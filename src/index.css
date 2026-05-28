@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+/* ── Tailwind v4: enable class-based dark mode ── */
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-primary: #10B981;
+  --color-primary-hover: #059669;
+  --color-secondary: #6366f1;
+  --color-danger: #ef4444;
+  --color-warning: #f59e0b;
+  --color-success: #10b981;
+}
+
+@layer base {
+  /* Smooth theme transitions */
+  *, *::before, *::after {
+    transition-property: background-color, border-color, color;
+    transition-duration: 150ms;
+    transition-timing-function: ease;
+  }
+
+  /* Override transition for elements that shouldn't animate (inputs, etc.) */
+  input, textarea, select, button {
+    transition-property: background-color, border-color, color, box-shadow, opacity, transform;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 999px;
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: #374151;
+  }
+
+  /* Hide number input arrows */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}

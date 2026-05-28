@@ -1,0 +1,871 @@
+import { useMemo, useState } from 'react';
+import { Plus, Download, Search, Eye, Mail, Phone, MapPin, Building, Key, ShieldCheck, UserX, UserCheck, Trash2, X, Edit } from 'lucide-react';
+import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
+import { Drawer } from '@/shared/components/ui/Drawer';
+import { Modal } from '@/shared/components/ui/Modal';
+import { useUserStore, BRANCH_OPTIONS, type SystemUserRecord } from '../store/userStore';
+import { UserAvatar } from '@/shared/components/ui/UserAvatar';
+import { buildUserAvatarUrl } from '@/shared/utils/userAvatar';
+import { useRoleStore } from '../store/roleStore';
+import type { ColumnDef } from '@tanstack/react-table';
+
+const statusBadgeStyles = {
+  ACTIVE: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200',
+  SUSPENDED: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-red-200 animate-pulse',
+  ON_LEAVE: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200',
+  TERMINATED: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400 border-gray-200',
+};
+
+type SearchField = 'all' | 'userCode' | 'fullName' | 'emailAddress' | 'assignedRole' | 'primaryDepartment' | 'branchLocation';
+
+export function UsersPage() {
+  const { users, addUser, updateUser, deleteUser } = useUserStore();
+  const roles = useRoleStore((s) => s.roles);
+
+  const [search, setSearch] = useState('');
+  const [searchField, setSearchField] = useState<SearchField>('all');
+  const [selectedUser, setSelectedUser] = useState<SystemUserRecord | null>(null);
+  const [deletingUser, setDeletingUser] = useState<SystemUserRecord | null>(null);
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
+
+  // Filter states
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
+
+  // Form states
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
+  const [editingMeta, setEditingMeta] = useState<{
+    id: string;
+    userCode: string;
+    authUserId: string;
+    lastLoginTimestamp: string;
+  } | null>(null);
+
+  const [formData, setFormData] = useState<Omit<SystemUserRecord, 'id' | 'userCode' | 'lastLoginTimestamp' | 'authUserId'>>({
+    fullName: '',
+    emailAddress: '',
+    contactPhone: '',
+    avatarUrl: buildUserAvatarUrl('new-user@retailhub.vn'),
+    assignedRole: 'STAFF',
+    primaryDepartment: 'Bộ phận Bán hàng & Chăm sóc khách hàng',
+    branchId: 'BR-001',
+    branchLocation: 'CH Quận 1',
+    positionTitle: 'Nhân viên',
+    hireDate: new Date().toISOString().split('T')[0],
+    employmentType: 'FULL_TIME',
+    status: 'ACTIVE',
+    mfaEnabled: false,
+    notes: '',
+  });
+
+  const filtered = users.filter((item) => {
+    // 1. Text search filter
+    let matchesSearch = true;
+    const q = search.toLowerCase();
+    if (q) {
+      switch (searchField) {
+        case 'userCode':
+          matchesSearch = item.userCode.toLowerCase().includes(q);
+          break;
+        case 'fullName':
+          matchesSearch = item.fullName.toLowerCase().includes(q);
+          break;
+        case 'emailAddress':
+          matchesSearch = item.emailAddress.toLowerCase().includes(q);
+          break;
+        case 'assignedRole':
+          matchesSearch = item.assignedRole.toLowerCase().includes(q);
+          break;
+        case 'primaryDepartment':
+          matchesSearch = item.primaryDepartment.toLowerCase().includes(q);
+          break;
+        case 'branchLocation':
+          matchesSearch = item.branchLocation.toLowerCase().includes(q);
+          break;
+        case 'all':
+        default:
+          matchesSearch = (
+            item.userCode.toLowerCase().includes(q) ||
+            item.fullName.toLowerCase().includes(q) ||
+            item.emailAddress.toLowerCase().includes(q) ||
+            item.assignedRole.toLowerCase().includes(q) ||
+            item.primaryDepartment.toLowerCase().includes(q) ||
+            item.branchLocation.toLowerCase().includes(q)
+          );
+      }
+    }
+
+    // 2. Status filter
+    const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
+
+    // 3. Role filter
+    const matchesRole = roleFilter === 'all' || item.assignedRole === roleFilter;
+
+    return matchesSearch && matchesStatus && matchesRole;
+  });
+
+  const searchPlaceholder = useMemo(() => {
+    switch (searchField) {
+      case 'userCode':
+        return 'Tìm theo mã nhân viên (ví dụ: USR-9901)...';
+      case 'fullName':
+        return 'Tìm theo họ và tên đầy đủ...';
+      case 'emailAddress':
+        return 'Tìm theo địa chỉ email...';
+      case 'assignedRole':
+        return 'Tìm theo vai trò phân quyền...';
+      case 'primaryDepartment':
+        return 'Tìm theo bộ phận phòng ban...';
+      case 'branchLocation':
+        return 'Tìm theo tên chi nhánh/địa điểm làm việc...';
+      case 'all':
+      default:
+        return 'Nhập từ khóa tìm kiếm theo mọi thuộc tính tài khoản...';
+    }
+  }, [searchField]);
+
+  const handleExportCSV = () => {
+    const headers = ['Mã nhân viên', 'Họ tên', 'Email', 'SĐT', 'Ảnh đại diện', 'Vai trò', 'Chức danh', 'Phòng ban', 'Mã CN', 'Chi nhánh', 'Ngày vào làm', 'Hình thức', 'Trạng thái', 'MFA', 'Ghi chú'];
+    const rows = users.map(u => [
+      u.userCode,
+      u.fullName,
+      u.emailAddress,
+      u.contactPhone,
+      u.avatarUrl,
+      u.assignedRole,
+      u.positionTitle,
+      u.primaryDepartment,
+      u.branchId,
+      u.branchLocation,
+      u.hireDate,
+      u.employmentType,
+      u.status,
+      u.mfaEnabled ? 'Đã kích hoạt' : 'Chưa kích hoạt',
+      u.notes || ''
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+      + [headers.join(','), ...rows.map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Danh_Sach_Nhan_Vien_RetailHub_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleOpenCreate = () => {
+    setFormMode('create');
+    setEditingMeta(null);
+    setFormData({
+      fullName: '',
+      emailAddress: '',
+      contactPhone: '',
+      avatarUrl: buildUserAvatarUrl('new-user@retailhub.vn'),
+      assignedRole: roles.length > 0 ? roles[0].roleCode : 'STAFF',
+      primaryDepartment: 'Bộ phận Bán hàng & Chăm sóc khách hàng',
+      branchId: 'BR-001',
+      branchLocation: 'CH Quận 1',
+      positionTitle: 'Nhân viên',
+      hireDate: new Date().toISOString().split('T')[0],
+      employmentType: 'FULL_TIME',
+      status: 'ACTIVE',
+      mfaEnabled: false,
+      notes: '',
+    });
+    setFormOpen(true);
+  };
+
+  const handleOpenEdit = (user: SystemUserRecord) => {
+    setSelectedUser(null);
+    setFormMode('edit');
+    setEditingMeta({
+      id: user.id,
+      userCode: user.userCode,
+      authUserId: user.authUserId,
+      lastLoginTimestamp: user.lastLoginTimestamp,
+    });
+    setFormData({
+      fullName: user.fullName,
+      emailAddress: user.emailAddress,
+      contactPhone: user.contactPhone,
+      avatarUrl: user.avatarUrl,
+      assignedRole: user.assignedRole,
+      primaryDepartment: user.primaryDepartment,
+      branchId: user.branchId,
+      branchLocation: user.branchLocation,
+      positionTitle: user.positionTitle,
+      hireDate: user.hireDate,
+      employmentType: user.employmentType,
+      status: user.status,
+      mfaEnabled: user.mfaEnabled,
+      notes: user.notes || '',
+    });
+    setFormOpen(true);
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    const avatarUrl = formData.avatarUrl?.trim() || buildUserAvatarUrl(formData.emailAddress || formData.fullName);
+    const payload = { ...formData, avatarUrl };
+
+    if (formMode === 'create') {
+      addUser(payload);
+    } else if (editingMeta) {
+      updateUser({
+        ...payload,
+        id: editingMeta.id,
+        authUserId: editingMeta.authUserId,
+        userCode: editingMeta.userCode,
+        lastLoginTimestamp: editingMeta.lastLoginTimestamp,
+      });
+    }
+    setFormOpen(false);
+    setEditingMeta(null);
+  };
+
+  const handleDelete = (user: SystemUserRecord) => {
+    if (user.emailAddress === 'admin@system.com') {
+      setErrorNotice('Không thể xóa tài khoản Quản trị viên tối cao root!');
+      return;
+    }
+    setDeletingUser(user);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!deletingUser) return;
+    deleteUser(deletingUser.id);
+    setDeletingUser(null);
+    setSelectedUser(null);
+  };
+
+  const toggleUserSuspension = (user: SystemUserRecord) => {
+    const nextStatus = user.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+    updateUser({
+      ...user,
+      status: nextStatus,
+    });
+    setSelectedUser(prev => prev ? { ...prev, status: nextStatus } : null);
+  };
+
+  const columns = useMemo<ColumnDef<SystemUserRecord>[]>(
+    () => [
+      {
+        accessorKey: 'userCode',
+        header: 'Mã nhân viên',
+        cell: (info) => <span className="font-mono font-bold text-primary px-2 py-0.5 bg-primary/10 rounded border border-primary/20 hover:underline">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'fullName',
+        header: 'Nhân viên',
+        cell: ({ row }) => (
+          <div className="flex items-center gap-3">
+            <UserAvatar
+              name={row.original.fullName}
+              avatarUrl={row.original.avatarUrl}
+              seed={row.original.emailAddress}
+              size="sm"
+            />
+            <div>
+              <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.fullName}</p>
+              <p className="text-xs text-gray-500">{row.original.positionTitle}</p>
+              <p className="text-xs text-gray-400 font-mono">{row.original.emailAddress}</p>
+            </div>
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'assignedRole',
+        header: 'Vai trò bảo mật',
+        cell: (info) => {
+          const code = info.getValue() as string;
+          const match = roles.find(r => r.roleCode === code);
+          return (
+            <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300 px-2 py-0.5 rounded font-bold border border-gray-200 dark:border-gray-700">
+              {match ? match.roleTitle : code}
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: 'primaryDepartment',
+        header: 'Phòng ban & Chi nhánh',
+        cell: ({ row }) => (
+          <div>
+            <p className="text-sm text-gray-800 dark:text-gray-200 font-medium">{row.original.primaryDepartment}</p>
+            <p className="text-xs text-gray-500">{row.original.branchLocation}</p>
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'employmentType',
+        header: 'Hình thức',
+        cell: (info) => {
+          const type = info.getValue() as string;
+          return (
+            <span className="font-mono text-xs font-semibold text-gray-600 dark:text-gray-400">
+              {type === 'FULL_TIME' ? 'TOÀN THỜI GIAN' :
+               type === 'PART_TIME' ? 'BÁN THỜI GIAN' :
+               type === 'CONTRACTOR' ? 'HỢP ĐỒNG BÊN NGOÀI' : 'THỜI VỤ'}
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: 'mfaEnabled',
+        header: 'MFA 2FA',
+        cell: (info) => (
+          <span className={`text-xs px-2 py-0.5 rounded font-mono font-bold border ${
+            info.getValue() as boolean ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200' : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300 border-red-200'
+          }`}>
+            {info.getValue() as boolean ? 'ĐÃ KÍCH HOẠT' : 'CHƯA BẬT'}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'status',
+        header: 'Trạng thái',
+        cell: (info) => {
+          const status = info.getValue() as keyof typeof statusBadgeStyles;
+          return (
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${statusBadgeStyles[status]}`}>
+              {status === 'ACTIVE' ? 'ĐANG LÀM VIỆC' : status === 'SUSPENDED' ? 'TẠM NGHƯNG' : status === 'ON_LEAVE' ? 'NGHỈ PHÉP' : 'ĐÃ NGHỈ VIỆC'}
+            </span>
+          );
+        },
+      },
+      {
+        id: 'actions',
+        header: 'Hành động',
+        cell: ({ row }) => (
+          <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setSelectedUser(row.original)}
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+              title="Xem hồ sơ"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleOpenEdit(row.original)}
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+              title="Chỉnh sửa lý lịch"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleDelete(row.original)}
+              disabled={row.original.emailAddress === 'admin@system.com'}
+              className={`p-1.5 rounded-lg transition-colors ${
+                row.original.emailAddress === 'admin@system.com' 
+                  ? 'text-gray-200 dark:text-gray-800 cursor-not-allowed' 
+                  : 'text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
+              }`}
+              title="Xóa nhân sự"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [roles]
+  );
+
+  return (
+    <>
+      <div className="space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Danh bạ Tài Khoản & Nhân sự doanh nghiệp</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý cấp phát tài khoản, phân gán vai trò bảo mật RBAC chi tiết và theo dõi lịch sử hoạt động đăng nhập của nhân sự.</p>
+          </div>
+          <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-none shrink-0">
+            <button 
+              onClick={handleExportCSV}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0"
+            >
+              <Download className="w-4 h-4" /> Xuất danh sách nhân sự
+            </button>
+            <button 
+              onClick={handleOpenCreate}
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm whitespace-nowrap shrink-0"
+            >
+              <Plus className="w-4 h-4" /> Cấp tài khoản mới
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Vietnamese Attribute Dropdown */}
+            <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-2 shrink-0">
+              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">Tìm kiếm theo:</span>
+              <select
+                value={searchField}
+                onChange={(e) => setSearchField(e.target.value as SearchField)}
+                className="text-xs font-bold text-gray-700 dark:text-gray-200 bg-transparent border-none py-1 focus:ring-0 focus:outline-none cursor-pointer"
+              >
+                <option value="all">Tất cả thông tin</option>
+                <option value="userCode">Mã nhân viên</option>
+                <option value="fullName">Họ và tên</option>
+                <option value="emailAddress">Địa chỉ email</option>
+                <option value="assignedRole">Vai trò bảo mật</option>
+                <option value="primaryDepartment">Phòng ban</option>
+                <option value="branchLocation">Chi nhánh</option>
+              </select>
+            </div>
+
+            <div className="flex-1 relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={searchPlaceholder}
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Quick Filters Row */}
+          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700/60">
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-gray-500 font-medium">Lọc Trạng thái:</span>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+              >
+                <option value="all">Tất cả trạng thái</option>
+                <option value="ACTIVE">ĐANG LÀM VIỆC</option>
+                <option value="SUSPENDED">TẠM NGHƯNG</option>
+                <option value="ON_LEAVE">NGHỈ PHÉP</option>
+                <option value="TERMINATED">ĐÃ NGHỈ VIỆC</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-gray-500 font-medium">Lọc Vai trò:</span>
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+              >
+                <option value="all">Tất cả vai trò</option>
+                {roles.map(r => (
+                  <option key={r.id} value={r.roleCode}>{r.roleTitle}</option>
+                ))}
+              </select>
+            </div>
+
+            {(statusFilter !== 'all' || roleFilter !== 'all' || search) && (
+              <button
+                onClick={() => { setStatusFilter('all'); setRoleFilter('all'); setSearch(''); }}
+                className="text-xs text-red-500 hover:text-red-600 font-semibold flex items-center gap-1 ml-auto transition-colors"
+              >
+                <X className="w-3.5 h-3.5" /> Xóa bộ lọc
+              </button>
+            )}
+          </div>
+        </div>
+
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedUser(row)} />
+      </div>
+
+      {/* Details View Drawer */}
+      <Drawer
+        isOpen={!!selectedUser}
+        onClose={() => setSelectedUser(null)}
+        title={selectedUser ? `Thông tin tài khoản: ${selectedUser.userCode}` : 'Hồ sơ nhân sự'}
+        width="max-w-lg"
+      >
+        {selectedUser && (
+          <div className="space-y-6">
+            <div className="flex flex-col items-center text-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-800">
+              <UserAvatar
+                name={selectedUser.fullName}
+                avatarUrl={selectedUser.avatarUrl}
+                seed={selectedUser.emailAddress}
+                size="xl"
+              />
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">{selectedUser.fullName}</h3>
+              <p className="text-sm text-gray-500">{selectedUser.positionTitle}</p>
+              <p className="text-xs font-mono text-gray-400">{selectedUser.userCode} · {selectedUser.authUserId}</p>
+            </div>
+
+            <div className={`flex items-center justify-between p-4 rounded-xl border ${
+              selectedUser.status === 'ACTIVE'
+                ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+                : selectedUser.status === 'ON_LEAVE'
+                ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+                : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold ${
+                  selectedUser.status === 'ACTIVE' ? 'bg-emerald-600' : selectedUser.status === 'ON_LEAVE' ? 'bg-amber-600' : 'bg-red-600'
+                }`}>
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Vai trò phân quyền</p>
+                  <p className="text-lg font-bold font-mono text-gray-900 dark:text-white mt-0.5">
+                    {roles.find(r => r.roleCode === selectedUser.assignedRole)?.roleTitle || selectedUser.assignedRole}
+                  </p>
+                </div>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                selectedUser.status === 'ACTIVE' ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
+                selectedUser.status === 'ON_LEAVE' ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
+                'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100'
+              }`}>
+                {selectedUser.status === 'ACTIVE' ? 'ĐANG LÀM VIỆC' : selectedUser.status === 'ON_LEAVE' ? 'NGHỈ PHÉP' : selectedUser.status === 'SUSPENDED' ? 'BỊ ĐÌNH CHỈ' : 'ĐÃ NGHỈ VIỆC'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  <Mail className="w-4 h-4 text-primary" /> Email đăng ký
+                </div>
+                <p className="text-xs font-mono font-bold text-gray-900 dark:text-white truncate">{selectedUser.emailAddress}</p>
+              </div>
+              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  <Key className="w-4 h-4 text-emerald-500" /> Trạng thái xác thực 2FA/MFA
+                </div>
+                <p className={`text-xs font-bold truncate font-mono ${selectedUser.mfaEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {selectedUser.mfaEnabled ? 'ĐÃ BẬT XÁC THỰC' : 'TÀI KHOẢN CHƯA BẢO MẬT'}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 text-sm">
+              <div className="border-b border-gray-200 dark:border-gray-700 pb-3">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Hợp đồng & Ngày vào làm</span>
+                <span className="inline-block text-xs bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-300 px-2 py-0.5 rounded font-mono font-bold">
+                  {selectedUser.employmentType === 'FULL_TIME' ? 'Chính thức' : selectedUser.employmentType === 'PART_TIME' ? 'Bán thời gian' : selectedUser.employmentType === 'CONTRACTOR' ? 'Hợp đồng ngoài' : 'Thời vụ'}
+                </span>
+                <span className="ml-2 text-xs text-gray-500">Từ {selectedUser.hireDate}</span>
+              </div>
+
+              <div className="flex items-center gap-2 text-sm pt-1 text-gray-700 dark:text-gray-300">
+                <Phone className="w-4 h-4 text-gray-400 shrink-0" />
+                <span>Số điện thoại: <span className="font-mono">{selectedUser.contactPhone}</span></span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <Building className="w-4 h-4 text-gray-400 shrink-0" />
+                <span>Bộ phận phòng ban: <span className="font-semibold">{selectedUser.primaryDepartment}</span></span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
+                <span>Chi nhánh: <span className="font-semibold">{selectedUser.branchLocation}</span> <span className="font-mono text-xs text-gray-400">({selectedUser.branchId})</span></span>
+              </div>
+
+              <div className="flex justify-between items-center pt-3 border-t border-gray-200 dark:border-gray-700 text-xs font-mono">
+                <span className="text-gray-500 dark:text-gray-400 font-sans">Thời gian đăng nhập gần nhất:</span>
+                <span className="text-gray-800 dark:text-gray-200">{selectedUser.lastLoginTimestamp}</span>
+              </div>
+
+              {selectedUser.notes && (
+                <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Ghi chú quản lý nhân sự</span>
+                  <p className="text-xs text-gray-700 dark:text-gray-300 italic bg-white dark:bg-gray-800 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 leading-relaxed">{selectedUser.notes}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
+              {selectedUser.emailAddress !== 'admin@system.com' && (
+                <button 
+                  onClick={() => toggleUserSuspension(selectedUser)}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-white font-semibold rounded-lg shadow transition-colors text-sm ${
+                    selectedUser.status === 'ACTIVE' 
+                      ? 'bg-red-600 hover:bg-red-700' 
+                      : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
+                >
+                  {selectedUser.status === 'ACTIVE' ? (
+                    <>
+                      <UserX className="w-4 h-4" /> Đình chỉ tài khoản
+                    </>
+                  ) : (
+                    <>
+                      <UserCheck className="w-4 h-4" /> Kích hoạt lại tài khoản
+                    </>
+                  )}
+                </button>
+              )}
+              <button 
+                onClick={() => handleOpenEdit(selectedUser)}
+                className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
+              >
+                <ShieldCheck className="w-4 h-4 inline mr-1" /> Chỉnh sửa hồ sơ
+              </button>
+            </div>
+          </div>
+        )}
+      </Drawer>
+
+      {/* Create / Edit Drawer Form */}
+      <Drawer
+        isOpen={formOpen}
+        onClose={() => setFormOpen(false)}
+        title={formMode === 'create' ? 'Cấp phát tài khoản nhân sự mới' : 'Cập nhật lý lịch nhân viên'}
+        width="max-w-xl"
+      >
+        <form onSubmit={handleSave} className="space-y-4">
+          <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800">
+            <UserAvatar
+              name={formData.fullName || 'Nhân viên mới'}
+              avatarUrl={formData.avatarUrl}
+              seed={formData.emailAddress || formData.fullName}
+              size="lg"
+            />
+            <div className="flex-1 w-full space-y-2">
+              <label className="block text-xs font-bold text-gray-500 uppercase">URL ảnh đại diện *</label>
+              <input
+                type="url"
+                required
+                placeholder="https://..."
+                value={formData.avatarUrl}
+                onChange={(e) => setFormData((p) => ({ ...p, avatarUrl: e.target.value }))}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  setFormData((p) => ({
+                    ...p,
+                    avatarUrl: buildUserAvatarUrl(p.emailAddress || p.fullName || 'retailhub'),
+                  }))
+                }
+                className="text-xs text-primary font-semibold hover:underline"
+              >
+                Tạo ảnh mặc định theo email
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Họ và tên đầy đủ nhân viên *</label>
+            <input
+              type="text"
+              required
+              placeholder="Ví dụ: Nguyễn Văn A"
+              value={formData.fullName}
+              onChange={(e) => setFormData(p => ({ ...p, fullName: e.target.value }))}
+              className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Địa chỉ Email đăng nhập *</label>
+              <input
+                type="email"
+                required
+                disabled={formMode === 'edit' && formData.emailAddress === 'admin@system.com'}
+                placeholder="Ví dụ: a.nguyen@retailhub.io"
+                value={formData.emailAddress}
+                onChange={(e) => {
+                  const email = e.target.value;
+                  setFormData((p) => ({
+                    ...p,
+                    emailAddress: email,
+                    avatarUrl:
+                      formMode === 'create' && (!p.avatarUrl || p.avatarUrl.includes('new-user'))
+                        ? buildUserAvatarUrl(email || 'retailhub')
+                        : p.avatarUrl,
+                  }));
+                }}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary disabled:opacity-55"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Số điện thoại liên lạc *</label>
+              <input
+                type="text"
+                required
+                placeholder="Ví dụ: +84 912 345 678"
+                value={formData.contactPhone}
+                onChange={(e) => setFormData(p => ({ ...p, contactPhone: e.target.value }))}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Chức danh *</label>
+              <input
+                type="text"
+                required
+                value={formData.positionTitle}
+                onChange={(e) => setFormData((p) => ({ ...p, positionTitle: e.target.value }))}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ngày vào làm *</label>
+              <input
+                type="date"
+                required
+                value={formData.hireDate}
+                onChange={(e) => setFormData((p) => ({ ...p, hireDate: e.target.value }))}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bộ phận phòng ban *</label>
+              <input
+                type="text"
+                required
+                value={formData.primaryDepartment}
+                onChange={(e) => setFormData((p) => ({ ...p, primaryDepartment: e.target.value }))}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Chi nhánh *</label>
+              <select
+                required
+                value={formData.branchId}
+                onChange={(e) => {
+                  const branchId = e.target.value;
+                  const label = BRANCH_OPTIONS.find((b) => b.id === branchId)?.label ?? branchId;
+                  setFormData((p) => ({ ...p, branchId, branchLocation: label }));
+                }}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              >
+                {BRANCH_OPTIONS.map((b) => (
+                  <option key={b.id} value={b.id}>{b.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Vai trò gán quyền bảo mật *</label>
+              <select
+                value={formData.assignedRole}
+                disabled={formMode === 'edit' && formData.emailAddress === 'admin@system.com'}
+                onChange={(e) => setFormData(p => ({ ...p, assignedRole: e.target.value }))}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              >
+                {roles.map(r => (
+                  <option key={r.id} value={r.roleCode}>{r.roleTitle} ({r.roleCode})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Hình thức hợp đồng lao động *</label>
+              <select
+                value={formData.employmentType}
+                onChange={(e) => setFormData(p => ({ ...p, employmentType: e.target.value as any }))}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              >
+                <option value="FULL_TIME">Chính thức (FULL TIME)</option>
+                <option value="PART_TIME">Bán thời gian (PART TIME)</option>
+                <option value="CONTRACTOR">Nhà thầu ngoài (CONTRACTOR)</option>
+                <option value="SEASONAL">Thử việc/Thời vụ (SEASONAL)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6 py-1">
+            {formData.emailAddress !== 'admin@system.com' && (
+              <div>
+                <span className="text-xs font-bold text-gray-500 uppercase mr-2">Trạng thái nhân sự:</span>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData(p => ({ ...p, status: e.target.value as any }))}
+                  className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-xs font-bold"
+                >
+                  <option value="ACTIVE">ĐANG LÀM VIỆC (ACTIVE)</option>
+                  <option value="SUSPENDED">ĐÌNH CHỈ (SUSPENDED)</option>
+                  <option value="ON_LEAVE">NGHỈ PHÉP (ON_LEAVE)</option>
+                  <option value="TERMINATED">ĐÃ THÔI VIỆC (TERMINATED)</option>
+                </select>
+              </div>
+            )}
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.mfaEnabled}
+                onChange={(e) => setFormData(p => ({ ...p, mfaEnabled: e.target.checked }))}
+                className="rounded border-gray-300 text-primary focus:ring-primary w-4 h-4"
+              />
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 select-none">Đã kích hoạt xác thực 2FA/MFA?</span>
+            </label>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ghi chú & Lý lịch hành chính</label>
+            <textarea
+              rows={3}
+              placeholder="Nhập lịch sử ký kết hợp đồng, ghi chú kiểm tra lý lịch bảo mật..."
+              value={formData.notes}
+              onChange={(e) => setFormData(p => ({ ...p, notes: e.target.value }))}
+              className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+            />
+          </div>
+
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex gap-3 justify-end">
+            <button
+              type="button"
+              onClick={() => setFormOpen(false)}
+              className="px-4 py-2 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-50 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-semibold"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold shadow"
+            >
+              Lưu lý lịch nhân viên
+            </button>
+          </div>
+        </form>
+      </Drawer>
+
+      <Modal
+        isOpen={!!deletingUser}
+        onClose={() => setDeletingUser(null)}
+        title="Xóa Tài Khoản Nhân Sự"
+        isDestructive
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400">Bạn có chắc chắn muốn xóa tài khoản của <strong>{deletingUser?.fullName}</strong> ({deletingUser?.emailAddress}) khỏi danh bạ hệ thống?</p>
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <button type="button" onClick={() => setDeletingUser(null)} className="px-4 py-2 border rounded-lg text-sm dark:border-gray-700">Hủy</button>
+            <button type="button" onClick={handleDeleteConfirm} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold">Đồng ý xóa</button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!errorNotice}
+        onClose={() => setErrorNotice(null)}
+        title="Thông Báo"
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400">{errorNotice}</p>
+          <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+            <button type="button" onClick={() => setErrorNotice(null)} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold">Đóng</button>
+          </div>
+        </div>
+      </Modal>
+    </>
+  );
+}
