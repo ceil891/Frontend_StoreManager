@@ -1,0 +1,490 @@
+import { useMemo, useState } from 'react';
+import { Plus, Download, Search, Eye, Building2, Users, UserCheck, Briefcase, DollarSign, Edit, Trash2, X } from 'lucide-react';
+import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
+import { Drawer } from '@/shared/components/ui/Drawer';
+import { Modal } from '@/shared/components/ui/Modal';
+import type { ColumnDef } from '@tanstack/react-table';
+import { useHrStore, type DepartmentRecord } from '../store/hrStore';
+
+const statusStyles = {
+  ACTIVE: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200',
+  RESTRUCTURING: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200',
+  MERGING: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200',
+  INACTIVE: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-200',
+};
+
+export function DepartmentsPage() {
+  const { departments: data, addDepartment, updateDepartment, deleteDepartment } = useHrStore();
+  
+  const [search, setSearch] = useState('');
+  const [selectedDept, setSelectedDept] = useState<DepartmentRecord | null>(null);
+
+  // Filter states
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const [editingDept, setEditingDept] = useState<Partial<DepartmentRecord>>({});
+  
+  const [deletingDept, setDeletingDept] = useState<DepartmentRecord | null>(null);
+
+  const filtered = data.filter((item) => {
+    // 1. Text search
+    let matchesSearch = true;
+    const q = search.toLowerCase();
+    if (q) {
+      matchesSearch = (
+        item.departmentCode.toLowerCase().includes(q) ||
+        item.departmentName.toLowerCase().includes(q) ||
+        item.headOfDepartment.toLowerCase().includes(q) ||
+        item.parentDivision.toLowerCase().includes(q)
+      );
+    }
+
+    // 2. Status filter
+    const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  const handleOpenCreate = () => {
+    setModalMode('create');
+    setEditingDept({
+      departmentCode: `DPT-${Math.floor(1000 + Math.random() * 9000)}`,
+      departmentName: '',
+      headOfDepartment: '',
+      totalEmployees: 0,
+      allocatedAnnualBudgetUsd: 0,
+      ytdSpendUsd: 0,
+      costCenterCode: '',
+      status: 'ACTIVE',
+      establishedDate: new Date().toISOString().split('T')[0],
+      parentDivision: '',
+      missionStatement: ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (dept: DepartmentRecord) => {
+    setModalMode('edit');
+    setEditingDept(dept);
+    setIsModalOpen(true);
+  };
+
+  const handleSaveDept = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDept.departmentCode || !editingDept.departmentName) return;
+
+    const payload: Omit<DepartmentRecord, 'id'> = {
+      departmentCode: editingDept.departmentCode,
+      departmentName: editingDept.departmentName,
+      headOfDepartment: editingDept.headOfDepartment || 'Unassigned',
+      totalEmployees: Number(editingDept.totalEmployees) || 0,
+      allocatedAnnualBudgetUsd: Number(editingDept.allocatedAnnualBudgetUsd) || 0,
+      ytdSpendUsd: Number(editingDept.ytdSpendUsd) || 0,
+      costCenterCode: editingDept.costCenterCode || '',
+      status: editingDept.status as any || 'ACTIVE',
+      establishedDate: editingDept.establishedDate || '',
+      parentDivision: editingDept.parentDivision || '',
+      missionStatement: editingDept.missionStatement || ''
+    };
+
+    if (modalMode === 'create') {
+      addDepartment(payload);
+    } else if (editingDept.id) {
+      updateDepartment(editingDept.id, payload);
+    }
+    setIsModalOpen(false);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!deletingDept) return;
+    deleteDepartment(deletingDept.id);
+    setDeletingDept(null);
+  };
+
+  const columns = useMemo<ColumnDef<DepartmentRecord>[]>(
+    () => [
+      {
+        accessorKey: 'departmentCode',
+        header: 'Dept Code',
+        cell: (info) => <span className="font-mono font-bold text-primary hover:underline">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'departmentName',
+        header: 'Department Title & Division',
+        cell: ({ row }) => (
+          <div>
+            <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.departmentName}</p>
+            <p className="text-xs text-gray-500 font-mono">Division: {row.original.parentDivision}</p>
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'headOfDepartment',
+        header: 'Department Head',
+        cell: (info) => <span className="font-medium text-gray-900 dark:text-white text-sm">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'totalEmployees',
+        header: 'Active Staff',
+        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{info.getValue() as number} FTEs</span>,
+      },
+      {
+        accessorKey: 'allocatedAnnualBudgetUsd',
+        header: 'Allocated Budget',
+        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">${(info.getValue() as number).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>,
+      },
+      {
+        accessorKey: 'ytdSpendUsd',
+        header: 'YTD Ledger Spend',
+        cell: ({ row }) => {
+          const budget = row.original.allocatedAnnualBudgetUsd;
+          const spend = row.original.ytdSpendUsd;
+          const pct = budget > 0 ? ((spend / budget) * 100).toFixed(1) : '0.0';
+          return (
+            <div>
+              <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">${spend.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+              <span className="text-xs text-gray-500 block font-mono">{pct}% consumed</span>
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: 'costCenterCode',
+        header: 'Cost Center',
+        cell: (info) => <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded border border-gray-200 dark:border-gray-700">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        cell: (info) => {
+          const status = info.getValue() as keyof typeof statusStyles;
+          return (
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${statusStyles[status]}`}>
+              {status}
+            </span>
+          );
+        },
+      },
+      {
+        id: 'actions',
+        header: 'Actions',
+        cell: ({ row }) => (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); setSelectedDept(row.original); }}
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setDeletingDept(row.original); }}
+              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        ),
+      },
+    ],
+    []
+  );
+
+  return (
+    <>
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Organization Departments & Cost Centers</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage corporate organization hierarchy, review active staff headcount allocations, audit departmental fiscal budgets and track cost center consumption.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
+              <Download className="w-4 h-4" /> Export Organization Chart
+            </button>
+            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
+              <Plus className="w-4 h-4" /> Create Department
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Tìm kiếm phòng ban theo mã, tên, trưởng bộ phận hoặc phân khu..."
+                className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Quick Filters Row */}
+          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700/60">
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-gray-500 font-medium">Lọc Trạng thái:</span>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+              >
+                <option value="all">Tất cả trạng thái</option>
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="RESTRUCTURING">RESTRUCTURING</option>
+                <option value="MERGING">MERGING</option>
+                <option value="INACTIVE">INACTIVE</option>
+              </select>
+            </div>
+
+            {(statusFilter !== 'all' || search) && (
+              <button
+                onClick={() => { setStatusFilter('all'); setSearch(''); }}
+                className="text-xs text-red-500 hover:text-red-600 font-semibold flex items-center gap-1 ml-auto transition-colors"
+              >
+                <X className="w-3.5 h-3.5" /> Xóa bộ lọc
+              </button>
+            )}
+          </div>
+        </div>
+
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedDept(row)} />
+      </div>
+
+      <Drawer
+        isOpen={!!selectedDept}
+        onClose={() => setSelectedDept(null)}
+        title={selectedDept ? `Department Specification: ${selectedDept.departmentCode}` : 'Department Dossier'}
+        width="max-w-lg"
+      >
+        {selectedDept && (
+          <div className="space-y-6">
+            <div className={`flex items-center justify-between p-4 rounded-xl border ${
+              selectedDept.status === 'ACTIVE'
+                ? 'bg-emerald-50 border-emerald-200'
+                : selectedDept.status === 'RESTRUCTURING'
+                ? 'bg-amber-50 border-amber-200'
+                : 'bg-gray-50 border-gray-200'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold ${
+                  selectedDept.status === 'ACTIVE' ? 'bg-emerald-600' : selectedDept.status === 'RESTRUCTURING' ? 'bg-amber-600' : 'bg-gray-600'
+                }`}>
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Allocated Annual Budget</p>
+                  <p className="text-xl font-bold font-mono text-gray-900 mt-0.5">
+                    ${selectedDept.allocatedAnnualBudgetUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                selectedDept.status === 'ACTIVE' ? 'bg-emerald-200 text-emerald-900' :
+                selectedDept.status === 'RESTRUCTURING' ? 'bg-amber-200 text-amber-900' :
+                'bg-gray-200 text-gray-900'
+              }`}>
+                {selectedDept.status}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
+                  <Users className="w-4 h-4 text-primary" /> Active Headcount
+                </div>
+                <p className="text-lg font-mono font-bold text-gray-900 truncate">{selectedDept.totalEmployees} FTEs assigned</p>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
+                  <DollarSign className="w-4 h-4 text-emerald-600" /> YTD Spend Audit
+                </div>
+                <p className="text-base font-bold font-mono text-emerald-600 truncate">
+                  ${selectedDept.ytdSpendUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 bg-gray-50 p-4 rounded-xl border border-gray-200 text-sm">
+              <div className="border-b border-gray-200 pb-3">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Department Title & Division</span>
+                <h3 className="text-base font-bold text-gray-900">{selectedDept.departmentName}</h3>
+                <span className="inline-block mt-1 text-xs bg-gray-200 text-gray-800 px-2 py-0.5 rounded font-mono font-bold">
+                  Cost Center: {selectedDept.costCenterCode}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center pt-2 text-sm">
+                <span className="text-gray-500">Department Head Executive:</span>
+                <span className="font-semibold text-gray-900 flex items-center gap-1.5">
+                  <UserCheck className="w-4 h-4 text-primary inline" /> {selectedDept.headOfDepartment}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500">Parent Division:</span>
+                <span className="font-medium text-gray-800">{selectedDept.parentDivision}</span>
+              </div>
+
+              <div className="flex justify-between items-center pt-2 border-t border-gray-200 text-xs font-mono">
+                <span className="text-gray-500 font-sans">Established Date:</span>
+                <span className="text-gray-800">{selectedDept.establishedDate}</span>
+              </div>
+
+              {selectedDept.missionStatement && (
+                <div className="pt-3 border-t border-gray-200 mt-2">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Charter Mission Statement</span>
+                  <p className="text-sm text-gray-700 italic">{selectedDept.missionStatement}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-6 border-t border-gray-200 flex gap-3">
+              <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg shadow transition-colors text-sm">
+                <Briefcase className="w-4 h-4" /> Manage Positions & Staff
+              </button>
+            </div>
+          </div>
+        )}
+      </Drawer>
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={modalMode === 'create' ? 'Tạo Phòng ban Mới' : 'Cập nhật Phòng ban'}
+        width="max-w-2xl"
+      >
+        <form onSubmit={handleSaveDept} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Mã Phòng ban *</label>
+              <input
+                type="text" required
+                value={editingDept.departmentCode || ''}
+                onChange={(e) => setEditingDept({ ...editingDept, departmentCode: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Mã Cost Center</label>
+              <input
+                type="text"
+                value={editingDept.costCenterCode || ''}
+                onChange={(e) => setEditingDept({ ...editingDept, costCenterCode: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Tên Phòng ban *</label>
+            <input
+              type="text" required
+              value={editingDept.departmentName || ''}
+              onChange={(e) => setEditingDept({ ...editingDept, departmentName: e.target.value })}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Parent Division (Khối)</label>
+              <input
+                type="text"
+                value={editingDept.parentDivision || ''}
+                onChange={(e) => setEditingDept({ ...editingDept, parentDivision: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Trưởng phòng (Head)</label>
+              <input
+                type="text"
+                value={editingDept.headOfDepartment || ''}
+                onChange={(e) => setEditingDept({ ...editingDept, headOfDepartment: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Ngân sách năm ($)</label>
+              <input
+                type="number"
+                value={editingDept.allocatedAnnualBudgetUsd || 0}
+                onChange={(e) => setEditingDept({ ...editingDept, allocatedAnnualBudgetUsd: parseFloat(e.target.value) || 0 })}
+                className="w-full px-3 py-2 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Trạng thái</label>
+              <select
+                value={editingDept.status || 'ACTIVE'}
+                onChange={(e) => setEditingDept({ ...editingDept, status: e.target.value as any })}
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
+              >
+                <option value="ACTIVE">Hoạt động (Active)</option>
+                <option value="RESTRUCTURING">Tái cấu trúc (Restructuring)</option>
+                <option value="MERGING">Đang sáp nhập (Merging)</option>
+                <option value="INACTIVE">Ngừng hoạt động (Inactive)</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Sứ mệnh / Mô tả chung (Mission Statement)</label>
+            <textarea
+              rows={2}
+              value={editingDept.missionStatement || ''}
+              onChange={(e) => setEditingDept({ ...editingDept, missionStatement: e.target.value })}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2 border rounded-lg text-sm font-medium hover:bg-gray-50"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold"
+            >
+              Lưu Thông Tin
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={!!deletingDept}
+        onClose={() => setDeletingDept(null)}
+        title="Xóa Phòng Ban"
+        isDestructive
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">Bạn có chắc chắn muốn xóa phòng ban <strong>{deletingDept?.departmentName}</strong>?</p>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button type="button" onClick={() => setDeletingDept(null)} className="px-4 py-2 border rounded-lg text-sm">Hủy</button>
+            <button type="button" onClick={handleDeleteConfirm} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold">Đồng ý xóa</button>
+          </div>
+        </div>
+      </Modal>
+    </>
+  );
+}
