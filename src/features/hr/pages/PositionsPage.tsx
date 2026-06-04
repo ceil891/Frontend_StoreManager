@@ -111,38 +111,59 @@ export function PositionsPage() {
     setDeletingPos(null);
   };
 
+  const jobGradeLabels = {
+    EXECUTIVE_L6: 'Executive L6',
+    DIRECTOR_L5: 'Director L5',
+    SENIOR_MGR_L4: 'Senior Mgr L4',
+    TEAM_LEAD_L3: 'Team Lead L3',
+    ASSOCIATE_L2: 'Associate L2',
+    ENTRY_L1: 'Entry L1',
+  } as const;
+
+  const hiringStatusLabels = {
+    OPEN_HIRING: 'Mở tuyển',
+    FULL_QUOTA: 'Đã đủ chỉ tiêu',
+    FROZEN: 'Tạm dừng',
+    CLOSED: 'Đóng',
+  } as const;
+
+  const overtimeLabels = {
+    true: 'Không được miễn OT',
+    false: 'Được miễn OT',
+  } as const;
+
   const columns = useMemo<ColumnDef<JobPositionRecord>[]>(
     () => [
       {
         accessorKey: 'positionCode',
-        header: 'Pos Code',
+        header: 'Mã vị trí',
         cell: (info) => <span className="font-mono font-bold text-primary hover:underline">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'positionTitle',
-        header: 'Job Title & Assigned Dept',
+        header: 'Tên chức danh & Phòng ban',
         cell: ({ row }) => (
           <div>
             <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.positionTitle}</p>
-            <p className="text-xs text-gray-500 font-mono">Dept: {row.original.departmentName}</p>
+            <p className="text-xs text-gray-500 font-mono">Bộ phận: {row.original.departmentName}</p>
           </div>
         ),
       },
       {
         accessorKey: 'jobGradeTier',
-        header: 'Job Grade',
+        header: 'Bậc lương',
         cell: (info) => {
-          const t = info.getValue() as keyof typeof tierStyles;
+          const tier = info.getValue() as keyof typeof jobGradeLabels;
           return (
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${tierStyles[t]}`}>
-              {t.replace(/_/g, ' ')}
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${tierStyles[tier]}`}>
+              {jobGradeLabels[tier] ?? tier.replace(/_/g, ' ')}
             </span>
           );
         },
       },
       {
         accessorKey: 'salaryRangeMin',
-        header: 'Salary Band Matrix',
+        header: 'Khoảng lương',
         cell: ({ row }) => (
           <span className="font-mono font-semibold text-gray-800 dark:text-gray-200 text-xs">
             ${(row.original.salaryRangeMin / 1000).toFixed(0)}k - ${(row.original.salaryRangeMax / 1000).toFixed(0)}k USD
@@ -151,18 +172,18 @@ export function PositionsPage() {
       },
       {
         accessorKey: 'activeHeadcount',
-        header: 'Headcount Quota',
+        header: 'Chỉ tiêu nhân sự',
         cell: ({ row }) => {
           const active = row.original.activeHeadcount;
           const quota = row.original.approvedHeadcountQuota;
           const isOver = active > quota;
           return (
             <div>
-              <span className={`font-mono font-bold ${isOver ? 'text-red-600 dark:text-red-400 font-bold' : 'text-gray-900 dark:text-white'}`}>
-                {active} / {quota} active
+              <span className={`font-mono font-bold ${isOver ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
+                {active} / {quota} hiện có
               </span>
               <span className="text-xs text-gray-500 block font-mono">
-                {isOver ? `+${active - quota} over quota` : `${quota - active} open slots`}
+                {isOver ? `+${active - quota} vượt chỉ tiêu` : `${quota - active} vị trí trống`}
               </span>
             </div>
           );
@@ -170,20 +191,20 @@ export function PositionsPage() {
       },
       {
         accessorKey: 'isOvertimeEligible',
-        header: 'OT Rule',
+        header: 'Quy tắc OT',
         cell: (info) => (
           <span className={`text-xs px-2 py-0.5 rounded font-mono font-bold ${
             info.getValue() as boolean ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'
           }`}>
-            {info.getValue() as boolean ? 'NON-EXEMPT' : 'EXEMPT'}
+            {overtimeLabels[String(info.getValue() as boolean) as keyof typeof overtimeLabels]}
           </span>
         ),
       },
       {
         accessorKey: 'status',
-        header: 'Hiring Status',
+        header: 'Trạng thái tuyển dụng',
         cell: (info) => {
-          const status = info.getValue() as string;
+          const status = info.getValue() as keyof typeof hiringStatusLabels;
           return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
               status === 'OPEN_HIRING' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
@@ -191,14 +212,14 @@ export function PositionsPage() {
               status === 'FROZEN' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' :
               'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
             }`}>
-              {status.replace('_', ' ')}
+              {hiringStatusLabels[status] ?? status.replace(/_/g, ' ')}
             </span>
           );
         },
       },
       {
         id: 'actions',
-        header: 'Actions',
+        header: 'Hành động',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
@@ -231,15 +252,15 @@ export function PositionsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Organization Job Positions & Headcount Quotas</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage structured job positions, evaluate salary band matrices, review approved headcount quotas and enforce FLSA overtime exemption rules.</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Vị trí công việc & Hạn mức nhân sự</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý vị trí việc làm, đánh giá bậc lương, xem hạn mức nhân sự và kiểm soát quy tắc làm thêm giờ.</p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Export Matrix
+              <Download className="w-4 h-4" /> Xuất bảng
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
-              <Plus className="w-4 h-4" /> Create Position
+              <Plus className="w-4 h-4" /> Tạo Vị trí
             </button>
           </div>
         </div>

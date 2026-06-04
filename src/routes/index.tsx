@@ -1,7 +1,4 @@
-// ============================================================
-// ROUTING LAYER — Full ERP Router with Lazy Loading
-// All 50+ pages are lazy-loaded as separate JS chunks.
-// ============================================================
+
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 import { PrivateRoute } from './PrivateRoute';

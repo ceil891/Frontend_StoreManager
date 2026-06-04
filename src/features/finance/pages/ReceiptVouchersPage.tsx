@@ -5,6 +5,7 @@ import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type ReceiptVoucher } from '../store/financeStore';
+import { toast } from 'sonner';
 
 const categoryMap: Record<string, string> = {
   SALES_REVENUE: 'Doanh thu bán hàng',
@@ -114,7 +115,7 @@ export function ReceiptVouchersPage() {
       {
         accessorKey: 'amount',
         header: 'Số tiền thực thu',
-        cell: (info) => <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">+${(info.getValue() as number).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>,
+        cell: (info) => <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">+{ (info.getValue() as number).toLocaleString('vi-VN') } ₫</span>,
       },
       {
         accessorKey: 'paymentMethod',
@@ -171,7 +172,10 @@ export function ReceiptVouchersPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Ghi nhận và quản lý dòng tiền vào từ hoạt động bán hàng, thu hồi công nợ đối tác và tiền mặt ký quỹ.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
+            <button
+              onClick={() => toast.success('Xuất sổ quỹ thu thành công!')}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+            >
               <Download className="w-4 h-4" /> Xuất sổ quỹ thu
             </button>
             <button
@@ -219,7 +223,7 @@ export function ReceiptVouchersPage() {
                 </div>
                 <div>
                   <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">Tổng tiền thực thu</p>
-                  <p className="text-xl font-bold font-mono text-emerald-700 dark:text-emerald-400">+${selectedVoucher.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                  <p className="text-xl font-bold font-mono text-emerald-700 dark:text-emerald-400">+{selectedVoucher.amount.toLocaleString('vi-VN')} ₫</p>
                 </div>
               </div>
               <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100">
@@ -252,13 +256,34 @@ export function ReceiptVouchersPage() {
                 <span className="font-semibold text-gray-900 dark:text-white">{methodMap[selectedVoucher.paymentMethod] || selectedVoucher.paymentMethod}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Tài khoản nhận tiền:</span>
+                <span className="font-semibold font-mono text-gray-900 dark:text-white">{selectedVoucher.receivingAccount || 'Tiền mặt'}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Chứng từ / Hóa đơn tham chiếu:</span>
                 <span className="font-mono font-semibold text-gray-900 dark:text-white">{selectedVoucher.referenceDoc || 'Không có'}</span>
               </div>
               <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
+                <span className="text-gray-500 dark:text-gray-400">Liên hệ người nộp:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{selectedVoucher.payerContact || 'Chưa ghi nhận'}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Nhân viên thu ngân / Kế toán:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedVoucher.cashier}</span>
               </div>
+
+              {selectedVoucher.attachments && selectedVoucher.attachments.length > 0 && (
+                <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-2">Tệp chứng từ đính kèm</span>
+                  <div className="flex flex-col gap-2">
+                    {selectedVoucher.attachments.map((att, i) => (
+                      <a key={i} href="#" className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:underline">
+                        <FileText className="w-4 h-4" /> {att.split('/').pop()}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {selectedVoucher.notes && (
                 <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
@@ -269,7 +294,10 @@ export function ReceiptVouchersPage() {
             </div>
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
-              <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
+              <button
+                onClick={() => toast.success('Đã gửi yêu cầu in biên lai thu tiền!')}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+              >
                 <FileText className="w-4 h-4" /> In biên lai thu tiền
               </button>
             </div>
@@ -325,7 +353,7 @@ export function ReceiptVouchersPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tiền thực thu ($) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tiền thực thu (₫) *</label>
               <input
                 type="number"
                 value={editingVoucher.amount ?? 0}

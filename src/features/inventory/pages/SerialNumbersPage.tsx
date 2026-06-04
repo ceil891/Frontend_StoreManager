@@ -3,32 +3,10 @@ import { Plus, Download, Search, Eye, QrCode, Building2, Calendar, FileText, Wre
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import type { ColumnDef } from '@tanstack/react-table';
-
-interface SerialItemRecord {
-  id: string;
-  serialNumber: string;
-  sku: string;
-  productName: string;
-  category: string;
-  unitCost: number;
-  status: 'IN_STOCK' | 'SOLD' | 'RESERVED' | 'RMA_REPAIR' | 'WRITTEN_OFF';
-  currentLocation: string;
-  receivedDate: string;
-  warrantyExpiry: string;
-  associatedInvoice?: string;
-  associatedCustomer?: string;
-  notes?: string;
-}
-
-const MOCK_SERIALS: SerialItemRecord[] = [
-  { id: '1', serialNumber: 'SN-RH99-8012', sku: 'SKU-ELEC-001', productName: 'RetailHub Pro POS Terminal', category: 'Hardware', unitCost: 850.00, status: 'IN_STOCK', currentLocation: 'Main Flagship / HQ', receivedDate: '2024-05-10', warrantyExpiry: '2027-05-10', notes: 'Pristine unit in sealed factory packaging. Ready for store deployment.' },
-  { id: '2', serialNumber: 'SN-RH99-8015', sku: 'SKU-ELEC-001', productName: 'RetailHub Pro POS Terminal', category: 'Hardware', unitCost: 850.00, status: 'SOLD', currentLocation: 'Customer Site - Apex Retail', receivedDate: '2024-04-15', warrantyExpiry: '2027-04-15', associatedInvoice: 'INV-2024-9012', associatedCustomer: 'Apex Retail Group', notes: 'Deployed with preconfigured POS software bundle v2.4.' },
-  { id: '3', serialNumber: 'SN-BCS2-1092', sku: 'SKU-ELEC-002', productName: 'Bluetooth Barcode Scanner', category: 'Peripherals', unitCost: 120.00, status: 'RMA_REPAIR', currentLocation: 'Vendor Repair Depot', receivedDate: '2024-03-01', warrantyExpiry: '2025-03-01', associatedInvoice: 'INV-2024-8110', associatedCustomer: 'Downtown Bistro', notes: 'Laser alignment error reported. Sent back under manufacturer warranty.' },
-  { id: '4', serialNumber: 'SN-SCL5-5501', sku: 'SKU-ELEC-005', productName: 'Commercial Digital Scale 30KG', category: 'Scales', unitCost: 340.00, status: 'RESERVED', currentLocation: 'Central Warehouse', receivedDate: '2024-05-16', warrantyExpiry: '2026-05-16', notes: 'Reserved for upcoming store launch at West End Mall.' },
-];
+import { useInventoryStore, type SerialItemRecord } from '../store/inventoryStore';
 
 export function SerialNumbersPage() {
-  const [data] = useState<SerialItemRecord[]>(MOCK_SERIALS);
+  const data = useInventoryStore((s) => s.serialItems);
   const [search, setSearch] = useState('');
   const [selectedSerial, setSelectedSerial] = useState<SerialItemRecord | null>(null);
 
@@ -270,6 +248,41 @@ export function SerialNumbersPage() {
                 <span className="text-gray-500 dark:text-gray-400">Initial Receiving Date:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedSerial.receivedDate}</span>
               </div>
+              {(selectedSerial.vendorName || selectedSerial.poReference) && (
+                <div className="pt-2 border-t border-gray-200 dark:border-gray-700 space-y-2">
+                  {selectedSerial.vendorName && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500 dark:text-gray-400">Nhà cung cấp:</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">{selectedSerial.vendorName}</span>
+                    </div>
+                  )}
+                  {selectedSerial.poReference && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500 dark:text-gray-400">Phiếu nhập (PO):</span>
+                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{selectedSerial.poReference}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {(selectedSerial.macAddress || selectedSerial.imei1) && (
+                <div className="pt-2 border-t border-gray-200 dark:border-gray-700 space-y-2">
+                  {selectedSerial.macAddress && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500 dark:text-gray-400">MAC Address:</span>
+                      <span className="font-mono text-xs font-semibold">{selectedSerial.macAddress}</span>
+                    </div>
+                  )}
+                  {selectedSerial.imei1 && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500 dark:text-gray-400">IMEI 1 / IMEI 2:</span>
+                      <span className="font-mono text-[10px] font-semibold text-right">
+                        {selectedSerial.imei1}
+                        {selectedSerial.imei2 ? ` / ${selectedSerial.imei2}` : ''}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {selectedSerial.associatedInvoice && (
                 <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">

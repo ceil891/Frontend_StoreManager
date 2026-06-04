@@ -335,6 +335,17 @@ export function TransactionReasonsPage() {
                 <span className="font-mono font-bold text-gray-800 dark:text-gray-200">{impactMap[selectedReason.cashFlowImpact] || selectedReason.cashFlowImpact}</span>
               </div>
 
+              <div className="flex justify-between items-center text-sm pt-2 border-t border-gray-200 dark:border-gray-700">
+                <span className="text-gray-500 dark:text-gray-400">TK đối ứng mặc định:</span>
+                <span className="font-mono font-bold text-gray-900 dark:text-white">{selectedReason.defaultOffsetGLCode || 'Không thiết lập'}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Giới hạn ngân sách:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {selectedReason.budgetLimit !== undefined ? `$${selectedReason.budgetLimit.toLocaleString('en-US')}` : 'Không giới hạn'}
+                </span>
+              </div>
+
               <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700 text-xs">
                 <span className="text-gray-500 dark:text-gray-400">Yêu cầu đính kèm hóa đơn kiểm toán:</span>
                 <span className={`font-bold ${selectedReason.requiresReceiptUpload ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500'}`}>

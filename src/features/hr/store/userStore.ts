@@ -23,15 +23,22 @@ export interface SystemUserRecord {
   /** Ảnh đại diện — bắt buộc (URL). */
   avatarUrl: string;
   assignedRole: string;
-  primaryDepartment: string;
+  departmentId: string;
   branchId: string;
   branchLocation: string;
-  positionTitle: string;
+  positionId: string;
+  managerId?: string;
+  timezone?: string;
+  locale?: string;
+  identityId?: string;
+  taxId?: string;
+  dateOfBirth?: string;
   hireDate: string;
   employmentType: 'FULL_TIME' | 'PART_TIME' | 'CONTRACTOR' | 'SEASONAL';
   status: 'ACTIVE' | 'SUSPENDED' | 'ON_LEAVE' | 'TERMINATED';
   lastLoginTimestamp: string;
   mfaEnabled: boolean;
+  faceEnrolled?: boolean;
   notes?: string;
 }
 
@@ -55,15 +62,22 @@ export function normalizeSystemUser(
     contactPhone: partial.contactPhone ?? '',
     avatarUrl: partial.avatarUrl?.trim() || buildUserAvatarUrl(email),
     assignedRole: partial.assignedRole ?? 'STAFF',
-    primaryDepartment: partial.primaryDepartment ?? 'Bộ phận Bán hàng',
+    departmentId: partial.departmentId ?? '1',
     branchId,
     branchLocation: partial.branchLocation ?? branchLabel(branchId),
-    positionTitle: partial.positionTitle ?? 'Nhân viên',
+    positionId: partial.positionId ?? '1',
+    managerId: partial.managerId,
+    timezone: partial.timezone ?? 'Asia/Ho_Chi_Minh',
+    locale: partial.locale ?? 'vi-VN',
+    identityId: partial.identityId,
+    taxId: partial.taxId,
+    dateOfBirth: partial.dateOfBirth,
     hireDate: partial.hireDate ?? new Date().toISOString().split('T')[0],
     employmentType: partial.employmentType ?? 'FULL_TIME',
     status: partial.status ?? 'ACTIVE',
     lastLoginTimestamp: partial.lastLoginTimestamp ?? 'Chưa từng đăng nhập',
     mfaEnabled: partial.mfaEnabled ?? false,
+    faceEnrolled: partial.faceEnrolled ?? false,
     notes: partial.notes,
   };
 }
@@ -78,10 +92,12 @@ const DEFAULT_MOCK_USERS: SystemUserRecord[] = [
     contactPhone: '0901234567',
     avatarUrl: buildUserAvatarUrl('admin@system.com'),
     assignedRole: 'SUPER_ADMIN',
-    primaryDepartment: 'Ban Giám đốc điều hành',
+    departmentId: '1',
     branchId: 'HQ',
     branchLocation: 'Trụ sở chính - TP.HCM',
-    positionTitle: 'Giám đốc điều hành',
+    positionId: '1',
+    timezone: 'Asia/Ho_Chi_Minh',
+    locale: 'vi-VN',
     hireDate: '2019-01-15',
     employmentType: 'FULL_TIME',
     status: 'ACTIVE',
@@ -98,10 +114,11 @@ const DEFAULT_MOCK_USERS: SystemUserRecord[] = [
     contactPhone: '0912345678',
     avatarUrl: buildUserAvatarUrl('manager@store.com'),
     assignedRole: 'STORE_MANAGER',
-    primaryDepartment: 'Quản lý vận hành cửa hàng',
+    departmentId: '1',
     branchId: 'BR-001',
     branchLocation: 'CH Quận 1',
-    positionTitle: 'Quản lý chi nhánh',
+    positionId: '1',
+    managerId: '1',
     hireDate: '2021-03-01',
     employmentType: 'FULL_TIME',
     status: 'ACTIVE',
@@ -118,10 +135,11 @@ const DEFAULT_MOCK_USERS: SystemUserRecord[] = [
     contactPhone: '0923456789',
     avatarUrl: buildUserAvatarUrl('staff@store.com'),
     assignedRole: 'STAFF',
-    primaryDepartment: 'Bộ phận Bán hàng & Chăm sóc khách hàng',
+    departmentId: '1',
     branchId: 'BR-001',
     branchLocation: 'CH Quận 1',
-    positionTitle: 'Nhân viên bán hàng / Thu ngân POS',
+    positionId: '1',
+    managerId: '2',
     hireDate: '2022-08-10',
     employmentType: 'FULL_TIME',
     status: 'ACTIVE',
@@ -138,10 +156,11 @@ const DEFAULT_MOCK_USERS: SystemUserRecord[] = [
     contactPhone: '0934567890',
     avatarUrl: buildUserAvatarUrl('inventory@retailhub.vn'),
     assignedRole: 'INVENTORY_STAFF',
-    primaryDepartment: 'Bộ phận Kho vận & Kiểm soát tồn',
+    departmentId: '2',
     branchId: 'BR-002',
     branchLocation: 'CH Tân Bình',
-    positionTitle: 'Nhân viên kho',
+    positionId: '2',
+    managerId: '2',
     hireDate: '2023-02-20',
     employmentType: 'FULL_TIME',
     status: 'ON_LEAVE',

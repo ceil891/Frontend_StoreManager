@@ -5,6 +5,7 @@ import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type PaymentVoucher } from '../store/financeStore';
+import { toast } from 'sonner';
 
 const categoryMap: Record<string, string> = {
   SUPPLIER_PAYMENT: 'Thanh toán nhà cung cấp',
@@ -117,7 +118,7 @@ export function PaymentVouchersPage() {
       {
         accessorKey: 'amount',
         header: 'Số tiền giải ngân',
-        cell: (info) => <span className="font-bold font-mono text-red-600 dark:text-red-400">-${(info.getValue() as number).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>,
+        cell: (info) => <span className="font-bold font-mono text-red-600 dark:text-red-400">-{ (info.getValue() as number).toLocaleString('vi-VN') } ₫</span>,
       },
       {
         accessorKey: 'paymentMethod',
@@ -182,7 +183,10 @@ export function PaymentVouchersPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Lập và quản lý các phiếu giải ngân thanh toán cho nhà cung cấp, chi phí điện nước và các khoản thanh toán qua hệ thống ngân hàng.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
+            <button
+              onClick={() => toast.success('Xuất sổ nhật ký chi thành công!')}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+            >
               <Download className="w-4 h-4" /> Xuất sổ nhật ký chi
             </button>
             <button
@@ -230,7 +234,7 @@ export function PaymentVouchersPage() {
                 </div>
                 <div>
                   <p className="text-xs text-red-800 dark:text-red-400 font-semibold uppercase tracking-wider">Tổng tiền giải ngân</p>
-                  <p className="text-xl font-bold font-mono text-red-700 dark:text-red-400">-${selectedVoucher.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                  <p className="text-xl font-bold font-mono text-red-700 dark:text-red-400">-{selectedVoucher.amount.toLocaleString('vi-VN')} ₫</p>
                 </div>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
@@ -263,13 +267,34 @@ export function PaymentVouchersPage() {
                 <span className="font-semibold text-gray-900 dark:text-white">{categoryMap[selectedVoucher.category] || selectedVoucher.category}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Kênh giải ngân / Ngân hàng:</span>
+                <span className="text-gray-500 dark:text-gray-400">Tài khoản người nhận (Payee):</span>
+                <span className="font-semibold font-mono text-gray-900 dark:text-white">{selectedVoucher.payeeBankAccount || 'Không xác định'}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Kênh giải ngân / Ngân hàng (Payer):</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedVoucher.bankAccountRef}</span>
               </div>
               <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
+                <span className="text-gray-500 dark:text-gray-400">Người lập phiếu:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{selectedVoucher.creator || 'Chưa rõ'}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Người phê duyệt / Thẩm định:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedVoucher.approver}</span>
               </div>
+
+              {selectedVoucher.attachments && selectedVoucher.attachments.length > 0 && (
+                <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-2">Tệp chứng từ đính kèm</span>
+                  <div className="flex flex-col gap-2">
+                    {selectedVoucher.attachments.map((att, i) => (
+                      <a key={i} href="#" className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:underline">
+                        <FileText className="w-4 h-4" /> {att.split('/').pop()}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {selectedVoucher.notes && (
                 <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
@@ -281,11 +306,21 @@ export function PaymentVouchersPage() {
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
               {selectedVoucher.status === 'PENDING_APPROVAL' && (
-                <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
+                <button
+                  onClick={() => {
+                    updatePayment(selectedVoucher.id, { status: 'COMPLETED' });
+                    setSelectedVoucher({ ...selectedVoucher, status: 'COMPLETED' });
+                    toast.success('Đã phê duyệt & thực hiện lệnh chuyển thành công!');
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                >
                   Phê duyệt & Thực hiện lệnh chuyển
                 </button>
               )}
-              <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
+              <button
+                onClick={() => toast.success('Đã gửi yêu cầu in ủy nhiệm chi!')}
+                className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
+              >
                 <FileText className="w-4 h-4 inline mr-1" /> In ủy nhiệm chi
               </button>
             </div>
@@ -342,7 +377,7 @@ export function PaymentVouchersPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tiền chi ($) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tiền chi (₫) *</label>
               <input
                 type="number"
                 value={editingVoucher.amount ?? 0}

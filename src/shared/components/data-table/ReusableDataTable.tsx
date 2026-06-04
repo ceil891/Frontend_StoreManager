@@ -152,14 +152,18 @@ export function ReusableDataTable<TData, TValue>({
             <thead className="text-xs text-gray-500 uppercase bg-gray-50 dark:bg-gray-900/50 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => {
+                  {headerGroup.headers.map((header, idx) => {
                     const align = header.column.columnDef.meta?.align || 'left';
                     const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
+                    const isFirstColumn = idx === 0;
+                    const isLastColumn = idx === headerGroup.headers.length - 1;
+                    const stickyClass = isFirstColumn ? 'sticky left-0 z-10 bg-gray-50 dark:bg-gray-900/50' : isLastColumn ? 'sticky right-0 z-10 bg-gray-50 dark:bg-gray-900/50' : '';
+                    
                     return (
                       <th
                         key={header.id}
                         colSpan={header.colSpan}
-                        className={`px-4 py-3 font-medium tracking-wider whitespace-nowrap ${alignClass}`}
+                        className={`px-4 py-3 font-medium tracking-wider whitespace-nowrap ${alignClass} ${stickyClass}`}
                         style={{ width: header.getSize() !== 150 ? header.getSize() : 'auto' }}
                       >
                         {header.isPlaceholder ? null : (
@@ -206,11 +210,15 @@ export function ReusableDataTable<TData, TValue>({
                       onRowClick ? 'cursor-pointer' : ''
                     }`}
                   >
-                    {row.getVisibleCells().map((cell) => {
+                    {row.getVisibleCells().map((cell, idx) => {
                       const align = cell.column.columnDef.meta?.align || 'left';
                       const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
+                      const isFirstColumn = idx === 0;
+                      const isLastColumn = idx === row.getVisibleCells().length - 1;
+                      const stickyClass = isFirstColumn ? 'sticky left-0 z-10 bg-white dark:bg-gray-800' : isLastColumn ? 'sticky right-0 z-10 bg-white dark:bg-gray-800' : '';
+                      
                       return (
-                        <td key={cell.id} className={`px-4 py-3 text-gray-900 dark:text-gray-100 whitespace-nowrap ${alignClass}`}>
+                        <td key={cell.id} className={`px-4 py-3 text-gray-900 dark:text-gray-100 whitespace-nowrap ${alignClass} ${stickyClass}`}>
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </td>
                       );

@@ -113,17 +113,30 @@ export function DebtLedgerPage() {
         },
       },
       {
+        accessorKey: 'referenceDoc',
+        header: 'Chứng từ gốc',
+        cell: (info) => <span className="font-mono text-blue-600 dark:text-blue-400 text-xs hover:underline cursor-pointer">{info.getValue() as string || '-'}</span>,
+      },
+      {
         accessorKey: 'totalDebt',
         header: 'Tổng công nợ',
-        cell: (info) => {
-          const val = info.getValue() as number;
-          return <span className={`font-bold font-mono ${val >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{val >= 0 ? `+$${val.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `-$${Math.abs(val).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}</span>;
+        cell: ({ row }) => {
+          const val = row.original.totalDebt;
+          const curr = row.original.currency || 'VND';
+          const prefix = curr === 'USD' ? '$' : '';
+          const suffix = curr === 'VND' ? ' ₫' : curr !== 'USD' ? ` ${curr}` : '';
+          return <span className={`font-bold font-mono ${val >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{val >= 0 ? `+${prefix}${val.toLocaleString('en-US')}${suffix}` : `-${prefix}${Math.abs(val).toLocaleString('en-US')}${suffix}`}</span>;
         },
+      },
+      {
+        accessorKey: 'incurredDate',
+        header: 'Ngày phát sinh',
+        cell: (info) => <span className="text-gray-500 text-sm font-mono">{info.getValue() as string || '-'}</span>,
       },
       {
         accessorKey: 'dueDate',
         header: 'Hạn thanh toán',
-        cell: (info) => <span className="text-gray-500 text-sm">{info.getValue() as string}</span>,
+        cell: (info) => <span className="text-gray-500 text-sm font-mono">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'status',
@@ -274,9 +287,15 @@ export function DebtLedgerPage() {
                 <span className="font-semibold text-gray-900 dark:text-white">{entityTypeMap[selectedDebt.entityType] || selectedDebt.entityType}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Số tiền cần thanh toán đợt này:</span>
+                <span className="text-gray-500 dark:text-gray-400">Đã thanh toán (lũy kế):</span>
+                <span className="font-semibold font-mono text-emerald-600">
+                  {selectedDebt.paidAmount !== undefined ? `${selectedDebt.paidAmount.toLocaleString('en-US')} ${selectedDebt.currency || 'VND'}` : '0'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Còn lại (Chưa thanh toán):</span>
                 <span className={`font-semibold font-mono ${selectedDebt.dueAmount === 0 ? 'text-gray-500' : selectedDebt.dueAmount > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {selectedDebt.dueAmount >= 0 ? `+$${selectedDebt.dueAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `-$${Math.abs(selectedDebt.dueAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                  {selectedDebt.dueAmount >= 0 ? `+${selectedDebt.dueAmount.toLocaleString('en-US')} ${selectedDebt.currency || 'VND'}` : `-${Math.abs(selectedDebt.dueAmount).toLocaleString('en-US')} ${selectedDebt.currency || 'VND'}`}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">

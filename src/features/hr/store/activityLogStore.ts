@@ -28,6 +28,10 @@ export interface ActivityLogRecord {
   ipAddress: string;
   status: 'SUCCESS' | 'DENIED' | 'FAILED';
   changedFields?: string[];
+  oldValues?: Record<string, any>;
+  newValues?: Record<string, any>;
+  userAgent?: string;
+  sessionId?: string;
 }
 
 interface ActivityLogState {
@@ -61,6 +65,8 @@ const DEFAULT_LOGS: ActivityLogRecord[] = [
     ipAddress: '192.168.1.10',
     status: 'SUCCESS',
     changedFields: ['fullName', 'emailAddress', 'assignedRole', 'branchId'],
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0',
+    sessionId: 'sess_998124',
   },
   {
     id: 'log_2',
@@ -81,6 +87,10 @@ const DEFAULT_LOGS: ActivityLogRecord[] = [
     ipAddress: '192.168.20.15',
     status: 'SUCCESS',
     changedFields: ['status', 'paymentStatus'],
+    oldValues: { status: 'PENDING', paymentStatus: 'UNPAID' },
+    newValues: { status: 'COMPLETED', paymentStatus: 'PAID' },
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15',
+    sessionId: 'sess_112001',
   },
   {
     id: 'log_3',
@@ -139,6 +149,9 @@ const DEFAULT_LOGS: ActivityLogRecord[] = [
     ipAddress: '192.168.20.15',
     status: 'SUCCESS',
     changedFields: ['name', 'location', 'manager', 'revenueTarget'],
+    newValues: { name: 'CH Thủ Đức', location: 'Q. Thủ Đức', manager: 'Trần Thị Lan', revenueTarget: 500000000 },
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15',
+    sessionId: 'sess_112001',
   },
   {
     id: 'log_6',
@@ -159,6 +172,10 @@ const DEFAULT_LOGS: ActivityLogRecord[] = [
     ipAddress: '192.168.1.10',
     status: 'SUCCESS',
     changedFields: ['amount', 'notes'],
+    oldValues: { amount: 1500000, notes: 'Thu tiền cọc' },
+    newValues: { amount: 2000000, notes: 'Thu tiền cọc và thanh toán nợ cũ' },
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0',
+    sessionId: 'sess_998124',
   },
   {
     id: 'log_7',

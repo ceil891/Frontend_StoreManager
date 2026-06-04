@@ -1,0 +1,13 @@
+{
+  "app": {
+    "title": "RetailHub"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "search": "Search",
+    "noData": "No data"
+  }
+}

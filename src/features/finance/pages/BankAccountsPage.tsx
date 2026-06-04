@@ -5,6 +5,20 @@ import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type CorporateBankAccount } from '../store/financeStore';
+import { toast } from 'sonner';
+
+const formatBalance = (amount: number, currency: string) => {
+  if (currency === 'VND') {
+    return `${amount.toLocaleString('vi-VN')} ₫`;
+  }
+  if (currency === 'EUR') {
+    return `${amount.toLocaleString('de-DE')} €`;
+  }
+  if (currency === 'GBP') {
+    return `£${amount.toLocaleString('en-GB')}`;
+  }
+  return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+};
 
 const typeBadgeStyles = {
   PRIMARY_OPERATING: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200',
@@ -144,12 +158,12 @@ export function BankAccountsPage() {
       {
         accessorKey: 'currentBalance',
         header: 'Tổng số dư sổ sách',
-        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">${(info.getValue() as number).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>,
+        cell: ({ row }) => <span className="font-mono font-bold text-gray-900 dark:text-white">{formatBalance(row.original.currentBalance, row.original.currency)}</span>,
       },
       {
         accessorKey: 'availableWorkingCapital',
         header: 'Vốn lưu động khả dụng',
-        cell: (info) => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">${(info.getValue() as number).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>,
+        cell: ({ row }) => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{formatBalance(row.original.availableWorkingCapital, row.original.currency)}</span>,
       },
       {
         accessorKey: 'status',
@@ -209,7 +223,10 @@ export function BankAccountsPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý các tài khoản liên kết với các định chế tài chính, giám sát số dư vốn lưu động khả dụng, lịch trình giải ngân và người được ủy quyền ký quỹ. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
+            <button
+              onClick={() => toast.success('Xuất dữ liệu số dư thành công!')}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+            >
               <Download className="w-4 h-4" /> Xuất dữ liệu số dư
             </button>
             <button
@@ -266,7 +283,7 @@ export function BankAccountsPage() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Thanh khoản vốn lưu động</p>
                   <p className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
-                    ${selectedAccount.availableWorkingCapital.toLocaleString('en-US', { minimumFractionDigits: 2 })} {selectedAccount.currency}
+                    {formatBalance(selectedAccount.availableWorkingCapital, selectedAccount.currency)}
                   </p>
                 </div>
               </div>
@@ -285,7 +302,7 @@ export function BankAccountsPage() {
                   <CreditCard className="w-4 h-4 text-primary" /> Tổng số dư sổ sách
                 </div>
                 <p className="text-lg font-mono font-bold text-gray-900 dark:text-white truncate">
-                  ${selectedAccount.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  {formatBalance(selectedAccount.currentBalance, selectedAccount.currency)}
                 </p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
@@ -300,10 +317,33 @@ export function BankAccountsPage() {
               <div className="border-b border-gray-200 dark:border-gray-700 pb-3">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Thông tin số tài khoản</span>
                 <div className="flex justify-between items-center font-mono">
-                  <span className="text-base font-bold text-primary">{selectedAccount.accountNumberMasked}</span>
+                  <span className="text-base font-bold text-primary" title={selectedAccount.accountNumber || selectedAccount.accountNumberMasked}>
+                    {selectedAccount.accountNumber || selectedAccount.accountNumberMasked}
+                  </span>
                   <span className="bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-300 px-2 py-0.5 rounded text-xs">SWIFT: {selectedAccount.swiftBic}</span>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">Chi nhánh: {selectedAccount.branchName}</p>
+                {selectedAccount.accountName && (
+                  <p className="text-sm font-bold text-gray-700 dark:text-gray-300 mt-2 uppercase">{selectedAccount.accountName}</p>
+                )}
+                <div className="flex justify-between mt-1 text-xs text-gray-500">
+                  <p>Chi nhánh: {selectedAccount.branchName}</p>
+                  {selectedAccount.bankCountry && <p>Quốc gia: {selectedAccount.bankCountry}</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                <div>
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Hạn mức thấu chi</span>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {selectedAccount.overdraftLimit !== undefined ? formatBalance(selectedAccount.overdraftLimit, selectedAccount.currency) : 'Không cấp'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Ngày đối soát cuối</span>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {selectedAccount.lastReconciledDate || 'Chưa đối soát'}
+                  </p>
+                </div>
               </div>
 
               <div className="pt-1">
@@ -321,6 +361,13 @@ export function BankAccountsPage() {
                 <span className="text-gray-500 dark:text-gray-400 font-sans">Ngày mở tài khoản:</span>
                 <span className="text-gray-800 dark:text-gray-200">{selectedAccount.openedDate}</span>
               </div>
+              
+              {selectedAccount.updatedBy && (
+                <div className="flex justify-between items-center pt-1 text-xs font-mono">
+                  <span className="text-gray-500 dark:text-gray-400 font-sans">Cập nhật lần cuối bởi:</span>
+                  <span className="text-gray-800 dark:text-gray-200 font-semibold">{selectedAccount.updatedBy}</span>
+                </div>
+              )}
 
               {selectedAccount.notes && (
                 <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
@@ -332,11 +379,17 @@ export function BankAccountsPage() {
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
               {selectedAccount.status === 'ACTIVE' && (
-                <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg shadow transition-colors text-sm">
+                <button
+                  onClick={() => toast.success('Đã gửi yêu cầu chuyển khoản thanh khoản nội bộ!')}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                >
                   <DollarSign className="w-4 h-4" /> Chuyển khoản thanh khoản nội bộ
                 </button>
               )}
-              <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
+              <button
+                onClick={() => toast.info('Chức năng đang được phát triển!')}
+                className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
+              >
                 <Lock className="w-4 h-4 inline mr-1" /> Kiểm tra nhật ký ký quỹ
               </button>
             </div>
@@ -417,7 +470,7 @@ export function BankAccountsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng số dư sổ sách</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng số dư sổ sách ({editingAccount.currency || 'VND'})</label>
               <input
                 type="number"
                 value={editingAccount.currentBalance ?? 0}
@@ -426,7 +479,7 @@ export function BankAccountsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Vốn lưu động khả dụng</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Vốn lưu động khả dụng ({editingAccount.currency || 'VND'})</label>
               <input
                 type="number"
                 value={editingAccount.availableWorkingCapital ?? 0}

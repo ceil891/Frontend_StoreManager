@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Plus, Download, Search, Eye, Mail, Phone, MapPin, Building, Key, ShieldCheck, UserX, UserCheck, Trash2, X, Edit } from 'lucide-react';
+import { Plus, Download, Search, Eye, Mail, Phone, MapPin, Building, Key, ShieldCheck, UserX, UserCheck, Trash2, X, Edit, Scan } from 'lucide-react';
+import { toast } from 'sonner';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -7,6 +8,7 @@ import { useUserStore, BRANCH_OPTIONS, type SystemUserRecord } from '../store/us
 import { UserAvatar } from '@/shared/components/ui/UserAvatar';
 import { buildUserAvatarUrl } from '@/shared/utils/userAvatar';
 import { useRoleStore } from '../store/roleStore';
+import { useHrStore } from '../store/hrStore';
 import type { ColumnDef } from '@tanstack/react-table';
 
 const statusBadgeStyles = {
@@ -21,12 +23,15 @@ type SearchField = 'all' | 'userCode' | 'fullName' | 'emailAddress' | 'assignedR
 export function UsersPage() {
   const { users, addUser, updateUser, deleteUser } = useUserStore();
   const roles = useRoleStore((s) => s.roles);
+  const { departments, positions } = useHrStore();
 
   const [search, setSearch] = useState('');
   const [searchField, setSearchField] = useState<SearchField>('all');
   const [selectedUser, setSelectedUser] = useState<SystemUserRecord | null>(null);
   const [deletingUser, setDeletingUser] = useState<SystemUserRecord | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
+  const [faceScanUser, setFaceScanUser] = useState<SystemUserRecord | null>(null);
+  const [scanStep, setScanStep] = useState<number>(0);
 
   // Filter states
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -48,10 +53,16 @@ export function UsersPage() {
     contactPhone: '',
     avatarUrl: buildUserAvatarUrl('new-user@retailhub.vn'),
     assignedRole: 'STAFF',
-    primaryDepartment: 'Bộ phận Bán hàng & Chăm sóc khách hàng',
+    departmentId: departments[0]?.id || '1',
     branchId: 'BR-001',
     branchLocation: 'CH Quận 1',
-    positionTitle: 'Nhân viên',
+    positionId: positions[0]?.id || '1',
+    managerId: '',
+    timezone: 'Asia/Ho_Chi_Minh',
+    locale: 'vi-VN',
+    identityId: '',
+    taxId: '',
+    dateOfBirth: '',
     hireDate: new Date().toISOString().split('T')[0],
     employmentType: 'FULL_TIME',
     status: 'ACTIVE',
@@ -78,7 +89,7 @@ export function UsersPage() {
           matchesSearch = item.assignedRole.toLowerCase().includes(q);
           break;
         case 'primaryDepartment':
-          matchesSearch = item.primaryDepartment.toLowerCase().includes(q);
+          matchesSearch = item.departmentId.toLowerCase().includes(q) || (departments.find(d => d.id === item.departmentId)?.departmentName.toLowerCase().includes(q) ?? false);
           break;
         case 'branchLocation':
           matchesSearch = item.branchLocation.toLowerCase().includes(q);
@@ -90,7 +101,7 @@ export function UsersPage() {
             item.fullName.toLowerCase().includes(q) ||
             item.emailAddress.toLowerCase().includes(q) ||
             item.assignedRole.toLowerCase().includes(q) ||
-            item.primaryDepartment.toLowerCase().includes(q) ||
+            (departments.find(d => d.id === item.departmentId)?.departmentName.toLowerCase().includes(q) ?? false) ||
             item.branchLocation.toLowerCase().includes(q)
           );
       }
@@ -134,8 +145,8 @@ export function UsersPage() {
       u.contactPhone,
       u.avatarUrl,
       u.assignedRole,
-      u.positionTitle,
-      u.primaryDepartment,
+      positions.find(p => p.id === u.positionId)?.positionTitle || u.positionId,
+      departments.find(d => d.id === u.departmentId)?.departmentName || u.departmentId,
       u.branchId,
       u.branchLocation,
       u.hireDate,
@@ -164,10 +175,16 @@ export function UsersPage() {
       contactPhone: '',
       avatarUrl: buildUserAvatarUrl('new-user@retailhub.vn'),
       assignedRole: roles.length > 0 ? roles[0].roleCode : 'STAFF',
-      primaryDepartment: 'Bộ phận Bán hàng & Chăm sóc khách hàng',
+      departmentId: departments.length > 0 ? departments[0].id : '1',
       branchId: 'BR-001',
       branchLocation: 'CH Quận 1',
-      positionTitle: 'Nhân viên',
+      positionId: positions.length > 0 ? positions[0].id : '1',
+      managerId: '',
+      timezone: 'Asia/Ho_Chi_Minh',
+      locale: 'vi-VN',
+      identityId: '',
+      taxId: '',
+      dateOfBirth: '',
       hireDate: new Date().toISOString().split('T')[0],
       employmentType: 'FULL_TIME',
       status: 'ACTIVE',
@@ -192,10 +209,16 @@ export function UsersPage() {
       contactPhone: user.contactPhone,
       avatarUrl: user.avatarUrl,
       assignedRole: user.assignedRole,
-      primaryDepartment: user.primaryDepartment,
+      departmentId: user.departmentId,
       branchId: user.branchId,
       branchLocation: user.branchLocation,
-      positionTitle: user.positionTitle,
+      positionId: user.positionId,
+      managerId: user.managerId || '',
+      timezone: user.timezone || 'Asia/Ho_Chi_Minh',
+      locale: user.locale || 'vi-VN',
+      identityId: user.identityId || '',
+      taxId: user.taxId || '',
+      dateOfBirth: user.dateOfBirth || '',
       hireDate: user.hireDate,
       employmentType: user.employmentType,
       status: user.status,
@@ -269,7 +292,7 @@ export function UsersPage() {
             />
             <div>
               <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.fullName}</p>
-              <p className="text-xs text-gray-500">{row.original.positionTitle}</p>
+              <p className="text-xs text-gray-500">{positions.find(p => p.id === row.original.positionId)?.positionTitle || row.original.positionId}</p>
               <p className="text-xs text-gray-400 font-mono">{row.original.emailAddress}</p>
             </div>
           </div>
@@ -289,14 +312,17 @@ export function UsersPage() {
         },
       },
       {
-        accessorKey: 'primaryDepartment',
+        accessorKey: 'departmentId',
         header: 'Phòng ban & Chi nhánh',
-        cell: ({ row }) => (
-          <div>
-            <p className="text-sm text-gray-800 dark:text-gray-200 font-medium">{row.original.primaryDepartment}</p>
-            <p className="text-xs text-gray-500">{row.original.branchLocation}</p>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const dept = departments.find(d => d.id === row.original.departmentId);
+          return (
+            <div>
+              <p className="text-sm text-gray-800 dark:text-gray-200 font-medium">{dept?.departmentName || row.original.departmentId}</p>
+              <p className="text-xs text-gray-500">{row.original.branchLocation}</p>
+            </div>
+          );
+        },
       },
       {
         accessorKey: 'employmentType',
@@ -493,8 +519,17 @@ export function UsersPage() {
                 size="xl"
               />
               <h3 className="text-lg font-bold text-gray-900 dark:text-white">{selectedUser.fullName}</h3>
-              <p className="text-sm text-gray-500">{selectedUser.positionTitle}</p>
+              <p className="text-sm text-gray-500">{positions.find(p => p.id === selectedUser.positionId)?.positionTitle || selectedUser.positionId}</p>
               <p className="text-xs font-mono text-gray-400">{selectedUser.userCode} · {selectedUser.authUserId}</p>
+              {selectedUser.faceEnrolled ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 mt-2 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Nhận diện khuôn mặt (Đã đăng ký)
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 mt-2 rounded-full text-xs font-bold bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400" /> Nhận diện khuôn mặt (Chưa thiết lập)
+                </span>
+              )}
             </div>
 
             <div className={`flex items-center justify-between p-4 rounded-xl border ${
@@ -558,7 +593,11 @@ export function UsersPage() {
               </div>
               <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                 <Building className="w-4 h-4 text-gray-400 shrink-0" />
-                <span>Bộ phận phòng ban: <span className="font-semibold">{selectedUser.primaryDepartment}</span></span>
+                <span>Bộ phận phòng ban: <span className="font-semibold">{departments.find(d => d.id === selectedUser.departmentId)?.departmentName || selectedUser.departmentId}</span></span>
+              </div>
+              <div className="flex items-center gap-2 text-sm pt-1 text-gray-700 dark:text-gray-300">
+                <UserCheck className="w-4 h-4 text-gray-400 shrink-0" />
+                <span>Quản lý trực tiếp: <span className="font-semibold">{selectedUser.managerId ? users.find(u => u.id === selectedUser.managerId)?.fullName : 'Không có'}</span></span>
               </div>
               <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                 <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
@@ -599,6 +638,19 @@ export function UsersPage() {
                   )}
                 </button>
               )}
+              <button 
+                onClick={() => {
+                  setFaceScanUser(selectedUser);
+                  setScanStep(0);
+                }}
+                className={`px-4 py-2.5 font-semibold rounded-lg border transition-colors text-sm flex items-center gap-2 ${
+                  selectedUser.faceEnrolled
+                    ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100'
+                    : 'bg-primary/5 text-primary border-primary/20 hover:bg-primary/10'
+                }`}
+              >
+                <Scan className="w-4 h-4" /> {selectedUser.faceEnrolled ? 'Cập nhật khuôn mặt' : 'Quét khuôn mặt'}
+              </button>
               <button 
                 onClick={() => handleOpenEdit(selectedUser)}
                 className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
@@ -701,13 +753,16 @@ export function UsersPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Chức danh *</label>
-              <input
-                type="text"
+              <select
                 required
-                value={formData.positionTitle}
-                onChange={(e) => setFormData((p) => ({ ...p, positionTitle: e.target.value }))}
+                value={formData.positionId}
+                onChange={(e) => setFormData((p) => ({ ...p, positionId: e.target.value }))}
                 className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-              />
+              >
+                {positions.map(pos => (
+                  <option key={pos.id} value={pos.id}>{pos.positionTitle}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ngày vào làm *</label>
@@ -724,13 +779,16 @@ export function UsersPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bộ phận phòng ban *</label>
-              <input
-                type="text"
+              <select
                 required
-                value={formData.primaryDepartment}
-                onChange={(e) => setFormData((p) => ({ ...p, primaryDepartment: e.target.value }))}
+                value={formData.departmentId}
+                onChange={(e) => setFormData((p) => ({ ...p, departmentId: e.target.value }))}
                 className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-              />
+              >
+                {departments.map(dept => (
+                  <option key={dept.id} value={dept.id}>{dept.departmentName}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Chi nhánh *</label>
@@ -776,6 +834,64 @@ export function UsersPage() {
                 <option value="PART_TIME">Bán thời gian (PART TIME)</option>
                 <option value="CONTRACTOR">Nhà thầu ngoài (CONTRACTOR)</option>
                 <option value="SEASONAL">Thử việc/Thời vụ (SEASONAL)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Quản lý trực tiếp</label>
+              <select
+                value={formData.managerId || ''}
+                onChange={(e) => setFormData((p) => ({ ...p, managerId: e.target.value || undefined }))}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              >
+                <option value="">-- Không có --</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.fullName}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Thông tin định danh (CCCD)</label>
+              <input
+                type="text"
+                placeholder="Số CMND/CCCD"
+                value={formData.identityId || ''}
+                onChange={(e) => setFormData((p) => ({ ...p, identityId: e.target.value }))}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mã số thuế</label>
+              <input
+                type="text"
+                value={formData.taxId || ''}
+                onChange={(e) => setFormData((p) => ({ ...p, taxId: e.target.value }))}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ngày sinh</label>
+              <input
+                type="date"
+                value={formData.dateOfBirth || ''}
+                onChange={(e) => setFormData((p) => ({ ...p, dateOfBirth: e.target.value }))}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ngôn ngữ (Locale)</label>
+              <select
+                value={formData.locale || 'vi-VN'}
+                onChange={(e) => setFormData((p) => ({ ...p, locale: e.target.value }))}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              >
+                <option value="vi-VN">Tiếng Việt (vi-VN)</option>
+                <option value="en-US">English (en-US)</option>
               </select>
             </div>
           </div>
@@ -865,6 +981,106 @@ export function UsersPage() {
             <button type="button" onClick={() => setErrorNotice(null)} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold">Đóng</button>
           </div>
         </div>
+      </Modal>
+
+      {/* Modal: Quét & Đăng ký khuôn mặt */}
+      <Modal
+        isOpen={!!faceScanUser}
+        onClose={() => setFaceScanUser(null)}
+        title={faceScanUser?.faceEnrolled ? 'Cập Nhật Nhận Diện Khuôn Mặt' : 'Đăng Ký Nhận Diện Khuôn Mặt'}
+        width="max-w-md"
+      >
+        {faceScanUser && (
+          <div className="space-y-6">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Thiết lập dữ liệu sinh trắc học khuôn mặt cho nhân viên <strong>{faceScanUser.fullName}</strong>. Dữ liệu này dùng để xác thực điểm danh ca làm việc và ký duyệt quầy quỹ.
+            </p>
+
+            {scanStep === 0 && (
+              <div className="flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 text-center gap-4">
+                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center text-primary animate-pulse">
+                  <Scan className="w-8 h-8" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-gray-900 dark:text-white">Yêu cầu truy cập Camera</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-[280px]">
+                    Hệ thống sẽ kết nối với camera thiết bị để bắt đầu quy trình quét nhận diện 3D.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScanStep(1);
+                    // Giả lập quét mặt trong 3.5 giây
+                    setTimeout(() => {
+                      setScanStep(2);
+                      const updated = {
+                        ...faceScanUser,
+                        faceEnrolled: true,
+                      };
+                      updateUser(updated);
+                      // Đồng bộ ngay trong drawer nếu được chọn
+                      if (selectedUser?.id === faceScanUser.id) {
+                        setSelectedUser(updated);
+                      }
+                      toast.success(`Đăng ký khuôn mặt cho ${faceScanUser.fullName} thành công!`);
+                    }, 3500);
+                  }}
+                  className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-white text-sm font-semibold rounded-xl shadow-sm transition-all"
+                >
+                  Cho phép & Bắt đầu quét
+                </button>
+              </div>
+            )}
+
+            {scanStep === 1 && (
+              <div className="relative aspect-square max-w-[260px] mx-auto rounded-full overflow-hidden bg-black border-4 border-primary shadow-lg flex items-center justify-center">
+                {/* Giả lập webcam */}
+                <div className="absolute inset-0 bg-cover bg-center filter grayscale contrast-125 opacity-70" style={{ backgroundImage: `url(${faceScanUser.avatarUrl})` }} />
+                
+                {/* Hiệu ứng quét nhận diện */}
+                <div className="absolute inset-0 bg-gradient-to-b from-primary/0 via-primary/20 to-primary/0 animate-bounce" />
+                <div className="absolute inset-4 rounded-full border-2 border-dashed border-primary/40 animate-spin" />
+                
+                {/* Khung ngắm diện tích mặt */}
+                <div className="absolute w-44 h-44 rounded-full border border-primary/80 flex items-center justify-center">
+                  <div className="w-4 h-4 border-t-2 border-l-2 border-primary absolute top-0 left-0" />
+                  <div className="w-4 h-4 border-t-2 border-r-2 border-primary absolute top-0 right-0" />
+                  <div className="w-4 h-4 border-b-2 border-l-2 border-primary absolute bottom-0 left-0" />
+                  <div className="w-4 h-4 border-b-2 border-r-2 border-primary absolute bottom-0 right-0" />
+                  
+                  <span className="text-[10px] text-primary font-mono tracking-widest uppercase animate-pulse">Scanning...</span>
+                </div>
+
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 px-3 py-1 rounded-full text-[11px] text-white font-mono flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
+                  <span>REC: CAM_01</span>
+                </div>
+              </div>
+            )}
+
+            {scanStep === 2 && (
+              <div className="flex flex-col items-center justify-center p-8 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-800 text-center gap-4 animate-in fade-in zoom-in-95 duration-200">
+                <div className="w-16 h-16 bg-emerald-600 rounded-full flex items-center justify-center text-white shadow-lg">
+                  <ShieldCheck className="w-8 h-8" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-emerald-800 dark:text-emerald-400">Đăng ký hoàn tất!</h4>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-1 max-w-[280px]">
+                    Dữ liệu sinh trắc học khuôn mặt của nhân viên đã được mã hóa và lưu vào hệ thống bảo mật.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFaceScanUser(null)}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-all"
+                >
+                  Xác nhận & Đóng
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </>
   );

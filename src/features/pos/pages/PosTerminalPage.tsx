@@ -8,7 +8,7 @@ import {
 import { usePosCartStore } from '../store/posCartStore';
 import type { PosProduct } from '../store/posCartStore';
 import { usePosConfigStore, type PaymentMethodRecord } from '../store/posConfigStore';
-import { useSalesStore, BRANCH_NAME_BY_ID } from '@/features/sales/store/salesStore';
+import { useSalesStore, BRANCH_NAME_BY_ID, deriveShiftId, WALK_IN_CUSTOMER_ID } from '@/features/sales/store/salesStore';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { Link } from 'react-router';
 
@@ -86,7 +86,7 @@ export function PosTerminalPage() {
   // Customer
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
   const [customerPhone, setCustomerPhone] = useState('');
-  const [activeCustomer, setActiveCustomer] = useState<{ name: string; phone: string; points: number } | null>(null);
+  const [activeCustomer, setActiveCustomer] = useState<{ id: string; name: string; phone: string; points: number } | null>(null);
   const [usedPoints, setUsedPoints] = useState(0);
 
   // Voucher
@@ -164,7 +164,7 @@ export function PosTerminalPage() {
   const handleSearchCustomer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerPhone.trim()) return;
-    setActiveCustomer({ name: 'Nguyễn Văn ' + customerPhone.slice(-1), phone: customerPhone, points: Math.floor(Math.random() * 5000) + 500 });
+    setActiveCustomer({ id: '1', name: 'Nguyễn Văn ' + customerPhone.slice(-1), phone: customerPhone, points: Math.floor(Math.random() * 5000) + 500 });
     setIsSearchingCustomer(false);
     setUsedPoints(0);
   };
@@ -227,9 +227,12 @@ export function PosTerminalPage() {
 
     addSaleOrder({
       code,
-      customerName: activeCustomer?.name ?? 'Khách lẻ',
+      customerId: activeCustomer?.id ?? WALK_IN_CUSTOMER_ID,
       date: dateStr,
-      total: Math.round(totalAmount),
+      subTotal: Math.round(subtotal),
+      taxAmount: Math.round(vatAmount),
+      discountAmount: Math.round(voucherDiscount + pointsDiscount),
+      totalAmount: Math.round(totalAmount),
       status: 'COMPLETED',
       paymentStatus: 'PAID',
       paymentMethod: payLabel,
@@ -242,6 +245,10 @@ export function PosTerminalPage() {
       currency: 'VND',
       itemsSummary,
       orderLines,
+      amountTendered: isCashPayment ? Math.round(cashGivenNum) : Math.round(totalAmount),
+      changeAmount: isCashPayment ? Math.round(changeAmount) : 0,
+      shiftId: deriveShiftId(now),
+      promoCodeApplied: appliedVoucher?.code,
     });
 
     setIsSuccess(true);
@@ -642,8 +649,14 @@ export function PosTerminalPage() {
                     <div className="mb-4">
                       <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Tiền khách đưa</label>
                       <input
-                        type="number" value={cashGiven}
-                        onChange={e => setCashGiven(e.target.value)}
+                        type="text"
+                        inputMode="numeric"
+                        value={cashGiven}
+                        onChange={e => {
+                          // TC2 fix: strip non-digits then remove leading zeros
+                          const digits = e.target.value.replace(/\D/g, '');
+                          setCashGiven(digits === '' ? '' : String(parseInt(digits, 10)));
+                        }}
                         placeholder="Nhập số tiền..."
                         className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xl font-black focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
                       />

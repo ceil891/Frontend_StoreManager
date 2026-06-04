@@ -8,48 +8,12 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface InventoryAuditSession {
-  id: string;
-  auditNumber: string;
-  storeLocation: string;
-  scheduledDate: string;
-  executionDate?: string;
-  type: 'FULL_STORE' | 'CYCLE_COUNT' | 'CATEGORY_SPECIFIC' | 'DISCREPANCY_SPOT_CHECK';
-  totalSkusCounted: number;
-  discrepancySkusCount: number;
-  netValuationVariance: number;
-  status: 'SCHEDULED' | 'IN_PROGRESS' | 'UNDER_REVIEW' | 'RECONCILED_CLOSED';
-  leadAuditor: string;
-  notes?: string;
-}
-
-// Chi tiết sản phẩm được kiểm kê (mock)
-interface AuditLineItem {
-  sku: string;
-  name: string;
-  systemQty: number;
-  actualQty: number;
-  variance: number;
-  unitCost: number;
-}
-
-const MOCK_LINE_ITEMS: AuditLineItem[] = [
-  { sku: 'SV-001', name: 'Sữa Vinamilk 1L', systemQty: 120, actualQty: 118, variance: -2, unitCost: 29000 },
-  { sku: 'BH-002', name: 'Bia Heineken 330ml', systemQty: 200, actualQty: 200, variance: 0, unitCost: 14000 },
-  { sku: 'GS-003', name: 'Gạo ST25 5kg', systemQty: 45, actualQty: 42, variance: -3, unitCost: 155000 },
-  { sku: 'NM-004', name: 'Nước mắm Chinsu 500ml', systemQty: 88, actualQty: 90, variance: +2, unitCost: 22000 },
-  { sku: 'MG-005', name: 'Mì gói Hảo Hảo', systemQty: 500, actualQty: 488, variance: -12, unitCost: 5500 },
-  { sku: 'CF-009', name: 'Cà phê G7 3in1', systemQty: 60, actualQty: 60, variance: 0, unitCost: 52000 },
-];
-
-const INITIAL_AUDITS: InventoryAuditSession[] = [
-  { id: '1', auditNumber: 'KK-2024-501', storeLocation: 'CH Quận 1 – Trung tâm', scheduledDate: '2024-05-15', executionDate: '2024-05-16', type: 'FULL_STORE', totalSkusCounted: 4500, discrepancySkusCount: 12, netValuationVariance: -350000, status: 'RECONCILED_CLOSED', leadAuditor: 'Nguyễn Minh Châu', notes: 'Kiểm kê toàn bộ kho tháng 5. Chênh lệch nhỏ ở khu hàng đóng gói.' },
-  { id: '2', auditNumber: 'KK-2024-502', storeLocation: 'Kho Trung tâm phân phối', scheduledDate: '2024-05-17', executionDate: '2024-05-17', type: 'CYCLE_COUNT', totalSkusCounted: 1850, discrepancySkusCount: 15, netValuationVariance: -123000, status: 'UNDER_REVIEW', leadAuditor: 'Trần Đức Anh', notes: 'Kiểm định kỳ khu hàng giá trị cao. Đang chờ phê duyệt kết quả.' },
-  { id: '3', auditNumber: 'KK-2024-503', storeLocation: 'CH Tân Bình', scheduledDate: '2024-05-18', type: 'CATEGORY_SPECIFIC', totalSkusCounted: 350, discrepancySkusCount: 0, netValuationVariance: 0, status: 'IN_PROGRESS', leadAuditor: 'Lê Thị Hương', notes: 'Kiểm danh mục đồ uống và hàng mới nhập tháng 5.' },
-  { id: '4', auditNumber: 'KK-2024-504', storeLocation: 'CH Quận 7', scheduledDate: '2024-05-20', type: 'DISCREPANCY_SPOT_CHECK', totalSkusCounted: 0, discrepancySkusCount: 0, netValuationVariance: 0, status: 'SCHEDULED', leadAuditor: 'Phạm Văn Bình', notes: 'Kiểm tra đột xuất sau cảnh báo lệch số liệu từ POS.' },
-];
+import {
+  useInventoryStore,
+  MOCK_AUDIT_LINE_ITEMS,
+  VARIANCE_REASON_LABELS,
+  type InventoryAuditSession,
+} from '../store/inventoryStore';
 
 const EMPTY_AUDIT: Omit<InventoryAuditSession, 'id'> = {
   auditNumber: '',
@@ -61,6 +25,7 @@ const EMPTY_AUDIT: Omit<InventoryAuditSession, 'id'> = {
   netValuationVariance: 0,
   status: 'SCHEDULED',
   leadAuditor: '',
+  isBlindCount: false,
   notes: '',
 };
 
@@ -83,7 +48,7 @@ const fmtVND = (n: number) =>
 
 // ─────────────────────────────────────────────────────────────────────────────
 export function InventoryCheckPage() {
-  const [audits, setAudits] = useState<InventoryAuditSession[]>(INITIAL_AUDITS);
+  const { inventoryAudits: audits, addInventoryAudit, updateInventoryAudit, deleteInventoryAudit } = useInventoryStore();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
@@ -123,29 +88,31 @@ export function InventoryCheckPage() {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAudit.auditNumber || !editingAudit.storeLocation) return;
+    const payload = {
+      auditNumber: editingAudit.auditNumber!,
+      storeLocation: editingAudit.storeLocation!,
+      scheduledDate: editingAudit.scheduledDate || new Date().toISOString().slice(0, 10),
+      type: editingAudit.type || 'FULL_STORE',
+      totalSkusCounted: editingAudit.totalSkusCounted || 0,
+      discrepancySkusCount: editingAudit.discrepancySkusCount || 0,
+      netValuationVariance: editingAudit.netValuationVariance || 0,
+      status: editingAudit.status || 'SCHEDULED',
+      leadAuditor: editingAudit.leadAuditor || '',
+      isBlindCount: editingAudit.isBlindCount ?? false,
+      approvedBy: editingAudit.approvedBy,
+      lineItems: editingAudit.lineItems,
+      notes: editingAudit.notes,
+    };
     if (modalMode === 'create') {
-      const newAudit: InventoryAuditSession = {
-        id: Date.now().toString(),
-        auditNumber: editingAudit.auditNumber!,
-        storeLocation: editingAudit.storeLocation!,
-        scheduledDate: editingAudit.scheduledDate || new Date().toISOString().slice(0, 10),
-        type: editingAudit.type || 'FULL_STORE',
-        totalSkusCounted: editingAudit.totalSkusCounted || 0,
-        discrepancySkusCount: editingAudit.discrepancySkusCount || 0,
-        netValuationVariance: editingAudit.netValuationVariance || 0,
-        status: editingAudit.status || 'SCHEDULED',
-        leadAuditor: editingAudit.leadAuditor || '',
-        notes: editingAudit.notes,
-      };
-      setAudits([...audits, newAudit]);
-    } else {
-      setAudits(audits.map(a => a.id === editingAudit.id ? { ...a, ...editingAudit } as InventoryAuditSession : a));
+      addInventoryAudit(payload);
+    } else if (editingAudit.id) {
+      updateInventoryAudit(editingAudit.id, payload);
     }
     setIsModalOpen(false);
   };
 
   const handleApprove = (id: string) => {
-    setAudits(audits.map(a => a.id === id ? { ...a, status: 'RECONCILED_CLOSED' } : a));
+    updateInventoryAudit(id, { status: 'RECONCILED_CLOSED', approvedBy: 'Giám đốc Kho (phê duyệt tự động)' });
     setSelectedAudit(null);
   };
 
@@ -202,6 +169,15 @@ export function InventoryCheckPage() {
           </span>
         );
       },
+    },
+    {
+      accessorKey: 'isBlindCount',
+      header: 'Kiểm mù',
+      cell: ({ row }) => (
+        <span className={`text-xs font-bold px-2 py-0.5 rounded ${row.original.isBlindCount ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-600'}`}>
+          {row.original.isBlindCount ? 'Blind' : 'Mở'}
+        </span>
+      ),
     },
     {
       accessorKey: 'scheduledDate',
@@ -391,8 +367,10 @@ export function InventoryCheckPage() {
                       { label: 'Loại kiểm kê', value: TYPE_MAP[selectedAudit.type] },
                       { label: 'Tổng SKU đã kiểm', value: `${selectedAudit.totalSkusCounted.toLocaleString()} SKU` },
                       { label: 'Số SKU lệch số', value: selectedAudit.discrepancySkusCount > 0 ? <span className="text-red-600 font-bold">{selectedAudit.discrepancySkusCount} SKU</span> : <span className="text-emerald-600 font-semibold">Không có</span> },
+                      { label: 'Chế độ kiểm mù', value: selectedAudit.isBlindCount ? 'Có — ẩn tồn hệ thống' : 'Không' },
                       { label: 'Ngày thực hiện', value: selectedAudit.executionDate || 'Chưa thực hiện' },
                       { label: 'Kiểm toán viên', value: selectedAudit.leadAuditor },
+                      { label: 'Người phê duyệt CL', value: selectedAudit.approvedBy || 'Chưa phê duyệt' },
                     ].map(({ label, value }) => (
                       <div key={label} className="flex justify-between items-center px-4 py-2.5">
                         <span className="text-gray-500 dark:text-gray-400">{label}</span>
@@ -425,23 +403,37 @@ export function InventoryCheckPage() {
               {/* TAB: Chi tiết sản phẩm */}
               {drawerTab === 'items' && (
                 <div className="space-y-3">
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">So sánh tồn kho Thực tế vs Hệ thống</p>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    So sánh tồn kho Thực tế vs Hệ thống
+                    {selectedAudit.isBlindCount && (
+                      <span className="ml-2 text-indigo-600 normal-case">(Kiểm mù — tồn HT ẩn với auditor)</span>
+                    )}
+                  </p>
                   <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-                    {MOCK_LINE_ITEMS.map(item => (
+                    {(selectedAudit.lineItems ?? MOCK_AUDIT_LINE_ITEMS).map(item => (
                       <div key={item.sku} className={`flex items-center gap-3 p-3 rounded-xl border text-sm ${item.variance !== 0 ? 'border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-900/10' : 'border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/20'}`}>
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-gray-900 dark:text-white truncate">{item.name}</p>
                           <p className="text-[11px] text-gray-400 font-mono">{item.sku}</p>
+                          {item.variance !== 0 && item.varianceReason && (
+                            <p className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold mt-0.5">
+                              Lý do: {VARIANCE_REASON_LABELS[item.varianceReason]}
+                            </p>
+                          )}
                         </div>
                         <div className="text-right shrink-0">
                           <div className="flex items-center gap-3 text-xs">
-                            <span className="text-gray-500">HT: <span className="font-bold text-gray-700 dark:text-gray-300">{item.systemQty}</span></span>
+                            {!selectedAudit.isBlindCount && (
+                              <span className="text-gray-500">HT: <span className="font-bold text-gray-700 dark:text-gray-300">{item.systemQty}</span></span>
+                            )}
                             <span className="text-gray-500">TT: <span className="font-bold text-gray-700 dark:text-gray-300">{item.actualQty}</span></span>
-                            <span className={`font-black text-sm ${item.variance > 0 ? 'text-emerald-600' : item.variance < 0 ? 'text-red-500' : 'text-gray-400'}`}>
-                              {item.variance === 0 ? '±0' : item.variance > 0 ? `+${item.variance}` : item.variance}
-                            </span>
+                            {!selectedAudit.isBlindCount && (
+                              <span className={`font-black text-sm ${item.variance > 0 ? 'text-emerald-600' : item.variance < 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                                {item.variance === 0 ? '±0' : item.variance > 0 ? `+${item.variance}` : item.variance}
+                              </span>
+                            )}
                           </div>
-                          {item.variance !== 0 && (
+                          {!selectedAudit.isBlindCount && item.variance !== 0 && (
                             <p className="text-[10px] text-red-500 font-semibold mt-0.5">
                               {fmtVND(item.variance * item.unitCost)}
                             </p>
@@ -496,12 +488,29 @@ export function InventoryCheckPage() {
               </select>
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Kiểm toán viên chủ trì</label>
-            <input type="text" value={editingAudit.leadAuditor || ''} onChange={e => setEditingAudit({ ...editingAudit, leadAuditor: e.target.value })}
-              placeholder="Họ tên kiểm toán viên..."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500" />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Kiểm toán viên chủ trì</label>
+              <input type="text" value={editingAudit.leadAuditor || ''} onChange={e => setEditingAudit({ ...editingAudit, leadAuditor: e.target.value })}
+                placeholder="Họ tên kiểm toán viên..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Người phê duyệt chênh lệch</label>
+              <input type="text" value={editingAudit.approvedBy || ''} onChange={e => setEditingAudit({ ...editingAudit, approvedBy: e.target.value })}
+                placeholder="Kế toán / Giám đốc kho..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500" />
+            </div>
           </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={editingAudit.isBlindCount ?? false}
+              onChange={e => setEditingAudit({ ...editingAudit, isBlindCount: e.target.checked })}
+              className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">Kiểm kê mù (Blind Count) — ẩn tồn hệ thống với người đếm</span>
+          </label>
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Ghi chú</label>
             <textarea rows={2} value={editingAudit.notes || ''} onChange={e => setEditingAudit({ ...editingAudit, notes: e.target.value })}
@@ -535,7 +544,7 @@ export function InventoryCheckPage() {
               Hủy bỏ
             </button>
             <button type="button"
-              onClick={() => { setAudits(audits.filter(a => a.id !== deletingAudit?.id)); setDeletingAudit(null); }}
+              onClick={() => { if (deletingAudit) deleteInventoryAudit(deletingAudit.id); setDeletingAudit(null); }}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg text-sm">
               Xóa kỳ kiểm kê
             </button>

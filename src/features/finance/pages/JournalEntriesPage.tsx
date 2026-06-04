@@ -69,6 +69,11 @@ export function JournalEntriesPage() {
           description: '',
           debit: 0,
           credit: 0,
+          entityId: '',
+          costCenter: '',
+          currency: 'VND',
+          exchangeRate: 1,
+          originalAmount: 0,
         },
       ],
     };
@@ -168,6 +173,9 @@ export function JournalEntriesPage() {
                 <tr>
                   <th className="px-3 py-3">TK</th>
                   <th className="px-3 py-3">Tên tài khoản</th>
+                  <th className="px-3 py-3">Đối tượng</th>
+                  <th className="px-3 py-3">TT Chi phí</th>
+                  <th className="px-3 py-3">Ngoại tệ & Tỷ giá</th>
                   <th className="px-3 py-3">Diễn giải dòng</th>
                   <th className="px-3 py-3 text-right">Nợ</th>
                   <th className="px-3 py-3 text-right">Có</th>
@@ -199,6 +207,42 @@ export function JournalEntriesPage() {
                       </select>
                     </td>
                     <td className="px-3 py-2 text-gray-700 dark:text-gray-200">{line.accountName}</td>
+                    <td className="px-3 py-2">
+                      <input
+                        value={line.entityId || ''}
+                        onChange={(e) => updateLine(line.id, (prev) => ({ ...prev, entityId: e.target.value }))}
+                        className="w-20 rounded-lg border border-gray-300 bg-white px-2 py-2 text-xs focus:border-emerald-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900"
+                        placeholder="Mã ĐT"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        value={line.costCenter || ''}
+                        onChange={(e) => updateLine(line.id, (prev) => ({ ...prev, costCenter: e.target.value }))}
+                        className="w-20 rounded-lg border border-gray-300 bg-white px-2 py-2 text-xs focus:border-emerald-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900"
+                        placeholder="TTCP"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex gap-1">
+                        <select
+                          value={line.currency || 'VND'}
+                          onChange={(e) => updateLine(line.id, (prev) => ({ ...prev, currency: e.target.value }))}
+                          className="rounded-lg border border-gray-300 bg-white px-1 py-2 text-xs focus:border-emerald-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900"
+                        >
+                          <option value="VND">VND</option>
+                          <option value="USD">USD</option>
+                          <option value="EUR">EUR</option>
+                        </select>
+                        <input
+                          type="number"
+                          placeholder="Tỷ giá"
+                          value={line.exchangeRate || 1}
+                          onChange={(e) => updateLine(line.id, (prev) => ({ ...prev, exchangeRate: Number(e.target.value) || 1 }))}
+                          className="w-16 rounded-lg border border-gray-300 bg-white px-1 py-2 text-xs text-right focus:border-emerald-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900"
+                        />
+                      </div>
+                    </td>
                     <td className="px-3 py-2">
                       <input
                         value={line.description}

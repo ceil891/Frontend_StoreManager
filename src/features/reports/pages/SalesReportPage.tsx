@@ -6,7 +6,9 @@ import {
 } from 'recharts';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import type { ColumnDef } from '@tanstack/react-table';
-import { useSalesStore, type SaleOrder } from '@/features/sales/store/salesStore';
+import { useSalesStore, type SaleOrder, formatMoney } from '@/features/sales/store/salesStore';
+import { resolveCustomerName } from '@/features/sales/store/salesHelpers';
+import { useCrmStore } from '@/features/crm/store/crmStore';
 
 interface SalesTransaction {
   id: string;
@@ -20,8 +22,8 @@ interface SalesTransaction {
 
 /** Quy đổi về VND để tính KPI thống nhất (USD mock × 25000) */
 function toVnd(order: SaleOrder): number {
-  if (order.currency === 'VND') return order.total;
-  return Math.round(order.total * 25000);
+  if (order.currency === 'VND') return order.totalAmount;
+  return Math.round(order.totalAmount * 25000);
 }
 
 function formatVnd(n: number): string {
@@ -34,14 +36,14 @@ function mapOrderStatus(status: SaleOrder['status']): SalesTransaction['status']
   return 'PENDING';
 }
 
-function orderToTransaction(order: SaleOrder): SalesTransaction {
+function orderToTransaction(order: SaleOrder, customerName: string): SalesTransaction {
   const isVnd = order.currency === 'VND';
   return {
     id: order.code,
-    customerName: order.customerName,
+    customerName,
     store: order.branchName || (order.origin === 'POS' ? 'Quầy POS' : order.origin === 'ONLINE' ? 'Online' : 'Bán hàng thủ công'),
-    amount: isVnd ? order.total : order.total,
-    amountLabel: isVnd ? formatVnd(order.total) : `$${order.total.toFixed(2)}`,
+    amount: order.totalAmount,
+    amountLabel: formatMoney(order.totalAmount, isVnd ? 'VND' : 'USD'),
     status: mapOrderStatus(order.status),
     date: order.date,
   };
@@ -49,6 +51,7 @@ function orderToTransaction(order: SaleOrder): SalesTransaction {
 
 export function SalesReportPage() {
   const saleOrders = useSalesStore((s) => s.saleOrders);
+  const customers = useCrmStore((s) => s.customers);
   const [dateRange, setDateRange] = useState('7d');
 
   const paidOrCompleted = saleOrders.filter(
@@ -125,7 +128,7 @@ export function SalesReportPage() {
       [...saleOrders]
         .sort((a, b) => b.date.localeCompare(a.date))
         .slice(0, 10)
-        .map(orderToTransaction),
+        .map((o) => orderToTransaction(o, resolveCustomerName(o.customerId, customers))),
     [saleOrders]
   );
 

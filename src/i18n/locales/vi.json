@@ -1,0 +1,13 @@
+{
+  "app": {
+    "title": "RetailHub"
+  },
+  "common": {
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "delete": "Xóa",
+    "confirm": "Đồng ý",
+    "search": "Tìm kiếm",
+    "noData": "Không có dữ liệu"
+  }
+}

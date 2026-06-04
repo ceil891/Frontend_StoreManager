@@ -44,6 +44,8 @@ export function CombosPage() {
     setModalMode('create');
     setEditingCombo({
       comboCode: `CB-${Math.floor(1000 + Math.random() * 9000)}`,
+      comboBarcode: `893${Math.floor(1000000000 + Math.random() * 9000000000)}`,
+      comboType: 'PRE_ASSEMBLED',
       comboName: '',
       description: '',
       comboPrice: 0,
@@ -69,10 +71,12 @@ export function CombosPage() {
 
     const payload: Omit<ProductCombo, 'id'> = {
       comboCode: editingCombo.comboCode,
+      comboBarcode: editingCombo.comboBarcode || '',
+      comboType: editingCombo.comboType || 'PRE_ASSEMBLED',
       comboName: editingCombo.comboName,
       description: editingCombo.description || '',
       comboPrice: Number(editingCombo.comboPrice) || 0,
-      status: editingCombo.status as any || 'ACTIVE',
+      status: editingCombo.status || 'ACTIVE',
       validFrom: editingCombo.validFrom || '',
       validUntil: editingCombo.validUntil || '',
       details: editingDetails
@@ -135,6 +139,23 @@ export function CombosPage() {
         accessorKey: 'comboCode',
         header: 'Mã Combo',
         cell: (info) => <span className="font-mono font-bold text-blue-600 hover:underline">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'comboBarcode',
+        header: 'Mã vạch Combo',
+        cell: (info) => <span className="font-mono text-xs text-gray-600 dark:text-gray-400">{info.getValue() as string || '—'}</span>,
+      },
+      {
+        accessorKey: 'comboType',
+        header: 'Loại Combo',
+        cell: (info) => {
+          const t = info.getValue() as string;
+          return (
+            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+              {t === 'PRE_ASSEMBLED' ? 'Đóng gói sẵn' : 'Gom động (POS)'}
+            </span>
+          );
+        },
       },
       {
         accessorKey: 'comboName',
@@ -316,6 +337,16 @@ export function CombosPage() {
 
             <div className="p-4 bg-gray-50 border rounded-xl space-y-2 text-sm">
               <div className="flex justify-between">
+                <span className="text-gray-500">Mã vạch quầy (UPC):</span>
+                <span className="font-mono font-semibold">{selectedCombo.comboBarcode || '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Loại Combo:</span>
+                <span className="font-semibold">
+                  {selectedCombo.comboType === 'PRE_ASSEMBLED' ? 'Pre-assembled (trừ tồn khi đóng gói)' : 'Dynamic/Virtual (trừ khi bán POS)'}
+                </span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-gray-500">Ngày bắt đầu áp dụng:</span>
                 <span className="font-semibold">{selectedCombo.validFrom || 'N/A'}</span>
               </div>
@@ -355,6 +386,29 @@ export function CombosPage() {
                     className="w-full px-3 py-2 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500"
                     required
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Mã vạch Combo (UPC) *</label>
+                  <input
+                    type="text"
+                    value={editingCombo.comboBarcode || ''}
+                    onChange={(e) => setEditingCombo({ ...editingCombo, comboBarcode: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Loại Combo</label>
+                  <select
+                    value={editingCombo.comboType || 'PRE_ASSEMBLED'}
+                    onChange={(e) => setEditingCombo({ ...editingCombo, comboType: e.target.value as ProductCombo['comboType'] })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="PRE_ASSEMBLED">Pre-assembled (đóng gói sẵn)</option>
+                    <option value="DYNAMIC_VIRTUAL">Dynamic/Virtual (gom tại quầy)</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Trạng thái</label>

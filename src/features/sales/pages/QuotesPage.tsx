@@ -1,15 +1,19 @@
 import { useState, useMemo } from 'react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Plus, Download, Search, Filter, Eye, FileText, User, Calendar, CheckCircle2, Edit, Trash2 } from 'lucide-react';
-import { useSalesStore, type QuoteItem } from '../store/salesStore';
+import { useSalesStore, type QuoteItem, calcTotalAmount, formatMoney } from '../store/salesStore';
+import { resolveCustomerName } from '../store/salesHelpers';
+import { useCrmStore } from '@/features/crm/store/crmStore';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { OrderLinesEditor, sumOrderLines } from '@/shared/components/sales/OrderLinesEditor';
+import { CustomerSelect } from '@/shared/components/sales/CustomerSelect';
+import { OrderPricingFields } from '@/shared/components/sales/OrderPricingFields';
 
 export function QuotesPage() {
   const { quotes: data, addQuote, updateQuote, deleteQuote } = useSalesStore();
+  const customers = useCrmStore((s) => s.customers);
   const canManage = usePermission('sales:quotes:manage');
   const [search, setSearch] = useState('');
   const [selectedQuote, setSelectedQuote] = useState<QuoteItem | null>(null);
@@ -21,7 +25,7 @@ export function QuotesPage() {
   const [deletingQuote, setDeletingQuote] = useState<QuoteItem | null>(null);
 
   const filtered = data.filter((item) =>
-    item.customerName.toLowerCase().includes(search.toLowerCase()) ||
+    resolveCustomerName(item.customerId, customers).toLowerCase().includes(search.toLowerCase()) ||
     item.code.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -32,8 +36,13 @@ export function QuotesPage() {
     
     setEditingQuote({
       code: `QT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      customerName: '',
-      total: 0,
+      customerId: '',
+      issueDate: new Date().toISOString().split('T')[0],
+      revision: 1,
+      subTotal: 0,
+      taxAmount: 0,
+      discountAmount: 0,
+      totalAmount: 0,
       validUntil: nextMonth.toISOString().split('T')[0],
       status: 'DRAFT',
       salesRep: 'System User',
@@ -45,11 +54,15 @@ export function QuotesPage() {
   };
 
   const applyOrderLines = (lines: NonNullable<QuoteItem['orderLines']>) => {
-    const total = sumOrderLines(lines);
+    const subTotal = sumOrderLines(lines);
+    const taxAmount = Number(editingQuote.taxAmount) || 0;
+    const discountAmount = Number(editingQuote.discountAmount) || 0;
+    const totalAmount = calcTotalAmount({ subTotal, taxAmount, discountAmount });
     setEditingQuote((prev) => ({
       ...prev,
       orderLines: lines,
-      total,
+      subTotal,
+      totalAmount,
       itemsCount: lines.filter((l) => l.productName.trim()).length,
     }));
   };
@@ -62,20 +75,29 @@ export function QuotesPage() {
 
   const handleSaveQuote = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingQuote.customerName || !editingQuote.code) return;
+    if (!editingQuote.customerId || !editingQuote.code) return;
 
     const lines = editingQuote.orderLines ?? [];
-    const lineTotal = sumOrderLines(lines);
+    const lineSub = sumOrderLines(lines);
+    const subTotal = lines.length ? lineSub : Number(editingQuote.subTotal) || 0;
+    const taxAmount = Number(editingQuote.taxAmount) || 0;
+    const discountAmount = Number(editingQuote.discountAmount) || 0;
+    const totalAmount = calcTotalAmount({ subTotal, taxAmount, discountAmount });
     const linePayload = {
       orderLines: lines,
-      total: lines.length ? lineTotal : Number(editingQuote.total) || 0,
+      subTotal,
+      taxAmount,
+      discountAmount,
+      totalAmount,
       itemsCount: lines.filter((l) => l.productName.trim()).length || Number(editingQuote.itemsCount) || 0,
     };
 
     if (modalMode === 'create') {
       const newQuote: Omit<QuoteItem, 'id'> = {
         code: editingQuote.code,
-        customerName: editingQuote.customerName,
+        customerId: editingQuote.customerId,
+        issueDate: editingQuote.issueDate || new Date().toISOString().split('T')[0],
+        revision: Number(editingQuote.revision) || 1,
         validUntil: editingQuote.validUntil || new Date().toISOString().split('T')[0],
         status: editingQuote.status as any || 'DRAFT',
         salesRep: editingQuote.salesRep || 'System User',
@@ -103,14 +125,23 @@ export function QuotesPage() {
         cell: (info) => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 hover:underline">{info.getValue() as string}</span>,
       },
       {
-        accessorKey: 'customerName',
+        id: 'customer',
         header: 'Khách hàng / Đối tác',
-        cell: (info) => <span className="font-medium text-gray-900 dark:text-white">{info.getValue() as string}</span>,
+        cell: ({ row }) => (
+          <span className="font-medium text-gray-900 dark:text-white">
+            {resolveCustomerName(row.original.customerId, customers)}
+          </span>
+        ),
       },
       {
-        accessorKey: 'total',
+        accessorKey: 'revision',
+        header: 'Phiên bản',
+        cell: (info) => <span className="font-mono text-xs text-gray-500">v{info.getValue() as number}</span>,
+      },
+      {
+        accessorKey: 'totalAmount',
         header: 'Tổng giá trị',
-        cell: (info) => <span className="font-bold text-gray-900 dark:text-white">${(info.getValue() as number).toFixed(2)}</span>,
+        cell: (info) => <span className="font-bold text-gray-900 dark:text-white">{formatMoney(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'validUntil',
@@ -168,7 +199,7 @@ export function QuotesPage() {
         ),
       },
     ],
-    [canManage]
+    [canManage, customers]
   );
 
   return (
@@ -216,10 +247,10 @@ export function QuotesPage() {
       </div>
 
       {/* Drawer Details */}
-      <Drawer
+      <Modal
         isOpen={!!selectedQuote}
         onClose={() => setSelectedQuote(null)}
-        title={selectedQuote ? `Quotation: ${selectedQuote.code}` : 'Quotation Details'}
+        title={selectedQuote ? `Chi tiết báo giá: ${selectedQuote.code}` : 'Chi tiết báo giá'}
         width="max-w-lg"
       >
         {selectedQuote && (
@@ -230,8 +261,8 @@ export function QuotesPage() {
                   <FileText className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">Total Proposed</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">${selectedQuote.total.toFixed(2)}</p>
+                  <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">Tổng đề xuất</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{formatMoney(selectedQuote.totalAmount, 'VND')}</p>
                 </div>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
@@ -240,37 +271,42 @@ export function QuotesPage() {
                 selectedQuote.status === 'DRAFT' ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
                 'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100'
               }`}>
-                {selectedQuote.status}
+                {selectedQuote.status === 'ACCEPTED' ? 'Đã chấp nhận' : selectedQuote.status === 'SENT' ? 'Đã gửi' : selectedQuote.status === 'DRAFT' ? 'Nháp' : 'Hết hạn'}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Client
+                  <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Khách hàng
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedQuote.customerName}</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white truncate">
+                  {resolveCustomerName(selectedQuote.customerId, customers)}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Phiên bản v{selectedQuote.revision}</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Calendar className="w-4 h-4 text-amber-500" /> Validity
+                  <Calendar className="w-4 h-4 text-amber-500" /> Ngày lập / Hạn
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">Until {selectedQuote.validUntil}</p>
+                <p className="text-sm font-bold text-gray-900 dark:text-white">
+                  {selectedQuote.issueDate} &rarr; {selectedQuote.validUntil}
+                </p>
               </div>
             </div>
 
             <div className="space-y-4 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Sales Representative:</span>
+                <span className="text-gray-500 dark:text-gray-400">Nhân viên phụ trách:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedQuote.salesRep}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Included Line Items:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedQuote.itemsCount} products</span>
+                <span className="text-gray-500 dark:text-gray-400">Số dòng sản phẩm:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{selectedQuote.itemsCount} sản phẩm</span>
               </div>
               {selectedQuote.notes && (
                <div className="pt-2 border-t border-gray-200 dark:border-gray-800 mt-2">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Terms & Notes</span>
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Điều khoản & Ghi chú</span>
                   <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedQuote.notes}</p>
                 </div>
               )}
@@ -278,17 +314,17 @@ export function QuotesPage() {
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
               {selectedQuote.status !== 'ACCEPTED' && (
-                <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                  <CheckCircle2 className="w-4 h-4" /> Convert to Sale Order
+                <button type="button" className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
+                  <CheckCircle2 className="w-4 h-4" /> Chuyển thành Đơn bán hàng
                 </button>
               )}
-              <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
-                Download PDF
+              <button type="button" className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
+                Tải PDF
               </button>
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Form Modal */}
       <Modal
@@ -310,43 +346,34 @@ export function QuotesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng *</label>
-              <input
-                type="text"
-                value={editingQuote.customerName || ''}
-                onChange={(e) => setEditingQuote({ ...editingQuote, customerName: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng (CRM) *</label>
+              <CustomerSelect
+                value={editingQuote.customerId || ''}
+                onChange={(customerId) => setEditingQuote({ ...editingQuote, customerId })}
+                allowWalkIn={false}
                 required
-                placeholder="Tên khách hàng hoặc công ty..."
               />
             </div>
           </div>
 
-          <OrderLinesEditor
-            lines={editingQuote.orderLines ?? []}
-            currency="USD"
-            onChange={applyOrderLines}
-          />
-
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng tiền ($)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày lập báo giá</label>
               <input
-                type="number"
-                step="0.01"
-                readOnly={!!(editingQuote.orderLines?.length)}
-                value={editingQuote.total || 0}
-                onChange={(e) => setEditingQuote({ ...editingQuote, total: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                type="date"
+                value={editingQuote.issueDate || ''}
+                onChange={(e) => setEditingQuote({ ...editingQuote, issueDate: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số lượng mục</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phiên bản (revision)</label>
               <input
                 type="number"
-                readOnly
-                value={editingQuote.itemsCount || 0}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm"
+                min={1}
+                value={editingQuote.revision ?? 1}
+                onChange={(e) => setEditingQuote({ ...editingQuote, revision: parseInt(e.target.value, 10) || 1 })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm font-mono"
               />
             </div>
             <div>
@@ -355,9 +382,36 @@ export function QuotesPage() {
                 type="date"
                 value={editingQuote.validUntil || ''}
                 onChange={(e) => setEditingQuote({ ...editingQuote, validUntil: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
               />
             </div>
+          </div>
+
+          <OrderLinesEditor
+            lines={editingQuote.orderLines ?? []}
+            currency="VND"
+            onChange={applyOrderLines}
+          />
+
+          <OrderPricingFields
+            currency="VND"
+            values={{
+              subTotal: Number(editingQuote.subTotal) || 0,
+              taxAmount: Number(editingQuote.taxAmount) || 0,
+              discountAmount: Number(editingQuote.discountAmount) || 0,
+              totalAmount: Number(editingQuote.totalAmount) || 0,
+            }}
+            onChange={(patch) => setEditingQuote((prev) => ({ ...prev, ...patch }))}
+          />
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số lượng mục</label>
+            <input
+              type="number"
+              readOnly
+              value={editingQuote.itemsCount || 0}
+              className="w-full max-w-[120px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 font-mono text-sm"
+            />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
