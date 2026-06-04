@@ -8,6 +8,8 @@ export interface SecurityRoleRecord {
   description: string;
   assignedUsersCount: number;
   permissionScope: 'GLOBAL_SUPERADMIN' | 'DIVISION_MANAGER' | 'BRANCH_OPERATIONS' | 'RESTRICTED_CASHIER' | 'AUDIT_READONLY';
+  dataScopeBranchIds?: string[];
+  isSystemRole?: boolean;
   mfaEnforced: boolean;
   sessionTimeoutMinutes: number;
   status: 'ACTIVE' | 'DEPRECATED' | 'AUDIT_HOLD';
@@ -90,6 +92,8 @@ export const DEFAULT_MOCK_ROLES: SecurityRoleRecord[] = [
     description: 'Quyền root toàn năng. Cho phép cấu hình hệ thống, quản lý tài chính doanh nghiệp và chính sách an ninh mạng.',
     assignedUsersCount: 1,
     permissionScope: 'GLOBAL_SUPERADMIN',
+    dataScopeBranchIds: ['*'],
+    isSystemRole: true,
     mfaEnforced: true,
     sessionTimeoutMinutes: 15,
     status: 'ACTIVE',
@@ -103,6 +107,8 @@ export const DEFAULT_MOCK_ROLES: SecurityRoleRecord[] = [
     description: 'Giám sát bán hàng tại quầy POS, phê duyệt nhập xuất kho, quản lý danh sách sản phẩm và khách hàng chi nhánh.',
     assignedUsersCount: 1,
     permissionScope: 'BRANCH_OPERATIONS',
+    dataScopeBranchIds: ['BR-001'],
+    isSystemRole: false,
     mfaEnforced: true,
     sessionTimeoutMinutes: 60,
     status: 'ACTIVE',
@@ -149,6 +155,8 @@ export const DEFAULT_MOCK_ROLES: SecurityRoleRecord[] = [
     description: 'Thực hiện kiểm kê kho hàng vật lý, tạo phiếu nhập/xuất kho và kiểm tra hạn sử dụng lô hàng.',
     assignedUsersCount: 1,
     permissionScope: 'BRANCH_OPERATIONS',
+    dataScopeBranchIds: ['BR-002'],
+    isSystemRole: false,
     mfaEnforced: false,
     sessionTimeoutMinutes: 120,
     status: 'ACTIVE',
@@ -168,6 +176,8 @@ export const DEFAULT_MOCK_ROLES: SecurityRoleRecord[] = [
     description: 'Mở ca bán hàng, tạo hóa đơn bán lẻ tại quầy POS. Không có quyền sửa đổi cài đặt hệ thống hoặc phê duyệt kho.',
     assignedUsersCount: 1,
     permissionScope: 'RESTRICTED_CASHIER',
+    dataScopeBranchIds: ['BR-001'],
+    isSystemRole: false,
     mfaEnforced: false,
     sessionTimeoutMinutes: 240,
     status: 'ACTIVE',

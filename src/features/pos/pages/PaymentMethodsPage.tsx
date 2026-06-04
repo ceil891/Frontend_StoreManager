@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, Download, Search, Filter, Eye, CreditCard, Percent, Smartphone, Globe, RefreshCcw, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePosConfigStore, type PaymentMethodRecord } from '../store/posConfigStore';
@@ -12,6 +11,20 @@ const typeBadgeStyles = {
   BANK_TRANSFER_QR: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200',
   CASH_DRAWER: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200',
   BUY_NOW_PAY_LATER: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-red-200',
+};
+
+const typeMap: Record<string, string> = {
+  CREDIT_CARD_GATEWAY: 'Cổng thẻ tín dụng',
+  QR_EWALLET: 'Ví điện tử & QR',
+  BANK_TRANSFER_QR: 'Chuyển khoản QR',
+  CASH_DRAWER: 'Hộp tiền mặt',
+  BUY_NOW_PAY_LATER: 'Mua trước trả sau (BNPL)',
+};
+
+const settlementMap: Record<string, string> = {
+  INSTANT: 'Tức thời',
+  NEXT_DAY: 'Ngày hôm sau (T+1)',
+  T_PLUS_3: 'Sau 3 ngày (T+3)',
 };
 
 export function PaymentMethodsPage() {
@@ -97,7 +110,7 @@ export function PaymentMethodsPage() {
         cell: ({ row }) => (
           <div>
             <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.methodName}</p>
-            <p className="text-xs text-gray-500 font-mono">Engine: {row.original.configuredGateways}</p>
+            <p className="text-xs text-gray-500 font-mono">Động cơ: {row.original.configuredGateways}</p>
           </div>
         ),
       },
@@ -108,7 +121,7 @@ export function PaymentMethodsPage() {
           const t = info.getValue() as keyof typeof typeBadgeStyles;
           return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${typeBadgeStyles[t]}`}>
-              {t.replace(/_/g, ' ')}
+              {typeMap[t] || t}
             </span>
           );
         },
@@ -125,7 +138,10 @@ export function PaymentMethodsPage() {
       {
         accessorKey: 'settlementTime',
         header: 'Thời gian đối soát (SLA)',
-        cell: (info) => <span className="font-mono text-xs text-gray-700 dark:text-gray-300 font-bold">{((info.getValue() as string)).replace(/_/g, ' ')}</span>,
+        cell: (info) => {
+          const val = info.getValue() as string;
+          return <span className="font-mono text-xs text-gray-700 dark:text-gray-300 font-bold">{settlementMap[val] || val}</span>;
+        },
       },
       {
         accessorKey: 'totalVolumeUsd',
@@ -226,10 +242,10 @@ export function PaymentMethodsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedMethod(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedMethod}
         onClose={() => setSelectedMethod(null)}
-        title={selectedMethod ? `Gateway Dossier: ${selectedMethod.methodCode}` : 'Gateway Specification'}
+        title={selectedMethod ? `Chi tiết cổng thanh toán: ${selectedMethod.methodCode}` : 'Chi tiết phương thức'}
         width="max-w-lg"
       >
         {selectedMethod && (
@@ -248,7 +264,7 @@ export function PaymentMethodsPage() {
                   <CreditCard className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Processed Volume (YTD)</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Doanh số tích lũy (YTD)</p>
                   <p className="text-xl font-bold font-mono text-gray-900 dark:text-white mt-0.5">
                     ${selectedMethod.totalVolumeUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </p>
@@ -259,14 +275,16 @@ export function PaymentMethodsPage() {
                 selectedMethod.status === 'TESTING_MODE' ? 'bg-purple-200 text-purple-900 dark:bg-purple-800 dark:text-purple-100' :
                 'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100'
               }`}>
-                {selectedMethod.status.replace('_', ' ')}
+                {selectedMethod.status === 'ACTIVE' ? 'Hoạt động' :
+                 selectedMethod.status === 'TESTING_MODE' ? 'Chế độ test' :
+                 selectedMethod.status === 'MAINTENANCE' ? 'Bảo trì' : 'Vô hiệu hóa'}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Percent className="w-4 h-4 text-emerald-600" /> Gateway Tariff Matrix
+                  <Percent className="w-4 h-4 text-emerald-600" /> Biểu phí cổng thanh toán
                 </div>
                 <p className="text-base font-mono font-bold text-gray-900 dark:text-white truncate">
                   {selectedMethod.processingFeePct}% + ${selectedMethod.fixedFeeUsd.toFixed(2)}
@@ -274,30 +292,30 @@ export function PaymentMethodsPage() {
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <RefreshCcw className="w-4 h-4 text-blue-500" /> Settlement Clearing SLA
+                  <RefreshCcw className="w-4 h-4 text-blue-500" /> Thời gian đối soát (SLA)
                 </div>
-                <p className="text-xs font-bold text-gray-900 dark:text-white truncate font-mono">{selectedMethod.settlementTime.replace(/_/g, ' ')}</p>
+                <p className="text-xs font-bold text-gray-900 dark:text-white truncate font-mono">{settlementMap[selectedMethod.settlementTime] || selectedMethod.settlementTime}</p>
               </div>
             </div>
 
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 text-sm">
               <div className="border-b border-gray-200 dark:border-gray-700 pb-3">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Method Channel & Engine</span>
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Kênh & Động cơ thanh toán</span>
                 <h3 className="text-base font-bold text-gray-900 dark:text-white">{selectedMethod.methodName}</h3>
                 <span className="inline-block mt-1 text-xs bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-300 px-2 py-0.5 rounded font-mono font-bold">
-                  Engine: {selectedMethod.configuredGateways}
+                  Động cơ: {selectedMethod.configuredGateways}
                 </span>
               </div>
 
               <div className="flex justify-between items-center pt-2 text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Payment Channel Type:</span>
+                <span className="text-gray-500 dark:text-gray-400">Loại kênh thanh toán:</span>
                 <span className={`inline-block text-xs px-2.5 py-0.5 rounded-full font-bold border ${typeBadgeStyles[selectedMethod.providerType]}`}>
-                  {selectedMethod.providerType.replace(/_/g, ' ')}
+                  {typeMap[selectedMethod.providerType] || selectedMethod.providerType}
                 </span>
               </div>
 
               <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Supported Currencies</span>
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Đồng tiền hỗ trợ</span>
                 <div className="flex gap-1.5 font-mono font-bold text-xs">
                   {selectedMethod.supportedCurrencies.map((curr) => (
                     <span key={curr} className="bg-white dark:bg-gray-900 px-2 py-0.5 rounded border border-gray-200 dark:border-gray-800 shadow-2xs">
@@ -309,16 +327,16 @@ export function PaymentMethodsPage() {
             </div>
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
-              <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                <Globe className="w-4 h-4" /> Edit API Webhook Keys
+              <button type="button" className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
+                <Globe className="w-4 h-4" /> Sửa khóa API Webhook
               </button>
-              <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
-                <Smartphone className="w-4 h-4 inline mr-1" /> Test Terminal Ping
+              <button type="button" className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
+                <Smartphone className="w-4 h-4 inline mr-1" /> Thử kết nối đầu cuối (Ping)
               </button>
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Form Modal */}
       <Modal

@@ -5,6 +5,7 @@ import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePurchaseStore, type SupplierRecord } from '../store/purchaseStore';
+import { toast } from 'sonner';
 
 export function SuppliersPage() {
   const { suppliers: data, addSupplier, updateSupplier, deleteSupplier } = usePurchaseStore();
@@ -180,7 +181,10 @@ export function SuppliersPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý đối tác nhà cung cấp, chỉ số hiệu suất và điều khoản hợp tác. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0">
+            <button
+              onClick={() => toast.success('Xuất danh sách nhà cung cấp thành công!')}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0"
+            >
               <Download className="w-4 h-4" /> Xuất dữ liệu
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm whitespace-nowrap shrink-0">
@@ -214,7 +218,7 @@ export function SuppliersPage() {
       <Drawer
         isOpen={!!selectedSupplier}
         onClose={() => setSelectedSupplier(null)}
-        title={selectedSupplier ? `Vendor Card: ${selectedSupplier.code}` : 'Vendor Details'}
+        title={selectedSupplier ? `Hồ sơ nhà cung cấp: ${selectedSupplier.code}` : 'Chi tiết nhà cung cấp'}
         width="max-w-lg"
       >
         {selectedSupplier && (
@@ -239,7 +243,7 @@ export function SuppliersPage() {
             </div>
 
             <div className="space-y-4 bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Direct Contact Information</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Thông tin liên hệ trực tiếp</h3>
               <div className="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
                 <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                 <span className="font-semibold">{selectedSupplier.contactPerson}</span>
@@ -260,39 +264,49 @@ export function SuppliersPage() {
 
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Vendor Reliability Rating:</span>
+                <span className="text-gray-500 dark:text-gray-400">Đánh giá mức độ tin cậy:</span>
                 <span className="inline-flex items-center gap-1 font-bold text-amber-500">
                   <Star className="w-4 h-4 fill-amber-500" /> {selectedSupplier.rating.toFixed(1)} / 5.0
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Est. Fulfillment Lead Time:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedSupplier.leadTimeDays} business days</span>
+                <span className="text-gray-500 dark:text-gray-400">Thời gian giao hàng dự kiến:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{selectedSupplier.leadTimeDays} ngày</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Agreed Payment Terms:</span>
+                <span className="text-gray-500 dark:text-gray-400">Điều khoản thanh toán:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedSupplier.paymentTerms}</span>
               </div>
               <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
-                <span className="text-gray-500 dark:text-gray-400">In-Flight Active Purchase Orders:</span>
+                <span className="text-gray-500 dark:text-gray-400">Đơn mua hàng đang xử lý:</span>
                 <span className="font-bold text-emerald-600 dark:text-emerald-400">{selectedSupplier.activeOrdersCount} POs</span>
               </div>
 
               {selectedSupplier.notes && (
                 <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Procurement Agreements & Notes</span>
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Thỏa thuận mua hàng & Ghi chú</span>
                   <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedSupplier.notes}</p>
                 </div>
               )}
             </div>
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
-              <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                <FileText className="w-4 h-4" /> Create Purchase Order
+              <button
+                onClick={() => toast.info('Đang chuyển hướng sang trang tạo đơn mua PO...')}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+              >
+                <FileText className="w-4 h-4" /> Tạo đơn đặt hàng mua (PO)
               </button>
               {selectedSupplier.status !== 'ACTIVE' && (
-                <button className="px-4 py-2.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 font-semibold rounded-lg hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors text-sm">
-                  <CheckCircle2 className="w-4 h-4 inline mr-1" /> Restore Active Status
+                <button
+                  onClick={() => {
+                    updateSupplier(selectedSupplier.id, { status: 'ACTIVE' });
+                    setSelectedSupplier({ ...selectedSupplier, status: 'ACTIVE' });
+                    toast.success('Đã khôi phục trạng thái hoạt động thành công!');
+                  }}
+                  className="px-4 py-2.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 font-semibold rounded-lg hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors text-sm"
+                >
+                  <CheckCircle2 className="w-4 h-4 inline mr-1" /> Khôi phục hoạt động
                 </button>
               )}
             </div>

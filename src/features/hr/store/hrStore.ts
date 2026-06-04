@@ -8,15 +8,16 @@ export interface DepartmentRecord {
   id: string;
   departmentCode: string;
   departmentName: string;
-  headOfDepartment: string;
+  headUserId?: string;
   totalEmployees: number;
   allocatedAnnualBudgetUsd: number;
   ytdSpendUsd: number;
   costCenterCode: string;
   status: 'ACTIVE' | 'MERGING' | 'RESTRUCTURING' | 'INACTIVE';
   establishedDate: string;
-  parentDivision: string;
+  parentId?: string;
   missionStatement?: string;
+  locationId?: string;
 }
 
 export interface JobPositionRecord {
@@ -57,8 +58,8 @@ interface HrState {
 // MOCK DATA SEED
 // ---------------------------
 const MOCK_DEPARTMENTS: DepartmentRecord[] = [
-  { id: '1', departmentCode: 'DPT-SLS-01', departmentName: 'Omnichannel Retail & Store Operations', headOfDepartment: 'VP Marcus Aurelius', totalEmployees: 480, allocatedAnnualBudgetUsd: 4500000.00, ytdSpendUsd: 1850400.00, costCenterCode: 'CC-SALES-101', status: 'ACTIVE', establishedDate: '2018-01-15', parentDivision: 'Global Commercial Operations', missionStatement: 'Maximizing retail gross margin performance across brick-and-mortar storefronts.' },
-  { id: '2', departmentCode: 'DPT-LOG-02', departmentName: 'Supply Chain & Regional Warehousing', headOfDepartment: 'Director Sarah Jenkins', totalEmployees: 185, allocatedAnnualBudgetUsd: 2800000.00, ytdSpendUsd: 1120000.00, costCenterCode: 'CC-LOG-202', status: 'ACTIVE', establishedDate: '2019-06-01', parentDivision: 'Logistics & Distribution' },
+  { id: '1', departmentCode: 'DPT-SLS-01', departmentName: 'Omnichannel Retail & Store Operations', headUserId: '1', totalEmployees: 480, allocatedAnnualBudgetUsd: 4500000.00, ytdSpendUsd: 1850400.00, costCenterCode: 'CC-SALES-101', status: 'ACTIVE', establishedDate: '2018-01-15', parentId: undefined, missionStatement: 'Maximizing retail gross margin performance across brick-and-mortar storefronts.', locationId: 'HQ' },
+  { id: '2', departmentCode: 'DPT-LOG-02', departmentName: 'Supply Chain & Regional Warehousing', headUserId: '2', totalEmployees: 185, allocatedAnnualBudgetUsd: 2800000.00, ytdSpendUsd: 1120000.00, costCenterCode: 'CC-LOG-202', status: 'ACTIVE', establishedDate: '2019-06-01', parentId: undefined, locationId: 'BR-001' },
 ];
 
 const MOCK_POSITIONS: JobPositionRecord[] = [

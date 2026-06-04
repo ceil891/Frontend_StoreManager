@@ -11,7 +11,10 @@ import { AIAlerts } from '@/components/AI/AIAlerts';
 import { AIAssistant } from '@/components/AI/AIAssistant';
 export function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  // TC1 fix: All groups start collapsed; user clicks group header to expand
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(NAV_GROUPS.map((g) => [g.group, true]))
+  );
 
   const user = useAuthUser();
   const role = useAuthRole();

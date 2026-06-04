@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react';
 import { Plus, Download, Search, Filter, Eye, Calendar, CheckCircle2, Send, Building2, FileText, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-import { useSalesStore, type ExportInvoiceItem } from '../store/salesStore';
+import { useSalesStore, type ExportInvoiceItem, formatMoney } from '../store/salesStore';
+import { resolveCustomerName, paymentTermsToDueDate } from '../store/salesHelpers';
+import { useCrmStore } from '@/features/crm/store/crmStore';
+import { CustomerSelect } from '@/shared/components/sales/CustomerSelect';
 import { usePermission } from '@/shared/hooks/usePermission';
 
 export function ExportInvoicesPage() {
   const canManage = usePermission('sales:invoices:manage');
+  const customers = useCrmStore((s) => s.customers);
   const exportInvoices = useSalesStore((s) => s.exportInvoices);
   const addExportInvoice = useSalesStore((s) => s.addExportInvoice);
   const updateExportInvoice = useSalesStore((s) => s.updateExportInvoice);
@@ -24,7 +27,7 @@ export function ExportInvoicesPage() {
 
   const filtered = exportInvoices.filter(
     (item) =>
-      item.customerName.toLowerCase().includes(search.toLowerCase()) ||
+      resolveCustomerName(item.customerId, customers).toLowerCase().includes(search.toLowerCase()) ||
       item.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
       item.taxId.toLowerCase().includes(search.toLowerCase())
   );
@@ -33,9 +36,12 @@ export function ExportInvoicesPage() {
     setModalMode('create');
     setEditing({
       invoiceNumber: `INV-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
-      customerName: '',
+      customerId: '',
       taxId: '',
+      billingAddress: '',
+      orderIds: [],
       issueDate: new Date().toISOString().split('T')[0],
+      dueDate: paymentTermsToDueDate(new Date().toISOString().split('T')[0], 'Net 30'),
       subtotal: 0,
       vatAmount: 0,
       totalAmount: 0,
@@ -54,21 +60,27 @@ export function ExportInvoicesPage() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editing.invoiceNumber || !editing.customerName) return;
+    if (!editing.invoiceNumber || !editing.customerId) return;
     const subtotal = Number(editing.subtotal) || 0;
     const vat = Number(editing.vatAmount) || 0;
     const total = Number(editing.totalAmount) || subtotal + vat;
+    const issueDate = editing.issueDate || new Date().toISOString().split('T')[0];
+    const paymentTerms = editing.paymentTerms || 'Net 30';
+    const dueDate = editing.dueDate || paymentTermsToDueDate(issueDate, paymentTerms);
     if (modalMode === 'create') {
       addExportInvoice({
         invoiceNumber: editing.invoiceNumber,
-        customerName: editing.customerName,
+        customerId: editing.customerId,
         taxId: editing.taxId || '—',
-        issueDate: editing.issueDate || new Date().toISOString().split('T')[0],
+        billingAddress: editing.billingAddress || '—',
+        orderIds: editing.orderIds || [],
+        issueDate,
+        dueDate,
         subtotal,
         vatAmount: vat,
         totalAmount: total,
         status: (editing.status as ExportInvoiceItem['status']) || 'ISSUED',
-        paymentTerms: editing.paymentTerms || 'Net 30',
+        paymentTerms,
         notes: editing.notes,
       });
     } else if (editing.id) {
@@ -77,6 +89,7 @@ export function ExportInvoicesPage() {
         subtotal,
         vatAmount: vat,
         totalAmount: total,
+        dueDate,
       } as Partial<ExportInvoiceItem>);
     }
     setIsModalOpen(false);
@@ -103,9 +116,9 @@ export function ExportInvoicesPage() {
         cell: (info) => <span className="font-mono font-bold text-blue-600 dark:text-blue-400 hover:underline">{info.getValue() as string}</span>,
       },
       {
-        accessorKey: 'customerName',
+        id: 'customer',
         header: 'Khách hàng B2B',
-        cell: (info) => <span className="font-medium text-gray-900 dark:text-white">{info.getValue() as string}</span>,
+        cell: ({ row }) => <span className="font-medium text-gray-900 dark:text-white">{resolveCustomerName(row.original.customerId, customers)}</span>,
       },
       {
         accessorKey: 'taxId',
@@ -120,7 +133,7 @@ export function ExportInvoicesPage() {
       {
         accessorKey: 'totalAmount',
         header: 'Tổng tiền (gồm VAT)',
-        cell: (info) => <span className="font-bold text-gray-900 dark:text-white">${(info.getValue() as number).toFixed(2)}</span>,
+        cell: (info) => <span className="font-bold text-gray-900 dark:text-white">{formatMoney(info.getValue() as number, 'VND')}</span>,
       },
       {
         accessorKey: 'status',
@@ -190,7 +203,7 @@ export function ExportInvoicesPage() {
         ),
       },
     ],
-    [canManage]
+    [canManage, customers]
   );
 
   return (
@@ -214,7 +227,7 @@ export function ExportInvoicesPage() {
               <button
                 type="button"
                 onClick={handleOpenCreate}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
               >
                 <Plus className="w-4 h-4" /> Thêm hóa đơn
               </button>
@@ -247,10 +260,10 @@ export function ExportInvoicesPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedInvoice(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedInvoice}
         onClose={() => setSelectedInvoice(null)}
-        title={selectedInvoice ? `Hóa đơn: ${selectedInvoice.invoiceNumber}` : 'Chi tiết'}
+        title={selectedInvoice ? `Chi tiết hóa đơn: ${selectedInvoice.invoiceNumber}` : 'Chi tiết hóa đơn'}
         width="max-w-lg"
       >
         {selectedInvoice && (
@@ -262,7 +275,7 @@ export function ExportInvoicesPage() {
                 </div>
                 <div>
                   <p className="text-xs text-blue-800 dark:text-blue-400 font-semibold uppercase tracking-wider">Tổng thanh toán</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">${selectedInvoice.totalAmount.toFixed(2)}</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{formatMoney(selectedInvoice.totalAmount, 'VND')}</p>
                 </div>
               </div>
               <span
@@ -276,7 +289,7 @@ export function ExportInvoicesPage() {
                         : 'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100'
                 }`}
               >
-                {selectedInvoice.status}
+                {selectedInvoice.status === 'PAID' ? 'Đã thanh toán' : selectedInvoice.status === 'ISSUED' ? 'Đã phát hành' : selectedInvoice.status === 'OVERDUE' ? 'Quá hạn' : 'Đã hủy'}
               </span>
             </div>
 
@@ -285,14 +298,14 @@ export function ExportInvoicesPage() {
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400" /> Khách B2B
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedInvoice.customerName}</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{resolveCustomerName(selectedInvoice.customerId, customers)}</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   <Calendar className="w-4 h-4 text-blue-500" /> Ngày & điều khoản
                 </div>
                 <p className="text-base font-bold text-gray-900 dark:text-white truncate">
-                  {selectedInvoice.issueDate} ({selectedInvoice.paymentTerms})
+                  {selectedInvoice.issueDate} (Due: {selectedInvoice.dueDate})
                 </p>
               </div>
             </div>
@@ -303,16 +316,20 @@ export function ExportInvoicesPage() {
                 <span className="font-mono font-semibold text-gray-900 dark:text-white">{selectedInvoice.taxId}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Subtotal:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">${selectedInvoice.subtotal.toFixed(2)}</span>
+                <span className="text-gray-500 dark:text-gray-400">Địa chỉ xuất HĐ:</span>
+                <span className="font-semibold text-gray-900 dark:text-white text-right">{selectedInvoice.billingAddress}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Tạm tính:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{formatMoney(selectedInvoice.subtotal, 'VND')}</span>
               </div>
               <div className="flex justify-between items-center text-sm border-b border-gray-200 dark:border-gray-700 pb-3">
-                <span className="text-gray-500 dark:text-gray-400">VAT:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">${selectedInvoice.vatAmount.toFixed(2)}</span>
+                <span className="text-gray-500 dark:text-gray-400">Thuế VAT:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{formatMoney(selectedInvoice.vatAmount, 'VND')}</span>
               </div>
               <div className="flex justify-between items-center text-base font-bold pt-1">
                 <span className="text-gray-900 dark:text-white">Tổng cộng:</span>
-                <span className="text-blue-600 dark:text-blue-400">${selectedInvoice.totalAmount.toFixed(2)}</span>
+                <span className="text-emerald-600 dark:text-emerald-400">{formatMoney(selectedInvoice.totalAmount, 'VND')}</span>
               </div>
 
               {selectedInvoice.notes && (
@@ -328,7 +345,7 @@ export function ExportInvoicesPage() {
                 <button
                   type="button"
                   onClick={handleMarkPaid}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
                 >
                   <CheckCircle2 className="w-4 h-4" /> Đánh dấu đã thanh toán
                 </button>
@@ -342,7 +359,7 @@ export function ExportInvoicesPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}
@@ -374,12 +391,11 @@ export function ExportInvoicesPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên khách B2B *</label>
-            <input
-              type="text"
-              value={editing.customerName || ''}
-              onChange={(e) => setEditing({ ...editing, customerName: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng (CRM) *</label>
+            <CustomerSelect
+              value={editing.customerId || ''}
+              onChange={(customerId) => setEditing({ ...editing, customerId })}
+              allowWalkIn={false}
               required
             />
           </div>
@@ -392,39 +408,58 @@ export function ExportInvoicesPage() {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm font-mono"
             />
           </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ xuất hóa đơn</label>
+            <input
+              type="text"
+              value={editing.billingAddress || ''}
+              onChange={(e) => setEditing({ ...editing, billingAddress: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Order IDs</label>
+            <input
+              type="text"
+              value={(editing.orderIds || []).join(', ')}
+              onChange={(e) => setEditing({ ...editing, orderIds: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm font-mono"
+              placeholder="SO-001, SO-002"
+            />
+          </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Subtotal</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tạm tính (₫)</label>
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 value={editing.subtotal ?? 0}
                 onChange={(e) => setEditing({ ...editing, subtotal: parseFloat(e.target.value) || 0 })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">VAT</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thuế VAT (₫)</label>
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 value={editing.vatAmount ?? 0}
                 onChange={(e) => setEditing({ ...editing, vatAmount: parseFloat(e.target.value) || 0 })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng cộng (₫)</label>
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 value={editing.totalAmount ?? (Number(editing.subtotal) || 0) + (Number(editing.vatAmount) || 0)}
                 onChange={(e) => setEditing({ ...editing, totalAmount: parseFloat(e.target.value) || 0 })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
               <select
@@ -443,7 +478,16 @@ export function ExportInvoicesPage() {
               <input
                 type="text"
                 value={editing.paymentTerms || ''}
-                onChange={(e) => setEditing({ ...editing, paymentTerms: e.target.value })}
+                onChange={(e) => setEditing({ ...editing, paymentTerms: e.target.value, dueDate: paymentTermsToDueDate(editing.issueDate || new Date().toISOString().split('T')[0], e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hạn thanh toán</label>
+              <input
+                type="date"
+                value={editing.dueDate || ''}
+                onChange={(e) => setEditing({ ...editing, dueDate: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
               />
             </div>
@@ -461,7 +505,7 @@ export function ExportInvoicesPage() {
             <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border rounded-lg text-sm">
               Hủy
             </button>
-            <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold">
+            <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold">
               Lưu
             </button>
           </div>
@@ -486,3 +530,4 @@ export function ExportInvoicesPage() {
     </>
   );
 }
+

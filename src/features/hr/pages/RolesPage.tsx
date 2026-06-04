@@ -4,6 +4,7 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import { useRoleStore, ALL_SYSTEM_PERMISSIONS, type SecurityRoleRecord } from '../store/roleStore';
+import { BRANCH_OPTIONS } from '../store/userStore';
 import type { ColumnDef } from '@tanstack/react-table';
 
 const scopeBadgeStyles = {
@@ -37,6 +38,8 @@ export function RolesPage() {
     roleTitle: '',
     description: '',
     permissionScope: 'BRANCH_OPERATIONS',
+    dataScopeBranchIds: ['BR-001'],
+    isSystemRole: false,
     mfaEnforced: false,
     sessionTimeoutMinutes: 60,
     status: 'ACTIVE',
@@ -127,6 +130,8 @@ export function RolesPage() {
       roleTitle: '',
       description: '',
       permissionScope: 'BRANCH_OPERATIONS',
+      dataScopeBranchIds: ['BR-001'],
+      isSystemRole: false,
       mfaEnforced: false,
       sessionTimeoutMinutes: 60,
       status: 'ACTIVE',
@@ -143,6 +148,8 @@ export function RolesPage() {
       roleTitle: role.roleTitle,
       description: role.description,
       permissionScope: role.permissionScope,
+      dataScopeBranchIds: role.dataScopeBranchIds || [],
+      isSystemRole: role.isSystemRole || false,
       mfaEnforced: role.mfaEnforced,
       sessionTimeoutMinutes: role.sessionTimeoutMinutes,
       status: role.status,
@@ -175,8 +182,8 @@ export function RolesPage() {
   };
 
   const handleDelete = (role: SecurityRoleRecord) => {
-    if (role.roleCode === 'SUPER_ADMIN') {
-      setErrorNotice('Không thể xóa vai trò SUPER_ADMIN hệ thống để tránh khóa tài khoản root!');
+    if (role.isSystemRole || role.roleCode === 'SUPER_ADMIN') {
+      setErrorNotice('Không thể xóa vai trò hệ thống (System Role)!');
       return;
     }
     setDeletingRole(role);
@@ -232,7 +239,10 @@ export function RolesPage() {
         header: 'Tên vai trò & Mô tả',
         cell: ({ row }) => (
           <div>
-            <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.roleTitle}</p>
+            <p className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-1.5">
+              {row.original.roleTitle}
+              {row.original.isSystemRole && <span className="bg-red-100 text-red-800 text-[10px] px-1 rounded font-bold uppercase">System</span>}
+            </p>
             <p className="text-xs text-gray-500 truncate max-w-xs">{row.original.description}</p>
           </div>
         ),
@@ -307,13 +317,13 @@ export function RolesPage() {
             </button>
             <button
               onClick={() => handleDelete(row.original)}
-              disabled={row.original.roleCode === 'SUPER_ADMIN'}
+              disabled={row.original.isSystemRole || row.original.roleCode === 'SUPER_ADMIN'}
               className={`p-1.5 rounded-lg transition-colors ${
-                row.original.roleCode === 'SUPER_ADMIN' 
+                (row.original.isSystemRole || row.original.roleCode === 'SUPER_ADMIN')
                   ? 'text-gray-200 dark:text-gray-800 cursor-not-allowed' 
                   : 'text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
               }`}
-              title="Xóa vai trò"
+              title={row.original.isSystemRole ? "Vai trò hệ thống không thể xóa" : "Xóa vai trò"}
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -508,6 +518,10 @@ export function RolesPage() {
                 <span className="text-gray-500 dark:text-gray-400 font-sans">Thời gian kết thúc phiên (Timeout):</span>
                 <span className="text-gray-800 dark:text-gray-200 font-bold">{selectedRole.sessionTimeoutMinutes} phút</span>
               </div>
+              <div className="flex justify-between items-center pt-1 text-xs font-mono">
+                <span className="text-gray-500 dark:text-gray-400 font-sans">Data Scope (Branches):</span>
+                <span className="text-gray-800 dark:text-gray-200 font-bold truncate max-w-[200px]">{selectedRole.dataScopeBranchIds?.join(', ') || 'N/A'}</span>
+              </div>
             </div>
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
@@ -519,7 +533,7 @@ export function RolesPage() {
               </button>
               <button 
                 onClick={() => handleDelete(selectedRole)}
-                disabled={selectedRole.roleCode === 'SUPER_ADMIN'}
+                disabled={selectedRole.isSystemRole || selectedRole.roleCode === 'SUPER_ADMIN'}
                 className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-red-50 dark:hover:bg-red-950/40 text-gray-700 dark:text-gray-300 hover:text-red-600 rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Trash2 className="w-4 h-4 inline mr-1" /> Gỡ bỏ vai trò
@@ -543,7 +557,7 @@ export function RolesPage() {
               <input
                 type="text"
                 required
-                disabled={formMode === 'edit' && formData.roleCode === 'SUPER_ADMIN'}
+                disabled={formMode === 'edit' && formData.isSystemRole}
                 placeholder="Ví dụ: STORE_MANAGER"
                 value={formData.roleCode}
                 onChange={(e) => setFormData(p => ({ ...p, roleCode: e.target.value.toUpperCase().replace(/\s+/g, '_') }))}
@@ -555,10 +569,11 @@ export function RolesPage() {
               <input
                 type="text"
                 required
+                disabled={formMode === 'edit' && formData.isSystemRole}
                 placeholder="Ví dụ: Giám sát bán hàng chi nhánh"
                 value={formData.roleTitle}
                 onChange={(e) => setFormData(p => ({ ...p, roleTitle: e.target.value }))}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary disabled:opacity-50"
               />
             </div>
           </div>
@@ -589,6 +604,30 @@ export function RolesPage() {
                 <option value="RESTRICTED_CASHIER">Nhân viên thu ngân (RESTRICTED_CASHIER)</option>
                 <option value="AUDIT_READONLY">Độc giả kiểm toán (AUDIT_READONLY)</option>
               </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Phạm vi chi nhánh (Data Scope)</label>
+              <div className="flex flex-col gap-2 max-h-32 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-gray-50 dark:bg-gray-900">
+                <label className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  <input type="checkbox" checked={formData.dataScopeBranchIds?.includes('*')} onChange={(e) => {
+                    if (e.target.checked) setFormData(p => ({ ...p, dataScopeBranchIds: ['*'] }));
+                    else setFormData(p => ({ ...p, dataScopeBranchIds: [] }));
+                  }} className="rounded border-gray-300 text-primary focus:ring-primary w-4 h-4" /> Toàn hệ thống (*)
+                </label>
+                {BRANCH_OPTIONS.map(b => (
+                  <label key={b.id} className={`flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 ${formData.dataScopeBranchIds?.includes('*') ? 'opacity-50' : ''}`}>
+                    <input type="checkbox" disabled={formData.dataScopeBranchIds?.includes('*')} checked={formData.dataScopeBranchIds?.includes(b.id)} onChange={(e) => {
+                      setFormData(p => {
+                        const prev = p.dataScopeBranchIds || [];
+                        if (e.target.checked) return { ...p, dataScopeBranchIds: [...prev.filter(id => id !== '*'), b.id] };
+                        return { ...p, dataScopeBranchIds: prev.filter(id => id !== b.id) };
+                      });
+                    }} className="rounded border-gray-300 text-primary focus:ring-primary w-4 h-4" /> {b.label}
+                  </label>
+                ))}
+              </div>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Timeout hết hạn phiên (Phút) *</label>

@@ -362,16 +362,44 @@ export function ActivityLogsPage() {
                   </div>
                 </div>
               )}
+              
+              {(selectedLog.oldValues || selectedLog.newValues) && (
+                <div className="pt-3 border-t border-gray-100 dark:border-gray-800 mt-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Truy vết dữ liệu (JSON Diff)</p>
+                  <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                    <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 p-2 rounded overflow-x-auto text-red-800 dark:text-red-300">
+                      <p className="font-bold border-b border-red-200 dark:border-red-800/50 pb-1 mb-1">Trước khi sửa</p>
+                      <pre>{selectedLog.oldValues ? JSON.stringify(selectedLog.oldValues, null, 2) : 'N/A'}</pre>
+                    </div>
+                    <div className="bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 p-2 rounded overflow-x-auto text-emerald-800 dark:text-emerald-300">
+                      <p className="font-bold border-b border-emerald-200 dark:border-emerald-800/50 pb-1 mb-1">Sau khi sửa</p>
+                      <pre>{selectedLog.newValues ? JSON.stringify(selectedLog.newValues, null, 2) : 'N/A'}</pre>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="flex items-center gap-2 text-gray-500">
-                <Monitor className="w-4 h-4" />
-                <span className="font-mono text-xs">{selectedLog.ipAddress}</span>
+            <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-xl border border-gray-200 dark:border-gray-700 grid grid-cols-2 gap-3 text-sm">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-gray-500">
+                  <Monitor className="w-4 h-4 shrink-0" />
+                  <span className="font-mono text-xs">{selectedLog.ipAddress}</span>
+                </div>
+                {selectedLog.userAgent && (
+                  <div className="flex text-gray-500 text-[10px] font-mono">
+                    <span className="truncate" title={selectedLog.userAgent}>{selectedLog.userAgent}</span>
+                  </div>
+                )}
+                {selectedLog.sessionId && (
+                  <div className="flex text-gray-500 text-[10px] font-mono font-semibold">
+                    Session: {selectedLog.sessionId}
+                  </div>
+                )}
               </div>
-              <div className="text-right">
-                <p className="text-xs text-gray-500">Thời gian</p>
-                <p className="font-mono text-sm font-semibold text-gray-900 dark:text-white">{selectedLog.timestamp}</p>
+              <div className="text-right flex flex-col justify-end">
+                <p className="text-xs text-gray-500">Thời gian ghi nhận</p>
+                <p className="font-mono text-sm font-bold text-gray-900 dark:text-white">{selectedLog.timestamp}</p>
               </div>
             </div>
           </div>

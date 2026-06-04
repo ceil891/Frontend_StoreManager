@@ -139,7 +139,7 @@ export function PriceListsPage() {
         cell: ({ row }) => (
           <div>
             <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.listName}</p>
-            <p className="text-xs text-gray-500 font-mono">Scope: {row.original.applicableBranches}</p>
+            <p className="text-xs text-gray-500 font-mono">Phạm vi: {row.original.applicableBranches}</p>
           </div>
         ),
       },
@@ -219,8 +219,8 @@ export function PriceListsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Price Lists & Valuation Schedules</h1>
-            <p className="text-sm text-gray-500 mt-1">Quản lý Bảng giá, Chính sách giá sỉ (B2B) và ghi đè giá đặc biệt cho từng mã SKU.</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Danh sách giá và lịch trình định giá</h1>
+            <p className="text-sm text-gray-500 mt-1">Quản lý bảng giá, chính sách giá sỉ (B2B) và ghi đè giá đặc biệt theo SKU.</p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white border text-gray-700 rounded-lg text-sm font-medium shadow-sm">
@@ -239,20 +239,20 @@ export function PriceListsPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by matrix code, list name or branch scope..."
+              placeholder="Tìm kiếm theo mã bảng giá, tên hoặc phạm vi chi nhánh..."
               className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm"
             />
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedList(row)} />
+        <ReusableDataTable columns={columns} data={filtered} />
       </div>
 
       {/* VIEW DRAWER */}
       <Drawer
         isOpen={!!selectedList}
         onClose={() => setSelectedList(null)}
-        title={selectedList ? `Price Matrix: ${selectedList.listCode}` : 'Price List'}
+        title={selectedList ? `Bảng giá: ${selectedList.listCode}` : 'Thông tin bảng giá'}
         width="max-w-xl"
       >
         {selectedList && (
@@ -267,8 +267,8 @@ export function PriceListsPage() {
                   <DollarSign className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase text-gray-500">Valuation Target Markup</p>
-                  <p className="text-2xl font-bold font-mono text-emerald-600 mt-0.5">+{selectedList.markupPercentage}% over cost</p>
+                  <p className="text-xs font-semibold uppercase text-gray-500">Tỷ lệ Markup mục tiêu</p>
+                  <p className="text-2xl font-bold font-mono text-emerald-600 mt-0.5">+{selectedList.markupPercentage}% trên chi phí</p>
                 </div>
               </div>
             </div>
@@ -276,21 +276,21 @@ export function PriceListsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white p-4 rounded-xl border shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
-                  <Tag className="w-4 h-4 text-emerald-600" /> Overridden SKUs
+                  <Tag className="w-4 h-4 text-emerald-600" /> SKU ghi đè giá
                 </div>
-                <p className="text-xl font-mono font-bold text-gray-900 truncate">{selectedList.details?.length || 0} items</p>
+                <p className="text-xl font-mono font-bold text-gray-900 truncate">{selectedList.details?.length || 0} mục</p>
               </div>
               <div className="bg-white p-4 rounded-xl border shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
-                  <Calendar className="w-4 h-4 text-blue-500" /> Target Currency
+                  <Calendar className="w-4 h-4 text-blue-500" /> Tiền tệ áp dụng
                 </div>
-                <p className="text-xl font-bold font-mono text-gray-900 truncate">{selectedList.currency} Anchor</p>
+                <p className="text-xl font-bold font-mono text-gray-900 truncate">{selectedList.currency}</p>
               </div>
             </div>
 
             <div className="space-y-3 bg-gray-50 p-4 rounded-xl border text-sm">
               <div className="border-b pb-3">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Price List Title</span>
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Tiêu đề Bảng giá</span>
                 <h3 className="text-base font-bold text-gray-900">{selectedList.listName}</h3>
               </div>
               <div className="flex justify-between">

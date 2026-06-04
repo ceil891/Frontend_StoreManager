@@ -19,103 +19,10 @@ import {
   Minimize2,
   X
 } from 'lucide-react';
-
-interface MobileProduct {
-  id: string;
-  sku: string;
-  name: string;
-  category: string;
-  price: number;
-  costPrice: number;
-  brand: string;
-  unit: string;
-  weight: string;
-  location: string;
-  onHand: number;
-  status: 'ACTIVE' | 'INACTIVE';
-  imageUrl: string;
-}
-
-const INITIAL_MOBILE_PRODUCTS: MobileProduct[] = [
-  { 
-    id: '1', 
-    sku: 'NK-AM24', 
-    name: 'Nike Air Max 24', 
-    category: 'Footwear', 
-    price: 129.99, 
-    costPrice: 80.00, 
-    brand: 'Nike', 
-    unit: 'Đôi', 
-    weight: '0.45 kg', 
-    location: 'Kệ A1-02', 
-    onHand: 45, 
-    status: 'ACTIVE', 
-    imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&q=80'
-  },
-  { 
-    id: '2', 
-    sku: 'AD-UB24', 
-    name: 'Adidas Ultraboost', 
-    category: 'Footwear', 
-    price: 159.99, 
-    costPrice: 95.00, 
-    brand: 'Adidas', 
-    unit: 'Đôi', 
-    weight: '0.38 kg', 
-    location: 'Kệ A2-05', 
-    onHand: 12, 
-    status: 'ACTIVE', 
-    imageUrl: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=400&q=80'
-  },
-  { 
-    id: '3', 
-    sku: 'AP-APRO', 
-    name: 'AirPods Pro 2', 
-    category: 'Electronics', 
-    price: 249.00, 
-    costPrice: 150.00, 
-    brand: 'Apple', 
-    unit: 'Chiếc', 
-    weight: '0.05 kg', 
-    location: 'Kệ B1-01', 
-    onHand: 0, 
-    status: 'INACTIVE', 
-    imageUrl: 'https://images.unsplash.com/photo-1588449668338-d13417f16af1?w=400&q=80'
-  },
-  { 
-    id: '4', 
-    sku: 'SS-S24', 
-    name: 'Samsung S24 Ultra', 
-    category: 'Electronics', 
-    price: 899.00, 
-    costPrice: 600.00, 
-    brand: 'Samsung', 
-    unit: 'Chiếc', 
-    weight: '0.22 kg', 
-    location: 'Kệ B2-03', 
-    onHand: 5, 
-    status: 'ACTIVE', 
-    imageUrl: 'https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=400&q=80'
-  },
-  { 
-    id: '5', 
-    sku: 'LV-BAG', 
-    name: 'LV Neverfull Bag', 
-    category: 'Accessories', 
-    price: 1500.00, 
-    costPrice: 900.00, 
-    brand: 'Louis Vuitton', 
-    unit: 'Chiếc', 
-    weight: '1.2 kg', 
-    location: 'Tủ VIP-01', 
-    onHand: 2, 
-    status: 'ACTIVE', 
-    imageUrl: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=400&q=80'
-  },
-];
+import { useInventoryStore, type MobileProduct } from '../store/inventoryStore';
 
 export function MobileInventoryPage() {
-  const [products, setProducts] = useState<MobileProduct[]>(INITIAL_MOBILE_PRODUCTS);
+  const { mobileProducts: products, addMobileProduct, updateMobileProduct, deleteMobileProduct } = useInventoryStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   
@@ -144,7 +51,12 @@ export function MobileInventoryPage() {
     location: 'Kệ kho',
     onHand: 0,
     status: 'ACTIVE',
-    imageUrl: ''
+    imageUrl: '',
+    barcodes: [],
+    reorderPoint: 5,
+    minStock: 2,
+    maxStock: 50,
+    variants: [],
   });
 
   // Filter categories
@@ -190,43 +102,47 @@ export function MobileInventoryPage() {
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const payload = {
+      sku: formData.sku?.toUpperCase() || `SKU-${Date.now().toString().slice(-4)}`,
+      name: formData.name || 'Sản phẩm mới',
+      category: formData.category || 'Footwear',
+      price: formData.price || 0,
+      costPrice: formData.costPrice || 0,
+      brand: formData.brand || 'Unbranded',
+      unit: formData.unit || 'Cái',
+      weight: formData.weight || '0.0 kg',
+      location: formData.location || 'Kệ kho',
+      onHand: formData.onHand || 0,
+      status: formData.status || 'ACTIVE',
+      imageUrl: formData.imageUrl || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&q=80',
+      barcodes: formData.barcodes?.length ? formData.barcodes : [formData.sku || ''],
+      reorderPoint: formData.reorderPoint ?? 5,
+      minStock: formData.minStock ?? 2,
+      maxStock: formData.maxStock ?? 50,
+      variants: formData.variants ?? [],
+    };
     if (editingProduct) {
-      // Edit
-      setProducts(prev => prev.map(item => item.id === editingProduct.id ? { ...item, ...formData } as MobileProduct : item));
+      updateMobileProduct(editingProduct.id, payload);
       if (selectedProduct && selectedProduct.id === editingProduct.id) {
-        setSelectedProduct({ ...selectedProduct, ...formData } as MobileProduct);
+        setSelectedProduct({ ...selectedProduct, ...payload } as MobileProduct);
       }
     } else {
-      // Create
-      const newProduct: MobileProduct = {
-        id: Date.now().toString(),
-        sku: formData.sku?.toUpperCase() || `SKU-${Date.now().toString().slice(-4)}`,
-        name: formData.name || 'Sản phẩm mới',
-        category: formData.category || 'Footwear',
-        price: formData.price || 0,
-        costPrice: formData.costPrice || 0,
-        brand: formData.brand || 'Unbranded',
-        unit: formData.unit || 'Cái',
-        weight: formData.weight || '0.0 kg',
-        location: formData.location || 'Kệ kho',
-        onHand: formData.onHand || 0,
-        status: formData.status || 'ACTIVE',
-        imageUrl: formData.imageUrl || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&q=80'
-      };
-      setProducts(prev => [newProduct, ...prev]);
+      addMobileProduct(payload);
     }
     setIsFormOpen(false);
   };
 
   const handleDelete = () => {
     if (productToDelete) {
-      setProducts(prev => prev.filter(item => item.id !== productToDelete.id));
+      deleteMobileProduct(productToDelete.id);
       if (selectedProduct && selectedProduct.id === productToDelete.id) {
         setSelectedProduct(null);
       }
       setProductToDelete(null);
     }
   };
+
+  const isLowStock = (prod: MobileProduct) => prod.onHand <= prod.reorderPoint;
 
   return (
     <div className="space-y-6">
@@ -370,10 +286,12 @@ export function MobileInventoryPage() {
                       {/* Pricing and Stock */}
                       <div className="flex items-baseline justify-between mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-700/50">
                         <span className="text-xs font-black text-slate-900 dark:text-white">${prod.price.toFixed(2)}</span>
-                        <span className={`text-[10px] font-extrabold ${
+                        <span className={`text-[10px] font-extrabold flex items-center gap-0.5 ${
+                          isLowStock(prod) ? 'text-red-500' :
                           prod.onHand > 10 ? 'text-emerald-600 dark:text-emerald-400' :
                           prod.onHand > 0 ? 'text-amber-500' : 'text-red-500'
                         }`}>
+                          {isLowStock(prod) && <AlertTriangle className="w-3 h-3" />}
                           {prod.onHand} {prod.unit}
                         </span>
                       </div>
@@ -448,6 +366,9 @@ export function MobileInventoryPage() {
                       <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">{selectedProduct.brand}</span>
                       <h3 className="text-lg font-black text-slate-800 dark:text-white mt-0.5 leading-tight">{selectedProduct.name}</h3>
                       <p className="text-[11px] font-bold text-slate-400 font-mono mt-1">SKU: {selectedProduct.sku}</p>
+                      {selectedProduct.barcodes?.[0] && (
+                        <p className="text-[10px] text-slate-500 font-mono">Barcode: {selectedProduct.barcodes.join(', ')}</p>
+                      )}
                     </div>
                     <button 
                       onClick={() => setSelectedProduct(null)}
@@ -467,9 +388,12 @@ export function MobileInventoryPage() {
                         <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Giá Bán</span>
                         <p className="text-base font-black text-slate-800 dark:text-white mt-0.5">${selectedProduct.price.toFixed(2)}</p>
                       </div>
-                      <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <div className={`p-2.5 rounded-xl border ${isLowStock(selectedProduct) ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800'}`}>
                         <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Tồn Kho</span>
-                        <p className="text-base font-black text-slate-800 dark:text-white mt-0.5">{selectedProduct.onHand} {selectedProduct.unit}</p>
+                        <p className={`text-base font-black mt-0.5 ${isLowStock(selectedProduct) ? 'text-red-600' : 'text-slate-800 dark:text-white'}`}>
+                          {selectedProduct.onHand} {selectedProduct.unit}
+                          {isLowStock(selectedProduct) && <span className="text-[9px] block">Dưới định mức ({selectedProduct.reorderPoint})</span>}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -515,6 +439,18 @@ export function MobileInventoryPage() {
                         </div>
                       </div>
                     </div>
+                    {selectedProduct.variants.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">Biến thể (Size/Color)</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedProduct.variants.map((v, i) => (
+                            <span key={i} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300">
+                              {[v.size, v.color].filter(Boolean).join(' / ') || v.skuSuffix}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Actions (Premium Edit/Delete integration inside mobile preview) */}
@@ -630,6 +566,35 @@ export function MobileInventoryPage() {
                           onChange={(e) => setFormData(p => ({ ...p, costPrice: parseFloat(e.target.value) || 0 }))}
                           className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:outline-none font-semibold text-slate-800 dark:text-white"
                         />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Mã vạch (Barcode)</label>
+                      <input
+                        type="text"
+                        value={(formData.barcodes ?? []).join(', ')}
+                        onChange={(e) => setFormData(p => ({ ...p, barcodes: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
+                        placeholder="893..., nhiều mã cách nhau bởi dấu phẩy"
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:outline-none text-slate-800 dark:text-white"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Điểm đặt lại</label>
+                        <input type="number" value={formData.reorderPoint ?? 0} onChange={(e) => setFormData(p => ({ ...p, reorderPoint: parseInt(e.target.value, 10) || 0 }))}
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs font-semibold" />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Min</label>
+                        <input type="number" value={formData.minStock ?? 0} onChange={(e) => setFormData(p => ({ ...p, minStock: parseInt(e.target.value, 10) || 0 }))}
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs font-semibold" />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Max</label>
+                        <input type="number" value={formData.maxStock ?? 0} onChange={(e) => setFormData(p => ({ ...p, maxStock: parseInt(e.target.value, 10) || 0 }))}
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs font-semibold" />
                       </div>
                     </div>
 

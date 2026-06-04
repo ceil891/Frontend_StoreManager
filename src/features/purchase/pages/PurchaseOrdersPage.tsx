@@ -5,6 +5,16 @@ import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePurchaseStore, type PurchaseOrderItem } from '../store/purchaseStore';
+import { toast } from 'sonner';
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Bản nháp',
+  PENDING_APPROVAL: 'Chờ duyệt',
+  APPROVED: 'Đã duyệt',
+  DISPATCHED: 'Đang vận chuyển',
+  DELIVERED: 'Đã giao hàng',
+  CANCELLED: 'Đã hủy',
+};
 
 export function PurchaseOrdersPage() {
   const { purchaseOrders: data, addPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder } = usePurchaseStore();
@@ -100,7 +110,7 @@ export function PurchaseOrdersPage() {
       {
         accessorKey: 'totalCost',
         header: 'Tổng chi phí',
-        cell: (info) => <span className="font-bold text-gray-900 dark:text-white">${(info.getValue() as number).toFixed(2)}</span>,
+        cell: (info) => <span className="font-bold text-gray-900 dark:text-white">{(info.getValue() as number).toLocaleString('vi-VN')} ₫</span>,
       },
       {
         accessorKey: 'estDeliveryDate',
@@ -112,14 +122,6 @@ export function PurchaseOrdersPage() {
         header: 'Trạng thái đơn',
         cell: (info) => {
           const status = info.getValue() as string;
-          const statusMap: Record<string, string> = {
-            DRAFT: 'Bản nháp',
-            PENDING_APPROVAL: 'Chờ duyệt',
-            APPROVED: 'Đã duyệt',
-            DISPATCHED: 'Đang vận chuyển',
-            DELIVERED: 'Đã giao hàng',
-            CANCELLED: 'Đã hủy',
-          };
           return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
               status === 'DELIVERED' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
@@ -128,7 +130,7 @@ export function PurchaseOrdersPage() {
               status === 'PENDING_APPROVAL' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' :
               'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
             }`}>
-              {statusMap[status] || status}
+              {STATUS_LABELS[status] || status}
             </span>
           );
         },
@@ -196,7 +198,10 @@ export function PurchaseOrdersPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Tạo đơn đặt hàng mua sỉ, theo dõi tiến độ giao hàng và ngân sách thu mua. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0">
+            <button
+              onClick={() => toast.success('Xuất dữ liệu đơn mua hàng thành công!')}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0"
+            >
               <Download className="w-4 h-4" /> Xuất dữ liệu
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm whitespace-nowrap shrink-0">
@@ -229,7 +234,7 @@ export function PurchaseOrdersPage() {
       <Drawer
         isOpen={!!selectedPO}
         onClose={() => setSelectedPO(null)}
-        title={selectedPO ? `Purchase Order: ${selectedPO.poNumber}` : 'PO Details'}
+        title={selectedPO ? `Đơn đặt hàng mua: ${selectedPO.poNumber}` : 'Chi tiết đơn PO'}
         width="max-w-lg"
       >
         {selectedPO && (
@@ -240,8 +245,8 @@ export function PurchaseOrdersPage() {
                   <FileText className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">Estimated PO Total</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">${selectedPO.totalCost.toFixed(2)}</p>
+                  <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">Tổng chi phí dự kiến</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{selectedPO.totalCost.toLocaleString('vi-VN')} ₫</p>
                 </div>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
@@ -251,20 +256,20 @@ export function PurchaseOrdersPage() {
                 selectedPO.status === 'PENDING_APPROVAL' ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
                 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
               }`}>
-                {selectedPO.status.replace('_', ' ')}
+                {STATUS_LABELS[selectedPO.status] || selectedPO.status}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Supplier Vendor
+                  <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Nhà cung cấp
                 </div>
                 <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedPO.supplierName}</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Calendar className="w-4 h-4 text-blue-500" /> Target ETA
+                  <Calendar className="w-4 h-4 text-blue-500" /> Ngày nhận dự kiến (ETA)
                 </div>
                 <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedPO.estDeliveryDate}</p>
               </div>
@@ -272,33 +277,37 @@ export function PurchaseOrdersPage() {
 
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Destination Hub:</span>
+                <span className="text-gray-500 dark:text-gray-400">Chi nhánh nhận:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedPO.destinationStore}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Creation Order Date:</span>
+                <span className="text-gray-500 dark:text-gray-400">Ngày lập đơn:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedPO.orderDate}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Product Line Items:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedPO.itemsCount} units</span>
+                <span className="text-gray-500 dark:text-gray-400">Số lượng mặt hàng:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{selectedPO.itemsCount} đơn vị</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Settlement Status:</span>
+                <span className="text-gray-500 dark:text-gray-400">Thanh toán:</span>
                 <span className={`font-bold px-2 py-0.5 rounded text-xs ${
                   selectedPO.paymentStatus === 'PAID' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
                   selectedPO.paymentStatus === 'PARTIAL_ADVANCE' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' :
                   'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
-                }`}>{selectedPO.paymentStatus.replace('_', ' ')}</span>
+                }`}>{
+                  selectedPO.paymentStatus === 'PAID' ? 'Đã thanh toán đủ' :
+                  selectedPO.paymentStatus === 'PARTIAL_ADVANCE' ? 'Tạm ứng 1 phần' :
+                  'Chưa thanh toán'
+                }</span>
               </div>
               <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
-                <span className="text-gray-500 dark:text-gray-400">Procurement Officer:</span>
+                <span className="text-gray-500 dark:text-gray-400">Nhân viên thu mua:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedPO.orderedBy}</span>
               </div>
 
               {selectedPO.notes && (
                 <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Procurement Terms & Cargo Notes</span>
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Điều khoản & Ghi chú vận chuyển</span>
                   <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedPO.notes}</p>
                 </div>
               )}
@@ -306,17 +315,34 @@ export function PurchaseOrdersPage() {
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
               {selectedPO.status === 'PENDING_APPROVAL' && (
-                <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                  <ShieldCheck className="w-4 h-4" /> Approve Purchase Order
+                <button
+                  onClick={() => {
+                    updatePurchaseOrder(selectedPO.id, { status: 'APPROVED' });
+                    setSelectedPO({ ...selectedPO, status: 'APPROVED' });
+                    toast.success('Đã phê duyệt đơn đặt hàng mua thành công!');
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                >
+                  <ShieldCheck className="w-4 h-4" /> Phê duyệt đơn mua
                 </button>
               )}
               {selectedPO.status === 'DISPATCHED' && (
-                <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                  <FileCheck className="w-4 h-4" /> Log Goods Receipt (GRN)
+                <button
+                  onClick={() => {
+                    updatePurchaseOrder(selectedPO.id, { status: 'DELIVERED' });
+                    setSelectedPO({ ...selectedPO, status: 'DELIVERED' });
+                    toast.success('Đã ghi nhận nhập kho hàng thành công!');
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                >
+                  <FileCheck className="w-4 h-4" /> Nhập kho hàng (GRN)
                 </button>
               )}
-              <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
-                Download PO PDF
+              <button
+                onClick={() => toast.success('Đã tải xuống file PO PDF thành công!')}
+                className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
+              >
+                Tải PO PDF
               </button>
             </div>
           </div>
@@ -429,10 +455,10 @@ export function PurchaseOrdersPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng chi phí dự kiến ($)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng chi phí dự kiến (₫)</label>
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 value={editingPO.totalCost || 0}
                 onChange={(e) => setEditingPO({ ...editingPO, totalCost: parseFloat(e.target.value) || 0 })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"

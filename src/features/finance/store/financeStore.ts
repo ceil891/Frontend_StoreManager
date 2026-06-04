@@ -13,6 +13,9 @@ export interface ReceiptVoucher {
   cashier: string;
   branchId: string;
   notes?: string;
+  receivingAccount?: string;
+  payerContact?: string;
+  attachments?: string[];
 }
 
 export interface PaymentVoucher {
@@ -28,6 +31,9 @@ export interface PaymentVoucher {
   branchId: string;
   notes?: string;
   status: 'COMPLETED' | 'PENDING_APPROVAL' | 'REJECTED';
+  payeeBankAccount?: string;
+  attachments?: string[];
+  creator?: string;
 }
 
 export interface DebtRecord {
@@ -43,6 +49,10 @@ export interface DebtRecord {
   accountManager: string;
   branchId: string;
   notes?: string;
+  referenceDoc?: string;
+  incurredDate?: string;
+  paidAmount?: number;
+  currency?: string;
 }
 
 export interface OperatingCost {
@@ -62,6 +72,8 @@ export interface OperatingCost {
 
 export interface CorporateBankAccount {
   id: string;
+  accountName?: string;
+  accountNumber?: string;
   accountNumberMasked: string;
   bankName: string;
   branchName: string;
@@ -74,6 +86,10 @@ export interface CorporateBankAccount {
   openedDate: string;
   authorizedSignatories: string[];
   notes?: string;
+  lastReconciledDate?: string;
+  overdraftLimit?: number;
+  bankCountry?: string;
+  updatedBy?: string;
 }
 
 export interface TransactionReasonRecord {
@@ -89,6 +105,9 @@ export interface TransactionReasonRecord {
   status: 'ACTIVE' | 'ARCHIVED' | 'REQUIRES_CFO_REVIEW';
   applicableDepartments: string;
   description?: string;
+  defaultOffsetGLCode?: string;
+  budgetLimit?: number;
+  isBudgetTracked?: boolean;
 }
 
 export type JournalStatus = 'DRAFT' | 'POSTED';
@@ -100,6 +119,11 @@ export interface JournalLine {
   description: string;
   debit: number;
   credit: number;
+  entityId?: string;
+  costCenter?: string;
+  currency?: string;
+  exchangeRate?: number;
+  originalAmount?: number;
 }
 
 export interface JournalEntry {
@@ -151,18 +175,18 @@ interface FinanceState {
 }
 
 const DEFAULT_RECEIPTS: ReceiptVoucher[] = [
-  { id: '1', voucherNumber: 'REC-2024-001', payerName: 'Đại lý Hùng Cường', category: 'SALES_REVENUE', amount: 4500000, paymentMethod: 'BANK_TRANSFER', receivedDate: '2024-05-17', referenceDoc: 'INV-2024-901', cashier: 'Trần Thị Lan', branchId: 'BR-001', notes: 'Thanh toán đơn bán buôn tháng 5.' },
+  { id: '1', voucherNumber: 'REC-2024-001', payerName: 'Đại lý Hùng Cường', category: 'SALES_REVENUE', amount: 4500000, paymentMethod: 'BANK_TRANSFER', receivedDate: '2024-05-17', referenceDoc: 'INV-2024-901', cashier: 'Trần Thị Lan', branchId: 'BR-001', notes: 'Thanh toán đơn bán buôn tháng 5.', receivingAccount: 'VCB - 001100223344', payerContact: '0901234567 - MST: 0312345678', attachments: ['/receipts/rec-1.pdf'] },
   { id: '2', voucherNumber: 'REC-2024-002', payerName: 'Khách lẻ POS', category: 'SALES_REVENUE', amount: 150000, paymentMethod: 'CASH', receivedDate: '2024-05-17', cashier: 'Lê Hoàng Nam', branchId: 'BR-001' },
 ];
 
 const DEFAULT_PAYMENTS: PaymentVoucher[] = [
-  { id: '1', voucherNumber: 'PAY-2024-001', payeeName: 'NCC Điện tử Toàn Cầu', category: 'SUPPLIER_PAYMENT', amount: 35000000, paymentMethod: 'BANK_TRANSFER', paymentDate: '2024-05-16', bankAccountRef: 'VCB •••• 2450', approver: 'Nguyễn Minh Quân', branchId: 'HQ', status: 'COMPLETED', notes: 'Tạm ứng PO #89102.' },
-  { id: '2', voucherNumber: 'PAY-2024-002', payeeName: 'Điện lực TP.HCM', category: 'UTILITIES', amount: 1850000, paymentMethod: 'BANK_TRANSFER', paymentDate: '2024-05-15', bankAccountRef: 'VCB •••• 2450', approver: 'Trần Thị Lan', branchId: 'BR-001', status: 'COMPLETED' },
+  { id: '1', voucherNumber: 'PAY-2024-001', payeeName: 'NCC Điện tử Toàn Cầu', category: 'SUPPLIER_PAYMENT', amount: 35000000, paymentMethod: 'BANK_TRANSFER', paymentDate: '2024-05-16', bankAccountRef: 'VCB •••• 2450', approver: 'Nguyễn Minh Quân', branchId: 'HQ', status: 'COMPLETED', notes: 'Tạm ứng PO #89102.', payeeBankAccount: 'TCB - 19033322211', creator: 'Lê Kế Toán', attachments: ['/invoices/inv-89102.pdf'] },
+  { id: '2', voucherNumber: 'PAY-2024-002', payeeName: 'Điện lực TP.HCM', category: 'UTILITIES', amount: 1850000, paymentMethod: 'BANK_TRANSFER', paymentDate: '2024-05-15', bankAccountRef: 'VCB •••• 2450', approver: 'Trần Thị Lan', branchId: 'BR-001', status: 'COMPLETED', creator: 'Lê Kế Toán' },
 ];
 
 const DEFAULT_DEBTS: DebtRecord[] = [
-  { id: '1', debtCode: 'DBT-2024-101', entityName: 'Siêu thị Apex', entityType: 'CUSTOMER', totalDebt: 45000000, dueAmount: 15000000, dueDate: '2024-05-30', status: 'DUE_SOON', lastPaymentDate: '2024-05-01', accountManager: 'Trần Thị Lan', branchId: 'BR-001' },
-  { id: '2', debtCode: 'DBT-2024-102', entityName: 'NCC Global Tech', entityType: 'SUPPLIER', totalDebt: -125000000, dueAmount: -25000000, dueDate: '2024-05-15', status: 'OVERDUE', lastPaymentDate: '2024-04-15', accountManager: 'Nguyễn Minh Quân', branchId: 'HQ' },
+  { id: '1', debtCode: 'DBT-2024-101', entityName: 'Siêu thị Apex', entityType: 'CUSTOMER', totalDebt: 45000000, dueAmount: 15000000, dueDate: '2024-05-30', status: 'DUE_SOON', lastPaymentDate: '2024-05-01', accountManager: 'Trần Thị Lan', branchId: 'BR-001', referenceDoc: 'SO-2024-88', incurredDate: '2024-04-30', paidAmount: 30000000, currency: 'VND' },
+  { id: '2', debtCode: 'DBT-2024-102', entityName: 'NCC Global Tech', entityType: 'SUPPLIER', totalDebt: -125000000, dueAmount: -25000000, dueDate: '2024-05-15', status: 'OVERDUE', lastPaymentDate: '2024-04-15', accountManager: 'Nguyễn Minh Quân', branchId: 'HQ', referenceDoc: 'PO-2024-41', incurredDate: '2024-03-15', paidAmount: 100000000, currency: 'VND' },
 ];
 
 const DEFAULT_COSTS: OperatingCost[] = [
@@ -171,13 +195,13 @@ const DEFAULT_COSTS: OperatingCost[] = [
 ];
 
 const DEFAULT_BANKS: CorporateBankAccount[] = [
-  { id: '1', accountNumberMasked: '•••• •••• 8810 2450', bankName: 'Vietcombank', branchName: 'CN TP.HCM', swiftBic: 'BFTVVNVX', currency: 'VND', currentBalance: 1450800000, availableWorkingCapital: 1250000000, accountType: 'PRIMARY_OPERATING', status: 'ACTIVE', openedDate: '2021-04-15', authorizedSignatories: ['Nguyễn Minh Quân', 'Trần Thị Lan'] },
-  { id: '2', accountNumberMasked: '•••• •••• 4419 9210', bankName: 'Techcombank', branchName: 'CN Quận 1', swiftBic: 'VTCBVNVX', currency: 'VND', currentBalance: 420500000, availableWorkingCapital: 420500000, accountType: 'MERCHANT_SETTLEMENT', status: 'ACTIVE', openedDate: '2022-01-10', authorizedSignatories: ['Trần Thị Lan'] },
+  { id: '1', accountName: 'CONG TY TNHH RETAILHUB', accountNumber: '00110022334455', accountNumberMasked: '•••• •••• 8810 2450', bankName: 'Vietcombank', branchName: 'CN TP.HCM', swiftBic: 'BFTVVNVX', currency: 'VND', currentBalance: 1450800000, availableWorkingCapital: 1250000000, accountType: 'PRIMARY_OPERATING', status: 'ACTIVE', openedDate: '2021-04-15', authorizedSignatories: ['Nguyễn Minh Quân', 'Trần Thị Lan'], lastReconciledDate: '2024-05-15', overdraftLimit: 500000000, bankCountry: 'Việt Nam', updatedBy: 'Admin' },
+  { id: '2', accountName: 'CONG TY TNHH RETAILHUB', accountNumber: '1903332221144', accountNumberMasked: '•••• •••• 4419 9210', bankName: 'Techcombank', branchName: 'CN Quận 1', swiftBic: 'VTCBVNVX', currency: 'VND', currentBalance: 420500000, availableWorkingCapital: 420500000, accountType: 'MERCHANT_SETTLEMENT', status: 'ACTIVE', openedDate: '2022-01-10', authorizedSignatories: ['Trần Thị Lan'], lastReconciledDate: '2024-05-16', overdraftLimit: 0, bankCountry: 'Việt Nam', updatedBy: 'Admin' },
 ];
 
 const DEFAULT_REASONS: TransactionReasonRecord[] = [
-  { id: '1', reasonCode: 'RSN-REV-POS', reasonName: 'Doanh thu POS', category: 'OPERATING_REVENUE', accountingGLCode: 'GL-40100', cashFlowImpact: 'INFLOW_DEBIT', isTaxDeductible: false, requiresReceiptUpload: false, totalLoggedVolumeUsd: 1450800, status: 'ACTIVE', applicableDepartments: 'Bán lẻ' },
-  { id: '2', reasonCode: 'RSN-COG-SUP', reasonName: 'Thanh toán nhập hàng', category: 'COST_OF_GOODS', accountingGLCode: 'GL-50100', cashFlowImpact: 'OUTFLOW_CREDIT', isTaxDeductible: true, requiresReceiptUpload: true, totalLoggedVolumeUsd: 840500, status: 'ACTIVE', applicableDepartments: 'Mua hàng' },
+  { id: '1', reasonCode: 'RSN-REV-POS', reasonName: 'Doanh thu POS', category: 'OPERATING_REVENUE', accountingGLCode: 'GL-40100', cashFlowImpact: 'INFLOW_DEBIT', isTaxDeductible: false, requiresReceiptUpload: false, totalLoggedVolumeUsd: 1450800, status: 'ACTIVE', applicableDepartments: 'Bán lẻ', defaultOffsetGLCode: 'GL-11110', isBudgetTracked: false },
+  { id: '2', reasonCode: 'RSN-COG-SUP', reasonName: 'Thanh toán nhập hàng', category: 'COST_OF_GOODS', accountingGLCode: 'GL-50100', cashFlowImpact: 'OUTFLOW_CREDIT', isTaxDeductible: true, requiresReceiptUpload: true, totalLoggedVolumeUsd: 840500, status: 'ACTIVE', applicableDepartments: 'Mua hàng', defaultOffsetGLCode: 'GL-11210', budgetLimit: 500000000, isBudgetTracked: true },
 ];
 
 const DEFAULT_JOURNAL: JournalEntry[] = [
@@ -190,8 +214,8 @@ const DEFAULT_JOURNAL: JournalEntry[] = [
     status: 'DRAFT',
     branchId: 'BR-001',
     lines: [
-      { id: 'line_1', accountCode: '1121', accountName: 'Tiền gửi VCB', description: 'Khách chuyển khoản', debit: 12500000, credit: 0 },
-      { id: 'line_2', accountCode: '131', accountName: 'Phải thu KH', description: 'Giảm công nợ', debit: 0, credit: 12500000 },
+      { id: 'line_1', accountCode: '1121', accountName: 'Tiền gửi VCB', description: 'Khách chuyển khoản', debit: 12500000, credit: 0, entityId: 'KH-001', currency: 'VND', exchangeRate: 1, originalAmount: 12500000 },
+      { id: 'line_2', accountCode: '131', accountName: 'Phải thu KH', description: 'Giảm công nợ', debit: 0, credit: 12500000, entityId: 'KH-001', currency: 'VND', exchangeRate: 1, originalAmount: 12500000 },
     ],
   },
 ];

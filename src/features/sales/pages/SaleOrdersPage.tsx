@@ -1,17 +1,17 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Badge } from '@/shared/components/ui/Badge';
-import { formatCurrency } from '@/shared/utils/currency';
 import { exportToCsv } from '@/shared/utils/exportCsv';
-import { useAuthRole } from '@/features/auth/store/authStore';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Download, Eye, ShoppingBag, CreditCard, Clock, CheckCircle2, FileText, User, Plus, Edit, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { useSalesStore, type SaleOrder, BRANCH_NAME_BY_ID } from '../store/salesStore';
+import { useSalesStore, type SaleOrder, BRANCH_NAME_BY_ID, calcTotalAmount, formatMoney } from '../store/salesStore';
+import { resolveCustomerName, WALK_IN_CUSTOMER_ID } from '../store/salesHelpers';
+import { useCrmStore } from '@/features/crm/store/crmStore';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { OrderLinesEditor, sumOrderLines, summarizeOrderLines } from '@/shared/components/sales/OrderLinesEditor';
+import { CustomerSelect } from '@/shared/components/sales/CustomerSelect';
+import { OrderPricingFields } from '@/shared/components/sales/OrderPricingFields';
 
 const ORIGIN_LABEL: Record<NonNullable<SaleOrder['origin']>, string> = {
   POS: 'POS',
@@ -19,19 +19,26 @@ const ORIGIN_LABEL: Record<NonNullable<SaleOrder['origin']>, string> = {
   MANUAL: 'Nhập tay',
 };
 
+const paymentMethodMap: Record<string, string> = {
+  'Cash': 'Tiền mặt',
+  'Credit Card': 'Thẻ tín dụng',
+  'Bank Transfer': 'Chuyển khoản',
+  'Apple Pay': 'Ví điện tử',
+};
+
 function formatOrderTotal(o: SaleOrder): string {
-  if (o.currency === 'VND') return `${o.total.toLocaleString('vi-VN')}đ`;
-  return `$${o.total.toFixed(2)}`;
+  return formatMoney(o.totalAmount, 'VND');
 }
 
 export function SaleOrdersPage() {
   const { saleOrders: data, addSaleOrder, updateSaleOrder, deleteSaleOrder } = useSalesStore();
+  const customers = useCrmStore((s) => s.customers);
+  const customerLabel = (id: string) => resolveCustomerName(id, customers);
   const canManage = usePermission('sales:orders:create');
   const storeOrders = useMemo(
     () => data.filter((o) => o.origin !== 'ONLINE'),
     [data]
   );
-  const [search, setSearch] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<SaleOrder | null>(null);
 
   // Filter states
@@ -49,10 +56,10 @@ export function SaleOrdersPage() {
 
   // Simulate loading state
   const [isLoading, setIsLoading] = useState(true);
-  useState(() => {
+  useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 800);
     return () => clearTimeout(timer);
-  });
+  }, []);
 
   const filtered = useMemo(() => {
     return storeOrders.filter((item) => {
@@ -63,7 +70,7 @@ export function SaleOrdersPage() {
       }
       
       if (fromDate) {
-        const itemDate = new Date(item.createdAt);
+        const itemDate = new Date(item.date.replace(' ', 'T'));
         itemDate.setHours(0, 0, 0, 0);
         const filterDate = new Date(fromDate);
         filterDate.setHours(0, 0, 0, 0);
@@ -71,7 +78,7 @@ export function SaleOrdersPage() {
       }
       
       if (toDate) {
-        const itemDate = new Date(item.createdAt);
+        const itemDate = new Date(item.date.replace(' ', 'T'));
         itemDate.setHours(0, 0, 0, 0);
         const filterDate = new Date(toDate);
         filterDate.setHours(0, 0, 0, 0);
@@ -86,9 +93,12 @@ export function SaleOrdersPage() {
     setModalMode('create');
     setEditingOrder({
       code: `ORD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      customerName: '',
+      customerId: WALK_IN_CUSTOMER_ID,
       date: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      total: 0,
+      subTotal: 0,
+      taxAmount: 0,
+      discountAmount: 0,
+      totalAmount: 0,
       status: 'PENDING',
       paymentStatus: 'UNPAID',
       paymentMethod: 'Cash',
@@ -98,20 +108,25 @@ export function SaleOrdersPage() {
       branchId: 'BR-001',
       branchName: BRANCH_NAME_BY_ID['BR-001'],
       origin: 'MANUAL',
-      currency: 'USD',
+      currency: 'VND',
       orderLines: [],
     });
     setIsModalOpen(true);
   };
 
   const applyOrderLines = (lines: NonNullable<SaleOrder['orderLines']>) => {
-    const total = sumOrderLines(lines);
-    setEditingOrder((prev) => ({
-      ...prev,
-      orderLines: lines,
-      total,
-      itemsSummary: summarizeOrderLines(lines),
-    }));
+    const subTotal = sumOrderLines(lines);
+    setEditingOrder((prev) => {
+      const taxAmount = prev.taxAmount ?? 0;
+      const discountAmount = prev.discountAmount ?? 0;
+      return {
+        ...prev,
+        orderLines: lines,
+        subTotal,
+        totalAmount: calcTotalAmount({ subTotal, taxAmount, discountAmount, shippingFee: prev.shippingFee }),
+        itemsSummary: summarizeOrderLines(lines),
+      };
+    });
   };
 
   const handleOpenEdit = (order: SaleOrder) => {
@@ -122,20 +137,27 @@ export function SaleOrdersPage() {
 
   const handleSaveOrder = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingOrder.customerName || !editingOrder.code) return;
+    if (!editingOrder.customerId || !editingOrder.code) return;
 
     const lines = editingOrder.orderLines ?? [];
     const lineTotal = sumOrderLines(lines);
+    const subTotal = lines.length ? lineTotal : Number(editingOrder.subTotal) || 0;
+    const taxAmount = Number(editingOrder.taxAmount) || 0;
+    const discountAmount = Number(editingOrder.discountAmount) || 0;
+    const totalAmount = calcTotalAmount({ subTotal, taxAmount, discountAmount, shippingFee: editingOrder.shippingFee });
     const payload = {
       orderLines: lines,
-      total: lines.length ? lineTotal : Number(editingOrder.total) || 0,
+      subTotal,
+      taxAmount,
+      discountAmount,
+      totalAmount,
       itemsSummary: summarizeOrderLines(lines) || editingOrder.itemsSummary,
     };
 
     if (modalMode === 'create') {
       const newOrder: Omit<SaleOrder, 'id'> = {
         code: editingOrder.code,
-        customerName: editingOrder.customerName,
+        customerId: editingOrder.customerId,
         date: editingOrder.date || new Date().toISOString().slice(0, 16).replace('T', ' '),
         ...payload,
         status: editingOrder.status as any || 'PENDING',
@@ -147,7 +169,7 @@ export function SaleOrdersPage() {
         branchId: editingOrder.branchId ?? 'BR-001',
         branchName: editingOrder.branchName || (editingOrder.branchId ? (BRANCH_NAME_BY_ID[String(editingOrder.branchId)] ?? String(editingOrder.branchId)) : BRANCH_NAME_BY_ID['BR-001']),
         origin: (editingOrder.origin as SaleOrder['origin']) || 'MANUAL',
-        currency: (editingOrder.currency as SaleOrder['currency']) || 'USD',
+        currency: (editingOrder.currency as SaleOrder['currency']) || 'VND',
       };
       addSaleOrder(newOrder);
       toast.success(`Đã tạo đơn hàng ${newOrder.code} thành công!`);
@@ -182,13 +204,13 @@ export function SaleOrdersPage() {
     }
     exportToCsv('danh-sach-don-hang', data, [
       { header: 'Mã đơn', accessor: (row) => row.code },
-      { header: 'Khách hàng', accessor: (row) => row.customerName || '' },
-      { header: 'Thời gian', accessor: (row) => new Date(row.createdAt).toLocaleString('vi-VN') },
-      { header: 'Chi nhánh', accessor: (row) => row.branchId },
-      { header: 'Nguồn', accessor: (row) => row.source },
-      { header: 'Tổng tiền', accessor: (row) => row.total },
+      { header: 'Khách hàng', accessor: (row) => customerLabel(row.customerId) },
+      { header: 'Tổng tiền', accessor: (row) => row.totalAmount },
+      { header: 'Thời gian', accessor: (row) => row.date ? new Date(row.date.replace(' ', 'T')).toLocaleString('vi-VN') : '' },
+      { header: 'Chi nhánh', accessor: (row) => row.branchId || '' },
+      { header: 'Nguồn', accessor: (row) => row.origin || '' },
       { header: 'Thanh toán', accessor: (row) => row.paymentStatus },
-      { header: 'Giao hàng', accessor: (row) => row.fulfillmentStatus },
+      { header: 'Giao hàng', accessor: (row) => row.deliveryStatus || '' },
       { header: 'Trạng thái', accessor: (row) => row.status },
     ]);
     toast.success('Đã xuất file CSV');
@@ -239,8 +261,9 @@ export function SaleOrdersPage() {
         cell: (info) => <span className="text-gray-500 text-sm">{info.getValue() as string}</span>,
       },
       {
-        accessorKey: 'customerName',
+        id: 'customerId',
         header: 'Khách hàng',
+        cell: ({ row }) => <span className="text-sm font-medium">{customerLabel(row.original.customerId)}</span>,
       },
       {
         accessorKey: 'createdByName',
@@ -327,7 +350,7 @@ export function SaleOrdersPage() {
         meta: { align: 'center' }
       }
     ],
-    [canManage]
+    [canManage, customers]
   );
 
   return (
@@ -441,11 +464,11 @@ export function SaleOrdersPage() {
         />
       </div>
 
-      {/* Order Details Drawer */}
-      <Drawer 
+      {/* Order Details Modal */}
+      <Modal 
         isOpen={!!selectedOrder} 
         onClose={() => setSelectedOrder(null)}
-        title={selectedOrder ? `Order Details: ${selectedOrder.code}` : 'Order Summary'}
+        title={selectedOrder ? `Chi tiết đơn hàng: ${selectedOrder.code}` : 'Tóm tắt đơn hàng'}
         width="max-w-lg"
       >
         {selectedOrder && (
@@ -457,7 +480,7 @@ export function SaleOrdersPage() {
                   <ShoppingBag className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">Total Value</p>
+                  <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">Tổng giá trị đơn</p>
                   <p className="text-xl font-bold text-gray-900 dark:text-white">{formatOrderTotal(selectedOrder)}</p>
                 </div>
               </div>
@@ -466,7 +489,7 @@ export function SaleOrdersPage() {
                 selectedOrder.status === 'PENDING' ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
                 'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100'
               }`}>
-                {selectedOrder.status}
+                {selectedOrder.status === 'COMPLETED' ? 'Hoàn thành' : selectedOrder.status === 'PENDING' ? 'Đang xử lý' : 'Đã hủy'}
               </span>
             </div>
 
@@ -474,16 +497,17 @@ export function SaleOrdersPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Customer
+                  <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Khách hàng
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedOrder.customerName}</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{customerLabel(selectedOrder.customerId)}</p>
+                <p className="text-[10px] font-mono text-gray-400">ID: {selectedOrder.customerId}</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <CreditCard className="w-4 h-4 text-blue-500" /> Payment
+                  <CreditCard className="w-4 h-4 text-blue-500" /> Thanh toán
                 </div>
                 <p className="text-base font-bold text-gray-900 dark:text-white truncate">
-                  {selectedOrder.paymentStatus} ({selectedOrder.paymentMethod || 'N/A'})
+                  {selectedOrder.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'} ({paymentMethodMap[selectedOrder.paymentMethod || ''] || selectedOrder.paymentMethod || 'N/A'})
                 </p>
               </div>
             </div>
@@ -510,6 +534,17 @@ export function SaleOrdersPage() {
               </div>
             </div>
 
+            <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 space-y-1 text-sm">
+              <div className="flex justify-between"><span className="text-gray-500">Tiền hàng</span><span className="font-mono">{formatMoney(selectedOrder.subTotal, 'VND')}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Thuế / Giảm</span><span className="font-mono">+{formatMoney(selectedOrder.taxAmount, 'VND')} / −{formatMoney(selectedOrder.discountAmount, 'VND')}</span></div>
+              {selectedOrder.origin === 'POS' && selectedOrder.shiftId && (
+                <div className="flex justify-between"><span className="text-gray-500">Ca làm việc</span><span className="font-mono text-xs">{selectedOrder.shiftId}</span></div>
+              )}
+              {selectedOrder.origin === 'POS' && selectedOrder.amountTendered != null && (
+                <div className="flex justify-between"><span className="text-gray-500">Khách đưa / Thối</span><span className="font-mono">{formatMoney(selectedOrder.amountTendered, 'VND')} / {formatMoney(selectedOrder.changeAmount ?? 0, 'VND')}</span></div>
+              )}
+            </div>
+
             {selectedOrder.origin === 'POS' && selectedOrder.itemsSummary && (
               <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Chi tiết POS</span>
@@ -519,14 +554,14 @@ export function SaleOrdersPage() {
 
             {/* Timeline */}
             <div>
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Lifecycle Timeline</h3>
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Trạng thái đơn hàng</h3>
               <div className="relative pl-6 border-l-2 border-gray-200 dark:border-gray-700 space-y-6 ml-2">
                 <div className="relative">
                   <div className="absolute -left-[31px] p-1 bg-white dark:bg-gray-800 rounded-full border border-gray-200 dark:border-gray-700">
                     <Clock className="w-3.5 h-3.5 text-gray-500" />
                   </div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Order Registered</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Created at {selectedOrder.date} by {selectedOrder.cashier || 'System POS'}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Đã khởi tạo đơn hàng</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Khởi tạo lúc {selectedOrder.date} bởi {selectedOrder.cashier || 'Hệ thống POS'}</p>
                 </div>
 
                 {selectedOrder.paymentStatus === 'PAID' && (
@@ -534,8 +569,8 @@ export function SaleOrdersPage() {
                     <div className="absolute -left-[31px] p-1 bg-white dark:bg-gray-800 rounded-full border border-gray-200 dark:border-gray-700">
                       <CreditCard className="w-3.5 h-3.5 text-blue-500" />
                     </div>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">Payment Verified</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Method: {selectedOrder.paymentMethod} — Reference ID: TXN-{Math.floor(Math.random() * 80000 + 10000)}</p>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">Xác nhận thanh toán</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Phương thức: {paymentMethodMap[selectedOrder.paymentMethod || ''] || selectedOrder.paymentMethod || 'N/A'} — Mã giao dịch: TXN-{Math.floor(Math.random() * 80000 + 10000)}</p>
                   </div>
                 )}
 
@@ -544,8 +579,8 @@ export function SaleOrdersPage() {
                     <div className="absolute -left-[31px] p-1 bg-white dark:bg-gray-800 rounded-full border border-gray-200 dark:border-gray-700">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                     </div>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">Fulfillment Completed</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Handed over directly at checkout counter.</p>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">Hoàn tất giao dịch</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Đã bàn giao sản phẩm trực tiếp tại quầy thanh toán.</p>
                   </div>
                 )}
               </div>
@@ -553,13 +588,18 @@ export function SaleOrdersPage() {
 
             {/* Action buttons */}
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
-              <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                <FileText className="w-4 h-4" /> Print Thermal Receipt
+              <button 
+                onClick={() => {
+                  toast.success(`Đang gửi lệnh in hóa đơn nhiệt cho đơn hàng ${selectedOrder.code}...`);
+                }}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+              >
+                <FileText className="w-4 h-4" /> In hóa đơn nhiệt (K80)
               </button>
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Form Modal */}
       <Modal
@@ -581,36 +621,50 @@ export function SaleOrdersPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng *</label>
-              <input
-                type="text"
-                value={editingOrder.customerName || ''}
-                onChange={(e) => setEditingOrder({ ...editingOrder, customerName: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng (CRM) *</label>
+              <CustomerSelect
+                value={editingOrder.customerId || ''}
+                onChange={(customerId) => setEditingOrder({ ...editingOrder, customerId })}
                 required
-                placeholder="Tên khách hàng..."
               />
             </div>
           </div>
 
           <OrderLinesEditor
             lines={editingOrder.orderLines ?? []}
-            currency={editingOrder.currency === 'VND' ? 'VND' : 'USD'}
+            currency="VND"
             onChange={applyOrderLines}
           />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng tiền ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                readOnly={!!(editingOrder.orderLines?.length)}
-                value={editingOrder.total || 0}
-                onChange={(e) => setEditingOrder({ ...editingOrder, total: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-              />
+          <OrderPricingFields
+            currency="VND"
+            values={{
+              subTotal: editingOrder.subTotal ?? 0,
+              taxAmount: editingOrder.taxAmount ?? 0,
+              discountAmount: editingOrder.discountAmount ?? 0,
+              totalAmount: editingOrder.totalAmount ?? 0,
+            }}
+            onChange={(patch) => setEditingOrder((prev) => ({ ...prev, ...patch }))}
+          />
+
+          {editingOrder.origin === 'POS' && (
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách đưa (Tendered)</label>
+                <input type="number" value={editingOrder.amountTendered ?? ''} onChange={(e) => setEditingOrder({ ...editingOrder, amountTendered: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border rounded-lg text-sm font-mono" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tiền thối</label>
+                <input type="number" value={editingOrder.changeAmount ?? ''} onChange={(e) => setEditingOrder({ ...editingOrder, changeAmount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border rounded-lg text-sm font-mono" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Shift ID</label>
+                <input type="text" value={editingOrder.shiftId ?? ''} onChange={(e) => setEditingOrder({ ...editingOrder, shiftId: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm font-mono" />
+              </div>
             </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày tạo</label>
               <input
@@ -689,7 +743,7 @@ export function SaleOrdersPage() {
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600 dark:text-gray-300">
-            Bạn có chắc chắn muốn xóa đơn hàng <strong className="text-gray-900 dark:text-white">{deletingOrder?.code}</strong> của khách <strong className="text-gray-900 dark:text-white">{deletingOrder?.customerName}</strong> không?
+            Bạn có chắc chắn muốn xóa đơn hàng <strong className="text-gray-900 dark:text-white">{deletingOrder?.code}</strong> của khách <strong className="text-gray-900 dark:text-white">{deletingOrder ? customerLabel(deletingOrder.customerId) : ''}</strong> không?
           </p>
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button

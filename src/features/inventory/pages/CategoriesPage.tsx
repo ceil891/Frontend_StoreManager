@@ -42,12 +42,16 @@ export function CategoriesPage() {
     setEditingCategory({
       code: `CAT-${Math.floor(100 + Math.random() * 900)}`,
       categoryName: '',
+      parentId: '',
       department: '',
       itemsCount: 0,
       totalValuation: 0,
       status: 'ACTIVE',
       description: '',
-      manager: ''
+      manager: '',
+      inventoryGlCode: '',
+      cogsGlCode: '',
+      taxClass: 'VAT_10',
     });
     setIsModalOpen(true);
   };
@@ -66,12 +70,16 @@ export function CategoriesPage() {
       const newCategory: Omit<ProductCategory, 'id'> = {
         code: editingCategory.code,
         categoryName: editingCategory.categoryName,
+        parentId: editingCategory.parentId || undefined,
         department: editingCategory.department || 'General',
         itemsCount: Number(editingCategory.itemsCount) || 0,
         totalValuation: Number(editingCategory.totalValuation) || 0,
-        status: editingCategory.status as any || 'ACTIVE',
+        status: editingCategory.status as ProductCategory['status'] || 'ACTIVE',
         description: editingCategory.description || '',
-        manager: editingCategory.manager || 'Admin'
+        manager: editingCategory.manager || 'Admin',
+        inventoryGlCode: editingCategory.inventoryGlCode,
+        cogsGlCode: editingCategory.cogsGlCode,
+        taxClass: editingCategory.taxClass,
       };
       addCategory(newCategory);
     } else if (editingCategory.id) {
@@ -97,6 +105,27 @@ export function CategoriesPage() {
         accessorKey: 'categoryName',
         header: 'Tên danh mục',
         cell: (info) => <span className="font-medium text-gray-900 dark:text-white">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'parentId',
+        header: 'Danh mục cha',
+        cell: ({ row }) => {
+          const parent = data.find((c) => c.id === row.original.parentId);
+          return (
+            <span className="text-sm text-gray-600 dark:text-gray-300">
+              {parent ? parent.categoryName : row.original.parentId ? row.original.parentId : '—'}
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: 'taxClass',
+        header: 'Thuế suất',
+        cell: (info) => {
+          const tax = info.getValue() as string | undefined;
+          const map: Record<string, string> = { VAT_8: 'VAT 8%', VAT_10: 'VAT 10%', EXEMPT: 'Miễn thuế' };
+          return <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">{tax ? map[tax] || tax : '—'}</span>;
+        },
       },
       {
         accessorKey: 'department',
@@ -158,7 +187,7 @@ export function CategoriesPage() {
         ),
       },
     ],
-    []
+    [data]
   );
 
   return (
@@ -271,6 +300,24 @@ export function CategoriesPage() {
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedCategory.department}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Danh mục cha:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {data.find((c) => c.id === selectedCategory.parentId)?.categoryName || '—'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">TK Kho / COGS:</span>
+                <span className="font-mono text-sm font-semibold text-gray-900 dark:text-white">
+                  {selectedCategory.inventoryGlCode || '—'} / {selectedCategory.cogsGlCode || '—'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Thuế suất mặc định:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {selectedCategory.taxClass === 'VAT_8' ? 'VAT 8%' : selectedCategory.taxClass === 'EXEMPT' ? 'Miễn thuế' : selectedCategory.taxClass === 'VAT_10' ? 'VAT 10%' : '—'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Category Lead Manager:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedCategory.manager}</span>
               </div>
@@ -330,6 +377,57 @@ export function CategoriesPage() {
                 onChange={(e) => setEditingCategory({ ...editingCategory, categoryName: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
                 required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục cha (Parent)</label>
+              <select
+                value={editingCategory.parentId || ''}
+                onChange={(e) => setEditingCategory({ ...editingCategory, parentId: e.target.value || undefined })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">— Không có (cấp gốc) —</option>
+                {data.filter((c) => c.id !== editingCategory.id).map((c) => (
+                  <option key={c.id} value={c.id}>{c.categoryName} ({c.code})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thuế suất mặc định</label>
+              <select
+                value={editingCategory.taxClass || 'VAT_10'}
+                onChange={(e) => setEditingCategory({ ...editingCategory, taxClass: e.target.value as ProductCategory['taxClass'] })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="VAT_8">VAT 8%</option>
+                <option value="VAT_10">VAT 10%</option>
+                <option value="EXEMPT">Miễn thuế</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">TK Kho (inventoryGlCode)</label>
+              <input
+                type="text"
+                value={editingCategory.inventoryGlCode || ''}
+                onChange={(e) => setEditingCategory({ ...editingCategory, inventoryGlCode: e.target.value })}
+                placeholder="VD: 1561"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">TK Giá vốn (cogsGlCode)</label>
+              <input
+                type="text"
+                value={editingCategory.cogsGlCode || ''}
+                onChange={(e) => setEditingCategory({ ...editingCategory, cogsGlCode: e.target.value })}
+                placeholder="VD: 6321"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
               />
             </div>
           </div>

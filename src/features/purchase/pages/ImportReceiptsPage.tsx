@@ -6,7 +6,8 @@ import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePurchaseStore, type ImportReceiptItem } from '../store/purchaseStore';
 
-const fmtVND = (n: number) => n.toLocaleString('vi-VN') + 'đ';
+const fmtVND = (n: number) => n.toLocaleString('vi-VN') + ' ₫';
+import { toast } from 'sonner';
 
 export function ImportReceiptsPage() {
   const { importReceipts: data, addImportReceipt, updateImportReceipt, deleteImportReceipt } = usePurchaseStore();
@@ -204,7 +205,10 @@ export function ImportReceiptsPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Ghi nhận và kiểm duyệt các đợt hàng nhập kho từ nhà cung cấp. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0">
+            <button
+              onClick={() => toast.success('Xuất dữ liệu Excel nhập kho thành công!')}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0"
+            >
               <Download className="w-4 h-4" /> Xuất Excel
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm whitespace-nowrap shrink-0">
@@ -387,13 +391,17 @@ export function ImportReceiptsPage() {
                   onClick={() => {
                     updateImportReceipt(selectedReceipt.id, { status: 'INSPECTED_ACCEPTED' });
                     setSelectedReceipt(null);
+                    toast.success('Đã xác nhận nhập kho thành công!');
                   }}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
                 >
                   <CheckCircle2 className="w-4 h-4" /> Xác nhận đã nhập kho
                 </button>
               )}
-              <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
+              <button
+                onClick={() => toast.success('Đã gửi yêu cầu in phiếu GRN!')}
+                className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
+              >
                 <FileText className="w-4 h-4 inline mr-1" /> In phiếu GRN
               </button>
             </div>
@@ -521,10 +529,10 @@ export function ImportReceiptsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng giá trị nhập ($)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng giá trị nhập (₫)</label>
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 value={editingReceipt.totalValuation || 0}
                 onChange={(e) => setEditingReceipt({ ...editingReceipt, totalValuation: parseFloat(e.target.value) || 0 })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"

@@ -5,6 +5,7 @@ import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useHrStore, type DepartmentRecord } from '../store/hrStore';
+import { useUserStore, BRANCH_OPTIONS } from '../store/userStore';
 
 const statusStyles = {
   ACTIVE: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200',
@@ -15,6 +16,7 @@ const statusStyles = {
 
 export function DepartmentsPage() {
   const { departments: data, addDepartment, updateDepartment, deleteDepartment } = useHrStore();
+  const { users } = useUserStore();
   
   const [search, setSearch] = useState('');
   const [selectedDept, setSelectedDept] = useState<DepartmentRecord | null>(null);
@@ -36,8 +38,8 @@ export function DepartmentsPage() {
       matchesSearch = (
         item.departmentCode.toLowerCase().includes(q) ||
         item.departmentName.toLowerCase().includes(q) ||
-        item.headOfDepartment.toLowerCase().includes(q) ||
-        item.parentDivision.toLowerCase().includes(q)
+        !!(item.headUserId && users.find(u => u.id === item.headUserId)?.fullName.toLowerCase().includes(q)) ||
+        !!(item.parentId && data.find(d => d.id === item.parentId)?.departmentName.toLowerCase().includes(q))
       );
     }
 
@@ -52,15 +54,16 @@ export function DepartmentsPage() {
     setEditingDept({
       departmentCode: `DPT-${Math.floor(1000 + Math.random() * 9000)}`,
       departmentName: '',
-      headOfDepartment: '',
+      headUserId: '',
       totalEmployees: 0,
       allocatedAnnualBudgetUsd: 0,
       ytdSpendUsd: 0,
       costCenterCode: '',
       status: 'ACTIVE',
       establishedDate: new Date().toISOString().split('T')[0],
-      parentDivision: '',
-      missionStatement: ''
+      parentId: '',
+      missionStatement: '',
+      locationId: 'HQ'
     });
     setIsModalOpen(true);
   };
@@ -78,15 +81,16 @@ export function DepartmentsPage() {
     const payload: Omit<DepartmentRecord, 'id'> = {
       departmentCode: editingDept.departmentCode,
       departmentName: editingDept.departmentName,
-      headOfDepartment: editingDept.headOfDepartment || 'Unassigned',
+      headUserId: editingDept.headUserId || undefined,
       totalEmployees: Number(editingDept.totalEmployees) || 0,
       allocatedAnnualBudgetUsd: Number(editingDept.allocatedAnnualBudgetUsd) || 0,
       ytdSpendUsd: Number(editingDept.ytdSpendUsd) || 0,
       costCenterCode: editingDept.costCenterCode || '',
       status: editingDept.status as any || 'ACTIVE',
       establishedDate: editingDept.establishedDate || '',
-      parentDivision: editingDept.parentDivision || '',
-      missionStatement: editingDept.missionStatement || ''
+      parentId: editingDept.parentId || undefined,
+      missionStatement: editingDept.missionStatement || '',
+      locationId: editingDept.locationId || undefined
     };
 
     if (modalMode === 'create') {
@@ -103,41 +107,54 @@ export function DepartmentsPage() {
     setDeletingDept(null);
   };
 
+  const statusLabels = {
+    ACTIVE: 'Đang hoạt động',
+    RESTRUCTURING: 'Đang tái cấu trúc',
+    MERGING: 'Hợp nhất',
+    INACTIVE: 'Không hoạt động',
+  } as const;
+
   const columns = useMemo<ColumnDef<DepartmentRecord>[]>(
     () => [
       {
         accessorKey: 'departmentCode',
-        header: 'Dept Code',
+        header: 'Mã PB',
         cell: (info) => <span className="font-mono font-bold text-primary hover:underline">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'departmentName',
-        header: 'Department Title & Division',
-        cell: ({ row }) => (
-          <div>
-            <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.departmentName}</p>
-            <p className="text-xs text-gray-500 font-mono">Division: {row.original.parentDivision}</p>
-          </div>
-        ),
+        header: 'Tên phòng ban & Phân khu',
+        cell: ({ row }) => {
+          const parent = data.find(d => d.id === row.original.parentId);
+          return (
+            <div>
+              <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.departmentName}</p>
+              <p className="text-xs text-gray-500 font-mono">Phân khu: {parent ? parent.departmentName : 'Không'}</p>
+            </div>
+          );
+        },
       },
       {
-        accessorKey: 'headOfDepartment',
-        header: 'Department Head',
-        cell: (info) => <span className="font-medium text-gray-900 dark:text-white text-sm">{info.getValue() as string}</span>,
+        accessorKey: 'headUserId',
+        header: 'Trưởng phòng',
+        cell: ({ row }) => {
+          const headUser = users.find(u => u.id === row.original.headUserId);
+          return <span className="font-medium text-gray-900 dark:text-white text-sm">{headUser ? headUser.fullName : 'Chưa phân công'}</span>;
+        },
       },
       {
         accessorKey: 'totalEmployees',
-        header: 'Active Staff',
-        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{info.getValue() as number} FTEs</span>,
+        header: 'Nhân sự',
+        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{info.getValue() as number} FTE</span>,
       },
       {
         accessorKey: 'allocatedAnnualBudgetUsd',
-        header: 'Allocated Budget',
+        header: 'Ngân sách phân bổ',
         cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">${(info.getValue() as number).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>,
       },
       {
         accessorKey: 'ytdSpendUsd',
-        header: 'YTD Ledger Spend',
+        header: 'Chi tiêu lũy kế',
         cell: ({ row }) => {
           const budget = row.original.allocatedAnnualBudgetUsd;
           const spend = row.original.ytdSpendUsd;
@@ -145,31 +162,31 @@ export function DepartmentsPage() {
           return (
             <div>
               <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">${spend.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-              <span className="text-xs text-gray-500 block font-mono">{pct}% consumed</span>
+              <span className="text-xs text-gray-500 block font-mono">{pct}% đã dùng</span>
             </div>
           );
         },
       },
       {
         accessorKey: 'costCenterCode',
-        header: 'Cost Center',
+        header: 'Trung tâm chi phí',
         cell: (info) => <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded border border-gray-200 dark:border-gray-700">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Status',
+        header: 'Trạng thái',
         cell: (info) => {
-          const status = info.getValue() as keyof typeof statusStyles;
+          const status = info.getValue() as keyof typeof statusLabels;
           return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${statusStyles[status]}`}>
-              {status}
+              {statusLabels[status] ?? status}
             </span>
           );
         },
       },
       {
         id: 'actions',
-        header: 'Actions',
+        header: 'Hành động',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
@@ -202,15 +219,15 @@ export function DepartmentsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Organization Departments & Cost Centers</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage corporate organization hierarchy, review active staff headcount allocations, audit departmental fiscal budgets and track cost center consumption.</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tổ chức Phòng ban & Trung tâm chi phí</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý cơ cấu phòng ban, theo dõi phân bổ nhân sự, kiểm toán ngân sách bộ phận và theo dõi chi phí trung tâm.</p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Export Organization Chart
+              <Download className="w-4 h-4" /> Xuất sơ đồ tổ chức
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
-              <Plus className="w-4 h-4" /> Create Department
+              <Plus className="w-4 h-4" /> Tạo Phòng ban
             </button>
           </div>
         </div>
@@ -241,10 +258,10 @@ export function DepartmentsPage() {
                 className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
               >
                 <option value="all">Tất cả trạng thái</option>
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="RESTRUCTURING">RESTRUCTURING</option>
-                <option value="MERGING">MERGING</option>
-                <option value="INACTIVE">INACTIVE</option>
+                <option value="ACTIVE">Đang hoạt động</option>
+                <option value="RESTRUCTURING">Đang tái cấu trúc</option>
+                <option value="MERGING">Hợp nhất</option>
+                <option value="INACTIVE">Không hoạt động</option>
               </select>
             </div>
 
@@ -328,15 +345,20 @@ export function DepartmentsPage() {
               <div className="flex justify-between items-center pt-2 text-sm">
                 <span className="text-gray-500">Department Head Executive:</span>
                 <span className="font-semibold text-gray-900 flex items-center gap-1.5">
-                  <UserCheck className="w-4 h-4 text-primary inline" /> {selectedDept.headOfDepartment}
+                  <UserCheck className="w-4 h-4 text-primary inline" /> {users.find(u => u.id === selectedDept.headUserId)?.fullName || 'Unassigned'}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500">Parent Division:</span>
-                <span className="font-medium text-gray-800">{selectedDept.parentDivision}</span>
+                <span className="font-medium text-gray-800">{data.find(d => d.id === selectedDept.parentId)?.departmentName || 'None'}</span>
               </div>
 
               <div className="flex justify-between items-center pt-2 border-t border-gray-200 text-xs font-mono">
+                <span className="text-gray-500 font-sans">Location:</span>
+                <span className="text-gray-800">{BRANCH_OPTIONS.find(b => b.id === selectedDept.locationId)?.label || selectedDept.locationId || 'N/A'}</span>
+              </div>
+
+              <div className="flex justify-between items-center text-xs font-mono">
                 <span className="text-gray-500 font-sans">Established Date:</span>
                 <span className="text-gray-800">{selectedDept.establishedDate}</span>
               </div>
@@ -399,21 +421,29 @@ export function DepartmentsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Parent Division (Khối)</label>
-              <input
-                type="text"
-                value={editingDept.parentDivision || ''}
-                onChange={(e) => setEditingDept({ ...editingDept, parentDivision: e.target.value })}
+              <select
+                value={editingDept.parentId || ''}
+                onChange={(e) => setEditingDept({ ...editingDept, parentId: e.target.value || undefined })}
                 className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
-              />
+              >
+                <option value="">-- Trực thuộc Ban giám đốc --</option>
+                {data.filter(d => d.id !== editingDept.id).map(dept => (
+                  <option key={dept.id} value={dept.id}>{dept.departmentName}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Trưởng phòng (Head)</label>
-              <input
-                type="text"
-                value={editingDept.headOfDepartment || ''}
-                onChange={(e) => setEditingDept({ ...editingDept, headOfDepartment: e.target.value })}
+              <select
+                value={editingDept.headUserId || ''}
+                onChange={(e) => setEditingDept({ ...editingDept, headUserId: e.target.value || undefined })}
                 className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
-              />
+              >
+                <option value="">-- Không có --</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.fullName}</option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -440,6 +470,20 @@ export function DepartmentsPage() {
                 <option value="INACTIVE">Ngừng hoạt động (Inactive)</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Chi nhánh vật lý</label>
+            <select
+              value={editingDept.locationId || ''}
+              onChange={(e) => setEditingDept({ ...editingDept, locationId: e.target.value || undefined })}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
+            >
+              <option value="">-- Trụ sở --</option>
+              {BRANCH_OPTIONS.map(b => (
+                <option key={b.id} value={b.id}>{b.label}</option>
+              ))}
+            </select>
           </div>
 
           <div>

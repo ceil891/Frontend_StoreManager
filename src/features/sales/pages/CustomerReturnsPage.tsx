@@ -1,15 +1,32 @@
 import { useMemo, useState } from 'react';
 import { Plus, Download, Search, Filter, Eye, User, Calendar, CheckCircle2, RefreshCw, AlertTriangle, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-import { useSalesStore, type CustomerReturnItem } from '../store/salesStore';
+import { useSalesStore, type CustomerReturnItem, BRANCH_NAME_BY_ID } from '../store/salesStore';
+import { resolveCustomerName, type RefundMethod } from '../store/salesHelpers';
+import { useCrmStore } from '@/features/crm/store/crmStore';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { OrderLinesEditor, sumOrderLines } from '@/shared/components/sales/OrderLinesEditor';
+import { CustomerSelect } from '@/shared/components/sales/CustomerSelect';
+import { toast } from 'sonner';
+
+const CONDITION_LABELS: Record<string, string> = {
+  UNOPENED: 'Chưa mở',
+  DEFECTIVE: 'Lỗi / hỏng',
+  USED_DAMAGED: 'Đã dùng / trầy',
+};
+
+const REFUND_METHOD_LABELS: Record<RefundMethod, string> = {
+  CASH: 'Tiền mặt',
+  BANK_TRANSFER: 'Chuyển khoản',
+  STORE_CREDIT: 'Ví / Store credit',
+  ORIGINAL_CARD: 'Hoàn thẻ gốc',
+};
 
 export function CustomerReturnsPage() {
   const canManage = usePermission('sales:returns:manage');
+  const customers = useCrmStore((s) => s.customers);
   const customerReturns = useSalesStore((s) => s.customerReturns);
   const addCustomerReturn = useSalesStore((s) => s.addCustomerReturn);
   const updateCustomerReturn = useSalesStore((s) => s.updateCustomerReturn);
@@ -25,7 +42,7 @@ export function CustomerReturnsPage() {
 
   const filtered = customerReturns.filter(
     (item) =>
-      item.customerName.toLowerCase().includes(search.toLowerCase()) ||
+      resolveCustomerName(item.customerId, customers).toLowerCase().includes(search.toLowerCase()) ||
       item.returnCode.toLowerCase().includes(search.toLowerCase()) ||
       item.orderCode.toLowerCase().includes(search.toLowerCase())
   );
@@ -39,8 +56,11 @@ export function CustomerReturnsPage() {
     setEditing({
       returnCode: `RET-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
       orderCode: '',
-      customerName: '',
+      customerId: '',
       refundAmount: 0,
+      refundMethod: 'CASH',
+      isRestocked: true,
+      returnBranchId: 'BR-001',
       returnDate: new Date().toISOString().split('T')[0],
       reason: '',
       condition: 'UNOPENED',
@@ -68,7 +88,7 @@ export function CustomerReturnsPage() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editing.returnCode || !editing.customerName || !editing.orderCode) return;
+    if (!editing.returnCode || !editing.customerId || !editing.orderCode) return;
     const lines = editing.returnLines ?? [];
     const refundFromLines = sumOrderLines(lines);
     const refundAmount = lines.length ? refundFromLines : Number(editing.refundAmount) || 0;
@@ -77,8 +97,11 @@ export function CustomerReturnsPage() {
       addCustomerReturn({
         returnCode: editing.returnCode,
         orderCode: editing.orderCode,
-        customerName: editing.customerName,
+        customerId: editing.customerId,
         refundAmount,
+        refundMethod: (editing.refundMethod as RefundMethod) || 'CASH',
+        isRestocked: editing.isRestocked ?? editing.condition === 'UNOPENED',
+        returnBranchId: editing.returnBranchId || 'BR-001',
         returnLines: lines,
         returnDate: editing.returnDate || new Date().toISOString().split('T')[0],
         reason: editing.reason || '',
@@ -127,9 +150,22 @@ export function CustomerReturnsPage() {
         cell: (info) => <span className="font-mono text-gray-500">{info.getValue() as string}</span>,
       },
       {
-        accessorKey: 'customerName',
+        id: 'customer',
         header: 'Khách hàng',
-        cell: (info) => <span className="font-medium text-gray-900 dark:text-white">{info.getValue() as string}</span>,
+        cell: ({ row }) => (
+          <span className="font-medium text-gray-900 dark:text-white">
+            {resolveCustomerName(row.original.customerId, customers)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'refundMethod',
+        header: 'Hoàn tiền',
+        cell: ({ row }) => (
+          <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+            {REFUND_METHOD_LABELS[row.original.refundMethod]}
+          </span>
+        ),
       },
       {
         accessorKey: 'reason',
@@ -139,7 +175,10 @@ export function CustomerReturnsPage() {
       {
         accessorKey: 'refundAmount',
         header: 'Số tiền hoàn',
-        cell: (info) => <span className="font-bold text-red-600 dark:text-red-400">-${(info.getValue() as number).toFixed(2)}</span>,
+        cell: (info) => {
+          const amount = info.getValue() as number;
+          return <span className="font-bold text-red-600 dark:text-red-400">{amount.toLocaleString('vi-VN')} ₫</span>;
+        },
       },
       {
         accessorKey: 'status',
@@ -207,7 +246,7 @@ export function CustomerReturnsPage() {
         ),
       },
     ],
-    [canManage]
+    [canManage, customers]
   );
 
   return (
@@ -223,6 +262,7 @@ export function CustomerReturnsPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
+              onClick={() => toast.success('Xuất file log hoàn trả thành công!')}
               className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
             >
               <Download className="w-4 h-4" /> Xuất log
@@ -264,10 +304,10 @@ export function CustomerReturnsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedReturn(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedReturn}
         onClose={() => setSelectedReturn(null)}
-        title={selectedReturn ? `Phiếu hoàn: ${selectedReturn.returnCode}` : 'Chi tiết'}
+        title={selectedReturn ? `Chi tiết phiếu hoàn trả: ${selectedReturn.returnCode}` : 'Chi tiết hoàn trả'}
         width="max-w-lg"
       >
         {selectedReturn && (
@@ -279,7 +319,7 @@ export function CustomerReturnsPage() {
                 </div>
                 <div>
                   <p className="text-xs text-amber-800 dark:text-amber-400 font-semibold uppercase tracking-wider">Hoàn tiền</p>
-                  <p className="text-xl font-bold text-red-600 dark:text-red-400">-${selectedReturn.refundAmount.toFixed(2)}</p>
+                  <p className="text-xl font-bold text-red-600 dark:text-red-400">{selectedReturn.refundAmount.toLocaleString('vi-VN')} ₫</p>
                 </div>
               </div>
               <span
@@ -304,7 +344,9 @@ export function CustomerReturnsPage() {
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   <User className="w-4 h-4 text-amber-600 dark:text-amber-400" /> Khách hàng
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedReturn.customerName}</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white truncate">
+                  {resolveCustomerName(selectedReturn.customerId, customers)}
+                </p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
@@ -330,7 +372,23 @@ export function CustomerReturnsPage() {
                         : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
                   }`}
                 >
-                  {selectedReturn.condition}
+                  {CONDITION_LABELS[selectedReturn.condition] || selectedReturn.condition}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Hình thức hoàn:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{REFUND_METHOD_LABELS[selectedReturn.refundMethod]}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Nhập lại kho:</span>
+                <span className={`font-semibold ${selectedReturn.isRestocked ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {selectedReturn.isRestocked ? 'Có (Nhập kho)' : 'Không'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Chi nhánh nhận:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {BRANCH_NAME_BY_ID[selectedReturn.returnBranchId] ?? selectedReturn.returnBranchId}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
@@ -372,6 +430,7 @@ export function CustomerReturnsPage() {
               )}
               <button
                 type="button"
+                onClick={() => toast.success('Đã gửi yêu cầu in phiếu hoàn!')}
                 className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
               >
                 In phiếu hoàn
@@ -379,7 +438,7 @@ export function CustomerReturnsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}
@@ -411,18 +470,17 @@ export function CustomerReturnsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng *</label>
-            <input
-              type="text"
-              value={editing.customerName || ''}
-              onChange={(e) => setEditing({ ...editing, customerName: e.target.value })}
-              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 text-sm"
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng (CRM) *</label>
+            <CustomerSelect
+              value={editing.customerId || ''}
+              onChange={(customerId) => setEditing({ ...editing, customerId })}
+              allowWalkIn={false}
               required
             />
           </div>
           <OrderLinesEditor
             lines={editing.returnLines ?? []}
-            currency="USD"
+            currency="VND"
             onChange={applyReturnLines}
           />
 
@@ -437,7 +495,7 @@ export function CustomerReturnsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tiền hoàn ($)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tiền hoàn (₫)</label>
               <input
                 type="number"
                 step="0.01"
@@ -457,12 +515,56 @@ export function CustomerReturnsPage() {
               className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 text-sm"
             />
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hình thức hoàn tiền</label>
+              <select
+                value={editing.refundMethod || 'CASH'}
+                onChange={(e) => setEditing({ ...editing, refundMethod: e.target.value as RefundMethod })}
+                className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 text-sm"
+              >
+                {(Object.keys(REFUND_METHOD_LABELS) as RefundMethod[]).map((k) => (
+                  <option key={k} value={k}>{REFUND_METHOD_LABELS[k]}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chi nhánh nhận hoàn</label>
+              <select
+                value={editing.returnBranchId || 'BR-001'}
+                onChange={(e) => setEditing({ ...editing, returnBranchId: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 text-sm"
+              >
+                {Object.entries(BRANCH_NAME_BY_ID).filter(([id]) => id.startsWith('BR-')).map(([id, name]) => (
+                  <option key={id} value={id}>{name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="isRestocked"
+              checked={!!editing.isRestocked}
+              onChange={(e) => setEditing({ ...editing, isRestocked: e.target.checked })}
+            />
+            <label htmlFor="isRestocked" className="text-sm text-gray-700 dark:text-gray-300">
+              Nhập lại tồn kho (tự sinh STOCK_IN)
+            </label>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tình trạng hàng</label>
               <select
                 value={editing.condition || 'UNOPENED'}
-                onChange={(e) => setEditing({ ...editing, condition: e.target.value as CustomerReturnItem['condition'] })}
+                onChange={(e) => {
+                  const condition = e.target.value as CustomerReturnItem['condition'];
+                  setEditing({
+                    ...editing,
+                    condition,
+                    isRestocked: condition === 'UNOPENED' ? (editing.isRestocked ?? true) : false,
+                  });
+                }}
                 className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 text-sm"
               >
                 <option value="UNOPENED">Chưa mở</option>

@@ -1,34 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Plus, Download, Search, Eye, AlertCircle, Building2, Calendar, FileText, CheckCircle2, Edit, Trash2, X } from 'lucide-react';
+import { Plus, Download, Search, Eye, AlertCircle, Building2, Calendar, FileText, CheckCircle2, Edit, Trash2, X, User, ImageIcon } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import type { ColumnDef } from '@tanstack/react-table';
-
-interface CancelIssueRecord {
-  id: string;
-  issueCode: string;
-  sku: string;
-  productName: string;
-  category: string;
-  quantity: number;
-  totalValuation: number;
-  reason: 'DAMAGED' | 'EXPIRED' | 'LOST' | 'THEFT' | 'QUALITY_DEFECT';
-  locationHub: string;
-  loggedDate: string;
-  authorizedBy: string;
-  status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'PROCESSED';
-  notes?: string;
-}
-
-const MOCK_CANCEL_ISSUES: CancelIssueRecord[] = [
-  { id: '1', issueCode: 'WRO-2024-001', sku: 'SKU-FOOD-102', productName: 'Artisanal Sourdough Flour 5KG', category: 'Grocery', quantity: 5, totalValuation: 41.00, reason: 'DAMAGED', locationHub: 'Downtown Branch', loggedDate: '2024-05-18', authorizedBy: 'Michael Chang', status: 'APPROVED', notes: 'Water damage resulting from storage humidity leak.' },
-  { id: '2', issueCode: 'WRO-2024-002', sku: 'SKU-BEV-909', productName: 'Imported Sparkling Mineral Water', category: 'Beverage', quantity: 24, totalValuation: 30.00, reason: 'EXPIRED', locationHub: 'Northside Store', loggedDate: '2024-05-17', authorizedBy: 'David Ross', status: 'PROCESSED', notes: 'Batch expired on display shelves. Disposed and accounted as write-off.' },
-  { id: '3', issueCode: 'WRO-2024-003', sku: 'SKU-ELEC-002', productName: 'Bluetooth Barcode Scanner', category: 'Hardware', quantity: 1, totalValuation: 120.00, reason: 'LOST', locationHub: 'Central Warehouse', loggedDate: '2024-05-15', authorizedBy: 'Super Admin', status: 'PENDING_APPROVAL', notes: 'Missing during physical inventory audit count. Under investigation.' },
-  { id: '4', issueCode: 'WRO-2024-004', sku: 'SKU-APPA-204', productName: 'Staff Uniform Organic Tee (L)', category: 'Apparel', quantity: 2, totalValuation: 50.00, reason: 'QUALITY_DEFECT', locationHub: 'Main Flagship / HQ', loggedDate: '2024-05-14', authorizedBy: 'Sarah Jenkins', status: 'REJECTED', notes: 'Torn seams. Rejected write-off request, returning to vendor for exchange.' },
-];
+import { useInventoryStore, type CancelIssueRecord } from '../store/inventoryStore';
 
 export function CancelIssuePage() {
-  const [data] = useState<CancelIssueRecord[]>(MOCK_CANCEL_ISSUES);
+  const data = useInventoryStore((s) => s.cancelIssues);
   const [search, setSearch] = useState('');
   const [selectedIssue, setSelectedIssue] = useState<CancelIssueRecord | null>(null);
 
@@ -103,6 +81,11 @@ export function CancelIssuePage() {
       {
         accessorKey: 'locationHub',
         header: 'Vị trí kho',
+      },
+      {
+        accessorKey: 'reportedBy',
+        header: 'Người báo cáo',
+        cell: (info) => <span className="text-sm text-gray-700 dark:text-gray-300">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'loggedDate',
@@ -288,10 +271,47 @@ export function CancelIssuePage() {
                 <span className="text-gray-500 dark:text-gray-400">Số lượng hủy:</span>
                 <span className="font-bold text-gray-900 dark:text-white">{selectedIssue.quantity} đơn vị</span>
               </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Người báo cáo:</span>
+                <span className="font-semibold text-gray-900 dark:text-white flex items-center gap-1">
+                  <User className="w-3.5 h-3.5 text-gray-400" />
+                  {selectedIssue.reportedBy}
+                </span>
+              </div>
               <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
                 <span className="text-gray-500 dark:text-gray-400">Người phê duyệt:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedIssue.authorizedBy}</span>
               </div>
+
+              {(selectedIssue.batchLotNumber || selectedIssue.expiryDate) && (
+                <div className="pt-2 border-t border-gray-200 dark:border-gray-700 space-y-2">
+                  {selectedIssue.batchLotNumber && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500 dark:text-gray-400">Lô hàng (Batch):</span>
+                      <span className="font-mono font-semibold text-gray-900 dark:text-white">{selectedIssue.batchLotNumber}</span>
+                    </div>
+                  )}
+                  {selectedIssue.expiryDate && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500 dark:text-gray-400">Hạn sử dụng:</span>
+                      <span className="font-semibold text-amber-700 dark:text-amber-400">{selectedIssue.expiryDate}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedIssue.proofImages.length > 0 && (
+                <div className="pt-3 border-t border-gray-200 dark:border-gray-800">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1 mb-2">
+                    <ImageIcon className="w-3.5 h-3.5" /> Bằng chứng / Hình ảnh ({selectedIssue.proofImages.length})
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {selectedIssue.proofImages.map((url, i) => (
+                      <img key={i} src={url} alt={`Proof ${i + 1}`} className="rounded-lg border border-gray-200 dark:border-gray-700 object-cover h-24 w-full" />
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {selectedIssue.notes && (
                 <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">

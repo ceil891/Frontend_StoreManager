@@ -3,33 +3,10 @@ import { Plus, Download, Search, Eye, TrendingUp, TrendingDown, Building2, Calen
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import type { ColumnDef } from '@tanstack/react-table';
-
-interface StockLedgerEntry {
-  id: string;
-  transactionCode: string;
-  sku: string;
-  productName: string;
-  type: 'STOCK_IN' | 'STOCK_OUT' | 'ADJUSTMENT_UP' | 'ADJUSTMENT_DOWN' | 'TRANSFER' | 'CUSTOMER_RETURN' | 'VENDOR_RETURN';
-  quantityChange: number;
-  runningBalance: number;
-  unitPrice: number;
-  totalValuation: number;
-  timestamp: string;
-  location: string;
-  loggedBy: string;
-  referenceDoc: string;
-  notes?: string;
-}
-
-const MOCK_LEDGER: StockLedgerEntry[] = [
-  { id: '1', transactionCode: 'TRX-2024-901', sku: 'SKU-ELEC-001', productName: 'RetailHub Pro POS Terminal', type: 'STOCK_IN', quantityChange: 25, runningBalance: 125, unitPrice: 850.00, totalValuation: 21250.00, timestamp: '2024-05-17 14:30', location: 'Main Flagship / HQ', loggedBy: 'Michael Chang', referenceDoc: 'GRN-2024-301', notes: 'Inbound PO delivery successfully verified and restocked.' },
-  { id: '2', transactionCode: 'TRX-2024-902', sku: 'SKU-APPA-204', productName: 'Staff Uniform Organic Tee (L)', type: 'STOCK_OUT', quantityChange: -5, runningBalance: 45, unitPrice: 25.00, totalValuation: -125.00, timestamp: '2024-05-17 11:15', location: 'Downtown Branch', loggedBy: 'Sarah Jenkins', referenceDoc: 'REQ-2024-118', notes: 'Internal store requisition for newly onboarded retail staff.' },
-  { id: '3', transactionCode: 'TRX-2024-903', sku: 'SKU-PACK-990', productName: 'Premium Paper Shopping Bags', type: 'ADJUSTMENT_DOWN', quantityChange: -150, runningBalance: 4850, unitPrice: 0.82, totalValuation: -123.00, timestamp: '2024-05-16 09:00', location: 'Central Warehouse', loggedBy: 'David Ross', referenceDoc: 'ADJ-2024-055', notes: 'Stock reconciliation adjustment following transit water damage discovery.' },
-  { id: '4', transactionCode: 'TRX-2024-904', sku: 'SKU-ELEC-002', productName: 'Bluetooth Barcode Scanner', type: 'CUSTOMER_RETURN', quantityChange: 1, runningBalance: 80, unitPrice: 120.00, totalValuation: 120.00, timestamp: '2024-05-15 16:45', location: 'Northside Store', loggedBy: 'Super Admin', referenceDoc: 'RMA-2024-012', notes: 'Customer return accepted. Unit verified in perfect resalable condition.' },
-];
+import { useInventoryStore, type StockLedgerEntry } from '../store/inventoryStore';
 
 export function StockLedgerPage() {
-  const [data] = useState<StockLedgerEntry[]>(MOCK_LEDGER);
+  const data = useInventoryStore((s) => s.stockLedger);
   const [search, setSearch] = useState('');
   const [selectedEntry, setSelectedEntry] = useState<StockLedgerEntry | null>(null);
 
@@ -100,8 +77,19 @@ export function StockLedgerPage() {
         },
       },
       {
-        accessorKey: 'location',
-        header: 'Vị trí kho',
+        id: 'locations',
+        header: 'Từ / Đến kho',
+        cell: ({ row }) => {
+          const e = row.original;
+          if (e.type === 'TRANSFER' && e.fromLocationId && e.toLocationId) {
+            return (
+              <span className="text-xs font-mono text-gray-600 dark:text-gray-300">
+                {e.fromLocationId} → {e.toLocationId}
+              </span>
+            );
+          }
+          return <span className="text-sm">{e.location}</span>;
+        },
       },
       {
         accessorKey: 'quantityChange',
@@ -325,6 +313,24 @@ export function StockLedgerPage() {
                 <span className="text-gray-500 dark:text-gray-400">Resulting Running Balance:</span>
                 <span className="font-bold text-gray-900 dark:text-white">{selectedEntry.runningBalance} units</span>
               </div>
+              {selectedEntry.type === 'TRANSFER' && selectedEntry.fromLocationId && selectedEntry.toLocationId && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">Chuyển kho:</span>
+                  <span className="font-mono text-xs font-semibold">{selectedEntry.fromLocationId} → {selectedEntry.toLocationId}</span>
+                </div>
+              )}
+              {selectedEntry.batchLotRef && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">Lô / Batch:</span>
+                  <span className="font-mono font-semibold">{selectedEntry.batchLotRef}</span>
+                </div>
+              )}
+              {selectedEntry.glPostingId && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">Bút toán GL:</span>
+                  <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{selectedEntry.glPostingId}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
                 <span className="text-gray-500 dark:text-gray-400">Reference Source Document:</span>
                 <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{selectedEntry.referenceDoc}</span>

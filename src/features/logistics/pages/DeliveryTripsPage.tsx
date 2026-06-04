@@ -46,12 +46,12 @@ export function DeliveryTripsPage() {
     () => [
       {
         accessorKey: 'manifestNumber',
-        header: 'Manifest ID',
+        header: 'Mã lệnh',
         cell: (info) => <span className="font-mono font-bold text-primary hover:underline">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'driverName',
-        header: 'Assigned Driver & Vehicle',
+        header: 'Tài xế & Phương tiện',
         cell: ({ row }) => (
           <div>
             <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.driverName}</p>
@@ -61,12 +61,12 @@ export function DeliveryTripsPage() {
       },
       {
         accessorKey: 'destinationZone',
-        header: 'Destination Route',
+        header: 'Tuyến đến',
         cell: (info) => <span className="font-medium text-gray-900 dark:text-white truncate max-w-xs block">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'totalParcels',
-        header: 'Parcels',
+        header: 'Số kiện',
         cell: ({ row }) => (
           <div>
             <span className="font-bold text-gray-900 dark:text-white">{row.original.totalParcels} boxes</span>
@@ -76,12 +76,12 @@ export function DeliveryTripsPage() {
       },
       {
         accessorKey: 'cashOnDeliveryTotal',
-        header: 'COD Collection',
+        header: 'COD thu hộ',
         cell: (info) => <span className="font-mono font-bold text-primary">${(info.getValue() as number).toFixed(2)}</span>,
       },
       {
         accessorKey: 'tripStatus',
-        header: 'Status',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           return (
@@ -99,7 +99,7 @@ export function DeliveryTripsPage() {
       },
       {
         accessorKey: 'scheduledDeparture',
-        header: 'Departure Time',
+        header: 'Giờ đi',
         cell: (info) => <span className="text-gray-500 text-sm font-mono">{info.getValue() as string}</span>,
       },
       {
@@ -123,15 +123,15 @@ export function DeliveryTripsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Delivery Route Trips Manifest</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Coordinate inter-store transit manifests, track courier fleet vehicles, monitor COD collections and manage route delays. Click any trip for details.</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Biểu mẫu Chuyến xe giao hàng</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Điều phối lệnh chuyển hàng giữa các cửa hàng, theo dõi đội xe, giám sát COD và xử lý chậm tuyến. Nhấn vào chuyến để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Export Dispatch Log
+              <Download className="w-4 h-4" /> Xuất nhật ký điều vận
             </button>
             <button className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
-              <Plus className="w-4 h-4" /> Dispatch New manifest
+              <Plus className="w-4 h-4" /> Tạo lệnh điều vận mới
             </button>
           </div>
         </div>
@@ -145,22 +145,22 @@ export function DeliveryTripsPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by manifest ID, driver name, vehicle plate or destination..."
+              placeholder="Tìm kiếm theo mã lệnh, tài xế, biển số hoặc tuyến đến..."
               className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-all"
             />
           </div>
           <button className="flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors text-sm">
-            <Filter className="w-4 h-4" /> Filter Routes
+            <Filter className="w-4 h-4" /> Lọc tuyến
           </button>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedTrip(row)} />
+        <ReusableDataTable columns={columns} data={filtered} />
       </div>
 
       <Drawer
         isOpen={!!selectedTrip}
         onClose={() => setSelectedTrip(null)}
-        title={selectedTrip ? `Fleet Manifest: ${selectedTrip.manifestNumber}` : 'Manifest Dossier'}
+        title={selectedTrip ? `Hồ sơ lệnh: ${selectedTrip.manifestNumber}` : 'Thông tin lệnh'}
         width="max-w-lg"
       >
         {selectedTrip && (
@@ -178,7 +178,7 @@ export function DeliveryTripsPage() {
                   <Truck className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Fleet Dispatch Status</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Trạng thái điều vận</p>
                   <p className="text-lg font-bold text-gray-900 dark:text-white uppercase mt-0.5">{selectedTrip.tripStatus.replace('_', ' ')}</p>
                 </div>
               </div>
@@ -194,14 +194,14 @@ export function DeliveryTripsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <UserCheck className="w-4 h-4 text-primary" /> Courier Assigned
+                  <UserCheck className="w-4 h-4 text-primary" /> Tài xế giao hàng
                 </div>
                 <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedTrip.driverName}</p>
                 <p className="text-xs font-mono text-gray-500">{selectedTrip.driverPhone}</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <DollarSign className="w-4 h-4 text-emerald-600" /> Pending COD Handover
+                  <DollarSign className="w-4 h-4 text-emerald-600" /> COD đang chờ bàn giao
                 </div>
                 <p className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 truncate">${selectedTrip.cashOnDeliveryTotal.toFixed(2)}</p>
               </div>
@@ -211,14 +211,14 @@ export function DeliveryTripsPage() {
               <div className="flex items-start gap-2.5 text-gray-700 dark:text-gray-300">
                 <MapPin className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Departure Hub</span>
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Kho xuất phát</span>
                   <span className="font-semibold text-gray-900 dark:text-white">{selectedTrip.departureHub}</span>
                 </div>
               </div>
               <div className="flex items-start gap-2.5 text-gray-700 dark:text-gray-300 pt-2 border-t border-gray-200 dark:border-gray-700">
                 <Navigation className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Destination Zone</span>
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Tuyến đến</span>
                   <span className="font-semibold text-gray-900 dark:text-white">{selectedTrip.destinationZone}</span>
                 </div>
               </div>
@@ -229,14 +229,14 @@ export function DeliveryTripsPage() {
                   <span className="font-mono font-semibold text-gray-800 dark:text-gray-200">{selectedTrip.scheduledDeparture}</span>
                 </div>
                 <div>
-                  <span className="text-gray-400 block mb-0.5">Estimated Arrival:</span>
+                  <span className="text-gray-400 block mb-0.5">Giờ đến dự kiến:</span>
                   <span className="font-mono font-semibold text-primary">{selectedTrip.estimatedArrival}</span>
                 </div>
               </div>
 
               <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700 text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Total Cargo Load:</span>
-                <span className="font-bold text-gray-900 dark:text-white">{selectedTrip.totalParcels} boxes ({selectedTrip.totalWeightKg} kg net)</span>
+                <span className="text-gray-500 dark:text-gray-400">Tổng tải hàng:</span>
+                <span className="font-bold text-gray-900 dark:text-white">{selectedTrip.totalParcels} kiện ({selectedTrip.totalWeightKg} kg)</span>
               </div>
 
               {selectedTrip.notes && (
@@ -258,7 +258,7 @@ export function DeliveryTripsPage() {
                 </button>
               )}
               <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
-                <Clock className="w-4 h-4 inline mr-1" /> Log Transit Delay
+                <Clock className="w-4 h-4 inline mr-1" /> Ghi lại chậm tuyến
               </button>
             </div>
           </div>

@@ -2,11 +2,14 @@ import { useMemo, useState } from 'react';
 import { Download, Filter, Eye, Globe, Smartphone, Store, Truck, User, MapPin, Phone, BadgeDollarSign, Edit, Trash2, Plus } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
-import { useSalesStore, type SaleOrder } from '../store/salesStore';
+import { useSalesStore, type SaleOrder, calcTotalAmount, formatMoney } from '../store/salesStore';
+import { resolveCustomerName } from '../store/salesHelpers';
+import { useCrmStore } from '@/features/crm/store/crmStore';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { OrderLinesEditor, sumOrderLines, summarizeOrderLines } from '@/shared/components/sales/OrderLinesEditor';
+import { CustomerSelect } from '@/shared/components/sales/CustomerSelect';
+import { OrderPricingFields } from '@/shared/components/sales/OrderPricingFields';
 
 const channelMeta = {
   WEB: { label: 'Web', icon: Globe, cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-900/30' },
@@ -26,6 +29,7 @@ const deliveryMap: Record<NonNullable<SaleOrder['deliveryStatus']>, { label: str
 
 export function OnlineOrdersPage() {
   const canManage = usePermission('sales:orders:create');
+  const customers = useCrmStore((s) => s.customers);
   const saleOrders = useSalesStore((s) => s.saleOrders);
   const addSaleOrder = useSalesStore((s) => s.addSaleOrder);
   const updateSaleOrder = useSalesStore((s) => s.updateSaleOrder);
@@ -49,7 +53,9 @@ export function OnlineOrdersPage() {
     const matchQ =
       !q ||
       o.code.toLowerCase().includes(q) ||
-      o.customerName.toLowerCase().includes(q) ||
+      resolveCustomerName(o.customerId, customers).toLowerCase().includes(q) ||
+      (o.paymentGatewayRef || '').toLowerCase().includes(q) ||
+      (o.promoCodeApplied || '').toLowerCase().includes(q) ||
       (o.recipientPhone || '').toLowerCase().includes(q) ||
       (o.shippingAddress || '').toLowerCase().includes(q) ||
       (o.trackingCode || '').toLowerCase().includes(q) ||
@@ -67,15 +73,19 @@ export function OnlineOrdersPage() {
     setModalMode('create');
     setEditing({
       code: `ONL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      customerName: '',
+      customerId: '',
       date: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      total: 0,
+      subTotal: 0,
+      taxAmount: 0,
+      discountAmount: 0,
+      shippingFee: 0,
+      totalAmount: 0,
       status: 'PENDING',
       paymentStatus: 'UNPAID',
       paymentMethod: 'COD',
       origin: 'ONLINE',
       onlineChannel: 'WEB',
-      currency: 'USD',
+      currency: 'VND',
       branchId: 'BR-001',
       branchName: 'CH Quận 1',
       recipientName: '',
@@ -95,13 +105,18 @@ export function OnlineOrdersPage() {
   };
 
   const applyOrderLines = (lines: NonNullable<SaleOrder['orderLines']>) => {
-    const total = sumOrderLines(lines);
+    const subTotal = sumOrderLines(lines);
+    const taxAmount = Number(editing.taxAmount) || 0;
+    const discountAmount = Number(editing.discountAmount) || 0;
+    const shippingFee = Number(editing.shippingFee) || 0;
+    const totalAmount = calcTotalAmount({ subTotal, taxAmount, discountAmount, shippingFee });
     setEditing((prev) => ({
       ...prev,
       orderLines: lines,
-      total,
+      subTotal,
+      totalAmount,
       itemsSummary: summarizeOrderLines(lines),
-      codAmount: prev.isCod ? total : prev.codAmount,
+      codAmount: prev.isCod ? totalAmount : prev.codAmount,
     }));
   };
 
@@ -113,18 +128,28 @@ export function OnlineOrdersPage() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editing.code || !editing.customerName) return;
+    if (!editing.code || !editing.customerId) return;
     const lines = editing.orderLines ?? [];
-    const lineTotal = sumOrderLines(lines);
+    const lineSub = sumOrderLines(lines);
+    const subTotal = lines.length ? lineSub : Number(editing.subTotal) || 0;
+    const taxAmount = Number(editing.taxAmount) || 0;
+    const discountAmount = Number(editing.discountAmount) || 0;
+    const shippingFee = Number(editing.shippingFee) || 0;
+    const totalAmount = calcTotalAmount({ subTotal, taxAmount, discountAmount, shippingFee });
     const linePayload = {
       orderLines: lines,
-      total: lines.length ? lineTotal : Number(editing.total) || 0,
+      subTotal,
+      taxAmount,
+      discountAmount,
+      shippingFee,
+      totalAmount,
       itemsSummary: summarizeOrderLines(lines) || editing.itemsSummary,
     };
+    const customerLabel = resolveCustomerName(editing.customerId, customers);
     if (modalMode === 'create') {
       addSaleOrder({
         code: editing.code,
-        customerName: editing.customerName,
+        customerId: editing.customerId,
         date: editing.date || new Date().toISOString().slice(0, 16).replace('T', ' '),
         ...linePayload,
         status: (editing.status as any) || 'PENDING',
@@ -132,12 +157,12 @@ export function OnlineOrdersPage() {
         paymentMethod: editing.paymentMethod || (editing.isCod ? 'COD' : 'Online Card'),
         origin: 'ONLINE',
         onlineChannel: (editing.onlineChannel as any) || 'WEB',
-        currency: (editing.currency as any) || 'USD',
+        currency: (editing.currency as any) || 'VND',
         branchId: editing.branchId ?? 'BR-001',
         branchName: editing.branchName || 'CH Quận 1',
         createdByName: editing.createdByName || 'System',
         createdByEmail: editing.createdByEmail,
-        recipientName: editing.recipientName || editing.customerName,
+        recipientName: editing.recipientName || customerLabel,
         recipientPhone: editing.recipientPhone,
         shippingAddress: editing.shippingAddress,
         province: editing.province,
@@ -146,7 +171,9 @@ export function OnlineOrdersPage() {
         shippingProvider: editing.shippingProvider,
         trackingCode: editing.trackingCode,
         isCod: !!editing.isCod,
-        codAmount: editing.isCod ? Number(editing.codAmount ?? linePayload.total ?? 0) : undefined,
+        codAmount: editing.isCod ? Number(editing.codAmount ?? totalAmount) : undefined,
+        paymentGatewayRef: editing.paymentGatewayRef,
+        promoCodeApplied: editing.promoCodeApplied,
       });
     } else if (editing.id) {
       updateSaleOrder(editing.id, { ...editing, ...linePayload } as Partial<SaleOrder>);
@@ -189,11 +216,13 @@ export function OnlineOrdersPage() {
         cell: ({ row }) => <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{row.original.branchName || 'N/A'}</span>,
       },
       {
-        accessorKey: 'customerName',
+        id: 'customer',
         header: 'Khách',
         cell: ({ row }) => (
           <div>
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">{row.original.customerName}</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">
+              {resolveCustomerName(row.original.customerId, customers)}
+            </p>
             <p className="text-xs text-gray-500 font-mono">{row.original.recipientPhone || '—'}</p>
           </div>
         ),
@@ -208,13 +237,17 @@ export function OnlineOrdersPage() {
         },
       },
       {
-        accessorKey: 'total',
+        accessorKey: 'totalAmount',
         header: 'Giá trị',
         cell: ({ row }) => (
           <div className="text-right">
-            <p className="font-bold text-gray-900 dark:text-white">${Number(row.original.total || 0).toFixed(2)}</p>
+            <p className="font-bold text-gray-900 dark:text-white">
+              {formatMoney(row.original.totalAmount, 'VND')}
+            </p>
             <p className={`text-[11px] font-semibold ${row.original.isCod ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-              {row.original.isCod ? `COD $${Number(row.original.codAmount ?? row.original.total ?? 0).toFixed(2)}` : 'Prepaid'}
+              {row.original.isCod
+                ? `COD ${formatMoney(row.original.codAmount ?? row.original.totalAmount, 'VND')}`
+                : 'Thanh toán trước'}
             </p>
           </div>
         ),
@@ -261,7 +294,7 @@ export function OnlineOrdersPage() {
         ),
       },
     ],
-    [canManage]
+    [canManage, customers]
   );
 
   return (
@@ -323,10 +356,10 @@ export function OnlineOrdersPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title={selected ? `Online Order: ${selected.code}` : 'Chi tiết'}
+        title={selected ? `Chi tiết đơn hàng online: ${selected.code}` : 'Chi tiết đơn hàng'}
         width="max-w-lg"
       >
         {selected && (
@@ -336,7 +369,9 @@ export function OnlineOrdersPage() {
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   <User className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> Người nhận
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selected.recipientName || selected.customerName}</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white truncate">
+                  {selected.recipientName || resolveCustomerName(selected.customerId, customers)}
+                </p>
                 <p className="text-xs text-gray-500 font-mono mt-1 flex items-center gap-1"><Phone className="w-3.5 h-3.5" /> {selected.recipientPhone || '—'}</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
@@ -345,9 +380,36 @@ export function OnlineOrdersPage() {
                 </div>
                 <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selected.paymentMethod || '—'}</p>
                 <p className={`text-xs font-semibold mt-1 ${selected.isCod ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                  {selected.isCod ? `COD $${Number(selected.codAmount ?? selected.total ?? 0).toFixed(2)}` : 'Prepaid'}
+                  {selected.isCod
+                    ? `COD ${formatMoney(selected.codAmount ?? selected.totalAmount, 'VND')}`
+                    : 'Thanh toán trước'}
                 </p>
               </div>
+            </div>
+
+            <div className="bg-gray-50 dark:bg-gray-900/40 p-4 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Tiền hàng</span>
+                <span className="font-mono font-semibold">{formatMoney(selected.subTotal, 'VND')}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Ship / Thuế / Giảm</span>
+                <span className="font-mono text-xs">
+                  +{formatMoney(selected.shippingFee ?? 0, 'VND')} / +{formatMoney(selected.taxAmount, 'VND')} / −{formatMoney(selected.discountAmount, 'VND')}
+                </span>
+              </div>
+              {selected.paymentGatewayRef && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Mã cổng TT</span>
+                  <span className="font-mono font-semibold">{selected.paymentGatewayRef}</span>
+                </div>
+              )}
+              {selected.promoCodeApplied && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Voucher</span>
+                  <span className="font-semibold text-indigo-600">{selected.promoCodeApplied}</span>
+                </div>
+              )}
             </div>
 
             <div className="bg-gray-50 dark:bg-gray-900/40 p-4 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
@@ -374,7 +436,7 @@ export function OnlineOrdersPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalMode === 'create' ? 'Tạo đơn online' : 'Sửa đơn online'} width="max-w-2xl">
         <form onSubmit={handleSave} className="space-y-4">
@@ -384,8 +446,13 @@ export function OnlineOrdersPage() {
               <input value={editing.code || ''} onChange={(e) => setEditing({ ...editing, code: e.target.value })} className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-900 font-mono text-sm" required />
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng *</label>
-              <input value={editing.customerName || ''} onChange={(e) => setEditing({ ...editing, customerName: e.target.value })} className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 text-sm" required />
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng (CRM) *</label>
+              <CustomerSelect
+                value={editing.customerId || ''}
+                onChange={(customerId) => setEditing({ ...editing, customerId })}
+                allowWalkIn={false}
+                required
+              />
             </div>
           </div>
 
@@ -441,22 +508,48 @@ export function OnlineOrdersPage() {
 
           <OrderLinesEditor
             lines={editing.orderLines ?? []}
-            currency={editing.currency === 'VND' ? 'VND' : 'USD'}
+            currency="VND"
             onChange={applyOrderLines}
           />
 
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá trị ($)</label>
-              <input type="number" step="0.01" readOnly={!!(editing.orderLines?.length)} value={editing.total ?? 0} onChange={(e) => setEditing({ ...editing, total: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-900 font-mono text-sm" />
+          <OrderPricingFields
+            showShipping
+            currency="VND"
+            values={{
+              subTotal: Number(editing.subTotal) || 0,
+              taxAmount: Number(editing.taxAmount) || 0,
+              discountAmount: Number(editing.discountAmount) || 0,
+              shippingFee: Number(editing.shippingFee) || 0,
+              totalAmount: Number(editing.totalAmount) || 0,
+            }}
+            onChange={(patch) => setEditing((prev) => ({ ...prev, ...patch, codAmount: prev.isCod ? (patch.totalAmount ?? prev.totalAmount) : prev.codAmount }))}
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã cổng thanh toán</label>
+              <input value={editing.paymentGatewayRef || ''} onChange={(e) => setEditing({ ...editing, paymentGatewayRef: e.target.value })} className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-mono text-sm" placeholder="VNPAY-TXN-..." />
             </div>
-            <div className="sm:col-span-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã khuyến mãi</label>
+              <input value={editing.promoCodeApplied || ''} onChange={(e) => setEditing({ ...editing, promoCodeApplied: e.target.value })} className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 text-sm" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">COD?</label>
-              <div className="flex items-center gap-2">
-                <input type="checkbox" checked={!!editing.isCod} onChange={(e) => setEditing({ ...editing, isCod: e.target.checked })} />
-                <input type="number" step="0.01" value={editing.codAmount ?? (Number(editing.total) || 0)} onChange={(e) => setEditing({ ...editing, codAmount: parseFloat(e.target.value) || 0 })} className="flex-1 px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-mono text-sm" />
+              <div className="flex items-center gap-2 mt-2">
+                <input type="checkbox" checked={!!editing.isCod} onChange={(e) => setEditing({ ...editing, isCod: e.target.checked, codAmount: e.target.checked ? (editing.totalAmount ?? 0) : undefined })} />
+                <span className="text-sm text-gray-600">Thu tiền khi giao</span>
               </div>
             </div>
+            {editing.isCod && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tiền COD</label>
+                <input type="number" step="0.01" value={editing.codAmount ?? (Number(editing.totalAmount) || 0)} onChange={(e) => setEditing({ ...editing, codAmount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-mono text-sm" />
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-2">

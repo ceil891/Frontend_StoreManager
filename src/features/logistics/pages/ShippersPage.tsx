@@ -35,6 +35,13 @@ const tierStyles = {
   HEAVY_FREIGHT_PALLET: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200',
 };
 
+const shipperStatusLabels = {
+  ACTIVE: 'Đang hoạt động',
+  ON_HOLD: 'Tạm dừng',
+  CONTRACT_PENDING: 'Chờ hợp đồng',
+  TERMINATED: 'Đã chấm dứt',
+} as const;
+
 export function ShippersPage() {
   const [data] = useState<ShipperPartnerRecord[]>(MOCK_SHIPPERS);
   const [search, setSearch] = useState('');
@@ -51,12 +58,12 @@ export function ShippersPage() {
     () => [
       {
         accessorKey: 'partnerCode',
-        header: 'Carrier Code',
+        header: 'Mã đối tác',
         cell: (info) => <span className="font-mono font-bold text-primary hover:underline">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'companyName',
-        header: 'Carrier Company & Rep',
+        header: 'Công ty đối tác & Người phụ trách',
         cell: ({ row }) => (
           <div>
             <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.companyName}</p>
@@ -66,7 +73,7 @@ export function ShippersPage() {
       },
       {
         accessorKey: 'serviceTier',
-        header: 'Fulfillment Class',
+        header: 'Loại dịch vụ',
         cell: (info) => {
           const t = info.getValue() as keyof typeof tierStyles;
           return (
@@ -78,12 +85,12 @@ export function ShippersPage() {
       },
       {
         accessorKey: 'baseRatePerKg',
-        header: 'Base Tariff',
+        header: 'Cước cơ bản',
         cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">${(info.getValue() as number).toFixed(2)} / kg</span>,
       },
       {
         accessorKey: 'slaComplianceRate',
-        header: 'SLA Rating',
+        header: 'Đánh giá SLA',
         cell: (info) => {
           const rate = info.getValue() as number;
           return (
@@ -95,14 +102,14 @@ export function ShippersPage() {
       },
       {
         accessorKey: 'activeFleetSize',
-        header: 'Active Fleet',
+        header: 'Đội xe',
         cell: (info) => <span className="font-mono text-gray-700 dark:text-gray-300">{info.getValue() as number} units</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Contract Status',
+        header: 'Tình trạng hợp đồng',
         cell: (info) => {
-          const status = info.getValue() as string;
+          const status = info.getValue() as keyof typeof shipperStatusLabels;
           return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
               status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
@@ -110,14 +117,14 @@ export function ShippersPage() {
               status === 'CONTRACT_PENDING' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' :
               'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
             }`}>
-              {status.replace('_', ' ')}
+              {shipperStatusLabels[status] ?? status.replace(/_/g, ' ')}
             </span>
           );
         },
       },
       {
         id: 'actions',
-        header: 'Actions',
+        header: 'Hành động',
         cell: ({ row }) => (
           <button
             onClick={(e) => { e.stopPropagation(); setSelectedShipper(row.original); }}
@@ -136,15 +143,15 @@ export function ShippersPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Shipping Carrier Partners & SLAs</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage contracted third-party logistics (3PL) couriers, evaluate SLA delivery compliance rates and review tariff matrix schedules. Click any carrier for details.</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Đối tác vận chuyển & SLA</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý đối tác logistics (3PL), đánh giá tỷ lệ SLA và xem lịch cước vận chuyển. Nhấn vào đối tác để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Export Carrier Matrix
+              <Download className="w-4 h-4" /> Xuất ma trận đối tác
             </button>
             <button className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
-              <Plus className="w-4 h-4" /> Onboard 3PL Partner
+              <Plus className="w-4 h-4" /> Thêm đối tác 3PL
             </button>
           </div>
         </div>
@@ -158,22 +165,22 @@ export function ShippersPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search carriers by code, company name, contact rep or headquarters..."
+              placeholder="Tìm kiếm đối tác theo mã, công ty, liên hệ hoặc trụ sở..."
               className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-all"
             />
           </div>
           <button className="flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors text-sm">
-            <Filter className="w-4 h-4" /> Filter SLAs
+            <Filter className="w-4 h-4" /> Lọc SLA
           </button>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedShipper(row)} />
+        <ReusableDataTable columns={columns} data={filtered} />
       </div>
 
       <Drawer
         isOpen={!!selectedShipper}
         onClose={() => setSelectedShipper(null)}
-        title={selectedShipper ? `3PL Dossier: ${selectedShipper.partnerCode}` : 'Carrier Specification'}
+        title={selectedShipper ? `Hồ sơ đối tác: ${selectedShipper.partnerCode}` : 'Thông tin đối tác'}
         width="max-w-lg"
       >
         {selectedShipper && (
@@ -192,8 +199,8 @@ export function ShippersPage() {
                   <Truck className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Service SLA Compliance</p>
-                  <p className="text-2xl font-bold font-mono text-gray-900 dark:text-white mt-0.5">{selectedShipper.slaComplianceRate.toFixed(1)}% Rating</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Tỷ lệ SLA</p>
+                  <p className="text-2xl font-bold font-mono text-gray-900 dark:text-white mt-0.5">{selectedShipper.slaComplianceRate.toFixed(1)}%</p>
                 </div>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
@@ -208,24 +215,24 @@ export function ShippersPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Star className="w-4 h-4 text-emerald-500" /> Active Fleet Assets
+                  <Star className="w-4 h-4 text-emerald-500" /> Tài sản đội xe
                 </div>
-                <p className="text-xl font-mono font-bold text-gray-900 dark:text-white truncate">{selectedShipper.activeFleetSize} vehicles</p>
+                <p className="text-xl font-mono font-bold text-gray-900 dark:text-white truncate">{selectedShipper.activeFleetSize} xe</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <FileText className="w-4 h-4 text-primary" /> Fulfillment Speed
+                  <FileText className="w-4 h-4 text-primary" /> Tốc độ thực hiện
                 </div>
-                <p className="text-xl font-bold font-mono text-primary truncate">~{selectedShipper.averageDeliveryHours} hrs avg</p>
+                <p className="text-xl font-bold font-mono text-primary truncate">~{selectedShipper.averageDeliveryHours} giờ</p>
               </div>
             </div>
 
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 text-sm">
               <div className="border-b border-gray-200 dark:border-gray-700 pb-3">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Logistics Enterprise Entity</span>
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Đơn vị logistics</span>
                 <h3 className="text-base font-bold text-gray-900 dark:text-white">{selectedShipper.companyName}</h3>
                 <span className={`inline-block mt-1 text-xs px-2.5 py-0.5 rounded-full font-bold border ${tierStyles[selectedShipper.serviceTier]}`}>
-                  Tier Class: {selectedShipper.serviceTier.replace(/_/g, ' ')}
+                  Loại dịch vụ: {selectedShipper.serviceTier.replace(/_/g, ' ')}
                 </span>
               </div>
 
@@ -240,18 +247,18 @@ export function ShippersPage() {
                 </div>
                 <div className="flex items-start gap-2.5">
                   <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
-                  <span>Headquarters: <strong className="text-gray-900 dark:text-white">{selectedShipper.headquarters}</strong></span>
+                  <span>Trụ sở: <strong className="text-gray-900 dark:text-white">{selectedShipper.headquarters}</strong></span>
                 </div>
               </div>
 
               <div className="flex justify-between items-center pt-3 border-t border-gray-200 dark:border-gray-700 text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Base Freight Tariff:</span>
+                <span className="text-gray-500 dark:text-gray-400">Cước vận chuyển:</span>
                 <span className="font-mono font-bold text-gray-900 dark:text-white">${selectedShipper.baseRatePerKg.toFixed(2)} / kg</span>
               </div>
 
               {selectedShipper.notes && (
                 <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Contract Manager Audit Notes</span>
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Ghi chú đánh giá hợp đồng</span>
                   <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedShipper.notes}</p>
                 </div>
               )}

@@ -79,7 +79,7 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
               key={line.id}
               className="grid grid-cols-12 gap-2 items-end p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40"
             >
-              <div className="col-span-12 sm:col-span-2">
+              <div className="col-span-4 sm:col-span-2">
                 <label className="text-[10px] text-gray-400 uppercase">SKU</label>
                 <input
                   value={line.sku}
@@ -88,7 +88,7 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
                   placeholder="SV-001"
                 />
               </div>
-              <div className="col-span-12 sm:col-span-4">
+              <div className="col-span-8 sm:col-span-4">
                 <label className="text-[10px] text-gray-400 uppercase">Tên SP #{idx + 1}</label>
                 <input
                   required
@@ -108,7 +108,7 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
                   className="w-full px-2 py-1 text-xs border rounded dark:bg-gray-900 dark:border-gray-600"
                 />
               </div>
-              <div className="col-span-6 sm:col-span-2">
+              <div className="col-span-6 sm:col-span-3">
                 <label className="text-[10px] text-gray-400 uppercase">Đơn giá</label>
                 <input
                   type="number"
@@ -119,12 +119,11 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
                   className="w-full px-2 py-1 text-xs border rounded dark:bg-gray-900 dark:border-gray-600"
                 />
               </div>
-              <div className="col-span-5 sm:col-span-1 flex items-center justify-between sm:justify-end gap-2 pb-0.5">
-                <span className="text-xs font-bold text-gray-800 dark:text-gray-200">{fmt(line.lineTotal)}</span>
+              <div className="col-span-2 sm:col-span-1 flex items-center justify-end pb-0.5">
                 <button
                   type="button"
                   onClick={() => removeRow(line.id)}
-                  className="p-1 text-gray-400 hover:text-red-600 rounded"
+                  className="p-1 text-gray-400 hover:text-red-600 rounded shrink-0"
                   title="Xóa dòng"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
