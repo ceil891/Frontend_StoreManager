@@ -33,8 +33,7 @@ export function summarizeOrderLines(lines: OrderLineItem[]): string {
 export function sumOrderLines(lines: OrderLineItem[]): number {
   return lines.reduce((s, l) => s + (l.lineTotal || computeLineTotal(l.quantity, l.unitPrice)), 0);
 }
-
-export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLinesEditorProps) {
+export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLinesEditorProps) {
   const symbol = currency === 'VND' ? 'đ' : '$';
   const fmt = (n: number) =>
     currency === 'VND' ? `${Math.round(n).toLocaleString('vi-VN')}${symbol}` : `${symbol}${n.toFixed(2)}`;
@@ -57,6 +56,23 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
 
   const total = sumOrderLines(lines);
 
+  const formatInputVal = (val: number) => {
+    if (currency === 'VND') {
+      return val === 0 ? '' : Math.round(val).toLocaleString('vi-VN');
+    }
+    return String(val);
+  };
+
+  const handlePriceChange = (id: string, rawVal: string) => {
+    if (currency === 'VND') {
+      const digits = rawVal.replace(/\D/g, '');
+      const parsed = digits === '' ? 0 : parseInt(digits, 10);
+      updateLine(id, { unitPrice: parsed });
+    } else {
+      updateLine(id, { unitPrice: parseFloat(rawVal) || 0 });
+    }
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -77,7 +93,7 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
           {lines.map((line, idx) => (
             <div
               key={line.id}
-              className="grid grid-cols-12 gap-2 items-end p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40"
+              className="grid grid-cols-12 gap-2 items-end p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-55 dark:bg-gray-900/40"
             >
               <div className="col-span-4 sm:col-span-2">
                 <label className="text-[10px] text-gray-400 uppercase">SKU</label>
@@ -105,17 +121,17 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
                   min={1}
                   value={line.quantity}
                   onChange={(e) => updateLine(line.id, { quantity: parseInt(e.target.value, 10) || 1 })}
-                  className="w-full px-2 py-1 text-xs border rounded dark:bg-gray-900 dark:border-gray-600"
+                  className="w-full px-2 py-1 text-xs border rounded dark:bg-gray-900 dark:border-gray-65"
                 />
               </div>
               <div className="col-span-6 sm:col-span-3">
                 <label className="text-[10px] text-gray-400 uppercase">Đơn giá</label>
                 <input
-                  type="number"
+                  type={currency === 'VND' ? 'text' : 'number'}
                   min={0}
                   step={currency === 'VND' ? 1 : 0.01}
-                  value={line.unitPrice}
-                  onChange={(e) => updateLine(line.id, { unitPrice: parseFloat(e.target.value) || 0 })}
+                  value={formatInputVal(line.unitPrice)}
+                  onChange={(e) => handlePriceChange(line.id, e.target.value)}
                   className="w-full px-2 py-1 text-xs border rounded dark:bg-gray-900 dark:border-gray-600"
                 />
               </div>
@@ -123,7 +139,7 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
                 <button
                   type="button"
                   onClick={() => removeRow(line.id)}
-                  className="p-1 text-gray-400 hover:text-red-600 rounded shrink-0"
+                  className="p-1 text-gray-400 hover:text-red-650 rounded shrink-0"
                   title="Xóa dòng"
                 >
                   <Trash2 className="w-3.5 h-3.5" />

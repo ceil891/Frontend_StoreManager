@@ -84,7 +84,6 @@ export function PosTerminalPage() {
   const [activeCategory, setActiveCategory] = useState('Tất cả');
 
   // Customer
-  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
   const [customerPhone, setCustomerPhone] = useState('');
   const [activeCustomer, setActiveCustomer] = useState<{ id: string; name: string; phone: string; points: number } | null>(null);
   const [usedPoints, setUsedPoints] = useState(0);
@@ -98,7 +97,8 @@ export function PosTerminalPage() {
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [selectedPaymentId, setSelectedPaymentId] = useState(FALLBACK_PAYMENTS[0].id);
   const [cashGiven, setCashGiven] = useState('');
-  const [isSuccess, setIsSuccess] = useState(false);
+  const [paymentState, setPaymentState] = useState<'idle' | 'processing' | 'success'>('idle');
+  const [currentOrderCode, setCurrentOrderCode] = useState('');
 
   // Time & Shift logic
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -208,7 +208,7 @@ export function PosTerminalPage() {
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
     const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    const code = `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
+    const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
     const orderLines = items.map((i, idx) => ({
       id: `pos_${now.getTime()}_${idx}`,
       sku: i.sku || String(i.id),
@@ -225,44 +225,50 @@ export function PosTerminalPage() {
     const branchId = user?.branchId ?? null;
     const branchName = branchId ? (BRANCH_NAME_BY_ID[branchId] ?? branchId) : 'N/A';
 
-    addSaleOrder({
-      code,
-      customerId: activeCustomer?.id ?? WALK_IN_CUSTOMER_ID,
-      date: dateStr,
-      subTotal: Math.round(subtotal),
-      taxAmount: Math.round(vatAmount),
-      discountAmount: Math.round(voucherDiscount + pointsDiscount),
-      totalAmount: Math.round(totalAmount),
-      status: 'COMPLETED',
-      paymentStatus: 'PAID',
-      paymentMethod: payLabel,
-      cashier: user?.name ?? 'Thu ngân',
-      createdByName: user?.name ?? 'Thu ngân',
-      createdByEmail: user?.email,
-      branchId,
-      branchName,
-      origin: 'POS',
-      currency: 'VND',
-      itemsSummary,
-      orderLines,
-      amountTendered: isCashPayment ? Math.round(cashGivenNum) : Math.round(totalAmount),
-      changeAmount: isCashPayment ? Math.round(changeAmount) : 0,
-      shiftId: deriveShiftId(now),
-      promoCodeApplied: appliedVoucher?.code,
-    });
+    const performOrderCreation = () => {
+      addSaleOrder({
+        code,
+        customerId: activeCustomer?.id ?? WALK_IN_CUSTOMER_ID,
+        date: dateStr,
+        subTotal: Math.round(subtotal),
+        taxAmount: Math.round(vatAmount),
+        discountAmount: Math.round(voucherDiscount + pointsDiscount),
+        totalAmount: Math.round(totalAmount),
+        status: 'COMPLETED',
+        paymentStatus: 'PAID',
+        paymentMethod: payLabel,
+        cashier: user?.name ?? 'Thu ngân',
+        createdByName: user?.name ?? 'Thu ngân',
+        createdByEmail: user?.email,
+        branchId,
+        branchName,
+        origin: 'POS',
+        currency: 'VND',
+        itemsSummary,
+        orderLines,
+        amountTendered: isCashPayment ? Math.round(cashGivenNum) : Math.round(totalAmount),
+        changeAmount: isCashPayment ? Math.round(changeAmount) : 0,
+        shiftId: deriveShiftId(now),
+        promoCodeApplied: appliedVoucher?.code,
+      });
 
-    setIsSuccess(true);
-    setTimeout(() => {
-      clearCart();
-      setAppliedVoucher(null);
-      setVoucherError('');
-      setActiveCustomer(null);
-      setCustomerPhone('');
-      setUsedPoints(0);
-      setIsSuccess(false);
-      setIsPaymentOpen(false);
-      setCashGiven('');
-    }, 2200);
+      setPaymentState('success');
+      setTimeout(() => {
+        clearCart();
+        setAppliedVoucher(null);
+        setVoucherError('');
+        setActiveCustomer(null);
+        setCustomerPhone('');
+        setUsedPoints(0);
+        setPaymentState('idle');
+        setIsPaymentOpen(false);
+        setCashGiven('');
+      }, 2200);
+    };
+
+    setPaymentState('processing');
+    const delay = isCashPayment ? 1200 : 3500;
+    setTimeout(performOrderCreation, delay);
   };
 
   // ── Quick cash buttons ────────────────────────────────────────────────────────
@@ -381,51 +387,18 @@ export function PosTerminalPage() {
                       {product.image ? (
                         <img src={product.image} alt={product.name} className="h-full object-contain rounded" />
                       ) : (
-                        <ImageIcon className="w-8 h-8 text-gray-300 opacity-50" />
-                      )}
-                    </div>
-                    <div className="p-2 flex-1 flex flex-col gap-0.5">
-                      <p className="text-[10px] text-gray-400 font-mono">{product.sku}</p>
-                      <h3 className="text-xs font-semibold text-gray-900 dark:text-white leading-tight line-clamp-2">{product.name}</h3>
-                      <div className="flex items-center justify-between mt-auto pt-1">
-                        <p className="text-xs font-black text-emerald-600 dark:text-emerald-400">{fmt(product.price)}</p>
-                        <p className="text-[10px] text-gray-400">Kho: {product.stock}</p>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ═══ RIGHT PANEL: Cart ═══ */}
-      <div className="flex flex-col w-[32%] h-full bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 shrink-0">
-
-        {/* Customer Section */}
+                        <ImageIcon cl        {/* Customer Section */}
         <div className="p-3 border-b border-gray-200 dark:border-gray-700 shrink-0 space-y-2 bg-gray-50 dark:bg-gray-900/20">
-          {!activeCustomer && !isSearchingCustomer && (
-            <button
-              onClick={() => setIsSearchingCustomer(true)}
-              className="w-full flex items-center justify-between p-2.5 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 transition-colors bg-white dark:bg-gray-800 text-sm"
-            >
-              <span className="flex items-center gap-2 font-medium"><UserPlus className="w-4 h-4" /> Nhập SĐT khách hàng</span>
-              <ChevronDown className="w-3.5 h-3.5" />
-            </button>
-          )}
-          {isSearchingCustomer && !activeCustomer && (
+          {!activeCustomer ? (
             <form onSubmit={handleSearchCustomer} className="flex gap-2">
               <input
-                autoFocus type="text" placeholder="Nhập số điện thoại..."
+                type="text" placeholder="Nhập SĐT khách hàng..."
                 value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
-                className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
               />
-              <button type="submit" className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700">Tìm</button>
-              <button type="button" onClick={() => setIsSearchingCustomer(false)} className="px-2 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-300 dark:hover:bg-gray-600">✕</button>
+              <button type="submit" className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors">Tìm</button>
             </form>
-          )}
-          {activeCustomer && (
+          ) : (
             <div className="bg-white dark:bg-gray-800 border border-emerald-200 dark:border-emerald-800/50 rounded-xl p-3">
               <div className="flex justify-between items-start mb-2">
                 <div>
@@ -439,6 +412,29 @@ export function PosTerminalPage() {
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                  <Gift className="w-3.5 h-3.5" />
+                  <span>{activeCustomer.points} điểm khả dụng</span>
+                </div>
+                <div className="flex-1 flex gap-1">
+                  <input
+                    type="text"
+                    value={usedPoints === 0 ? '' : usedPoints}
+                    onChange={e => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      const num = val === '' ? 0 : parseInt(val, 10);
+                      setUsedPoints(Math.min(num, activeCustomer.points));
+                    }}
+                    placeholder="Điểm dùng..."
+                    className="flex-1 px-2 py-1 border border-emerald-200 dark:border-emerald-800/50 rounded-lg text-xs bg-emerald-55 dark:bg-emerald-900/10 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+              </div>
+              {usedPoints > 0 && (
+                <p className="text-[10px] text-emerald-600 font-semibold mt-1">-{fmt(usedPoints * 10)} từ điểm thưởng</p>
+              )}
+            </div>
+          )}
+        </div> gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
                   <Gift className="w-3.5 h-3.5" />
                   <span>{activeCustomer.points} điểm khả dụng</span>
                 </div>
@@ -575,7 +571,13 @@ export function PosTerminalPage() {
               <Trash2 className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setIsPaymentOpen(true)}
+              onClick={() => {
+                const now = new Date();
+                const code = `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
+                setCurrentOrderCode(code);
+                setPaymentState('idle');
+                setIsPaymentOpen(true);
+              }}
               disabled={items.length === 0}
               className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-bold text-sm transition-colors shadow disabled:opacity-40 disabled:cursor-not-allowed"
             >

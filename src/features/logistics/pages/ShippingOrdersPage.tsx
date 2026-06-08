@@ -1,0 +1,2 @@
+export { DeliveryListsPage as ShippingOrdersPage } from '../../sales/pages/DeliveryListsPage';
+export { DeliveryListsPage as default } from '../../sales/pages/DeliveryListsPage';

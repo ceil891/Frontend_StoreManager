@@ -21,7 +21,7 @@ const deliveryMap: Record<NonNullable<SaleOrder['deliveryStatus']>, { label: str
   CREATED: { label: 'Mới tạo', cls: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
   CONFIRMED: { label: 'Đã xác nhận', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' },
   PICKING: { label: 'Đang soạn', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' },
-  SHIPPED: { label: 'Đang giao', cls: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300' },
+  SHIPPED: { label: 'Đang giao', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' },
   DELIVERED: { label: 'Đã giao', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' },
   FAILED: { label: 'Giao thất bại', cls: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
   CANCELLED: { label: 'Đã hủy', cls: 'bg-gray-200 text-gray-800 dark:bg-gray-800 dark:text-gray-300' },
@@ -193,7 +193,7 @@ export function OnlineOrdersPage() {
       {
         accessorKey: 'code',
         header: 'Mã đơn',
-        cell: (info) => <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'onlineChannel',
@@ -265,7 +265,7 @@ export function OnlineOrdersPage() {
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setSelected(row.original); }}
-              className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg"
+              className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg"
               title="Xem"
             >
               <Eye className="w-4 h-4" />
@@ -301,21 +301,23 @@ export function OnlineOrdersPage() {
     <>
       <div className="space-y-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Truck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              Đơn hàng Online
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Quản lý đơn từ Web/App/Sàn TMĐT, theo dõi vận chuyển, COD và địa chỉ giao hàng.
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg shrink-0">
+              <Truck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Đơn hàng Online (E-commerce)</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Đơn hàng tự động đồng bộ từ website bán hàng và sàn TMĐT. Nhấp vào dòng để xem chi tiết.
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-3">
-            <button type="button" className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium shadow-sm">
+            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors text-sm font-medium shadow-sm">
               <Download className="w-4 h-4" /> Xuất dữ liệu
             </button>
             {canManage && (
-              <button type="button" onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm">
+              <button type="button" onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm">
                 <Plus className="w-4 h-4" /> Tạo đơn online
               </button>
             )}
@@ -367,7 +369,7 @@ export function OnlineOrdersPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <User className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> Người nhận
+                  <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Người nhận
                 </div>
                 <p className="text-base font-bold text-gray-900 dark:text-white truncate">
                   {selected.recipientName || resolveCustomerName(selected.customerId, customers)}
@@ -400,14 +402,14 @@ export function OnlineOrdersPage() {
               </div>
               {selected.paymentGatewayRef && (
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Mã cổng TT</span>
+                  <span className="text-gray-550">Mã cổng TT</span>
                   <span className="font-mono font-semibold">{selected.paymentGatewayRef}</span>
                 </div>
               )}
               {selected.promoCodeApplied && (
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Voucher</span>
-                  <span className="font-semibold text-indigo-600">{selected.promoCodeApplied}</span>
+                  <span className="text-gray-550">Voucher</span>
+                  <span className="font-semibold text-emerald-600">{selected.promoCodeApplied}</span>
                 </div>
               )}
             </div>
@@ -554,7 +556,7 @@ export function OnlineOrdersPage() {
 
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border rounded-lg text-sm">Hủy</button>
-            <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold">Lưu</button>
+            <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow">Lưu</button>
           </div>
         </form>
       </Modal>
