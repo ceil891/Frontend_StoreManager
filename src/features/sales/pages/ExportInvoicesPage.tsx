@@ -425,40 +425,50 @@ export function ExportInvoicesPage() {
               onChange={(e) => setEditing({ ...editing, orderIds: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm font-mono"
               placeholder="SO-001, SO-002"
-            />
-          </div>
+            />          </div>
+
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tạm tính (₫)</label>
               <input
-                type="number"
-                step="1"
-                value={editing.subtotal ?? 0}
-                onChange={(e) => setEditing({ ...editing, subtotal: parseFloat(e.target.value) || 0 })}
+                type="text"
+                value={(editing.subtotal ?? 0) === 0 ? '' : Math.round(editing.subtotal ?? 0).toLocaleString('vi-VN')}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '');
+                  const parsed = digits === '' ? 0 : parseInt(digits, 10);
+                  setEditing({ ...editing, subtotal: parsed });
+                }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
               />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thuế VAT (₫)</label>
               <input
-                type="number"
-                step="1"
-                value={editing.vatAmount ?? 0}
-                onChange={(e) => setEditing({ ...editing, vatAmount: parseFloat(e.target.value) || 0 })}
+                type="text"
+                value={(editing.vatAmount ?? 0) === 0 ? '' : Math.round(editing.vatAmount ?? 0).toLocaleString('vi-VN')}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '');
+                  const parsed = digits === '' ? 0 : parseInt(digits, 10);
+                  setEditing({ ...editing, vatAmount: parsed });
+                }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
               />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng cộng (₫)</label>
               <input
-                type="number"
-                step="1"
-                value={editing.totalAmount ?? (Number(editing.subtotal) || 0) + (Number(editing.vatAmount) || 0)}
-                onChange={(e) => setEditing({ ...editing, totalAmount: parseFloat(e.target.value) || 0 })}
+                type="text"
+                value={(editing.totalAmount ?? ((editing.subtotal ?? 0) + (editing.vatAmount ?? 0))) === 0 ? '' : Math.round(editing.totalAmount ?? ((editing.subtotal ?? 0) + (editing.vatAmount ?? 0))).toLocaleString('vi-VN')}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '');
+                  const parsed = digits === '' ? 0 : parseInt(digits, 10);
+                  setEditing({ ...editing, totalAmount: parsed });
+                }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
               />
             </div>
           </div>
+
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>

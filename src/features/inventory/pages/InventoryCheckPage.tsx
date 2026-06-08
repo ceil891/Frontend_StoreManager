@@ -5,7 +5,6 @@ import {
   TrendingDown, Clock, CheckSquare,
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
@@ -310,8 +309,8 @@ export function InventoryCheckPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={row => { setDrawerTab('info'); setSelectedAudit(row); }} />
       </div>
 
-      {/* ═══ Drawer: Chi tiết kỳ kiểm kê ═══ */}
-      <Drawer
+      {/* ═══ Modal: Chi tiết kỳ kiểm kê ═══ */}
+      <Modal
         isOpen={!!selectedAudit}
         onClose={() => setSelectedAudit(null)}
         title={selectedAudit ? `Chi tiết kiểm kê: ${selectedAudit.auditNumber}` : 'Chi tiết kỳ kiểm kê'}
@@ -447,7 +446,7 @@ export function InventoryCheckPage() {
             </div>
           );
         })()}
-      </Drawer>
+      </Modal>
 
       {/* Modal: Tạo / Sửa */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}
@@ -517,7 +516,7 @@ export function InventoryCheckPage() {
               placeholder="Phạm vi kiểm kê, ghi chú đặc biệt..."
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none" />
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-4">
             <button type="button" onClick={() => setIsModalOpen(false)}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 font-medium rounded-lg text-sm">
               Hủy bỏ

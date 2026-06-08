@@ -269,12 +269,11 @@ export function OnlineOrdersPage() {
               title="Xem"
             >
               <Eye className="w-4 h-4" />
-            </button>
-            {canManage && (
+            </button>            {canManage && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
-                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"
+                className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg"
                 title="Sửa"
               >
                 <Edit className="w-4 h-4" />
@@ -549,7 +548,16 @@ export function OnlineOrdersPage() {
             {editing.isCod && (
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tiền COD</label>
-                <input type="number" step="0.01" value={editing.codAmount ?? (Number(editing.totalAmount) || 0)} onChange={(e) => setEditing({ ...editing, codAmount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-mono text-sm" />
+                <input
+                  type="text"
+                  value={(editing.codAmount ?? (Number(editing.totalAmount) || 0)) === 0 ? '' : Math.round(editing.codAmount ?? (Number(editing.totalAmount) || 0)).toLocaleString('vi-VN')}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '');
+                    const parsed = digits === '' ? 0 : parseInt(digits, 10);
+                    setEditing({ ...editing, codAmount: parsed });
+                  }}
+                  className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-mono text-sm"
+                />
               </div>
             )}
           </div>

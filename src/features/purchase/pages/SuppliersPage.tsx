@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, Download, Search, Filter, Eye, Building2, Phone, Mail, MapPin, Star, FileText, CheckCircle2, User, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePurchaseStore, type SupplierRecord } from '../store/purchaseStore';
@@ -82,6 +81,15 @@ export function SuppliersPage() {
     setDeletingSupplier(null);
   };
 
+  const categoryLabels: Record<string, string> = {
+    GENERAL: 'Hàng hóa chung',
+    ELECTRONICS: 'Thiết bị điện tử',
+    APPAREL: 'Thời trang & May mặc',
+    FOOD_BEVERAGE: 'Thực phẩm & Đồ uống',
+    HARDWARE: 'Công cụ & Phần cứng',
+    PACKAGING: 'Bao bì & Đóng gói',
+  };
+
   const columns = useMemo<ColumnDef<SupplierRecord>[]>(
     () => [
       {
@@ -97,7 +105,7 @@ export function SuppliersPage() {
       {
         accessorKey: 'category',
         header: 'Danh mục',
-        cell: (info) => <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded font-semibold">{String(info.getValue()).replace('_', ' ')}</span>,
+        cell: (info) => <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded font-semibold">{categoryLabels[info.getValue() as string] || String(info.getValue())}</span>,
       },
       {
         accessorKey: 'contactPerson',
@@ -214,8 +222,8 @@ export function SuppliersPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedSupplier(row)} />
       </div>
 
-      {/* Details Drawer */}
-      <Drawer
+      {/* Details Modal */}
+      <Modal
         isOpen={!!selectedSupplier}
         onClose={() => setSelectedSupplier(null)}
         title={selectedSupplier ? `Hồ sơ nhà cung cấp: ${selectedSupplier.code}` : 'Chi tiết nhà cung cấp'}
@@ -229,7 +237,7 @@ export function SuppliersPage() {
                   <Building2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">{selectedSupplier.category.replace('_', ' ')}</p>
+                  <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">{categoryLabels[selectedSupplier.category] || selectedSupplier.category}</p>
                   <p className="text-xl font-bold text-gray-900 dark:text-white">{selectedSupplier.supplierName}</p>
                 </div>
               </div>
@@ -312,7 +320,7 @@ export function SuppliersPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Form Modal */}
       <Modal
@@ -460,7 +468,7 @@ export function SuppliersPage() {
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
@@ -490,7 +498,7 @@ export function SuppliersPage() {
           <p className="text-sm text-gray-600 dark:text-gray-300">
             Bạn có chắc chắn muốn xóa nhà cung cấp <strong className="text-gray-900 dark:text-white">{deletingSupplier?.supplierName}</strong> khỏi hệ thống? 
           </p>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
               onClick={() => setDeletingSupplier(null)}

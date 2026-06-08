@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, Building2, Calendar, FileText, CheckCircle2, Box, Edit, Trash2, X, Package, Clock, TrendingUp } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePurchaseStore, type ImportReceiptItem } from '../store/purchaseStore';
@@ -304,7 +303,7 @@ export function ImportReceiptsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedReceipt(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedReceipt}
         onClose={() => setSelectedReceipt(null)}
         title={selectedReceipt ? `Chi tiết Phiếu nhập: ${selectedReceipt.grnNumber}` : 'Chi tiết phiếu nhập kho'}
@@ -408,7 +407,7 @@ export function ImportReceiptsPage() {
           </div>
           );
         })()}
-      </Drawer>
+      </Modal>
 
       {/* Form Modal */}
       <Modal
@@ -551,7 +550,7 @@ export function ImportReceiptsPage() {
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
@@ -581,7 +580,7 @@ export function ImportReceiptsPage() {
           <p className="text-sm text-gray-600 dark:text-gray-300">
             Bạn có chắc chắn muốn xóa phiếu nhập kho <strong className="text-gray-900 dark:text-white">{deletingReceipt?.grnNumber}</strong> không? Hành động này sẽ ảnh hưởng đến lịch sử đối soát và không thể hoàn tác.
           </p>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
               onClick={() => setDeletingReceipt(null)}

@@ -1,9 +1,9 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Search, ScanBarcode, UserPlus, CreditCard, Trash2, Plus, Minus, X,
   ArrowLeft, Image as ImageIcon, Gift, Smartphone, Landmark, Banknote,
   CheckCircle2, ShoppingCart as ShoppingCartIcon, Tag, ChevronDown, Clock,
-  type LucideIcon,
+  type LucideIcon, Loader2
 } from 'lucide-react';
 import { usePosCartStore } from '../store/posCartStore';
 import type { PosProduct } from '../store/posCartStore';
@@ -100,6 +100,17 @@ export function PosTerminalPage() {
   const [paymentState, setPaymentState] = useState<'idle' | 'processing' | 'success'>('idle');
   const [currentOrderCode, setCurrentOrderCode] = useState('');
 
+  const paymentTimerRef = useRef<any>(null);
+  const onCompleteRef = useRef<() => void>(() => {});
+
+  const handleForceCompletePayment = () => {
+    if (paymentTimerRef.current) {
+      clearTimeout(paymentTimerRef.current);
+      paymentTimerRef.current = null;
+    }
+    onCompleteRef.current();
+  };
+
   // Time & Shift logic
   const [currentTime, setCurrentTime] = useState(new Date());
   useEffect(() => {
@@ -165,7 +176,6 @@ export function PosTerminalPage() {
     e.preventDefault();
     if (!customerPhone.trim()) return;
     setActiveCustomer({ id: '1', name: 'Nguyễn Văn ' + customerPhone.slice(-1), phone: customerPhone, points: Math.floor(Math.random() * 5000) + 500 });
-    setIsSearchingCustomer(false);
     setUsedPoints(0);
   };
 
@@ -266,9 +276,10 @@ export function PosTerminalPage() {
       }, 2200);
     };
 
+    onCompleteRef.current = performOrderCreation;
     setPaymentState('processing');
     const delay = isCashPayment ? 1200 : 3500;
-    setTimeout(performOrderCreation, delay);
+    paymentTimerRef.current = setTimeout(performOrderCreation, delay);
   };
 
   // ── Quick cash buttons ────────────────────────────────────────────────────────
@@ -387,7 +398,32 @@ export function PosTerminalPage() {
                       {product.image ? (
                         <img src={product.image} alt={product.name} className="h-full object-contain rounded" />
                       ) : (
-                        <ImageIcon cl        {/* Customer Section */}
+                        <ImageIcon className="w-8 h-8 text-gray-300" />
+                      )}
+                    </div>
+                    <div className="p-2 flex-1 flex flex-col justify-between">
+                      <h3 className="text-xs font-bold text-gray-900 dark:text-white line-clamp-2 mb-1 group-hover:text-emerald-600 transition-colors">
+                        {product.name}
+                      </h3>
+                      <div>
+                        <p className="text-[10px] text-gray-400 font-mono mb-0.5">{product.sku}</p>
+                        <div className="flex justify-between items-baseline">
+                          <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">{fmt(product.price)}</span>
+                          <span className="text-[9px] text-gray-400">Tồn: {product.stock}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ═══ RIGHT PANEL: Cart & Customer ═══ */}
+      <div className="flex flex-col w-[32%] h-full bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700">
+        {/* Customer Section */}
         <div className="p-3 border-b border-gray-200 dark:border-gray-700 shrink-0 space-y-2 bg-gray-50 dark:bg-gray-900/20">
           {!activeCustomer ? (
             <form onSubmit={handleSearchCustomer} className="flex gap-2">
@@ -425,26 +461,7 @@ export function PosTerminalPage() {
                       setUsedPoints(Math.min(num, activeCustomer.points));
                     }}
                     placeholder="Điểm dùng..."
-                    className="flex-1 px-2 py-1 border border-emerald-200 dark:border-emerald-800/50 rounded-lg text-xs bg-emerald-55 dark:bg-emerald-900/10 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none"
-                  />
-                </div>
-              </div>
-              {usedPoints > 0 && (
-                <p className="text-[10px] text-emerald-600 font-semibold mt-1">-{fmt(usedPoints * 10)} từ điểm thưởng</p>
-              )}
-            </div>
-          )}
-        </div> gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-                  <Gift className="w-3.5 h-3.5" />
-                  <span>{activeCustomer.points} điểm khả dụng</span>
-                </div>
-                <div className="flex-1 flex gap-1">
-                  <input
-                    type="number" min={0} max={activeCustomer.points}
-                    value={usedPoints}
-                    onChange={e => setUsedPoints(Math.min(parseInt(e.target.value) || 0, activeCustomer.points))}
-                    placeholder="Điểm dùng..."
-                    className="flex-1 px-2 py-1 border border-emerald-200 dark:border-emerald-800/50 rounded-lg text-xs bg-emerald-50/50 dark:bg-emerald-900/10 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none"
+                    className="flex-1 px-2 py-1 border border-emerald-200 dark:border-emerald-800/50 rounded-lg text-xs bg-emerald-50 dark:bg-emerald-900/10 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none"
                   />
                 </div>
               </div>
@@ -568,31 +585,24 @@ export function PosTerminalPage() {
               className="p-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-xl hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               title="Xóa giỏ hàng"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-5 h-5" />
             </button>
             <button
-              onClick={() => {
-                const now = new Date();
-                const code = `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
-                setCurrentOrderCode(code);
-                setPaymentState('idle');
-                setIsPaymentOpen(true);
-              }}
+              onClick={() => setIsPaymentOpen(true)}
               disabled={items.length === 0}
-              className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-bold text-sm transition-colors shadow disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow"
             >
-              <CreditCard className="w-4 h-4" />
+              <CreditCard className="w-5 h-5" />
               Thanh toán {fmt(totalAmount)}
             </button>
           </div>
         </div>
       </div>
 
-      {/* ═══ PAYMENT MODAL ═══ */}
       {isPaymentOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            {isSuccess ? (
+        <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl animate-scaleIn flex flex-col max-h-[90vh]">
+            {paymentState === 'success' ? (
               /* SUCCESS SCREEN */
               <div className="flex flex-col items-center justify-center p-10 gap-4">
                 <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
@@ -604,6 +614,69 @@ export function PosTerminalPage() {
                   <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-900 rounded-xl p-4 text-center w-full">
                     <p className="text-sm text-gray-600 dark:text-gray-400">Tiền thối lại</p>
                     <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{fmt(changeAmount)}</p>
+                  </div>
+                )}
+              </div>
+            ) : paymentState === 'processing' ? (
+              /* PROCESSING/QR WAITING SCREEN */
+              <div className="flex flex-col items-center justify-center p-10 gap-4 animate-fadeIn">
+                {isCashPayment ? (
+                  <div className="flex flex-col items-center justify-center gap-4 py-8">
+                    <Loader2 className="w-12 h-12 text-emerald-500 animate-spin" />
+                    <h3 className="font-bold text-gray-900 dark:text-white text-base">Đang xử lý thanh toán tiền mặt...</h3>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-4 w-full">
+                    <div className="text-center space-y-1">
+                      <h3 className="font-bold text-gray-900 dark:text-white text-base">Quét mã QR thanh toán</h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Vui lòng quét mã QR hoặc chạm thiết bị di động để thanh toán
+                      </p>
+                    </div>
+
+                    <div className="relative border-2 border-dashed border-gray-250 dark:border-gray-700 p-3 bg-white rounded-2xl shadow-sm w-44 h-44 flex items-center justify-center overflow-hidden shrink-0">
+                      <svg className="w-full h-full text-emerald-600" viewBox="0 0 100 100">
+                        <path d="M10 25 V10 H25 M75 10 H90 V25 M90 75 V90 H75 M25 90 H10 V75" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+                        {selectedPayment.id.includes('ewallet') || selectedPayment.id.includes('transfer') || selectedPayment.id.includes('qr') ? (
+                          <>
+                            <rect x="20" y="20" width="15" height="15" fill="currentColor" />
+                            <rect x="65" y="20" width="15" height="15" fill="currentColor" />
+                            <rect x="20" y="65" width="15" height="15" fill="currentColor" />
+                            <rect x="45" y="45" width="10" height="10" fill="currentColor" />
+                            <rect x="55" y="65" width="10" height="10" fill="currentColor" />
+                            <rect x="65" y="55" width="10" height="10" fill="currentColor" />
+                            <rect x="45" y="65" width="5" height="5" fill="currentColor" />
+                            <rect x="65" y="45" width="5" height="5" fill="currentColor" />
+                          </>
+                        ) : (
+                          <>
+                            <rect x="22" y="32" width="56" height="36" rx="4" fill="none" stroke="currentColor" strokeWidth="4" />
+                            <circle cx="50" cy="50" r="5" fill="currentColor" />
+                            <path d="M36 50 Q43 42 50 50 T64 50" fill="none" stroke="currentColor" strokeWidth="3" />
+                          </>
+                        )}
+                      </svg>
+                      <div className="absolute inset-x-0 h-0.5 bg-emerald-500 animate-bounce top-1/2 shadow shadow-emerald-500" />
+                    </div>
+
+                    <div className="text-center">
+                      <p className="text-xs text-gray-400">Số tiền cần thu</p>
+                      <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{fmt(totalAmount)}</p>
+                    </div>
+
+                    <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl p-3 text-center w-full">
+                      <p className="text-xs text-emerald-700 dark:text-emerald-400 font-semibold animate-pulse flex items-center justify-center gap-1.5">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang chờ cổng thanh toán phản hồi...
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleForceCompletePayment}
+                      className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow active:scale-[0.98]"
+                    >
+                      Xác nhận đã nhận tiền (Ghi đè thủ công)
+                    </button>
                   </div>
                 )}
               </div>
@@ -636,7 +709,7 @@ export function PosTerminalPage() {
                           className={`flex items-center gap-2.5 p-3 rounded-xl border text-sm font-semibold transition-colors ${
                             selectedPaymentId === m.id
                               ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
-                              : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
+                              : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:bg-gray-650'
                           }`}
                         >
                           <Icon className="w-4 h-4 shrink-0" />
@@ -655,17 +728,16 @@ export function PosTerminalPage() {
                         inputMode="numeric"
                         value={cashGiven}
                         onChange={e => {
-                          // TC2 fix: strip non-digits then remove leading zeros
                           const digits = e.target.value.replace(/\D/g, '');
-                          setCashGiven(digits === '' ? '' : String(parseInt(digits, 10)));
+                          setCashGiven(digits === '' ? '' : parseInt(digits, 10).toLocaleString('vi-VN'));
                         }}
                         placeholder="Nhập số tiền..."
                         className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xl font-black focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
                       />
                       <div className="flex gap-2 mt-2">
                         {QUICK_CASH.map(q => (
-                          <button key={q} onClick={() => setCashGiven(String(q))}
-                            className="flex-1 py-1.5 text-xs font-semibold bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-gray-700 dark:text-gray-300 transition-colors">
+                          <button key={q} onClick={() => setCashGiven(q.toLocaleString('vi-VN'))}
+                            className="flex-1 py-1.5 text-xs font-semibold bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-650 rounded-lg text-gray-700 dark:text-gray-300 transition-colors">
                             {fmt(q)}
                           </button>
                         ))}

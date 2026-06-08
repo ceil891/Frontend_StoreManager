@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, Download, Search, Filter, Eye, Calendar, User, TrendingUp, AlertCircle, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type DebtRecord } from '../store/financeStore';
@@ -230,7 +229,7 @@ export function DebtLedgerPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedDebt(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedDebt}
         onClose={() => setSelectedDebt(null)}
         title={selectedDebt ? `Hồ Sơ Công Nợ: ${selectedDebt.debtCode}` : 'Chi Tiết Công Nợ'}
@@ -253,7 +252,17 @@ export function DebtLedgerPage() {
                   }`}>{selectedDebt.totalDebt >= 0 ? 'Khoản Phải Thu (Receivable)' : 'Khoản Phải Trả (Payable)'}</p>
                   <p className={`text-xl font-bold font-mono mt-0.5 ${
                     selectedDebt.totalDebt >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
-                  }`}>{selectedDebt.totalDebt >= 0 ? `+$${selectedDebt.totalDebt.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `-$${Math.abs(selectedDebt.totalDebt).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}</p>
+                  }`}>
+                    {(() => {
+                      const curr = selectedDebt.currency || 'VND';
+                      const val = selectedDebt.totalDebt;
+                      const prefix = curr === 'USD' ? '$' : '';
+                      const suffix = curr === 'VND' ? ' ₫' : curr !== 'USD' ? ` ${curr}` : '';
+                      return val >= 0
+                        ? `+${prefix}${val.toLocaleString('vi-VN')}${suffix}`
+                        : `-${prefix}${Math.abs(val).toLocaleString('vi-VN')}${suffix}`;
+                    })()}
+                  </p>
                 </div>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
@@ -289,13 +298,13 @@ export function DebtLedgerPage() {
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Đã thanh toán (lũy kế):</span>
                 <span className="font-semibold font-mono text-emerald-600">
-                  {selectedDebt.paidAmount !== undefined ? `${selectedDebt.paidAmount.toLocaleString('en-US')} ${selectedDebt.currency || 'VND'}` : '0'}
+                  {selectedDebt.paidAmount !== undefined ? `${selectedDebt.paidAmount.toLocaleString('vi-VN')} ${selectedDebt.currency || 'VND'}` : '0'}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Còn lại (Chưa thanh toán):</span>
                 <span className={`font-semibold font-mono ${selectedDebt.dueAmount === 0 ? 'text-gray-500' : selectedDebt.dueAmount > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {selectedDebt.dueAmount >= 0 ? `+${selectedDebt.dueAmount.toLocaleString('en-US')} ${selectedDebt.currency || 'VND'}` : `-${Math.abs(selectedDebt.dueAmount).toLocaleString('en-US')} ${selectedDebt.currency || 'VND'}`}
+                  {selectedDebt.dueAmount >= 0 ? `+${selectedDebt.dueAmount.toLocaleString('vi-VN')} ${selectedDebt.currency || 'VND'}` : `-${Math.abs(selectedDebt.dueAmount).toLocaleString('vi-VN')} ${selectedDebt.currency || 'VND'}`}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
@@ -325,7 +334,7 @@ export function DebtLedgerPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal: Thêm / Sửa */}
       <Modal
@@ -449,7 +458,7 @@ export function DebtLedgerPage() {
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
@@ -482,7 +491,7 @@ export function DebtLedgerPage() {
           <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2.5 rounded-lg border border-red-200 dark:border-red-800/40">
             Thao tác này sẽ xóa toàn bộ số dư đối chiếu sổ sách của đối tác này trong hệ thống. Hãy đảm bảo khoản nợ đã được tất toán hoặc có biên bản đồng ý xóa nợ hợp lệ.
           </p>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
               onClick={() => setDeletingDebt(null)}

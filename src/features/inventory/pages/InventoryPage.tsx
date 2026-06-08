@@ -37,6 +37,7 @@ export function InventoryPage() {
   const [editingUnits, setEditingUnits] = useState<ProductUnit[]>([]);
   const [deletingProduct, setDeletingProduct] = useState<ProductInventory | null>(null);
   const [deletingBulkProducts, setDeletingBulkProducts] = useState<{ rows: ProductInventory[], clear: () => void } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const filtered = data.filter((item) => {
     // 1. Text search is now handled internally by ReusableDataTable via globalFilter
@@ -768,52 +769,85 @@ export function InventoryPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ảnh chính sản phẩm</label>
-                <div className="flex items-center gap-3">
-                  <div className="w-20 h-20 bg-gray-50 dark:bg-gray-900 border rounded-lg flex items-center justify-center overflow-hidden shrink-0">
-                    {editingProduct.mainImage ? (
+                
+                <div 
+                  className={`border-2 border-dashed rounded-xl p-6 transition-all text-center flex flex-col items-center justify-center gap-2 cursor-pointer ${
+                    isDragging 
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20' 
+                      : 'border-gray-300 dark:border-gray-650 bg-gray-50 dark:bg-gray-900/50 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  }`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file && file.type.startsWith('image/')) {
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        setEditingProduct({ ...editingProduct, mainImage: reader.result as string });
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  onClick={() => document.getElementById('main-image-input')?.click()}
+                >
+                  <input
+                    id="main-image-input"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setEditingProduct({ ...editingProduct, mainImage: reader.result as string });
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  {editingProduct.mainImage ? (
+                    <div className="relative w-32 h-32 rounded-lg overflow-hidden border bg-white dark:bg-gray-800">
                       <img src={editingProduct.mainImage} alt="Main preview" className="w-full h-full object-cover" />
-                    ) : (
-                      <ImageIcon className="w-8 h-8 text-gray-400 opacity-50" />
-                    )}
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <input
-                      type="text"
-                      value={editingProduct.mainImage || ''}
-                      onChange={(e) => setEditingProduct({ ...editingProduct, mainImage: e.target.value })}
-                      placeholder="Nhập URL hình ảnh..."
-                      className="w-full px-3 py-1.5 border rounded-lg text-xs focus:ring-2 focus:ring-emerald-500"
-                    />
-                    <div className="flex items-center gap-2">
-                      <label className="cursor-pointer text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-250 font-semibold hover:bg-emerald-100 transition-colors">
-                        Chọn tệp ảnh
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                setEditingProduct({ ...editingProduct, mainImage: reader.result as string });
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                        />
-                      </label>
-                      {editingProduct.mainImage && (
-                        <button
-                          type="button"
-                          onClick={() => setEditingProduct({ ...editingProduct, mainImage: '' })}
-                          className="text-xs text-red-650 hover:bg-red-50 px-2 py-1.5 rounded-lg border border-red-200 transition-colors"
-                        >
-                          Xóa ảnh
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingProduct({ ...editingProduct, mainImage: '' });
+                        }}
+                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 hover:bg-red-700 shadow"
+                        title="Xóa ảnh"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      <ImageIcon className="w-10 h-10 text-gray-400" />
+                      <div className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                        Kéo thả hình ảnh vào đây hoặc click để chọn tệp
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        Hỗ trợ PNG, JPG, JPEG, WEBP
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="mt-2">
+                  <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">Hoặc nhập URL hình ảnh</label>
+                  <input
+                    type="text"
+                    value={editingProduct.mainImage || ''}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, mainImage: e.target.value })}
+                    placeholder="Nhập URL hình ảnh..."
+                    className="w-full px-3 py-1.5 border rounded-lg text-xs focus:ring-2 focus:ring-emerald-500"
+                  />
                 </div>
               </div>
 
