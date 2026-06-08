@@ -1,0 +1,355 @@
+import { useMemo, useState } from 'react';
+import { Plus, Download, Search, Eye, Edit, Trash2, X, CheckCircle2, Calendar, Tag } from 'lucide-react';
+import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
+import { Drawer } from '@/shared/components/ui/Drawer';
+import { Modal } from '@/shared/components/ui/Modal';
+import type { ColumnDef } from '@tanstack/react-table';
+
+interface WarrantyRecord {
+  id: string;
+  warrantyCode: string;
+  customerName: string;
+  serialOrIMEI: string;
+  startDate: string;
+  expiryDate: string;
+  terms: string;
+  status: 'HOẠT_ĐỘNG' | 'HẾT_HẠN' | 'HỦY';
+}
+
+const MOCK_DATA: WarrantyRecord[] = [
+  {
+    id: '1',
+    warrantyCode: 'WRT-2023-001',
+    customerName: 'Nguyễn Văn A',
+    serialOrIMEI: 'SN1234567890',
+    startDate: '2023-01-15',
+    expiryDate: '2025-01-14',
+    terms: 'Bảo hành 2 năm, thay thế linh kiện',
+    status: 'HOẠT_ĐỘNG',
+  },
+  {
+    id: '2',
+    warrantyCode: 'WRT-2022-045',
+    customerName: 'Công ty ABC',
+    serialOrIMEI: 'IMEI9876543210',
+    startDate: '2022-06-01',
+    expiryDate: '2024-05-31',
+    terms: 'Bảo hành 24 tháng, hỗ trợ onsite',
+    status: 'HOẠT_ĐỘNG',
+  },
+  {
+    id: '3',
+    warrantyCode: 'WRT-2021-112',
+    customerName: 'Trần Thị B',
+    serialOrIMEI: 'SN1122334455',
+    startDate: '2021-09-20',
+    expiryDate: '2023-09-19',
+    terms: 'Bảo hành 1 năm, chi phí vật tư',
+    status: 'HẾT_HẠN',
+  },
+];
+
+export function ProductWarrantiesPage() {
+  const [data, setData] = useState<WarrantyRecord[]>(MOCK_DATA);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
+  const [selectedItem, setSelectedItem] = useState<WarrantyRecord | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const [editingItem, setEditingItem] = useState<Partial<WarrantyRecord>>({});
+
+  const filtered = useMemo(() => {
+    return data.filter((item) => {
+      const matchSearch =
+        item.warrantyCode.toLowerCase().includes(search.toLowerCase()) ||
+        item.customerName.toLowerCase().includes(search.toLowerCase()) ||
+        item.serialOrIMEI.toLowerCase().includes(search.toLowerCase());
+      const matchStatus = statusFilter === 'Tất cả' || item.status === statusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [data, search, statusFilter]);
+
+  const handleOpenCreate = () => {
+    setModalMode('create');
+    setEditingItem({
+      warrantyCode: '',
+      customerName: '',
+      serialOrIMEI: '',
+      startDate: new Date().toISOString().split('T')[0],
+      expiryDate: '',
+      terms: '',
+      status: 'HOẠT_ĐỘNG',
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: WarrantyRecord) => {
+    setModalMode('edit');
+    setEditingItem(item);
+    setIsModalOpen(true);
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem.warrantyCode || !editingItem.customerName) return;
+    if (modalMode === 'create') {
+      const newItem: WarrantyRecord = {
+        id: String(data.length + 1),
+        warrantyCode: editingItem.warrantyCode!,
+        customerName: editingItem.customerName!,
+        serialOrIMEI: editingItem.serialOrIMEI || '',
+        startDate: editingItem.startDate || new Date().toISOString().split('T')[0],
+        expiryDate: editingItem.expiryDate || '',
+        terms: editingItem.terms || '',
+        status: editingItem.status as any || 'HOẠT_ĐỘNG',
+      };
+      setData([...data, newItem]);
+    } else if (editingItem.id) {
+      setData(data.map((item) => (item.id === editingItem.id ? (editingItem as WarrantyRecord) : item)));
+    }
+    setIsModalOpen(false);
+  };
+
+  const handleDelete = (item: WarrantyRecord) => {
+    setData(data.filter((d) => d.id !== item.id));
+    setSelectedItem(null);
+  };
+
+  const columns = useMemo<ColumnDef<WarrantyRecord>[]>(
+    () => [
+      {
+        accessorKey: 'warrantyCode',
+        header: 'Mã Sổ Bảo Hành',
+        cell: (info) => (
+          <span className="font-mono font-bold text-primary">{info.getValue() as string}</span>
+        ),
+      },
+      {
+        accessorKey: 'customerName',
+        header: 'Khách Hàng',
+        cell: (info) => <span className="font-medium text-gray-900 dark:text-white">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'serialOrIMEI',
+        header: 'Serial / IMEI',
+        cell: (info) => <span className="text-sm text-gray-600 dark:text-gray-300">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'status',
+        header: 'Trạng Thái',
+        cell: (info) => {
+          const status = info.getValue() as string;
+          const badge = {
+            HOẠT_ĐỘNG: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+            HẾT_HẠN: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+            HỦY: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300',
+          }[status];
+          return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${badge}`}>{status}</span>;
+        },
+      },
+      {
+        id: 'actions',
+        header: 'Thao Tác',
+        cell: ({ row }) => (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setSelectedItem(row.original)}
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+              title="Xem chi tiết"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleOpenEdit(row.original)}
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Chỉnh sửa"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleDelete(row.original)}
+              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Xóa"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [data]
+  );
+
+  return (
+    <>
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sổ Bảo Hành Sản Phẩm</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Quản lý các hồ sơ bảo hành, theo dõi thời gian và điều kiện bảo hành.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
+              <Download className="w-4 h-4" /> Xuất dữ liệu
+            </button>
+            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg">
+              <Plus className="w-4 h-4" /> Thêm sổ bảo hành
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3 p-4 bg-white rounded-xl border shadow-sm">
+          <div className="flex-1 relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Tìm kiếm mã, khách hàng, serial…"
+              className="block w-full pl-10 pr-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-2 py-1 border rounded bg-gray-50"
+          >
+            <option value="Tất cả">Tất cả trạng thái</option>
+            <option value="HOẠT_ĐỘNG">HOẠT ĐỘNG</option>
+            <option value="HẾT_HẠN">HẾT HẠN</option>
+            <option value="HỦY">HỦY</option>
+          </select>
+        </div>
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} />
+      </div>
+
+      {/* Drawer chi tiết */}
+      <Drawer isOpen={!!selectedItem} onClose={() => setSelectedItem(null)} title={selectedItem ? `Chi tiết sổ bảo hành: ${selectedItem.warrantyCode}` : ''}>
+        {selectedItem && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <span className="text-xs text-gray-500">Mã bảo hành</span>
+                <p className="font-mono font-bold text-gray-900 dark:text-white">{selectedItem.warrantyCode}</p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500">Khách hàng</span>
+                <p className="font-medium text-gray-900 dark:text-white">{selectedItem.customerName}</p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500">Serial / IMEI</span>
+                <p className="text-sm text-gray-700 dark:text-gray-300">{selectedItem.serialOrIMEI}</p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500">Ngày bắt đầu</span>
+                <p className="font-medium text-gray-900 dark:text-white">{selectedItem.startDate}</p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500">Ngày hết hạn</span>
+                <p className="font-medium text-gray-900 dark:text-white">{selectedItem.expiryDate}</p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500">Trạng thái</span>
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${selectedItem.status === 'HOẠT_ĐỘNG' ? 'bg-emerald-100 text-emerald-800' : selectedItem.status === 'HẾT_HẠN' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>{selectedItem.status}</span>
+              </div>
+            </div>
+            <div className="border-t pt-4">
+              <span className="text-xs font-semibold text-gray-400 uppercase">Điều khoản bảo hành</span>
+              <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">{selectedItem.terms || 'Chưa cập nhật'}</p>
+            </div>
+          </div>
+        )}
+      </Drawer>
+
+      {/* Modal tạo / sửa */}
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalMode === 'create' ? 'Thêm sổ bảo hành mới' : 'Cập nhật sổ bảo hành'}>
+        <form onSubmit={handleSave} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium mb-1">Mã bảo hành *</label>
+            <input
+              type="text"
+              value={editingItem.warrantyCode || ''}
+              onChange={(e) => setEditingItem({ ...editingItem, warrantyCode: e.target.value })}
+              className="w-full px-3 py-2 border rounded"
+              required
+              disabled={modalMode === 'edit'}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Khách hàng *</label>
+            <input
+              type="text"
+              value={editingItem.customerName || ''}
+              onChange={(e) => setEditingItem({ ...editingItem, customerName: e.target.value })}
+              className="w-full px-3 py-2 border rounded"
+              required
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium mb-1">Serial / IMEI</label>
+              <input
+                type="text"
+                value={editingItem.serialOrIMEI || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, serialOrIMEI: e.target.value })}
+                className="w-full px-3 py-2 border rounded"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Ngày bắt đầu *</label>
+              <input
+                type="date"
+                value={editingItem.startDate || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, startDate: e.target.value })}
+                className="w-full px-3 py-2 border rounded"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Ngày hết hạn *</label>
+              <input
+                type="date"
+                value={editingItem.expiryDate || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, expiryDate: e.target.value })}
+                className="w-full px-3 py-2 border rounded"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Trạng thái *</label>
+              <select
+                value={editingItem.status || 'HOẠT_ĐỘNG'}
+                onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
+                className="w-full px-3 py-2 border rounded"
+              >
+                <option value="HOẠT_ĐỘNG">HOẠT ĐỘNG</option>
+                <option value="HẾT_HẠN">HẾT HẠN</option>
+                <option value="HỦY">HỦY</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Điều khoản bảo hành</label>
+            <textarea
+              rows={3}
+              value={editingItem.terms || ''}
+              onChange={(e) => setEditingItem({ ...editingItem, terms: e.target.value })}
+              className="w-full px-3 py-2 border rounded"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border rounded">
+              Hủy bỏ
+            </button>
+            <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded">
+              {modalMode === 'create' ? 'Thêm mới' : 'Lưu thay đổi'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </>
+  );
+}

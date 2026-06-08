@@ -31,35 +31,52 @@ export function OrderPricingFields({ values, onChange, showShipping = false, cur
 
   const step = currency === 'VND' ? 1 : 0.01;
 
+  const formatInputVal = (val: number) => {
+    if (currency === 'VND') {
+      return val === 0 ? '' : Math.round(val).toLocaleString('vi-VN');
+    }
+    return String(val);
+  };
+
+  const handleInputChange = (rawVal: string, key: keyof OrderPricingValues) => {
+    if (currency === 'VND') {
+      const digits = rawVal.replace(/\D/g, '');
+      const parsed = digits === '' ? 0 : parseInt(digits, 10);
+      recalc({ [key]: parsed });
+    } else {
+      recalc({ [key]: parseFloat(rawVal) || 0 });
+    }
+  };
+
   return (
     <div className="grid grid-cols-2 gap-3 p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-700">
       <div>
         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiền hàng (subTotal)</label>
         <input
-          type="number"
+          type={currency === 'VND' ? 'text' : 'number'}
           step={step}
-          value={values.subTotal}
-          onChange={(e) => recalc({ subTotal: parseFloat(e.target.value) || 0 })}
+          value={formatInputVal(values.subTotal)}
+          onChange={(e) => handleInputChange(e.target.value, 'subTotal')}
           className="w-full px-2 py-1.5 border rounded-lg text-sm font-mono dark:bg-gray-900"
         />
       </div>
       <div>
         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Thuế (VAT)</label>
         <input
-          type="number"
+          type={currency === 'VND' ? 'text' : 'number'}
           step={step}
-          value={values.taxAmount}
-          onChange={(e) => recalc({ taxAmount: parseFloat(e.target.value) || 0 })}
+          value={formatInputVal(values.taxAmount)}
+          onChange={(e) => handleInputChange(e.target.value, 'taxAmount')}
           className="w-full px-2 py-1.5 border rounded-lg text-sm font-mono dark:bg-gray-900"
         />
       </div>
       <div>
         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Giảm giá</label>
         <input
-          type="number"
+          type={currency === 'VND' ? 'text' : 'number'}
           step={step}
-          value={values.discountAmount}
-          onChange={(e) => recalc({ discountAmount: parseFloat(e.target.value) || 0 })}
+          value={formatInputVal(values.discountAmount)}
+          onChange={(e) => handleInputChange(e.target.value, 'discountAmount')}
           className="w-full px-2 py-1.5 border rounded-lg text-sm font-mono dark:bg-gray-900"
         />
       </div>
@@ -67,10 +84,10 @@ export function OrderPricingFields({ values, onChange, showShipping = false, cur
         <div>
           <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Phí ship</label>
           <input
-            type="number"
+            type={currency === 'VND' ? 'text' : 'number'}
             step={step}
-            value={values.shippingFee ?? 0}
-            onChange={(e) => recalc({ shippingFee: parseFloat(e.target.value) || 0 })}
+            value={formatInputVal(values.shippingFee ?? 0)}
+            onChange={(e) => handleInputChange(e.target.value, 'shippingFee')}
             className="w-full px-2 py-1.5 border rounded-lg text-sm font-mono dark:bg-gray-900"
           />
         </div>

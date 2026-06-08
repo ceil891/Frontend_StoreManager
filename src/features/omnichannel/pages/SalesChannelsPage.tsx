@@ -1,0 +1,398 @@
+import { useMemo, useState } from 'react';
+import { Plus, Search, Eye, Edit, Trash2, Calendar, Link2, Share2, Download } from 'lucide-react';
+import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
+import { Drawer } from '@/shared/components/ui/Drawer';
+import { Modal } from '@/shared/components/ui/Modal';
+import type { ColumnDef } from '@tanstack/react-table';
+
+interface SalesChannelRecord {
+  id: string;
+  channelCode: string;
+  channelName: string;
+  channelType: 'SHOPEE' | 'LAZADA' | 'TIKTOK' | 'WEBSITE' | 'SOCIAL';
+  apiStatus: 'CONNECTED' | 'DISCONNECTED' | 'ERROR';
+  connectedDate: string;
+  notes?: string;
+}
+
+const MOCK_CHANNELS: SalesChannelRecord[] = [
+  {
+    id: '1',
+    channelCode: 'CH-SHOPEE-01',
+    channelName: 'Shopee - Gian Hàng Thời Trang RetailHub',
+    channelType: 'SHOPEE',
+    apiStatus: 'CONNECTED',
+    connectedDate: '2026-05-10',
+    notes: 'Kênh đồng bộ sản phẩm, đơn hàng và kho tự động mỗi 5 phút',
+  },
+  {
+    id: '2',
+    channelCode: 'CH-LAZADA-02',
+    channelName: 'Lazada - RetailHub Official Store',
+    channelType: 'LAZADA',
+    apiStatus: 'CONNECTED',
+    connectedDate: '2026-05-12',
+    notes: 'Kênh phụ trợ đồng bộ sản phẩm',
+  },
+  {
+    id: '3',
+    channelCode: 'CH-TIKTOK-03',
+    channelName: 'TikTok Shop - RetailHub Vietnam',
+    channelType: 'TIKTOK',
+    apiStatus: 'ERROR',
+    connectedDate: '2026-05-20',
+    notes: 'Lỗi token kết nối kết hạn từ TikTok, cần bấm làm mới kết nối lại API',
+  },
+];
+
+export function SalesChannelsPage() {
+  const [data, setData] = useState<SalesChannelRecord[]>(MOCK_CHANNELS);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<SalesChannelRecord | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const [editingItem, setEditingItem] = useState<Partial<SalesChannelRecord>>({});
+
+  const filtered = useMemo(() => {
+    if (!search) return data;
+    const q = search.toLowerCase();
+    return data.filter(
+      (d) =>
+        d.channelCode.toLowerCase().includes(q) ||
+        d.channelName.toLowerCase().includes(q) ||
+        d.channelType.toLowerCase().includes(q)
+    );
+  }, [search, data]);
+
+  const handleOpenCreate = () => {
+    setModalMode('create');
+    setEditingItem({
+      channelCode: '',
+      channelName: '',
+      channelType: 'SHOPEE',
+      apiStatus: 'DISCONNECTED',
+      connectedDate: new Date().toISOString().split('T')[0],
+      notes: '',
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: SalesChannelRecord) => {
+    setModalMode('edit');
+    setEditingItem(item);
+    setIsModalOpen(true);
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem.channelCode || !editingItem.channelName) return;
+
+    if (modalMode === 'create') {
+      const newItem: SalesChannelRecord = {
+        id: String(data.length + 1),
+        channelCode: editingItem.channelCode.toUpperCase(),
+        channelName: editingItem.channelName!,
+        channelType: editingItem.channelType as any || 'SHOPEE',
+        apiStatus: editingItem.apiStatus as any || 'DISCONNECTED',
+        connectedDate: editingItem.connectedDate!,
+        notes: editingItem.notes,
+      };
+      setData([...data, newItem]);
+    } else {
+      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as SalesChannelRecord) : d)));
+    }
+    setIsModalOpen(false);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm('Bạn có chắc chắn muốn ngắt kết nối và xóa kênh bán hàng này?')) {
+      setData(data.filter((d) => d.id !== id));
+    }
+  };
+
+  const columns = useMemo<ColumnDef<SalesChannelRecord>[]>(
+    () => [
+      {
+        accessorKey: 'channelCode',
+        header: 'Mã Kênh',
+        cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'channelName',
+        header: 'Tên Gian Hàng',
+        cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'channelType',
+        header: 'Loại Kênh',
+        cell: (info) => {
+          const val = info.getValue() as string;
+          let label = 'Shopee';
+          let color = 'text-orange-600 bg-orange-50';
+          if (val === 'LAZADA') {
+            label = 'Lazada';
+            color = 'text-blue-600 bg-blue-50';
+          } else if (val === 'TIKTOK') {
+            label = 'TikTok Shop';
+            color = 'text-black bg-gray-100 dark:text-white dark:bg-gray-700';
+          } else if (val === 'WEBSITE') {
+            label = 'Website WooCommerce';
+            color = 'text-purple-600 bg-purple-50';
+          } else if (val === 'SOCIAL') {
+            label = 'Mạng Xã Hội';
+            color = 'text-blue-500 bg-blue-50/50';
+          }
+          return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${color}`}>{label}</span>;
+        },
+      },
+      {
+        accessorKey: 'connectedDate',
+        header: 'Ngày Kết Nối',
+        cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'apiStatus',
+        header: 'Trạng Thái API',
+        cell: (info) => {
+          const status = info.getValue() as string;
+          let badgeClass = 'bg-gray-100 text-gray-800';
+          let label = 'Chưa Kết Nối';
+          if (status === 'CONNECTED') {
+            badgeClass = 'bg-emerald-100 text-emerald-800';
+            label = 'Hoạt Động';
+          } else if (status === 'ERROR') {
+            badgeClass = 'bg-red-100 text-red-800';
+            label = 'Lỗi Kết Nối';
+          }
+          return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
+        },
+      },
+      {
+        id: 'actions',
+        header: 'Thao Tác',
+        cell: ({ row }) => (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setSelected(row.original)}
+              className="p-1 text-gray-500 hover:text-emerald-600 rounded"
+              title="Xem Chi Tiết Kênh"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleOpenEdit(row.original)}
+              className="p-1 text-gray-500 hover:text-blue-600 rounded"
+              title="Sửa Cấu Hình"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleDelete(row.original.id)}
+              className="p-1 text-gray-500 hover:text-red-600 rounded"
+              title="Ngắt Kết Nối"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [data]
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold">Quản Lý Kênh Bán Hàng Đa Kênh (Sales Channels)</h1>
+          <p className="text-sm text-gray-500">
+            Tích hợp, cấu hình đồng bộ gian hàng trực tuyến trên các sàn TMĐT (Shopee, Lazada, TikTok) hoặc Website bán hàng của doanh nghiệp.
+          </p>
+        </div>
+        <button
+          onClick={handleOpenCreate}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition"
+        >
+          <Plus className="w-4 h-4" /> Tích Hợp Kênh Mới
+        </button>
+      </div>
+
+      <div className="p-4 bg-white dark:bg-gray-800 rounded shadow flex items-center gap-4">
+        <Link2 className="w-5 h-5 text-gray-400" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Tìm kiếm mã kênh, tên gian hàng, loại sàn TMĐT..."
+          className="w-full bg-transparent outline-none text-sm"
+        />
+      </div>
+
+      <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+
+      <Drawer
+        isOpen={!!selected}
+        onClose={() => setSelected(null)}
+        title={`Chi tiết kênh kết nối: ${selected?.channelName}`}
+      >
+        {selected && (
+          <div className="space-y-4 text-sm">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <span className="text-gray-500">Mã Kênh Kết Nối:</span>
+                <p className="font-mono font-semibold">{selected.channelCode}</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Loại Gian Hàng:</span>
+                <p className="font-semibold text-emerald-600">{selected.channelType}</p>
+              </div>
+            </div>
+            <div>
+              <span className="text-gray-500">Tên Gian Hàng / Kênh:</span>
+              <p className="font-semibold text-base">{selected.channelName}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4 border-t pt-2">
+              <div>
+                <span className="text-gray-500 flex items-center gap-1">
+                  <Calendar className="w-4 h-4 text-gray-400" /> Ngày Tích Hợp:
+                </span>
+                <p className="font-mono">{selected.connectedDate}</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Trạng Thái Đồng Bộ API:</span>
+                <div>
+                  <span
+                    className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
+                      selected.apiStatus === 'CONNECTED'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : selected.apiStatus === 'DISCONNECTED'
+                        ? 'bg-gray-100 text-gray-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    {selected.apiStatus === 'CONNECTED'
+                      ? 'Đang Kết Nối Hoạt Động'
+                      : selected.apiStatus === 'DISCONNECTED'
+                      ? 'Đã Ngắt Kết Nối'
+                      : 'Lỗi Đồng Bộ Sync'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            {selected.notes && (
+              <div>
+                <span className="text-gray-500">Ghi Chú Kênh:</span>
+                <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
+                  {selected.notes}
+                </p>
+              </div>
+            )}
+            <div className="border-t pt-4">
+              <h3 className="font-semibold mb-2">Thông Số Kỹ Thuật API</h3>
+              <div className="p-3 bg-gray-50 dark:bg-gray-900 font-mono text-xs space-y-1 rounded">
+                <p><span className="text-gray-400">Endpoint:</span> https://api.shopee.vn/v2/shop/get_info</p>
+                <p><span className="text-gray-400">Token Status:</span> ACTIVE (Expires in 15 days)</p>
+                <p><span className="text-gray-400">Last Sync:</span> 2026-06-04 16:40:12</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </Drawer>
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={modalMode === 'create' ? 'Tích Hợp Kênh TMĐT Mới' : 'Sửa Thông Tin Kênh Tích Hợp'}
+      >
+        <form onSubmit={handleSave} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Mã Kênh *</label>
+              <input
+                type="text"
+                value={editingItem.channelCode || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, channelCode: e.target.value })}
+                className="w-full p-2 border rounded font-mono"
+                placeholder="CH-XXXX"
+                required
+                disabled={modalMode === 'edit'}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Loại Kênh *</label>
+              <select
+                value={editingItem.channelType || 'SHOPEE'}
+                onChange={(e) => setEditingItem({ ...editingItem, channelType: e.target.value as any })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="SHOPEE">Shopee Vietnam</option>
+                <option value="LAZADA">Lazada Vietnam</option>
+                <option value="TIKTOK">TikTok Shop Vietnam</option>
+                <option value="WEBSITE">WooCommerce Website</option>
+                <option value="SOCIAL">Mạng Xã Hội (Facebook/Zalo)</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Tên Gian Hàng Hiển Thị *</label>
+            <input
+              type="text"
+              value={editingItem.channelName || ''}
+              onChange={(e) => setEditingItem({ ...editingItem, channelName: e.target.value })}
+              className="w-full p-2 border rounded"
+              placeholder="Tên shop trực tuyến"
+              required
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Ngày Tích Hợp *</label>
+              <input
+                type="date"
+                value={editingItem.connectedDate || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, connectedDate: e.target.value })}
+                className="w-full p-2 border rounded font-mono"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Trạng Thái API</label>
+              <select
+                value={editingItem.apiStatus || 'DISCONNECTED'}
+                onChange={(e) => setEditingItem({ ...editingItem, apiStatus: e.target.value as any })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="DISCONNECTED">Chưa Kết Nối API</option>
+                <option value="CONNECTED">Đang Hoạt Động (Đã ủy quyền)</option>
+                <option value="ERROR">Gặp Lỗi (Cần cấp lại Token)</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Ghi Chú</label>
+            <textarea
+              value={editingItem.notes || ''}
+              onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
+              className="w-full p-2 border rounded"
+              rows={3}
+              placeholder="Ghi chú cấu hình đồng bộ..."
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2 border rounded hover:bg-gray-100"
+            >
+              Hủy
+            </button>
+            <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
+              Lưu Cấu Hình
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  );
+}
+export default SalesChannelsPage;

@@ -702,7 +702,7 @@ export function PosSessionsPage() {
             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-1.5">Tiền mặt thực tế kiểm đếm (VND)</label>
             <input
               type="text"
-              value={actualClosingCashInput}
+              value={actualClosingCashInput ? parseInt(actualClosingCashInput, 10).toLocaleString('vi-VN') : ''}
               onChange={(e) => {
                 const numeric = e.target.value.replace(/\D/g, '');
                 setActualClosingCashInput(numeric ? String(parseInt(numeric, 10)) : '');
@@ -791,7 +791,7 @@ export function PosSessionsPage() {
             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Tiền quỹ đầu ca (₫)</label>
             <input
               type="text"
-              value={newOpeningCash}
+              value={newOpeningCash ? parseInt(newOpeningCash, 10).toLocaleString('vi-VN') : ''}
               onChange={(e) => {
                 const numeric = e.target.value.replace(/\D/g, '');
                 setNewOpeningCash(numeric ? String(parseInt(numeric, 10)) : '');
@@ -864,7 +864,7 @@ export function PosSessionsPage() {
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Tiền quỹ đầu ca (₫)</label>
               <input
                 type="text"
-                value={editingSession.openingCashFloatVnd}
+                value={editingSession.openingCashFloatVnd === 0 ? '' : editingSession.openingCashFloatVnd.toLocaleString('vi-VN')}
                 onChange={(e) => {
                   const num = parseInt(e.target.value.replace(/\D/g, ''), 10) || 0;
                   setEditingSession({ ...editingSession, openingCashFloatVnd: num });

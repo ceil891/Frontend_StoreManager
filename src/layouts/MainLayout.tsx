@@ -12,9 +12,25 @@ import { AIAssistant } from '@/components/AI/AIAssistant';
 export function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // TC1 fix: All groups start collapsed; user clicks group header to expand
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(NAV_GROUPS.map((g) => [g.group, true]))
-  );
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem('retailhub_sidebar_collapsed');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // ignore
+      }
+    }
+    const initial: Record<string, boolean> = {};
+    for (const group of NAV_GROUPS) {
+      const hasActive = group.items.some(item => {
+        if (item.href === '/') return location.pathname === '/';
+        return location.pathname.startsWith(item.href);
+      });
+      initial[group.group] = !hasActive;
+    }
+    return initial;
+  });
 
   const user = useAuthUser();
   const role = useAuthRole();
@@ -31,7 +47,11 @@ export function MainLayout() {
   };
 
   const toggleGroup = (group: string) =>
-    setCollapsedGroups((p) => ({ ...p, [group]: !p[group] }));
+    setCollapsedGroups((p) => {
+      const next = { ...p, [group]: !p[group] };
+      localStorage.setItem('retailhub_sidebar_collapsed', JSON.stringify(next));
+      return next;
+    });
 
   const checkPermission = useRoleStore((s) => s.checkPermission);
 
@@ -116,7 +136,7 @@ export function MainLayout() {
                       <NavLink
                         key={item.href}
                         to={item.href}
-                        end={item.href === '/'}
+                        end={true}
                         onClick={() => setSidebarOpen(false)}
                         className={({ isActive }) =>
                           `group flex items-center gap-2.5 px-2.5 py-1.5 text-sm font-medium rounded-lg transition-colors ${
