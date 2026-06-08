@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, Download, Search, Filter, Eye, Calendar, Building, FileText, ArrowUpRight, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type PaymentVoucher } from '../store/financeStore';
@@ -219,7 +218,7 @@ export function PaymentVouchersPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedVoucher(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedVoucher}
         onClose={() => setSelectedVoucher(null)}
         title={selectedVoucher ? `Hồ Sơ Phiếu Chi: ${selectedVoucher.voucherNumber}` : 'Chi Tiết Phiếu Chi'}
@@ -326,7 +325,7 @@ export function PaymentVouchersPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal: Thêm / Sửa */}
       <Modal
@@ -456,7 +455,7 @@ export function PaymentVouchersPage() {
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
@@ -489,7 +488,7 @@ export function PaymentVouchersPage() {
           <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2.5 rounded-lg border border-red-200 dark:border-red-800/40">
             Hành động này sẽ gỡ bỏ chứng từ khỏi hệ thống kế toán tổng hợp. Chỉ nên thực hiện nếu lệnh chuyển khoản chưa thực sự được ngân hàng xử lý hoặc đây là phiếu tạo nhầm.
           </p>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
               onClick={() => setDeletingVoucher(null)}

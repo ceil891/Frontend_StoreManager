@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Package, Tag, Download, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
+
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type ProductCombo, type ComboDetailItem } from '../store/inventoryStore';
@@ -138,7 +138,7 @@ export function CombosPage() {
       {
         accessorKey: 'comboCode',
         header: 'Mã Combo',
-        cell: (info) => <span className="font-mono font-bold text-blue-600 hover:underline">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-mono font-bold text-emerald-600 hover:underline">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'comboBarcode',
@@ -165,7 +165,7 @@ export function CombosPage() {
       {
         accessorKey: 'comboPrice',
         header: 'Giá Gói',
-        cell: (info) => <span className="font-bold text-blue-600">${(info.getValue() as number).toFixed(2)}</span>,
+        cell: (info) => <span className="font-bold text-emerald-600">{(info.getValue() as number).toLocaleString('vi-VN')} ₫</span>,
       },
       {
         accessorKey: 'details',
@@ -182,7 +182,7 @@ export function CombosPage() {
           const status = info.getValue() as string;
           return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
-              status === 'ACTIVE' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+              status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'
             }`}>
               {status === 'ACTIVE' ? 'Đang bán' : 'Tạm ngưng'}
             </span>
@@ -196,13 +196,13 @@ export function CombosPage() {
           <div className="flex items-center gap-1">
             <button
               onClick={(e) => { e.stopPropagation(); setSelectedCombo(row.original); }}
-              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
-              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
             >
               <Edit className="w-4 h-4" />
             </button>
@@ -231,7 +231,7 @@ export function CombosPage() {
             <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium shadow-sm">
               <Download className="w-4 h-4" /> Export CSV
             </button>
-            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm">
+            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm">
               <Plus className="w-4 h-4" /> Tạo Combo Mới
             </button>
           </div>
@@ -246,19 +246,19 @@ export function CombosPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by combo name or code..."
-                className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
               />
             </div>
           </div>
 
           {/* Quick Filters Row */}
-          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700/60">
+          <div className="flex flex-wrap items-center gap-3 pt-2  border-gray-100 dark:border-gray-700/60">
             <div className="flex items-center gap-1.5 text-xs">
               <span className="text-gray-500 font-medium">Trạng thái:</span>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs cursor-pointer"
+                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs cursor-pointer"
               >
                 <option value="all">Tất cả trạng thái</option>
                 <option value="ACTIVE">Đang bán (ACTIVE)</option>
@@ -280,22 +280,22 @@ export function CombosPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedCombo(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedCombo}
         onClose={() => setSelectedCombo(null)}
-        title={selectedCombo ? `Combo Detail: ${selectedCombo.comboCode}` : 'Combo'}
+        title={selectedCombo ? `Chi tiết Combo: ${selectedCombo.comboCode}` : 'Chi tiết Combo'}
         width="max-w-lg"
       >
         {selectedCombo && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-100">
+            <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl border border-emerald-100">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">
+                <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold">
                   <Package className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-blue-900 leading-tight">{selectedCombo.comboName}</h2>
-                  <p className="text-xs text-blue-800 mt-1 uppercase tracking-wider">Mã gói: {selectedCombo.comboCode}</p>
+                  <h2 className="text-xl font-bold text-emerald-900 leading-tight">{selectedCombo.comboName}</h2>
+                  <p className="text-xs text-emerald-800 mt-1 uppercase tracking-wider">Mã gói: {selectedCombo.comboCode}</p>
                 </div>
               </div>
             </div>
@@ -303,12 +303,12 @@ export function CombosPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="border p-4 rounded-xl bg-gray-50 border-gray-200">
                 <p className="text-xs font-semibold uppercase text-gray-600">Giá Gói (Combo Price)</p>
-                <p className="text-2xl font-bold text-blue-700">${selectedCombo.comboPrice.toFixed(2)}</p>
+                <p className="text-2xl font-bold text-emerald-700">{selectedCombo.comboPrice.toLocaleString('vi-VN')} ₫</p>
               </div>
               <div className="border p-4 rounded-xl bg-gray-50 border-gray-200">
                 <p className="text-xs font-semibold uppercase text-gray-600">Tổng Giá Trị Gốc</p>
                 <p className="text-2xl font-bold text-gray-900 line-through">
-                  ${selectedCombo.details.reduce((sum, i) => sum + (i.quantity * i.unitPriceAtCreation), 0).toFixed(2)}
+                  {selectedCombo.details.reduce((sum, i) => sum + (i.quantity * i.unitPriceAtCreation), 0).toLocaleString('vi-VN')} ₫
                 </p>
               </div>
             </div>
@@ -316,7 +316,7 @@ export function CombosPage() {
             <div className="space-y-3 bg-white border rounded-xl overflow-hidden">
               <div className="bg-gray-50 px-4 py-3 border-b flex justify-between items-center">
                 <span className="font-bold text-gray-900 text-sm flex items-center gap-2">
-                  <Tag className="w-4 h-4 text-blue-600" /> Các sản phẩm trong gói ({selectedCombo.details.length})
+                  <Tag className="w-4 h-4 text-emerald-600" /> Các sản phẩm trong gói ({selectedCombo.details.length})
                 </span>
               </div>
               <div className="p-4 space-y-2">
@@ -327,8 +327,8 @@ export function CombosPage() {
                       <p className="text-xs text-gray-500 font-mono">{d.sku}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-gray-900 text-sm">{d.quantity} x ${d.unitPriceAtCreation.toFixed(2)}</p>
-                      <p className="text-xs text-gray-500 font-bold">= ${(d.quantity * d.unitPriceAtCreation).toFixed(2)}</p>
+                      <p className="font-bold text-gray-900 text-sm">{d.quantity} x {d.unitPriceAtCreation.toLocaleString('vi-VN')} ₫</p>
+                      <p className="text-xs text-gray-500 font-bold">= {(d.quantity * d.unitPriceAtCreation).toLocaleString('vi-VN')} ₫</p>
                     </div>
                   </div>
                 ))}
@@ -355,7 +355,7 @@ export function CombosPage() {
                 <span className="font-semibold">{selectedCombo.validUntil || 'Không giới hạn'}</span>
               </div>
               {selectedCombo.description && (
-                <div className="pt-2 border-t mt-2">
+                <div className="pt-2  mt-2">
                   <span className="text-gray-500 block mb-1">Mô tả gói:</span>
                   <p className="font-medium">{selectedCombo.description}</p>
                 </div>
@@ -363,7 +363,7 @@ export function CombosPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}
@@ -374,7 +374,7 @@ export function CombosPage() {
         <form onSubmit={handleSaveCombo} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-4">
-              <h3 className="text-sm font-bold text-blue-700 uppercase border-b pb-1">Thông tin Gói</h3>
+              <h3 className="text-sm font-bold text-emerald-700 uppercase border-b pb-1">Thông tin Gói</h3>
               
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -383,7 +383,7 @@ export function CombosPage() {
                     type="text"
                     value={editingCombo.comboCode || ''}
                     onChange={(e) => setEditingCombo({ ...editingCombo, comboCode: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-emerald-500"
                     required
                   />
                 </div>
@@ -393,7 +393,7 @@ export function CombosPage() {
                     type="text"
                     value={editingCombo.comboBarcode || ''}
                     onChange={(e) => setEditingCombo({ ...editingCombo, comboBarcode: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-emerald-500"
                     required
                   />
                 </div>
@@ -404,7 +404,7 @@ export function CombosPage() {
                   <select
                     value={editingCombo.comboType || 'PRE_ASSEMBLED'}
                     onChange={(e) => setEditingCombo({ ...editingCombo, comboType: e.target.value as ProductCombo['comboType'] })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="PRE_ASSEMBLED">Pre-assembled (đóng gói sẵn)</option>
                     <option value="DYNAMIC_VIRTUAL">Dynamic/Virtual (gom tại quầy)</option>
@@ -415,7 +415,7 @@ export function CombosPage() {
                   <select
                     value={editingCombo.status || 'ACTIVE'}
                     onChange={(e) => setEditingCombo({ ...editingCombo, status: e.target.value as any })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="ACTIVE">Đang bán</option>
                     <option value="INACTIVE">Tạm ngưng</option>
@@ -429,7 +429,7 @@ export function CombosPage() {
                   type="text"
                   value={editingCombo.comboName || ''}
                   onChange={(e) => setEditingCombo({ ...editingCombo, comboName: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
                   required
                 />
               </div>
@@ -441,7 +441,7 @@ export function CombosPage() {
                     type="date"
                     value={editingCombo.validFrom || ''}
                     onChange={(e) => setEditingCombo({ ...editingCombo, validFrom: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
                 <div>
@@ -450,7 +450,7 @@ export function CombosPage() {
                     type="date"
                     value={editingCombo.validUntil || ''}
                     onChange={(e) => setEditingCombo({ ...editingCombo, validUntil: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
               </div>
@@ -461,19 +461,19 @@ export function CombosPage() {
                   rows={2}
                   value={editingCombo.description || ''}
                   onChange={(e) => setEditingCombo({ ...editingCombo, description: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
             </div>
 
             {/* Right Column: Combo Details */}
             <div className="space-y-4">
-              <h3 className="text-sm font-bold text-blue-700 uppercase border-b pb-1">Thành phần Gói (Sản phẩm)</h3>
+              <h3 className="text-sm font-bold text-emerald-700 uppercase border-b pb-1">Thành phần Gói (Sản phẩm)</h3>
               
               <div className="border rounded-lg bg-gray-50 p-3">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-xs font-bold text-gray-700">Các sản phẩm trong Combo</span>
-                  <button type="button" onClick={handleAddDetail} className="text-xs bg-white border px-2 py-1 rounded text-blue-600 font-semibold hover:bg-gray-100">
+                  <button type="button" onClick={handleAddDetail} className="text-xs bg-white border px-2 py-1 rounded text-emerald-600 font-semibold hover:bg-gray-100">
                     + Thêm SP
                   </button>
                 </div>
@@ -490,7 +490,7 @@ export function CombosPage() {
                           onChange={(e) => handleDetailSkuChange(d.id, e.target.value)}
                           className="w-full p-1 border rounded text-xs"
                         >
-                          {products.map(p => <option key={p.id} value={p.sku}>{p.name} ({p.sku}) - ${p.price}</option>)}
+                          {products.map(p => <option key={p.id} value={p.sku}>{p.name} ({p.sku}) - {p.price.toLocaleString('vi-VN')} ₫</option>)}
                         </select>
                       </div>
                       <div className="flex gap-2 items-end">
@@ -503,8 +503,8 @@ export function CombosPage() {
                           />
                         </div>
                         <div className="flex-1 text-right flex flex-col justify-end">
-                          <span className="text-[10px] text-gray-500">Giá gốc: ${d.unitPriceAtCreation.toFixed(2)}</span>
-                          <span className="text-xs font-bold text-gray-900">Tổng: ${(d.quantity * d.unitPriceAtCreation).toFixed(2)}</span>
+                          <span className="text-[10px] text-gray-500">Giá gốc: {d.unitPriceAtCreation.toLocaleString('vi-VN')} ₫</span>
+                          <span className="text-xs font-bold text-gray-900">Tổng: {(d.quantity * d.unitPriceAtCreation).toLocaleString('vi-VN')} ₫</span>
                         </div>
                         <button type="button" onClick={() => handleRemoveDetail(d.id)} className="text-red-500 hover:text-red-700 p-1 mb-0.5">
                           <Trash2 className="w-4 h-4" />
@@ -516,23 +516,27 @@ export function CombosPage() {
               </div>
               
               {/* Pricing Summary */}
-              <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center">
+              <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-lg flex justify-between items-center">
                 <div>
-                  <span className="text-xs text-blue-800 block">Tổng giá trị gốc: <span className="font-mono line-through">${calculateOriginalValue().toFixed(2)}</span></span>
-                  <label className="block text-xs font-bold text-blue-900 mt-1">GIÁ BÁN COMBO MỚI ($):</label>
+                  <span className="text-xs text-emerald-800 block">Tổng giá trị gốc: <span className="font-mono line-through">{calculateOriginalValue().toLocaleString('vi-VN')} ₫</span></span>
+                  <label className="block text-xs font-bold text-emerald-900 mt-1">GIÁ BÁN COMBO MỚI (₫):</label>
                 </div>
                 <input
-                  type="number" step="0.01"
-                  value={editingCombo.comboPrice || 0}
-                  onChange={(e) => setEditingCombo({ ...editingCombo, comboPrice: parseFloat(e.target.value) })}
-                  className="w-24 px-2 py-1 border border-blue-300 rounded bg-white text-blue-700 font-bold text-right focus:ring-2 focus:ring-blue-500 text-sm"
+                  type="text"
+                  value={(editingCombo.comboPrice ?? 0) === 0 ? '' : Math.round(editingCombo.comboPrice ?? 0).toLocaleString('vi-VN')}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '');
+                    const val = digits === '' ? 0 : parseInt(digits, 10);
+                    setEditingCombo({ ...editingCombo, comboPrice: val });
+                  }}
+                  className="w-32 px-2 py-1 border border-blue-300 rounded bg-white text-emerald-700 font-bold text-right focus:ring-2 focus:ring-emerald-500 text-sm"
                 />
               </div>
 
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex justify-end gap-3 pt-4 ">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
@@ -542,7 +546,7 @@ export function CombosPage() {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow"
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow"
             >
               Lưu Combo
             </button>
@@ -559,7 +563,7 @@ export function CombosPage() {
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">Bạn có chắc chắn muốn xóa combo <strong>{deletingCombo?.comboName}</strong>?</p>
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex justify-end gap-3 pt-4 ">
             <button type="button" onClick={() => setDeletingCombo(null)} className="px-4 py-2 border rounded-lg text-sm">Hủy</button>
             <button type="button" onClick={handleDeleteConfirm} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold">Đồng ý xóa</button>
           </div>

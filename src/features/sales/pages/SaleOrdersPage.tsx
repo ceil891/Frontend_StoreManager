@@ -651,15 +651,38 @@ export function SaleOrdersPage() {
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách đưa (Tendered)</label>
-                <input type="number" value={editingOrder.amountTendered ?? ''} onChange={(e) => setEditingOrder({ ...editingOrder, amountTendered: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border rounded-lg text-sm font-mono" />
+                <input
+                  type="text"
+                  value={(editingOrder.amountTendered ?? 0) === 0 ? '' : Math.round(editingOrder.amountTendered ?? 0).toLocaleString('vi-VN')}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '');
+                    const parsed = digits === '' ? 0 : parseInt(digits, 10);
+                    setEditingOrder({ ...editingOrder, amountTendered: parsed });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tiền thối</label>
-                <input type="number" value={editingOrder.changeAmount ?? ''} onChange={(e) => setEditingOrder({ ...editingOrder, changeAmount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border rounded-lg text-sm font-mono" />
+                <input
+                  type="text"
+                  value={(editingOrder.changeAmount ?? 0) === 0 ? '' : Math.round(editingOrder.changeAmount ?? 0).toLocaleString('vi-VN')}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '');
+                    const parsed = digits === '' ? 0 : parseInt(digits, 10);
+                    setEditingOrder({ ...editingOrder, changeAmount: parsed });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Shift ID</label>
-                <input type="text" value={editingOrder.shiftId ?? ''} onChange={(e) => setEditingOrder({ ...editingOrder, shiftId: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm font-mono" />
+                <input
+                  type="text"
+                  value={editingOrder.shiftId ?? ''}
+                  onChange={(e) => setEditingOrder({ ...editingOrder, shiftId: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                />
               </div>
             </div>
           )}
@@ -715,7 +738,7 @@ export function SaleOrdersPage() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
@@ -745,7 +768,7 @@ export function SaleOrdersPage() {
           <p className="text-sm text-gray-600 dark:text-gray-300">
             Bạn có chắc chắn muốn xóa đơn hàng <strong className="text-gray-900 dark:text-white">{deletingOrder?.code}</strong> của khách <strong className="text-gray-900 dark:text-white">{deletingOrder ? customerLabel(deletingOrder.customerId) : ''}</strong> không?
           </p>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
               onClick={() => setDeletingOrder(null)}
@@ -763,7 +786,6 @@ export function SaleOrdersPage() {
           </div>
         </div>
       </Modal>
-
       {/* Bulk Delete Confirmation Modal */}
       <Modal
         isOpen={!!deletingBulkOrders}

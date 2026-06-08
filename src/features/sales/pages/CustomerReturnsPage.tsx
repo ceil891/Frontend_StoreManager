@@ -142,7 +142,7 @@ export function CustomerReturnsPage() {
       {
         accessorKey: 'returnCode',
         header: 'Mã hoàn trả',
-        cell: (info) => <span className="font-mono font-bold text-amber-600 dark:text-amber-400 hover:underline">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 hover:underline">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'orderCode',
@@ -191,7 +191,7 @@ export function CustomerReturnsPage() {
                 status === 'APPROVED_REFUNDED'
                   ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
                   : status === 'PENDING_INSPECTION'
-                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                    ? 'bg-amber-100 text-emerald-800 dark:bg-amber-900/40 dark:text-amber-300'
                     : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
               }`}
             >
@@ -212,7 +212,7 @@ export function CustomerReturnsPage() {
                 setSelectedReturn(row.original);
               }}
               title="Xem chi tiết"
-              className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors"
+              className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -271,7 +271,7 @@ export function CustomerReturnsPage() {
               <button
                 type="button"
                 onClick={handleOpenCreate}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
               >
                 <Plus className="w-4 h-4" /> Tạo phiếu hoàn trả
               </button>
@@ -289,7 +289,7 @@ export function CustomerReturnsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm theo mã hoàn trả, mã đơn gốc hoặc tên khách..."
-              className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent sm:text-sm transition-all"
+              className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
             />
           </div>
           <button
@@ -312,13 +312,13 @@ export function CustomerReturnsPage() {
       >
         {selectedReturn && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between p-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800">
+            <div className="flex items-center justify-between p-4 bg-emerald-50 dark:bg-amber-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-amber-600 rounded-lg flex items-center justify-center text-white font-bold">
+                <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold">
                   <RefreshCw className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs text-amber-800 dark:text-amber-400 font-semibold uppercase tracking-wider">Hoàn tiền</p>
+                  <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">Hoàn tiền</p>
                   <p className="text-xl font-bold text-red-600 dark:text-red-400">{selectedReturn.refundAmount.toLocaleString('vi-VN')} ₫</p>
                 </div>
               </div>
@@ -327,7 +327,7 @@ export function CustomerReturnsPage() {
                   selectedReturn.status === 'APPROVED_REFUNDED'
                     ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100'
                     : selectedReturn.status === 'PENDING_INSPECTION'
-                      ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100'
+                      ? 'bg-amber-200 text-emerald-900 dark:bg-amber-800 dark:text-amber-100'
                       : 'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100'
                 }`}
               >
@@ -342,7 +342,7 @@ export function CustomerReturnsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <User className="w-4 h-4 text-amber-600 dark:text-amber-400" /> Khách hàng
+                  <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Khách hàng
                 </div>
                 <p className="text-base font-bold text-gray-900 dark:text-white truncate">
                   {resolveCustomerName(selectedReturn.customerId, customers)}
@@ -368,7 +368,7 @@ export function CustomerReturnsPage() {
                     selectedReturn.condition === 'UNOPENED'
                       ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
                       : selectedReturn.condition === 'DEFECTIVE'
-                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                        ? 'bg-amber-100 text-emerald-800 dark:bg-amber-900/40 dark:text-amber-300'
                         : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
                   }`}
                 >
@@ -381,7 +381,7 @@ export function CustomerReturnsPage() {
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Nhập lại kho:</span>
-                <span className={`font-semibold ${selectedReturn.isRestocked ? 'text-emerald-600' : 'text-amber-600'}`}>
+                <span className={`font-semibold ${selectedReturn.isRestocked ? 'text-emerald-600' : 'text-emerald-600'}`}>
                   {selectedReturn.isRestocked ? 'Có (Nhập kho)' : 'Không'}
                 </span>
               </div>
@@ -497,11 +497,14 @@ export function CustomerReturnsPage() {
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tiền hoàn (₫)</label>
               <input
-                type="number"
-                step="0.01"
+                type="text"
                 readOnly={!!(editing.returnLines?.length)}
-                value={editing.refundAmount ?? 0}
-                onChange={(e) => setEditing({ ...editing, refundAmount: parseFloat(e.target.value) || 0 })}
+                value={(editing.refundAmount ?? 0) === 0 ? '' : Math.round(editing.refundAmount ?? 0).toLocaleString('vi-VN')}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '');
+                  const parsed = digits === '' ? 0 : parseInt(digits, 10);
+                  setEditing({ ...editing, refundAmount: parsed });
+                }}
                 className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-900 text-sm"
               />
             </div>
@@ -607,7 +610,7 @@ export function CustomerReturnsPage() {
             <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border rounded-lg text-sm">
               Hủy
             </button>
-            <button type="submit" className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold">
+            <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold">
               Lưu
             </button>
           </div>

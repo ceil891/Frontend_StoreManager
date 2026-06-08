@@ -312,6 +312,11 @@ interface InventoryState {
 
   addSerialItem: (item: Omit<SerialItemRecord, 'id'>) => void;
   updateSerialItem: (id: string, data: Partial<SerialItemRecord>) => void;
+  deleteSerialItem: (id: string) => void;
+
+  addStockLedgerEntry: (entry: Omit<StockLedgerEntry, 'id'>) => void;
+  updateStockLedgerEntry: (id: string, data: Partial<StockLedgerEntry>) => void;
+  deleteStockLedgerEntry: (id: string) => void;
 
   addMobileProduct: (product: Omit<MobileProduct, 'id'>) => void;
   updateMobileProduct: (id: string, data: Partial<MobileProduct>) => void;
@@ -876,6 +881,15 @@ export const useInventoryStore = create<InventoryState>()(
         set((state) => ({ serialItems: [{ id: Date.now().toString(), ...item }, ...state.serialItems] })),
       updateSerialItem: (id, data) =>
         set((state) => ({ serialItems: state.serialItems.map((s) => (s.id === id ? { ...s, ...data } : s)) })),
+      deleteSerialItem: (id) =>
+        set((state) => ({ serialItems: state.serialItems.filter((s) => s.id !== id) })),
+
+      addStockLedgerEntry: (entry) =>
+        set((state) => ({ stockLedger: [{ id: Date.now().toString(), ...entry }, ...state.stockLedger] })),
+      updateStockLedgerEntry: (id, data) =>
+        set((state) => ({ stockLedger: state.stockLedger.map((s) => (s.id === id ? { ...s, ...data } : s)) })),
+      deleteStockLedgerEntry: (id) =>
+        set((state) => ({ stockLedger: state.stockLedger.filter((s) => s.id !== id) })),
 
       addMobileProduct: (product) =>
         set((state) => ({ mobileProducts: [{ id: Date.now().toString(), ...product }, ...state.mobileProducts] })),

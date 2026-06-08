@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation, Link } from 'react-router';
 import { LogOut, Search, Menu, Store, ChevronRight, X, Moon, Sun, Command } from 'lucide-react';
 import { useAuthStore, useAuthUser, useAuthRole } from '@/features/auth/store/authStore';
@@ -10,6 +10,7 @@ import { CommandPalette, useCommandPalette } from '@/shared/components/ui/Comman
 import { AIAlerts } from '@/components/AI/AIAlerts';
 import { AIAssistant } from '@/components/AI/AIAssistant';
 export function MainLayout() {
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // TC1 fix: All groups start collapsed; user clicks group header to expand
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
@@ -36,7 +37,6 @@ export function MainLayout() {
   const role = useAuthRole();
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
-  const location = useLocation();
 
   const { theme, toggleTheme } = useThemeStore();
   const { isOpen: cmdOpen, open: openCmd, close: closeCmd } = useCommandPalette();
@@ -52,6 +52,44 @@ export function MainLayout() {
       localStorage.setItem('retailhub_sidebar_collapsed', JSON.stringify(next));
       return next;
     });
+
+  useEffect(() => {
+    let updated = false;
+    const next = { ...collapsedGroups };
+    for (const group of NAV_GROUPS) {
+      const hasActive = group.items.some(item => {
+        if (item.href === '/') return location.pathname === '/';
+        return location.pathname.startsWith(item.href);
+      });
+      if (hasActive && collapsedGroups[group.group] !== false) {
+        next[group.group] = false;
+        updated = true;
+      }
+    }
+    if (updated) {
+      setCollapsedGroups(next);
+      localStorage.setItem('retailhub_sidebar_collapsed', JSON.stringify(next));
+    }
+  }, [location.pathname]);
+
+  const isRouteActive = (href: string) => {
+    if (href === '/') return location.pathname === '/';
+    if (location.pathname === href) return true;
+    if (location.pathname.startsWith(href)) {
+      let hasBetterMatch = false;
+      for (const group of NAV_GROUPS) {
+        for (const item of group.items) {
+          if (item.href !== href && item.href.startsWith(href) && location.pathname.startsWith(item.href)) {
+            hasBetterMatch = true;
+            break;
+          }
+        }
+        if (hasBetterMatch) break;
+      }
+      return !hasBetterMatch;
+    }
+    return false;
+  };
 
   const checkPermission = useRoleStore((s) => s.checkPermission);
 
@@ -136,11 +174,10 @@ export function MainLayout() {
                       <NavLink
                         key={item.href}
                         to={item.href}
-                        end={true}
                         onClick={() => setSidebarOpen(false)}
-                        className={({ isActive }) =>
+                        className={
                           `group flex items-center gap-2.5 px-2.5 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                            isActive
+                            isRouteActive(item.href)
                               ? 'bg-emerald-50 dark:bg-emerald-900/25 text-emerald-700 dark:text-emerald-400'
                               : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
                           }`

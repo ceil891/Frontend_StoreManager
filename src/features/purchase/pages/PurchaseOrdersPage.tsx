@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, Download, Search, Filter, Eye, Building2, Calendar, FileText, ShieldCheck, FileCheck, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePurchaseStore, type PurchaseOrderItem } from '../store/purchaseStore';
@@ -231,7 +230,7 @@ export function PurchaseOrdersPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedPO(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedPO}
         onClose={() => setSelectedPO(null)}
         title={selectedPO ? `Đơn đặt hàng mua: ${selectedPO.poNumber}` : 'Chi tiết đơn PO'}
@@ -347,7 +346,7 @@ export function PurchaseOrdersPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Form Modal */}
       <Modal
@@ -486,7 +485,7 @@ export function PurchaseOrdersPage() {
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
@@ -516,7 +515,7 @@ export function PurchaseOrdersPage() {
           <p className="text-sm text-gray-600 dark:text-gray-300">
             Bạn có chắc chắn muốn xóa đơn đặt hàng <strong className="text-gray-900 dark:text-white">{deletingPO?.poNumber}</strong> không? Hành động này không thể hoàn tác.
           </p>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
               onClick={() => setDeletingPO(null)}
