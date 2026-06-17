@@ -53,6 +53,11 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         set({ isLoading: true, error: null });
         try {
           const response = await mockAuthApi.login(credentials);
+          
+          // Lưu token vào localStorage để axiosClient sử dụng
+          localStorage.setItem('access_token', response.accessToken);
+          localStorage.setItem('refresh_token', response.refreshToken);
+
           set({
             user: response.user,
             accessToken: response.accessToken,
@@ -86,6 +91,10 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         try {
           await mockAuthApi.logout();
         } finally {
+          // Xóa token khỏi localStorage
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+
           set({
             user: null,
             accessToken: null,

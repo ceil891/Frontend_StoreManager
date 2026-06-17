@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, TrendingUp, TrendingDown, Building2, Calendar, FileText, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -6,7 +6,13 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type StockLedgerEntry } from '../store/inventoryStore';
 
 export function StockLedgerPage() {
-  const { stockLedger: data, addStockLedgerEntry, updateStockLedgerEntry, deleteStockLedgerEntry, products } = useInventoryStore();
+  const { stockLedger: data, addStockLedgerEntry, updateStockLedgerEntry, deleteStockLedgerEntry, products, fetchStockLedger, fetchProducts } = useInventoryStore();
+
+  useEffect(() => {
+    fetchStockLedger();
+    fetchProducts();
+  }, [fetchStockLedger, fetchProducts]);
+
   const [search, setSearch] = useState('');
   const [selectedEntry, setSelectedEntry] = useState<StockLedgerEntry | null>(null);
 

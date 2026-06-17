@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
@@ -22,7 +22,35 @@ import {
 import { useInventoryStore, type MobileProduct } from '../store/inventoryStore';
 
 export function MobileInventoryPage() {
-  const { mobileProducts: products, addMobileProduct, updateMobileProduct, deleteMobileProduct } = useInventoryStore();
+  const { products: rawProducts, addProduct, updateProduct, deleteProduct, fetchProducts } = useInventoryStore();
+  
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  const products = useMemo<MobileProduct[]>(() => {
+    return rawProducts.map((p) => ({
+      id: p.id,
+      sku: p.sku || '',
+      name: p.name || '',
+      category: p.category || '',
+      price: p.price || 0,
+      costPrice: p.costPrice || 0,
+      brand: p.brand || '',
+      unit: p.unit || 'Cái',
+      weight: p.weight || '0 kg',
+      location: p.location || '',
+      onHand: p.onHand || 0,
+      status: p.status || 'ACTIVE',
+      imageUrl: p.mainImage || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&q=80',
+      barcodes: p.barcodes || [],
+      reorderPoint: p.reorderPoint ?? 5,
+      minStock: p.minStock ?? 2,
+      maxStock: p.maxStock ?? 50,
+      variants: p.variants || [],
+    }));
+  }, [rawProducts]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   
@@ -121,20 +149,42 @@ export function MobileInventoryPage() {
       maxStock: formData.maxStock ?? 50,
       variants: formData.variants ?? [],
     };
+
+    const mappedPayload = {
+      sku: payload.sku,
+      name: payload.name,
+      category: payload.category,
+      price: payload.price,
+      costPrice: payload.costPrice,
+      brand: payload.brand,
+      unit: payload.unit,
+      weight: payload.weight,
+      location: payload.location,
+      onHand: payload.onHand,
+      status: payload.status,
+      mainImage: payload.imageUrl,
+      barcodes: payload.barcodes,
+      reorderPoint: payload.reorderPoint,
+      minStock: payload.minStock,
+      maxStock: payload.maxStock,
+      variants: payload.variants,
+      units: [],
+    };
+
     if (editingProduct) {
-      updateMobileProduct(editingProduct.id, payload);
+      updateProduct(editingProduct.id, mappedPayload);
       if (selectedProduct && selectedProduct.id === editingProduct.id) {
         setSelectedProduct({ ...selectedProduct, ...payload } as MobileProduct);
       }
     } else {
-      addMobileProduct(payload);
+      addProduct(mappedPayload);
     }
     setIsFormOpen(false);
   };
 
   const handleDelete = () => {
     if (productToDelete) {
-      deleteMobileProduct(productToDelete.id);
+      deleteProduct(productToDelete.id);
       if (selectedProduct && selectedProduct.id === productToDelete.id) {
         setSelectedProduct(null);
       }

@@ -1,69 +1,72 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   Plus, Download, Search, Eye, ClipboardCheck, Building2, Calendar,
   FileText, Edit, Trash2, X, AlertTriangle,
-  TrendingDown, Clock, CheckSquare,
+  TrendingDown, Clock, CheckSquare, Play
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
   useInventoryStore,
-  MOCK_AUDIT_LINE_ITEMS,
   VARIANCE_REASON_LABELS,
-  type InventoryAuditSession,
+  type InventoryCheckRecord,
 } from '../store/inventoryStore';
 
-const EMPTY_AUDIT: Omit<InventoryAuditSession, 'id'> = {
-  auditNumber: '',
-  storeLocation: '',
-  scheduledDate: new Date().toISOString().slice(0, 10),
-  type: 'FULL_STORE',
-  totalSkusCounted: 0,
-  discrepancySkusCount: 0,
-  netValuationVariance: 0,
-  status: 'SCHEDULED',
-  leadAuditor: '',
-  isBlindCount: false,
+const EMPTY_CHECK: Omit<InventoryCheckRecord, 'id'> = {
+  checkCode: '',
+  branchId: '1',
+  branchName: 'Chi nhánh Quận 1',
+  checkDate: new Date().toISOString().slice(0, 10),
+  status: 'DRAFT',
+  totalItems: 0,
+  discrepancyCount: 0,
+  netVariance: 0,
+  checkedBy: '',
   notes: '',
 };
 
-const TYPE_MAP: Record<string, string> = {
-  FULL_STORE: 'Toàn bộ kho',
-  CYCLE_COUNT: 'Kiểm kê định kỳ',
-  CATEGORY_SPECIFIC: 'Theo danh mục',
-  DISCREPANCY_SPOT_CHECK: 'Kiểm tra đột xuất',
-};
-
 const STATUS_MAP: Record<string, { label: string; cls: string }> = {
-  SCHEDULED:         { label: 'Đã lên lịch', cls: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
+  DRAFT:             { label: 'Bản nháp', cls: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
   IN_PROGRESS:       { label: 'Đang thực hiện', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
-  UNDER_REVIEW:      { label: 'Chờ duyệt', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
-  RECONCILED_CLOSED: { label: 'Đã cân bằng', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
+  COMPLETED:         { label: 'Đã hoàn thành', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
+  CANCELLED:         { label: 'Đã hủy', cls: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300' },
 };
 
 const fmtVND = (n: number) =>
   (n < 0 ? '-' : n > 0 ? '+' : '') + Math.abs(n).toLocaleString('vi-VN') + 'đ';
 
-// ─────────────────────────────────────────────────────────────────────────────
 export function InventoryCheckPage() {
-  const { inventoryAudits: audits, addInventoryAudit, updateInventoryAudit, deleteInventoryAudit } = useInventoryStore();
+  const {
+    inventoryChecks: audits,
+    fetchInventoryChecks,
+    addInventoryCheck,
+    updateInventoryCheck,
+    deleteInventoryCheck,
+    startInventoryCheck,
+    completeInventoryCheck
+  } = useInventoryStore();
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const [selectedAudit, setSelectedAudit] = useState<InventoryAuditSession | null>(null);
+  const [selectedAudit, setSelectedAudit] = useState<InventoryCheckRecord | null>(null);
   const [drawerTab, setDrawerTab] = useState<'info' | 'items'>('info');
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  const [editingAudit, setEditingAudit] = useState<Partial<InventoryAuditSession>>(EMPTY_AUDIT);
-  const [deletingAudit, setDeletingAudit] = useState<InventoryAuditSession | null>(null);
+  const [editingAudit, setEditingAudit] = useState<Partial<InventoryCheckRecord>>(EMPTY_CHECK);
+  const [deletingAudit, setDeletingAudit] = useState<InventoryCheckRecord | null>(null);
+
+  useEffect(() => {
+    fetchInventoryChecks();
+  }, [fetchInventoryChecks]);
 
   // Filter
   const filtered = audits.filter(a => {
     const q = search.toLowerCase();
-    const matchSearch = !q || a.auditNumber.toLowerCase().includes(q) || a.storeLocation.toLowerCase().includes(q) || a.leadAuditor.toLowerCase().includes(q);
+    const matchSearch = !q || a.checkCode.toLowerCase().includes(q) || a.branchName.toLowerCase().includes(q) || a.checkedBy.toLowerCase().includes(q);
     const matchStatus = statusFilter === 'all' || a.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -72,62 +75,66 @@ export function InventoryCheckPage() {
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingAudit({
-      ...EMPTY_AUDIT,
-      auditNumber: `KK-${new Date().getFullYear()}-${Math.floor(500 + Math.random() * 500)}`,
+      ...EMPTY_CHECK,
+      checkCode: `CHK-${new Date().getFullYear()}-${Math.floor(500 + Math.random() * 500)}`,
     });
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (a: InventoryAuditSession) => {
+  const handleOpenEdit = (a: InventoryCheckRecord) => {
     setModalMode('edit');
     setEditingAudit({ ...a });
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const resolveBranchId = (name?: string): number => {
+    if (!name) return 1;
+    const lower = name.toLowerCase();
+    if (lower.includes('quận 2') || lower.includes('q2') || lower.includes('cn2')) return 2;
+    if (lower.includes('quận 3') || lower.includes('q3') || lower.includes('cn3')) return 3;
+    return 1;
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingAudit.auditNumber || !editingAudit.storeLocation) return;
+    if (!editingAudit.checkCode || !editingAudit.branchName) return;
     const payload = {
-      auditNumber: editingAudit.auditNumber!,
-      storeLocation: editingAudit.storeLocation!,
-      scheduledDate: editingAudit.scheduledDate || new Date().toISOString().slice(0, 10),
-      type: editingAudit.type || 'FULL_STORE',
-      totalSkusCounted: editingAudit.totalSkusCounted || 0,
-      discrepancySkusCount: editingAudit.discrepancySkusCount || 0,
-      netValuationVariance: editingAudit.netValuationVariance || 0,
-      status: editingAudit.status || 'SCHEDULED',
-      leadAuditor: editingAudit.leadAuditor || '',
-      isBlindCount: editingAudit.isBlindCount ?? false,
-      approvedBy: editingAudit.approvedBy,
-      lineItems: editingAudit.lineItems,
-      notes: editingAudit.notes,
+      checkCode: editingAudit.checkCode,
+      branchId: resolveBranchId(editingAudit.branchName),
+      checkDate: editingAudit.checkDate || new Date().toISOString().slice(0, 10),
+      notes: editingAudit.notes || '',
     };
     if (modalMode === 'create') {
-      addInventoryAudit(payload);
+      await addInventoryCheck(payload);
     } else if (editingAudit.id) {
-      updateInventoryAudit(editingAudit.id, payload);
+      await updateInventoryCheck(editingAudit.id, { notes: payload.notes });
     }
     setIsModalOpen(false);
   };
 
-  const handleApprove = (id: string) => {
-    updateInventoryAudit(id, { status: 'RECONCILED_CLOSED', approvedBy: 'Giám đốc Kho (phê duyệt tự động)' });
+  const handleStart = async (id: string) => {
+    await startInventoryCheck(id);
+    setSelectedAudit(null);
+  };
+
+  const handleComplete = async (id: string) => {
+    await completeInventoryCheck(id);
     setSelectedAudit(null);
   };
 
   // KPI
-  const totalDiscrepancy = audits.reduce((s, a) => s + a.discrepancySkusCount, 0);
-  const totalVarianceValue = audits.reduce((s, a) => s + a.netValuationVariance, 0);
-  const pendingReview = audits.filter(a => a.status === 'UNDER_REVIEW').length;
+  const totalDiscrepancy = audits.reduce((s, a) => s + (a.discrepancyCount || 0), 0);
+  const totalVarianceValue = audits.reduce((s, a) => s + (a.netVariance || 0), 0);
+  const pendingReview = audits.filter(a => a.status === 'IN_PROGRESS').length;
 
-  const columns = useMemo<ColumnDef<InventoryAuditSession>[]>(() => [
+  const columns = useMemo<ColumnDef<InventoryCheckRecord>[]>(() => [
     {
-      accessorKey: 'auditNumber',
+      accessorKey: 'checkCode',
       header: 'Mã kỳ kiểm kê',
       cell: info => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{info.getValue() as string}</span>,
     },
     {
-      accessorKey: 'storeLocation',
+      accessorKey: 'branchName',
       header: 'Chi nhánh / Kho',
       cell: info => (
         <div className="flex items-center gap-2">
@@ -137,31 +144,22 @@ export function InventoryCheckPage() {
       ),
     },
     {
-      accessorKey: 'type',
-      header: 'Loại kiểm kê',
-      cell: info => (
-        <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded-md font-semibold">
-          {TYPE_MAP[info.getValue() as string] || info.getValue() as string}
-        </span>
-      ),
-    },
-    {
-      accessorKey: 'totalSkusCounted',
-      header: 'SKU đã kiểm',
+      accessorKey: 'totalItems',
+      header: 'Số lượng sản phẩm',
       cell: ({ row }) => (
         <div className="text-sm">
-          <span className="font-bold text-gray-900 dark:text-white">{row.original.totalSkusCounted.toLocaleString()}</span>
-          {row.original.discrepancySkusCount > 0 && (
-            <span className="ml-1.5 text-xs text-red-600 font-semibold">({row.original.discrepancySkusCount} lệch)</span>
+          <span className="font-bold text-gray-900 dark:text-white">{(row.original.totalItems || 0).toLocaleString()}</span>
+          {(row.original.discrepancyCount || 0) > 0 && (
+            <span className="ml-1.5 text-xs text-red-600 font-semibold">({row.original.discrepancyCount} lệch)</span>
           )}
         </div>
       ),
     },
     {
-      accessorKey: 'netValuationVariance',
+      accessorKey: 'netVariance',
       header: 'Chênh lệch giá trị',
       cell: ({ row }) => {
-        const val = row.original.netValuationVariance;
+        const val = row.original.netVariance || 0;
         return (
           <span className={`font-mono font-bold text-sm ${val > 0 ? 'text-emerald-600' : val < 0 ? 'text-red-500' : 'text-gray-400'}`}>
             {val === 0 ? 'Không có' : fmtVND(val)}
@@ -170,17 +168,8 @@ export function InventoryCheckPage() {
       },
     },
     {
-      accessorKey: 'isBlindCount',
-      header: 'Kiểm mù',
-      cell: ({ row }) => (
-        <span className={`text-xs font-bold px-2 py-0.5 rounded ${row.original.isBlindCount ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-600'}`}>
-          {row.original.isBlindCount ? 'Blind' : 'Mở'}
-        </span>
-      ),
-    },
-    {
-      accessorKey: 'scheduledDate',
-      header: 'Ngày lên lịch',
+      accessorKey: 'checkDate',
+      header: 'Ngày kiểm kê',
       cell: info => <span className="text-gray-500 text-sm">{info.getValue() as string}</span>,
     },
     {
@@ -251,7 +240,7 @@ export function InventoryCheckPage() {
               <Clock className="w-4 h-4" />
             </div>
             <div>
-              <p className="text-xs text-gray-400 font-medium">Chờ phê duyệt</p>
+              <p className="text-xs text-gray-400 font-medium">Đang thực hiện</p>
               <p className="text-xl font-black text-gray-900 dark:text-white">{pendingReview}</p>
             </div>
           </div>
@@ -293,10 +282,10 @@ export function InventoryCheckPage() {
             className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-300"
           >
             <option value="all">Tất cả trạng thái</option>
-            <option value="SCHEDULED">Đã lên lịch</option>
+            <option value="DRAFT">Bản nháp</option>
             <option value="IN_PROGRESS">Đang thực hiện</option>
-            <option value="UNDER_REVIEW">Chờ phê duyệt</option>
-            <option value="RECONCILED_CLOSED">Đã cân bằng</option>
+            <option value="COMPLETED">Đã hoàn thành</option>
+            <option value="CANCELLED">Đã hủy</option>
           </select>
           {(search || statusFilter !== 'all') && (
             <button onClick={() => { setSearch(''); setStatusFilter('all'); }}
@@ -313,12 +302,12 @@ export function InventoryCheckPage() {
       <Modal
         isOpen={!!selectedAudit}
         onClose={() => setSelectedAudit(null)}
-        title={selectedAudit ? `Chi tiết kiểm kê: ${selectedAudit.auditNumber}` : 'Chi tiết kỳ kiểm kê'}
+        title={selectedAudit ? `Chi tiết kiểm kê: ${selectedAudit.checkCode}` : 'Chi tiết kỳ kiểm kê'}
         width="max-w-xl"
       >
         {selectedAudit && (() => {
           const cfg = STATUS_MAP[selectedAudit.status];
-          const varVal = selectedAudit.netValuationVariance;
+          const varVal = selectedAudit.netVariance || 0;
           return (
             <div className="space-y-5">
               {/* Header card */}
@@ -339,7 +328,7 @@ export function InventoryCheckPage() {
 
               {/* Tabs */}
               <div className="flex gap-1 bg-gray-100 dark:bg-gray-900 p-1 rounded-lg">
-                {[{ key: 'info' as const, label: 'Thông tin chung' }, { key: 'items' as const, label: 'Chi tiết sản phẩm' }].map(tab => (
+                {[{ key: 'info' as const, label: 'Thông tin chung' }].map(tab => (
                   <button key={tab.key} onClick={() => setDrawerTab(tab.key)}
                     className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${drawerTab === tab.key ? 'bg-white dark:bg-gray-800 text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                     {tab.label}
@@ -353,23 +342,19 @@ export function InventoryCheckPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-gray-50 dark:bg-gray-900/40 p-3 rounded-xl">
                       <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-1"><Building2 className="w-3.5 h-3.5" />Chi nhánh / Kho</div>
-                      <p className="font-bold text-gray-900 dark:text-white text-sm">{selectedAudit.storeLocation}</p>
+                      <p className="font-bold text-gray-900 dark:text-white text-sm">{selectedAudit.branchName}</p>
                     </div>
                     <div className="bg-gray-50 dark:bg-gray-900/40 p-3 rounded-xl">
-                      <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-1"><Calendar className="w-3.5 h-3.5" />Ngày lên lịch</div>
-                      <p className="font-bold text-gray-900 dark:text-white text-sm">{selectedAudit.scheduledDate}</p>
+                      <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-1"><Calendar className="w-3.5 h-3.5" />Ngày kiểm kê</div>
+                      <p className="font-bold text-gray-900 dark:text-white text-sm">{selectedAudit.checkDate}</p>
                     </div>
                   </div>
 
                   <div className="bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800 text-sm overflow-hidden">
                     {[
-                      { label: 'Loại kiểm kê', value: TYPE_MAP[selectedAudit.type] },
-                      { label: 'Tổng SKU đã kiểm', value: `${selectedAudit.totalSkusCounted.toLocaleString()} SKU` },
-                      { label: 'Số SKU lệch số', value: selectedAudit.discrepancySkusCount > 0 ? <span className="text-red-600 font-bold">{selectedAudit.discrepancySkusCount} SKU</span> : <span className="text-emerald-600 font-semibold">Không có</span> },
-                      { label: 'Chế độ kiểm mù', value: selectedAudit.isBlindCount ? 'Có — ẩn tồn hệ thống' : 'Không' },
-                      { label: 'Ngày thực hiện', value: selectedAudit.executionDate || 'Chưa thực hiện' },
-                      { label: 'Kiểm toán viên', value: selectedAudit.leadAuditor },
-                      { label: 'Người phê duyệt CL', value: selectedAudit.approvedBy || 'Chưa phê duyệt' },
+                      { label: 'Tổng số lượng sản phẩm', value: `${selectedAudit.totalItems.toLocaleString()} items` },
+                      { label: 'Số lượng sản phẩm lệch', value: selectedAudit.discrepancyCount > 0 ? <span className="text-red-600 font-bold">{selectedAudit.discrepancyCount} items</span> : <span className="text-emerald-600 font-semibold">Không có</span> },
+                      { label: 'Người thực hiện', value: selectedAudit.checkedBy || 'Chưa xác định' },
                     ].map(({ label, value }) => (
                       <div key={label} className="flex justify-between items-center px-4 py-2.5">
                         <span className="text-gray-500 dark:text-gray-400">{label}</span>
@@ -386,60 +371,21 @@ export function InventoryCheckPage() {
                   )}
 
                   <div className="flex gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
-                    {selectedAudit.status === 'UNDER_REVIEW' && (
-                      <button onClick={() => handleApprove(selectedAudit.id)}
+                    {selectedAudit.status === 'DRAFT' && (
+                      <button onClick={() => handleStart(selectedAudit.id)}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-sm transition-colors shadow animate-pulse">
+                        <Play className="w-4 h-4" /> Bắt đầu kiểm kê thực tế
+                      </button>
+                    )}
+                    {selectedAudit.status === 'IN_PROGRESS' && (
+                      <button onClick={() => handleComplete(selectedAudit.id)}
                         className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm transition-colors shadow">
-                        <CheckSquare className="w-4 h-4" /> Phê duyệt & Đóng kỳ kiểm kê
+                        <CheckSquare className="w-4 h-4" /> Hoàn tất & Điều chỉnh tồn kho
                       </button>
                     )}
                     <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 text-sm transition-colors">
                       <FileText className="w-4 h-4 inline mr-1" /> In biên bản
                     </button>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB: Chi tiết sản phẩm */}
-              {drawerTab === 'items' && (
-                <div className="space-y-3">
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                    So sánh tồn kho Thực tế vs Hệ thống
-                    {selectedAudit.isBlindCount && (
-                      <span className="ml-2 text-indigo-600 normal-case">(Kiểm mù — tồn HT ẩn với auditor)</span>
-                    )}
-                  </p>
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-                    {(selectedAudit.lineItems ?? MOCK_AUDIT_LINE_ITEMS).map(item => (
-                      <div key={item.sku} className={`flex items-center gap-3 p-3 rounded-xl border text-sm ${item.variance !== 0 ? 'border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-900/10' : 'border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/20'}`}>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-gray-900 dark:text-white truncate">{item.name}</p>
-                          <p className="text-[11px] text-gray-400 font-mono">{item.sku}</p>
-                          {item.variance !== 0 && item.varianceReason && (
-                            <p className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold mt-0.5">
-                              Lý do: {VARIANCE_REASON_LABELS[item.varianceReason]}
-                            </p>
-                          )}
-                        </div>
-                        <div className="text-right shrink-0">
-                          <div className="flex items-center gap-3 text-xs">
-                            {!selectedAudit.isBlindCount && (
-                              <span className="text-gray-500">HT: <span className="font-bold text-gray-700 dark:text-gray-300">{item.systemQty}</span></span>
-                            )}
-                            <span className="text-gray-500">TT: <span className="font-bold text-gray-700 dark:text-gray-300">{item.actualQty}</span></span>
-                            {!selectedAudit.isBlindCount && (
-                              <span className={`font-black text-sm ${item.variance > 0 ? 'text-emerald-600' : item.variance < 0 ? 'text-red-500' : 'text-gray-400'}`}>
-                                {item.variance === 0 ? '±0' : item.variance > 0 ? `+${item.variance}` : item.variance}
-                              </span>
-                            )}
-                          </div>
-                          {!selectedAudit.isBlindCount && item.variance !== 0 && (
-                            <p className="text-[10px] text-red-500 font-semibold mt-0.5">
-                              {fmtVND(item.variance * item.unitCost)}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 </div>
               )}
@@ -450,66 +396,27 @@ export function InventoryCheckPage() {
 
       {/* Modal: Tạo / Sửa */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Lên lịch Kiểm kê mới' : `Chỉnh sửa: ${editingAudit.auditNumber}`}
+        title={modalMode === 'create' ? 'Lên lịch Kiểm kê mới' : `Chỉnh sửa: ${editingAudit.checkCode}`}
         width="max-w-xl">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Mã kỳ kiểm kê *</label>
-              <input required type="text" value={editingAudit.auditNumber || ''} onChange={e => setEditingAudit({ ...editingAudit, auditNumber: e.target.value })}
+              <input required type="text" value={editingAudit.checkCode || ''} onChange={e => setEditingAudit({ ...editingAudit, checkCode: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Ngày lên lịch</label>
-              <input type="date" value={editingAudit.scheduledDate || ''} onChange={e => setEditingAudit({ ...editingAudit, scheduledDate: e.target.value })}
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Ngày kiểm kê</label>
+              <input type="date" value={editingAudit.checkDate || ''} onChange={e => setEditingAudit({ ...editingAudit, checkDate: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500" />
             </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Chi nhánh / Kho kiểm *</label>
-            <input required type="text" value={editingAudit.storeLocation || ''} onChange={e => setEditingAudit({ ...editingAudit, storeLocation: e.target.value })}
-              placeholder="VD: CH Quận 1, Kho Trung tâm..."
+            <input required type="text" value={editingAudit.branchName || ''} onChange={e => setEditingAudit({ ...editingAudit, branchName: e.target.value })}
+              placeholder="VD: Chi nhánh Quận 1, Chi nhánh Quận 2..."
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Loại kiểm kê</label>
-              <select value={editingAudit.type || 'FULL_STORE'} onChange={e => setEditingAudit({ ...editingAudit, type: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500">
-                {Object.entries(TYPE_MAP).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Trạng thái</label>
-              <select value={editingAudit.status || 'SCHEDULED'} onChange={e => setEditingAudit({ ...editingAudit, status: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500">
-                {Object.entries(STATUS_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Kiểm toán viên chủ trì</label>
-              <input type="text" value={editingAudit.leadAuditor || ''} onChange={e => setEditingAudit({ ...editingAudit, leadAuditor: e.target.value })}
-                placeholder="Họ tên kiểm toán viên..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Người phê duyệt chênh lệch</label>
-              <input type="text" value={editingAudit.approvedBy || ''} onChange={e => setEditingAudit({ ...editingAudit, approvedBy: e.target.value })}
-                placeholder="Kế toán / Giám đốc kho..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500" />
-            </div>
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={editingAudit.isBlindCount ?? false}
-              onChange={e => setEditingAudit({ ...editingAudit, isBlindCount: e.target.checked })}
-              className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-            />
-            <span className="text-sm text-gray-700 dark:text-gray-300">Kiểm kê mù (Blind Count) — ẩn tồn hệ thống với người đếm</span>
-          </label>
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Ghi chú</label>
             <textarea rows={2} value={editingAudit.notes || ''} onChange={e => setEditingAudit({ ...editingAudit, notes: e.target.value })}
@@ -534,7 +441,7 @@ export function InventoryCheckPage() {
           <div className="flex items-start gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900 rounded-xl">
             <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
             <p className="text-sm text-gray-700 dark:text-gray-300">
-              Bạn có chắc muốn xóa kỳ kiểm kê <strong className="text-gray-900 dark:text-white">"{deletingAudit?.auditNumber}"</strong>? Hành động này không thể hoàn tác.
+              Bạn có chắc muốn xóa kỳ kiểm kê <strong className="text-gray-900 dark:text-white">"{deletingAudit?.checkCode}"</strong>? Hành động này không thể hoàn tác.
             </p>
           </div>
           <div className="flex justify-end gap-3 pt-2">
@@ -543,7 +450,7 @@ export function InventoryCheckPage() {
               Hủy bỏ
             </button>
             <button type="button"
-              onClick={() => { if (deletingAudit) deleteInventoryAudit(deletingAudit.id); setDeletingAudit(null); }}
+              onClick={() => { if (deletingAudit) deleteInventoryCheck(deletingAudit.id); setDeletingAudit(null); }}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg text-sm">
               Xóa kỳ kiểm kê
             </button>

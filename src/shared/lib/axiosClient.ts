@@ -3,7 +3,7 @@ import type { InternalAxiosRequestConfig } from 'axios';
 
 // Create Axios Instance
 export const axiosClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -43,7 +43,22 @@ axiosClient.interceptors.request.use(
 
 // Response Interceptor
 axiosClient.interceptors.response.use(
-  (response) => response.data, // Map response directly to data
+  (response) => {
+    const res = response.data;
+    // Spring Boot wrapped response: { success: boolean, status: number, message: string, data: any }
+    if (res && typeof res === 'object' && 'success' in res) {
+      if (res.success) {
+        return res.data;
+      } else {
+        const apiError = {
+          code: res.errorCode || 'API_ERROR',
+          message: res.message || 'API request failed',
+        };
+        return Promise.reject(apiError);
+      }
+    }
+    return res;
+  },
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
@@ -74,14 +89,21 @@ axiosClient.interceptors.response.use(
         }
 
         // Make an independent request to refresh token to avoid loops
-        const { data } = await axios.post(`${axiosClient.defaults.baseURL}/auth/refresh`, {
+        const response = await axios.post(`${axiosClient.defaults.baseURL}/auth/refresh`, {
           refreshToken,
         });
 
-        const newAccessToken = data.accessToken;
+        const wrappedData = response.data;
+        if (!wrappedData || !wrappedData.success || !wrappedData.data) {
+          throw new Error('Failed to refresh token');
+        }
+
+        const newAccessToken = wrappedData.data.accessToken;
+        const newRefreshToken = wrappedData.data.refreshToken;
+
         localStorage.setItem('access_token', newAccessToken);
-        if (data.refreshToken) {
-          localStorage.setItem('refresh_token', data.refreshToken);
+        if (newRefreshToken) {
+          localStorage.setItem('refresh_token', newRefreshToken);
         }
 
         axiosClient.defaults.headers.common['Authorization'] = `Bearer ${newAccessToken}`;
@@ -104,6 +126,12 @@ axiosClient.interceptors.response.use(
       }
     }
 
-    return Promise.reject(error);
+    const errorBody = error.response?.data as any;
+    const apiError = {
+      code: errorBody?.errorCode || 'API_ERROR',
+      message: errorBody?.message || error.message || 'An unexpected error occurred.',
+    };
+
+    return Promise.reject(apiError);
   }
 );

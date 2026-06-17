@@ -1,5 +1,22 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
+
+const resolveBranchId = (name?: string): number => {
+  if (!name) return 1;
+  const lower = name.toLowerCase();
+  if (lower.includes('quận 2') || lower.includes('q2') || lower.includes('cn2')) return 2;
+  if (lower.includes('quận 3') || lower.includes('q3') || lower.includes('cn3')) return 3;
+  return 1;
+};
+
+const resolveProductIdBySku = (sku?: string): number => {
+  if (!sku) return 1;
+  const products = useInventoryStore.getState().products;
+  const p = products.find(prod => prod.sku === sku);
+  return p ? Number(p.id) : 1;
+};
 
 // ---------------------------
 // TYPES: PRICE LISTS
@@ -33,59 +50,94 @@ export interface PriceListSchedule {
 interface LogisticsState {
   priceLists: PriceListSchedule[];
   
+  fetchPriceLists: () => Promise<void>;
   // PriceList Actions
-  addPriceList: (list: Omit<PriceListSchedule, 'id'>) => void;
-  updatePriceList: (id: string, data: Partial<PriceListSchedule>) => void;
-  deletePriceList: (id: string) => void;
+  addPriceList: (list: Omit<PriceListSchedule, 'id'>) => Promise<void>;
+  updatePriceList: (id: string, data: Partial<PriceListSchedule>) => Promise<void>;
+  deletePriceList: (id: string) => Promise<void>;
 }
-
-// ---------------------------
-// MOCK DATA SEED
-// ---------------------------
-const MOCK_PRICE_LISTS: PriceListSchedule[] = [
-  { 
-    id: '1', 
-    listCode: 'PL-2024-STD', 
-    listName: 'Standard Omnichannel Retail Master', 
-    currency: 'USD', 
-    pricingTier: 'RETAIL_DEFAULT', 
-    effectiveDate: '2024-01-01', 
-    markupPercentage: 45.0, 
-    status: 'ACTIVE', 
-    applicableBranches: 'All Corporate Stores & Webstore', 
-    notes: 'Master base retail pricing matrix. Indexed against standard supplier intake landed costs.',
-    details: [
-      { id: 'd1', sku: 'NK-AM24', productName: 'Nike Air Max 2024', basePrice: 129.99, overridePrice: 119.99 }
-    ]
-  },
-  { 
-    id: '2', 
-    listCode: 'PL-2024-WHS', 
-    listName: 'Wholesale Key Accounts Matrix (B2B)', 
-    currency: 'USD', 
-    pricingTier: 'WHOLESALE_TIER1', 
-    effectiveDate: '2024-01-15', 
-    expirationDate: '2024-12-31', 
-    markupPercentage: 20.0, 
-    status: 'ACTIVE', 
-    applicableBranches: 'Regional Warehouses & B2B Portal', 
-    notes: 'Applies automatically to authenticated Gold and Diamond commercial contractor accounts.',
-    details: [
-      { id: 'd2', sku: 'NK-AM24', productName: 'Nike Air Max 2024', basePrice: 129.99, overridePrice: 95.00 },
-      { id: 'd3', sku: 'SS-S24', productName: 'Samsung Galaxy S24', basePrice: 899.00, overridePrice: 799.00 }
-    ]
-  },
-];
 
 export const useLogisticsStore = create<LogisticsState>()(
   persist(
-    (set) => ({
-      priceLists: MOCK_PRICE_LISTS,
+    (set, get) => ({
+      priceLists: [],
 
-      // Price List Actions
-      addPriceList: (list) => set((state) => ({ priceLists: [{ id: Date.now().toString(), ...list }, ...state.priceLists] })),
-      updatePriceList: (id, data) => set((state) => ({ priceLists: state.priceLists.map((p) => (p.id === id ? { ...p, ...data } : p)) })),
-      deletePriceList: (id) => set((state) => ({ priceLists: state.priceLists.filter((p) => p.id !== id) })),
+      fetchPriceLists: async () => {
+        try {
+          const res = await axiosClient.get<any, any[]>('/pricelists');
+          const mapped = res.map((p: any) => ({
+            id: String(p.id),
+            listCode: p.listCode || '',
+            listName: p.listName || '',
+            currency: 'VND' as const,
+            pricingTier: 'RETAIL_DEFAULT' as const,
+            effectiveDate: p.startDate ? p.startDate.split('T')[0] : '',
+            expirationDate: p.endDate ? p.endDate.split('T')[0] : undefined,
+            markupPercentage: 0,
+            status: (p.isActive ? 'ACTIVE' : 'EXPIRED') as 'ACTIVE' | 'EXPIRED',
+            applicableBranches: p.branchName || 'Tất cả chi nhánh',
+            notes: '',
+            details: p.details ? p.details.map((d: any) => ({
+              id: String(d.id),
+              sku: d.productCode || '',
+              productName: d.productName || '',
+              basePrice: Number(d.price || 0),
+              overridePrice: Number(d.price || 0),
+            })) : [],
+          }));
+          set({ priceLists: mapped });
+        } catch (error) {
+          console.error('Failed to fetch price lists:', error);
+        }
+      },
+      addPriceList: async (list) => {
+        try {
+          const payload = {
+            listCode: list.listCode,
+            listName: list.listName,
+            startDate: list.effectiveDate ? `${list.effectiveDate}T00:00:00` : undefined,
+            endDate: list.expirationDate ? `${list.expirationDate}T00:00:00` : undefined,
+            branchId: resolveBranchId(list.applicableBranches),
+            isActive: list.status === 'ACTIVE',
+            details: list.details?.map(d => ({
+              productId: resolveProductIdBySku(d.sku),
+              price: d.overridePrice,
+            })) || [],
+          };
+          await axiosClient.post('/pricelists', payload);
+          await get().fetchPriceLists();
+        } catch (error) {
+          console.error('Failed to add price list:', error);
+        }
+      },
+      updatePriceList: async (id, data) => {
+        try {
+          const payload = {
+            listCode: data.listCode,
+            listName: data.listName,
+            startDate: data.effectiveDate ? `${data.effectiveDate}T00:00:00` : undefined,
+            endDate: data.expirationDate ? `${data.expirationDate}T00:00:00` : undefined,
+            branchId: data.applicableBranches ? resolveBranchId(data.applicableBranches) : undefined,
+            isActive: data.status === undefined ? undefined : data.status === 'ACTIVE',
+            details: data.details?.map(d => ({
+              productId: resolveProductIdBySku(d.sku),
+              price: d.overridePrice,
+            })) || [],
+          };
+          await axiosClient.put(`/pricelists/${id}`, payload);
+          await get().fetchPriceLists();
+        } catch (error) {
+          console.error('Failed to update price list:', error);
+        }
+      },
+      deletePriceList: async (id) => {
+        try {
+          await axiosClient.delete(`/pricelists/${id}`);
+          await get().fetchPriceLists();
+        } catch (error) {
+          console.error('Failed to delete price list:', error);
+        }
+      },
     }),
     {
       name: 'retailhub-logistics-storage',

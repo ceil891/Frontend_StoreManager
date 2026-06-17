@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, MapPin, Grid, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 
 interface StorageAreaRecord {
   id: string;
@@ -16,36 +17,30 @@ interface StorageAreaRecord {
   notes?: string;
 }
 
-const MOCK_AREAS: StorageAreaRecord[] = [
-  {
-    id: '1',
-    areaCode: 'ZA-01',
-    areaName: 'Khu Vực Hàng Tiêu Dùng - Hóa Mỹ Phẩm',
-    branchName: 'Chi nhánh Cầu Giấy',
-    storageCondition: 'NORMAL',
-    capacityPallets: 150,
-    status: 'ACTIVE',
-    notes: 'Khu bãi chứa hàng chất tẩy rửa, xà phòng, khăn giấy',
-  },
-  {
-    id: '2',
-    areaCode: 'ZA-02',
-    areaName: 'Khu Mát - Sữa & Thực Phẩm Tươi',
-    branchName: 'Chi nhánh Cầu Giấy',
-    storageCondition: 'COOL',
-    capacityPallets: 80,
-    status: 'ACTIVE',
-    notes: 'Duy trì nhiệt độ ổn định 10 - 15 độ C',
-  },
-];
-
 export function StorageAreasPage() {
-  const [data, setData] = useState<StorageAreaRecord[]>(MOCK_AREAS);
+  const { warehouseZones, fetchWarehouseZones, addWarehouseZone, updateWarehouseZone, deleteWarehouseZone } = useInventoryStore();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<StorageAreaRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<StorageAreaRecord>>({});
+
+  useEffect(() => {
+    fetchWarehouseZones();
+  }, [fetchWarehouseZones]);
+
+  const data = useMemo<StorageAreaRecord[]>(() => {
+    return warehouseZones.map((z) => ({
+      id: z.id,
+      areaCode: z.zoneCode,
+      areaName: z.zoneName,
+      branchName: z.branchName,
+      storageCondition: z.condition === 'Phòng lạnh bảo quản sản phẩm sữa & bơ' || z.condition === 'COOL' ? 'COOL' : z.condition === 'FREEZE' ? 'FREEZE' : 'NORMAL',
+      capacityPallets: z.capacity || 100,
+      status: z.status === 'TẠM_NGƯNG' ? 'INACTIVE' : 'ACTIVE',
+      notes: z.description,
+    }));
+  }, [warehouseZones]);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -63,9 +58,9 @@ export function StorageAreasPage() {
     setEditingItem({
       areaCode: '',
       areaName: '',
-      branchName: '',
+      branchName: 'Chi nhánh Quận 1',
       storageCondition: 'NORMAL',
-      capacityPallets: 0,
+      capacityPallets: 100,
       status: 'ACTIVE',
       notes: '',
     });
@@ -78,31 +73,31 @@ export function StorageAreasPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.areaCode || !editingItem.areaName || !editingItem.branchName) return;
+    if (!editingItem.areaCode || !editingItem.areaName) return;
+
+    const payload = {
+      zoneCode: editingItem.areaCode.toUpperCase(),
+      zoneName: editingItem.areaName!,
+      condition: editingItem.storageCondition || 'NORMAL',
+      capacity: Number(editingItem.capacityPallets || 0),
+      branchName: editingItem.branchName || 'Chi nhánh Quận 1',
+      status: editingItem.status === 'INACTIVE' ? ('TẠM_NGƯNG' as const) : ('HOẠT_ĐỘNG' as const),
+      description: editingItem.notes,
+    };
 
     if (modalMode === 'create') {
-      const newItem: StorageAreaRecord = {
-        id: String(data.length + 1),
-        areaCode: editingItem.areaCode.toUpperCase(),
-        areaName: editingItem.areaName!,
-        branchName: editingItem.branchName!,
-        storageCondition: editingItem.storageCondition as any || 'NORMAL',
-        capacityPallets: Number(editingItem.capacityPallets || 0),
-        status: editingItem.status as any || 'ACTIVE',
-        notes: editingItem.notes,
-      };
-      setData([...data, newItem]);
+      await addWarehouseZone(payload);
     } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as StorageAreaRecord) : d)));
+      await updateWarehouseZone(editingItem.id!, payload);
     }
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa phân khu bãi này?')) {
-      setData(data.filter((d) => d.id !== id));
+  const handleDelete = async (id: string) => {
+    if (confirm('Bạn có chắc chắn muốn xóa phân khu kho này?')) {
+      await deleteWarehouseZone(id);
     }
   };
 

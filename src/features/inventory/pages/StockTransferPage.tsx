@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, ArrowRightLeft, Building2, FileText, CheckCircle2, Truck, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
@@ -7,7 +7,12 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type StockTransferOrder } from '../store/inventoryStore';
 
 export function StockTransferPage() {
-  const { stockTransfers: data, addStockTransfer, updateStockTransfer, deleteStockTransfer } = useInventoryStore();
+  const { stockTransfers: data, addStockTransfer, updateStockTransfer, deleteStockTransfer, fetchStockTransfers } = useInventoryStore();
+
+  useEffect(() => {
+    fetchStockTransfers();
+  }, [fetchStockTransfers]);
+
   const [search, setSearch] = useState('');
   const [selectedTransfer, setSelectedTransfer] = useState<StockTransferOrder | null>(null);
 

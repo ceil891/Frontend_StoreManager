@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Tag, Layers, CheckCircle2, FileText, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
@@ -7,7 +7,12 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type ProductCategory } from '../store/inventoryStore';
 
 export function CategoriesPage() {
-  const { categories: data, addCategory, updateCategory, deleteCategory } = useInventoryStore();
+  const { categories: data, addCategory, updateCategory, deleteCategory, fetchCategories } = useInventoryStore();
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
+
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | null>(null);
 
