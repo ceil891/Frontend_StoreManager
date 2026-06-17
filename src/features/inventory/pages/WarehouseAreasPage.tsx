@@ -1,73 +1,41 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, Grid, Box, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-
-interface WarehouseAreaRecord {
-  id: string;
-  binCode: string;
-  barcode: string;
-  areaCode: string; // Belongs to StorageArea
-  areaName: string;
-  maxWeightKg: number;
-  maxVolumeM3: number;
-  status: 'EMPTY' | 'FULL';
-  notes?: string;
-}
-
-const MOCK_BINS: WarehouseAreaRecord[] = [
-  {
-    id: '1',
-    binCode: 'A1-03',
-    barcode: 'BIN-ZA01-A103',
-    areaCode: 'ZA-01',
-    areaName: 'Khu Vực Hàng Tiêu Dùng - Hóa Mỹ Phẩm',
-    maxWeightKg: 500,
-    maxVolumeM3: 2.5,
-    status: 'FULL',
-    notes: 'Kệ chịu tải trọng cao, đã chứa đầy hộp bột giặt OMO',
-  },
-  {
-    id: '2',
-    binCode: 'B2-01',
-    barcode: 'BIN-ZA02-B201',
-    areaCode: 'ZA-02',
-    areaName: 'Khu Mát - Sữa & Thực Phẩm Tươi',
-    maxWeightKg: 200,
-    maxVolumeM3: 1.0,
-    status: 'EMPTY',
-    notes: 'Khu kệ tầng 2, sạch sẽ thoáng mát',
-  },
-];
+import { useInventoryStore, type WarehouseBinRecord } from '@/features/inventory/store/inventoryStore';
 
 export function WarehouseAreasPage() {
-  const [data, setData] = useState<WarehouseAreaRecord[]>(MOCK_BINS);
+  const { warehouseBins, fetchWarehouseBins, addWarehouseBin, updateWarehouseBin, deleteWarehouseBin, warehouseZones, fetchWarehouseZones } = useInventoryStore();
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<WarehouseAreaRecord | null>(null);
+  const [selected, setSelected] = useState<WarehouseBinRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  const [editingItem, setEditingItem] = useState<Partial<WarehouseAreaRecord>>({});
+  const [editingItem, setEditingItem] = useState<Partial<WarehouseBinRecord>>({});
+
+  useEffect(() => {
+    fetchWarehouseBins();
+    fetchWarehouseZones();
+  }, [fetchWarehouseBins, fetchWarehouseZones]);
 
   const filtered = useMemo(() => {
-    if (!search) return data;
+    if (!search) return warehouseBins;
     const q = search.toLowerCase();
-    return data.filter(
+    return warehouseBins.filter(
       (d) =>
         d.binCode.toLowerCase().includes(q) ||
         d.barcode.toLowerCase().includes(q) ||
         d.areaName.toLowerCase().includes(q)
     );
-  }, [search, data]);
+  }, [search, warehouseBins]);
 
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingItem({
       binCode: '',
       barcode: '',
-      areaCode: '',
-      areaName: '',
+      areaCode: warehouseZones[0]?.zoneCode || 'ZA-01',
       maxWeightKg: 0,
       maxVolumeM3: 0,
       status: 'EMPTY',
@@ -76,42 +44,51 @@ export function WarehouseAreasPage() {
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (item: WarehouseAreaRecord) => {
+  const handleOpenEdit = (item: WarehouseBinRecord) => {
     setModalMode('edit');
     setEditingItem(item);
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.binCode || !editingItem.barcode || !editingItem.areaName) return;
+    if (!editingItem.binCode || !editingItem.barcode || !editingItem.areaCode) return;
+
+    const areaName = warehouseZones.find(z => z.zoneCode === editingItem.areaCode)?.zoneName || editingItem.areaCode;
 
     if (modalMode === 'create') {
-      const newItem: WarehouseAreaRecord = {
-        id: String(data.length + 1),
+      await addWarehouseBin({
         binCode: editingItem.binCode.toUpperCase(),
         barcode: editingItem.barcode.toUpperCase(),
-        areaCode: editingItem.areaCode || 'ZA-01',
-        areaName: editingItem.areaName!,
+        areaCode: editingItem.areaCode!,
+        areaName,
         maxWeightKg: Number(editingItem.maxWeightKg || 0),
         maxVolumeM3: Number(editingItem.maxVolumeM3 || 0),
         status: editingItem.status as any || 'EMPTY',
         notes: editingItem.notes,
-      };
-      setData([...data, newItem]);
+      });
     } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as WarehouseAreaRecord) : d)));
+      await updateWarehouseBin(editingItem.id!, {
+        binCode: editingItem.binCode.toUpperCase(),
+        barcode: editingItem.barcode.toUpperCase(),
+        areaCode: editingItem.areaCode!,
+        areaName,
+        maxWeightKg: Number(editingItem.maxWeightKg || 0),
+        maxVolumeM3: Number(editingItem.maxVolumeM3 || 0),
+        status: editingItem.status as any || 'EMPTY',
+        notes: editingItem.notes,
+      });
     }
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa thông tin ô kệ ngăn chứa này?')) {
-      setData(data.filter((d) => d.id !== id));
+  const handleDelete = async (id: string) => {
+    if (confirm('Bạn có chắc chắn muốn xóa vị trí lưu trữ này?')) {
+      await deleteWarehouseBin(id);
     }
   };
 
-  const columns = useMemo<ColumnDef<WarehouseAreaRecord>[]>(
+  const columns = useMemo<ColumnDef<WarehouseBinRecord>[]>(
     () => [
       {
         accessorKey: 'binCode',
@@ -178,7 +155,7 @@ export function WarehouseAreasPage() {
         ),
       },
     ],
-    [data]
+    [warehouseBins]
   );
 
   return (

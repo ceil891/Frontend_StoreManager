@@ -1,45 +1,58 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Building2, Calendar, FileText, CheckCircle2, RotateCcw, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { usePurchaseStore, type ReturnToSupplierItem } from '../store/purchaseStore';
 
-interface ReturnToSupplierItem {
-  id: string;
-  returnNumber: string; // RTV Number
-  grnRefNumber: string; // Original GRN Reference
-  supplierName: string;
+interface UiReturnItem extends ReturnToSupplierItem {
+  returnNumber: string;
   dispatchingStore: string;
-  returnDate: string;
   returnedItemsCount: number;
   claimValuation: number;
-  reason: 'DEFECTIVE_BATCH' | 'WRONG_SPECIFICATION' | 'EXPIRED_ON_ARRIVAL' | 'EXCESS_UNORDERED';
-  status: 'PENDING_SUPPLIER_APPROVAL' | 'APPROVED_CREDIT_NOTE' | 'REPLACEMENT_DISPATCHED' | 'REJECTED';
   logisticsCarrier: string;
-  trackingNumber?: string;
   filedBy: string;
-  notes?: string;
+  trackingNumber?: string;
 }
 
-const INITIAL_SUPPLIER_RETURNS: ReturnToSupplierItem[] = [
-  { id: '1', returnNumber: 'RTV-2024-001', grnRefNumber: 'GRN-2024-302', supplierName: 'Apex Premium Packaging', dispatchingStore: 'Kho phân phối Trung tâm', returnDate: '2024-05-17', returnedItemsCount: 150, claimValuation: 12300000, reason: 'DEFECTIVE_BATCH', status: 'APPROVED_CREDIT_NOTE', logisticsCarrier: 'Vận tải Nội bộ', trackingNumber: 'TRK-90182931', filedBy: 'David Ross', notes: 'Phát hiện túi giấy bị thấm nước khi dỡ hàng. Nhà cung cấp đồng ý cấn trừ vào hóa đơn sau.' },
-  { id: '2', returnNumber: 'RTV-2024-002', grnRefNumber: 'GRN-2024-280', supplierName: 'Nordic Apparel Mills', dispatchingStore: 'Chi nhánh Quận 1', returnDate: '2024-05-14', returnedItemsCount: 25, claimValuation: 12500000, reason: 'WRONG_SPECIFICATION', status: 'REPLACEMENT_DISPATCHED', logisticsCarrier: 'DHL Express', trackingNumber: 'DHL-55219018', filedBy: 'Sarah Jenkins', notes: 'Nhận size XL thay vì M trong thùng hàng số 4.' },
-  { id: '3', returnNumber: 'RTV-2024-003', grnRefNumber: 'GRN-2024-255', supplierName: 'Omega Hardware Wholesalers', dispatchingStore: 'Cửa hàng Tân Bình', returnDate: '2024-05-10', returnedItemsCount: 12, claimValuation: 8900000, reason: 'EXCESS_UNORDERED', status: 'PENDING_SUPPLIER_APPROVAL', logisticsCarrier: 'FedEx', trackingNumber: 'FX-00192831', filedBy: 'Michael Chang', notes: 'Gửi dư hàng không có trong hóa đơn. Trả lại để tránh lệch kho.' },
-];
-
 export function ReturnToSupplierPage() {
-  const [data, setData] = useState<ReturnToSupplierItem[]>(INITIAL_SUPPLIER_RETURNS);
+  const { returnToSuppliers, fetchReturnToSuppliers, addReturnToSupplier, updateReturnToSupplier, deleteReturnToSupplier } = usePurchaseStore();
   const [search, setSearch] = useState('');
-  const [selectedRTV, setSelectedRTV] = useState<ReturnToSupplierItem | null>(null);
+  const [selectedRTV, setSelectedRTV] = useState<UiReturnItem | null>(null);
 
   // Form states
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
-  const [editingRTV, setEditingRTV] = useState<Partial<ReturnToSupplierItem>>({});
-  const [deletingRTV, setDeletingRTV] = useState<ReturnToSupplierItem | null>(null);
+  const [editingRTV, setEditingRTV] = useState<Partial<UiReturnItem>>({});
+  const [deletingRTV, setDeletingRTV] = useState<UiReturnItem | null>(null);
 
   // Filter states
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  useEffect(() => {
+    fetchReturnToSuppliers();
+  }, [fetchReturnToSuppliers]);
+
+  const data = useMemo<UiReturnItem[]>(() => {
+    return returnToSuppliers.map((r) => ({
+      id: r.id,
+      rtvNumber: r.rtvNumber,
+      totalItems: r.totalItems,
+      refundValue: r.refundValue,
+      returnNumber: r.rtvNumber,
+      grnRefNumber: r.grnRefNumber,
+      supplierName: r.supplierName,
+      dispatchingStore: 'Kho phân phối Trung tâm',
+      returnDate: r.returnDate,
+      returnedItemsCount: r.totalItems,
+      claimValuation: r.refundValue,
+      reason: r.reason as any || 'DEFECTIVE_BATCH',
+      status: r.status as any || 'PENDING_SUPPLIER_APPROVAL',
+      logisticsCarrier: 'Nhà xe nội địa',
+      filedBy: 'Người quản lý',
+      notes: r.notes,
+    }));
+  }, [returnToSuppliers]);
 
   const filtered = data.filter((item) => {
     // 1. Text search
@@ -80,51 +93,47 @@ export function ReturnToSupplierPage() {
     setIsFormOpen(true);
   };
 
-  const handleOpenEdit = (rtv: ReturnToSupplierItem) => {
+  const handleOpenEdit = (rtv: UiReturnItem) => {
     setFormMode('edit');
     setEditingRTV(rtv);
     setIsFormOpen(true);
   };
 
-  const handleSaveRTV = (e: React.FormEvent) => {
+  const handleSaveRTV = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRTV.returnNumber || !editingRTV.supplierName) return;
 
-    const payload: ReturnToSupplierItem = {
-      id: editingRTV.id || Date.now().toString(),
-      returnNumber: editingRTV.returnNumber,
+    const payload = {
+      rtvNumber: editingRTV.returnNumber,
       grnRefNumber: editingRTV.grnRefNumber || '',
       supplierName: editingRTV.supplierName,
-      dispatchingStore: editingRTV.dispatchingStore || '',
-      returnDate: editingRTV.returnDate || '',
-      returnedItemsCount: Number(editingRTV.returnedItemsCount) || 0,
-      claimValuation: Number(editingRTV.claimValuation) || 0,
-      reason: editingRTV.reason || 'DEFECTIVE_BATCH',
+      dispatchingStore: editingRTV.dispatchingStore || 'Kho phân phối Trung tâm',
+      returnDate: editingRTV.returnDate || new Date().toISOString().split('T')[0],
+      totalItems: Number(editingRTV.returnedItemsCount) || 1,
+      refundValue: Number(editingRTV.claimValuation) || 0,
       status: editingRTV.status || 'PENDING_SUPPLIER_APPROVAL',
-      logisticsCarrier: editingRTV.logisticsCarrier || '',
-      trackingNumber: editingRTV.trackingNumber || '',
-      filedBy: editingRTV.filedBy || 'Hệ thống',
+      reason: editingRTV.reason || 'DEFECTIVE_BATCH',
       notes: editingRTV.notes || '',
     };
 
     if (formMode === 'create') {
-      setData([payload, ...data]);
-    } else {
-      setData(data.map(item => item.id === payload.id ? payload : item));
+      await addReturnToSupplier(payload);
+    } else if (editingRTV.id) {
+      await updateReturnToSupplier(editingRTV.id, payload);
     }
     setIsFormOpen(false);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingRTV) return;
-    setData(data.filter(item => item.id !== deletingRTV.id));
+    await deleteReturnToSupplier(deletingRTV.id);
     setDeletingRTV(null);
     if (selectedRTV?.id === deletingRTV.id) {
       setSelectedRTV(null);
     }
   };
 
-  const columns = useMemo<ColumnDef<ReturnToSupplierItem>[]>(
+  const columns = useMemo<ColumnDef<UiReturnItem>[]>(
     () => [
       {
         accessorKey: 'returnNumber',

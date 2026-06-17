@@ -1,87 +1,38 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, ShieldAlert, Thermometer, Layers, Warehouse, CheckCircle2, XCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-
-interface WarehouseZoneRecord {
-  id: string;
-  zoneCode: string;
-  zoneName: string;
-  condition: string; // Điều kiện nhiệt độ/độ ẩm
-  capacity: number; // Dung lượng chứa hàng (Pallet)
-  branchName: string; // Chi nhánh sở hữu
-  status: 'HOẠT_ĐỘNG' | 'TẠM_NGƯNG';
-  description?: string;
-}
-
-const MOCK_ZONES: WarehouseZoneRecord[] = [
-  {
-    id: '1',
-    zoneCode: 'ZONE-A',
-    zoneName: 'Khu vực hàng khô & thực phẩm đóng gói',
-    condition: 'Nhiệt độ thường (25-30°C), Độ ẩm < 60%',
-    capacity: 500,
-    branchName: 'Chi nhánh Quận 1',
-    status: 'HOẠT_ĐỘNG',
-    description: 'Lưu trữ các loại nước ngọt, mì gói, bánh kẹo và gia vị đóng hộp.',
-  },
-  {
-    id: '2',
-    zoneCode: 'ZONE-B',
-    zoneName: 'Phòng lạnh bảo quản sản phẩm sữa & bơ',
-    condition: 'Nhiệt độ mát (2-8°C), Độ ẩm 50%',
-    capacity: 150,
-    branchName: 'Chi nhánh Quận 1',
-    status: 'HOẠT_ĐỘNG',
-    description: 'Khu vực vô trùng, chuyên biệt cho sữa chua, bơ lạt, và nước trái cây.',
-  },
-  {
-    id: '3',
-    zoneCode: 'ZONE-C',
-    zoneName: 'Khu đông lạnh sâu (Thủy hải sản & Thịt)',
-    condition: 'Nhiệt độ đông (-18°C đến -22°C)',
-    capacity: 100,
-    branchName: 'Tổng kho Thủ Đức',
-    status: 'HOẠT_ĐỘNG',
-    description: 'Hàng nhập khẩu tươi sống, yêu cầu giám sát nhiệt độ 24/7.',
-  },
-  {
-    id: '4',
-    zoneCode: 'ZONE-D',
-    zoneName: 'Khu hàng mẫu & hàng chờ thanh lý',
-    condition: 'Nhiệt độ thường (25-35°C)',
-    capacity: 50,
-    branchName: 'Tổng kho Thủ Đức',
-    status: 'TẠM_NGƯNG',
-    description: 'Chứa các sản phẩm cận date hoặc lỗi bao bì chờ xử lý huỷ.',
-  },
-];
+import { useInventoryStore, type WarehouseZoneRecord } from '@/features/inventory/store/inventoryStore';
 
 export function WarehouseZonesPage() {
-  const [data, setData] = useState<WarehouseZoneRecord[]>(MOCK_ZONES);
+  const { warehouseZones, fetchWarehouseZones, addWarehouseZone, updateWarehouseZone, deleteWarehouseZone } = useInventoryStore();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<WarehouseZoneRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<WarehouseZoneRecord>>({});
 
+  useEffect(() => {
+    fetchWarehouseZones();
+  }, [fetchWarehouseZones]);
+
   const filtered = useMemo(() => {
-    if (!search) return data;
+    if (!search) return warehouseZones;
     const q = search.toLowerCase();
-    return data.filter(
+    return warehouseZones.filter(
       (d) =>
         d.zoneCode.toLowerCase().includes(q) ||
         d.zoneName.toLowerCase().includes(q) ||
         d.branchName.toLowerCase().includes(q)
     );
-  }, [search, data]);
+  }, [search, warehouseZones]);
 
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingItem({
-      zoneCode: `ZONE-${String.fromCharCode(65 + data.length)}`,
+      zoneCode: `ZONE-${String.fromCharCode(65 + warehouseZones.length)}`,
       zoneName: '',
       condition: 'Nhiệt độ thường (25-30°C)',
       capacity: 100,
@@ -98,31 +49,37 @@ export function WarehouseZonesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.zoneCode || !editingItem.zoneName || !editingItem.branchName) return;
+    if (!editingItem.zoneCode || !editingItem.zoneName) return;
 
     if (modalMode === 'create') {
-      const newItem: WarehouseZoneRecord = {
-        id: String(data.length + 1),
+      await addWarehouseZone({
         zoneCode: editingItem.zoneCode!,
         zoneName: editingItem.zoneName!,
         condition: editingItem.condition || 'Nhiệt độ thường',
         capacity: Number(editingItem.capacity || 0),
-        branchName: editingItem.branchName!,
-        status: editingItem.status as any || 'HOẠT_ĐỘNG',
+        branchName: editingItem.branchName || 'Chi nhánh Quận 1',
+        status: editingItem.status || 'HOẠT_ĐỘNG',
         description: editingItem.description,
-      };
-      setData([...data, newItem]);
+      });
     } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as WarehouseZoneRecord) : d)));
+      await updateWarehouseZone(editingItem.id!, {
+        zoneCode: editingItem.zoneCode,
+        zoneName: editingItem.zoneName,
+        condition: editingItem.condition,
+        capacity: Number(editingItem.capacity || 0),
+        branchName: editingItem.branchName,
+        status: editingItem.status,
+        description: editingItem.description,
+      });
     }
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa phân khu kho này?')) {
-      setData(data.filter((d) => d.id !== id));
+      await deleteWarehouseZone(id);
     }
   };
 
@@ -216,7 +173,7 @@ export function WarehouseZonesPage() {
         ),
       },
     ],
-    [data]
+    [warehouseZones]
   );
 
   return (

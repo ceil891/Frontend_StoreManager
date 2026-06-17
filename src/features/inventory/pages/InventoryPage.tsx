@@ -13,16 +13,20 @@ import { useInventoryStore, type ProductInventory, type ProductUnit } from '../s
 import { useSettingsStore } from '@/shared/store/settingsStore';
 
 export function InventoryPage() {
-  const { products: data, addProduct, updateProduct, deleteProduct, categories } = useInventoryStore();
+  const { products: data, addProduct, updateProduct, deleteProduct, categories, fetchProducts, fetchCategories, unitsList, fetchUnits } = useInventoryStore();
   const { getLowStockThreshold } = useSettingsStore();
   const [selectedProduct, setSelectedProduct] = useState<ProductInventory | null>(null);
 
-  // Simulate loading state
+  // Load real data from backend
   const [isLoading, setIsLoading] = useState(true);
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 800);
-    return () => clearTimeout(timer);
-  }, []);
+    const loadData = async () => {
+      setIsLoading(true);
+      await Promise.all([fetchProducts(), fetchCategories(), fetchUnits()]);
+      setIsLoading(false);
+    };
+    loadData();
+  }, [fetchProducts, fetchCategories, fetchUnits]);
 
   // Filter states
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -459,41 +463,97 @@ export function InventoryPage() {
       <Modal
         isOpen={!!selectedProduct}
         onClose={() => setSelectedProduct(null)}
-        title={selectedProduct ? `Thông tin sản phẩm: ${selectedProduct.sku}` : 'Sản phẩm'}
-        width="max-w-xl"
+        title={selectedProduct ? `Thông tin sản phẩm` : 'Sản phẩm'}
+        width="max-w-3xl"
       >
         {selectedProduct && (
-          <div className="space-y-6">
-            <div className="flex gap-4">
-              <div className="w-24 h-24 bg-gray-100 rounded-lg border flex items-center justify-center shrink-0 overflow-hidden">
+          <div className="space-y-8 animate-fade-in">
+            {/* Hero Section */}
+            <div className="flex flex-col md:flex-row gap-6">
+              {/* Product Image */}
+              <div className="w-full md:w-1/3 aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 border border-gray-200/60 dark:border-gray-700/60 flex items-center justify-center shrink-0 shadow-inner relative group">
                 {selectedProduct.mainImage ? (
-                  <img src={selectedProduct.mainImage} alt={selectedProduct.name} className="w-full h-full object-cover" />
+                  <img src={selectedProduct.mainImage} alt={selectedProduct.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                 ) : (
-                  <ImageIcon className="w-8 h-8 text-gray-400" />
+                  <div className="flex flex-col items-center gap-2 text-gray-400">
+                    <ImageIcon className="w-10 h-10 opacity-50" />
+                    <span className="text-xs font-medium">Chưa có ảnh</span>
+                  </div>
                 )}
+                <div className="absolute top-3 right-3">
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest backdrop-blur-md shadow-sm ${
+                    selectedProduct.status === 'ACTIVE' 
+                      ? 'bg-emerald-500/90 text-white' 
+                      : 'bg-gray-500/90 text-white'
+                  }`}>
+                    {selectedProduct.status === 'ACTIVE' ? 'Đang Bán' : 'Ngừng KD'}
+                  </span>
+                </div>
               </div>
-              <div>
-                <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">{selectedProduct.category}</span>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white leading-tight mt-1">{selectedProduct.name}</h2>
-                <div className="flex gap-3 mt-2 text-sm text-gray-500">
-                  <span className="flex items-center gap-1"><Tag className="w-4 h-4" /> {selectedProduct.brand}</span>
-                  <span className="flex items-center gap-1"><MapPin className="w-4 h-4" /> {selectedProduct.location}</span>
+
+              {/* Product Info Summary */}
+              <div className="flex-1 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold text-indigo-700 bg-indigo-50 dark:bg-indigo-900/40 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/50 uppercase tracking-widest">
+                      {selectedProduct.category}
+                    </span>
+                    <span className="text-xs font-mono font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                      <Barcode className="w-3.5 h-3.5" /> {selectedProduct.sku}
+                    </span>
+                  </div>
+                  <h2 className="text-2xl font-black text-gray-900 dark:text-white leading-tight mb-2">
+                    {selectedProduct.name}
+                  </h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1.5 font-medium">
+                    <Tag className="w-4 h-4" /> Thương hiệu: <span className="text-gray-800 dark:text-gray-200">{selectedProduct.brand || 'Đang cập nhật'}</span>
+                  </p>
+                </div>
+
+                <div className="mt-6 grid grid-cols-2 gap-4">
+                  <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20 border border-emerald-100 dark:border-emerald-800/30 p-4 rounded-2xl">
+                    <p className="text-[10px] text-emerald-800 dark:text-emerald-400 font-bold uppercase tracking-wider mb-1">Giá bán lẻ (Cơ sở)</p>
+                    <p className="text-3xl font-black text-emerald-700 dark:text-emerald-500 tracking-tight">
+                      {selectedProduct.price.toLocaleString('vi-VN')}₫
+                    </p>
+                    <p className="text-xs text-emerald-600/80 dark:text-emerald-500/70 font-medium mt-1">
+                      Giá vốn: {selectedProduct.costPrice.toLocaleString('vi-VN')}₫
+                    </p>
+                  </div>
+                  
+                  <div className={`p-4 rounded-2xl border transition-all ${
+                    selectedProduct.onHand <= getLowStockThreshold() 
+                      ? 'bg-gradient-to-br from-red-50 to-red-100/50 border-red-200 dark:from-red-950/30 dark:border-red-900/50' 
+                      : 'bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700/50 shadow-sm'
+                  }`}>
+                    <p className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${
+                      selectedProduct.onHand <= getLowStockThreshold() ? 'text-red-800 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'
+                    }`}>Tồn kho khả dụng</p>
+                    <p className={`text-3xl font-black tracking-tight ${
+                      selectedProduct.onHand <= getLowStockThreshold() ? 'text-red-600 dark:text-red-500' : 'text-gray-900 dark:text-white'
+                    }`}>
+                      {selectedProduct.onHand} <span className="text-lg font-bold text-gray-400">{selectedProduct.unit}</span>
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mt-1 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5" /> {selectedProduct.location || 'Chưa xếp kho'}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Gallery Images List */}
             {selectedProduct.galleryImages && selectedProduct.galleryImages.length > 0 && (
-              <div className="space-y-2 p-3 bg-gray-50 dark:bg-gray-950/40 rounded-xl border border-gray-100 dark:border-gray-800">
-                <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">Thư viện ảnh phụ</span>
-                <div className="flex gap-2 overflow-x-auto pb-1 max-w-full">
+              <div className="pt-2">
+                <span className="text-[11px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest block mb-3">Thư viện ảnh ({selectedProduct.galleryImages.length})</span>
+                <div className="flex gap-3 overflow-x-auto pb-2 snap-x">
                   {selectedProduct.galleryImages.map((img, idx) => (
                     <a 
                       key={idx}
                       href={img}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex-shrink-0 hover:scale-105 active:scale-95 transition-all shadow-sm"
+                      className="w-20 h-20 rounded-xl overflow-hidden border border-gray-200/80 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 shrink-0 hover:scale-105 hover:shadow-md hover:border-indigo-300 transition-all snap-start"
                     >
                       <img src={img} alt={`${selectedProduct.name} gallery ${idx}`} className="w-full h-full object-cover" />
                     </a>
@@ -502,40 +562,19 @@ export function InventoryPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {/* Barcode / SKU Block */}
-              <div className="col-span-full md:col-span-1 bg-white dark:bg-gray-800 border p-4 rounded-xl flex flex-col items-center justify-center space-y-1 shadow-sm">
-                <Barcode className="w-16 h-12 text-gray-800 dark:text-gray-200" strokeWidth={1} />
-                <span className="font-mono text-xs font-bold tracking-widest text-gray-600 dark:text-gray-400">{selectedProduct.sku}</span>
-              </div>
+            {/* Product Units & Conversion Diagram */}
+            <div className="bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-gray-200/60 dark:border-gray-800 p-5">
+              <span className="text-[11px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest block mb-4">
+                Đơn vị quy đổi & Giá bán linh hoạt
+              </span>
               
-              <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 p-4 rounded-xl">
-                <p className="text-xs text-emerald-800 font-semibold uppercase">Giá bán lẻ cơ sở</p>
-                <p className="text-2xl font-bold text-emerald-700">{selectedProduct.price.toLocaleString('vi-VN')}đ</p>
-                <p className="text-xs text-emerald-600 mt-1">Giá vốn: {selectedProduct.costPrice.toLocaleString('vi-VN')}đ</p>
-              </div>
-              <div className={`border p-4 rounded-xl ${selectedProduct.onHand <= getLowStockThreshold() ? 'bg-red-50 border-red-100' : 'bg-gray-50 border-gray-200'}`}>
-                <p className={`text-xs font-semibold uppercase ${selectedProduct.onHand <= getLowStockThreshold() ? 'text-red-800' : 'text-gray-600'}`}>Tồn kho khả dụng</p>
-                <p className={`text-2xl font-bold ${selectedProduct.onHand <= getLowStockThreshold() ? 'text-red-700' : 'text-gray-900'}`}>{selectedProduct.onHand} {selectedProduct.unit}</p>
-                {selectedProduct.onHand <= getLowStockThreshold() && (
-                  <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> Cảnh báo sắp hết hàng ({'<' }{getLowStockThreshold() + 1})
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* PRODUCT UNITS LISTING - High-Fidelity Visual Tree Diagram */}
-            <div className="space-y-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 shadow-sm">
-              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">Sơ đồ quy đổi đóng gói & Giá bán</span>
-              
-              <div className="flex flex-wrap items-center gap-3 bg-gray-50 dark:bg-gray-950 p-4 rounded-xl border border-gray-100 dark:border-gray-850 shadow-inner">
-                {/* Base Unit Node */}
-                <div className="bg-white dark:bg-gray-900 border border-emerald-350 p-2.5 rounded-lg text-center flex flex-col items-center gap-1 shadow-sm shrink-0 min-w-[100px]">
-                  <CircleDot className="w-5 h-5 text-emerald-600 animate-pulse" />
-                  <span className="text-xs font-bold text-gray-900 dark:text-white">{selectedProduct.unit}</span>
-                  <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">Gốc</span>
-                  <span className="text-[10px] font-mono text-gray-400 mt-0.5">{selectedProduct.price.toLocaleString('vi-VN')}đ</span>
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Base Unit */}
+                <div className="relative group bg-white dark:bg-gray-800 border-2 border-emerald-400/50 dark:border-emerald-500/50 rounded-xl p-4 flex flex-col items-center min-w-[120px] shadow-sm hover:shadow-md hover:border-emerald-500 transition-all">
+                  <div className="absolute -top-2.5 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">CƠ SỞ</div>
+                  <CircleDot className="w-6 h-6 text-emerald-500 mb-2" />
+                  <span className="font-black text-gray-900 dark:text-white text-lg">{selectedProduct.unit}</span>
+                  <span className="text-xs font-mono font-medium text-gray-500 mt-1">{selectedProduct.price.toLocaleString('vi-VN')}₫</span>
                 </div>
 
                 {selectedProduct.units && selectedProduct.units.length > 0 ? (
@@ -543,32 +582,43 @@ export function InventoryPage() {
                     .sort((a, b) => a.conversionFactor - b.conversionFactor)
                     .map((u) => (
                       <React.Fragment key={u.id}>
-                        {/* Connect arrow with conversion ratio factor badge */}
-                        <div className="flex flex-col items-center justify-center text-gray-400 px-1 shrink-0 font-mono">
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 dark:bg-emerald-950/60 px-1 py-0.5 rounded">x{u.conversionFactor}</span>
-                          <span className="text-sm">➔</span>
+                        <div className="flex flex-col items-center justify-center text-gray-300 dark:text-gray-600 px-2 shrink-0">
+                          <span className="text-[11px] font-black text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-md mb-1 shadow-sm border border-indigo-100 dark:border-indigo-800/30">
+                            x{u.conversionFactor}
+                          </span>
+                          <span className="text-xl">➔</span>
                         </div>
 
-                        {/* High-level packaging node */}
-                        <div className="bg-white dark:bg-gray-900 border border-gray-250 dark:border-gray-800 p-2.5 rounded-lg text-center flex flex-col items-center gap-1 shadow-sm shrink-0 min-w-[110px] hover:scale-105 transition-transform duration-200">
-                          <Package className="w-5 h-5 text-blue-500" />
-                          <span className="text-xs font-bold text-gray-900 dark:text-white">{u.unitCode}</span>
-                          <span className="text-[9px] text-gray-500 font-semibold bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">
-                            1 {u.unitCode} = {u.conversionFactor} {selectedProduct.unit}
-                          </span>
-                          <span className="text-[10px] font-mono text-emerald-700 font-bold mt-0.5">{u.price.toLocaleString('vi-VN')}đ</span>
+                        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col items-center min-w-[120px] shadow-sm hover:shadow-md hover:border-indigo-400 transition-all group">
+                          <Package className="w-6 h-6 text-indigo-500 mb-2 group-hover:scale-110 transition-transform" />
+                          <span className="font-black text-gray-900 dark:text-white text-lg">{u.unitCode}</span>
+                          <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 mt-1">{u.price.toLocaleString('vi-VN')}₫</span>
                         </div>
                       </React.Fragment>
                     ))
                 ) : (
-                  <p className="text-xs text-gray-400 italic py-2 ml-4">Chỉ sử dụng đơn vị cơ sở.</p>
+                  <div className="flex items-center gap-2 text-sm font-medium text-gray-400 italic px-4">
+                    Chỉ áp dụng kinh doanh đơn vị cơ sở.
+                  </div>
                 )}
               </div>
             </div>
 
-            <div className="pt-4 border-t flex gap-3">
-              <button className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold py-2.5 rounded-lg text-sm transition-colors">
-                Xem Lịch sử Giao dịch
+            {/* Quick Actions Footer inside Modal */}
+            <div className="flex items-center justify-between pt-6 mt-6 border-t border-gray-100 dark:border-gray-800">
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => { setSelectedProduct(null); handleOpenEdit(selectedProduct); }}
+                  className="px-5 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-bold rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors shadow-sm flex items-center gap-2"
+                >
+                  <Edit className="w-4 h-4" /> Cập nhật
+                </button>
+              </div>
+              <button 
+                onClick={() => setSelectedProduct(null)}
+                className="px-5 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-bold rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              >
+                Đóng
               </button>
             </div>
           </div>
@@ -579,27 +629,40 @@ export function InventoryPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={modalMode === 'create' ? 'Thêm Sản Phẩm Mới' : 'Cập Nhật Sản Phẩm'}
-        width="max-w-2xl"
+        width="max-w-3xl"
       >
-        <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6">
+        {/* Premium segmented tabs */}
+        <div className="bg-gray-100/80 dark:bg-gray-900/50 p-1 rounded-xl flex items-center mb-8 border border-gray-200/50 dark:border-gray-800/50 shadow-inner">
           <button
             type="button"
             onClick={() => setActiveModalTab('basic')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeModalTab === 'basic' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${
+              activeModalTab === 'basic' 
+                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm' 
+                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+            }`}
           >
             Thông tin cơ bản
           </button>
           <button
             type="button"
             onClick={() => setActiveModalTab('units')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeModalTab === 'units' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${
+              activeModalTab === 'units' 
+                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm' 
+                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+            }`}
           >
             Kho & Quy đổi
           </button>
           <button
             type="button"
             onClick={() => setActiveModalTab('images')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeModalTab === 'images' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${
+              activeModalTab === 'images' 
+                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm' 
+                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+            }`}
           >
             Hình ảnh
           </button>
@@ -607,154 +670,188 @@ export function InventoryPage() {
 
         <form onSubmit={handleSaveProduct} className="space-y-6">
           {activeModalTab === 'basic' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Mã SKU *</label>
+            <div className="space-y-5 animate-fade-in">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Mã SKU <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     value={editingProduct.sku || ''}
                     onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl font-mono text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                    placeholder="VD: SP-001"
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Tên Sản Phẩm *</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Tên Sản Phẩm <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     value={editingProduct.name || ''}
                     onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                    placeholder="Nhập tên sản phẩm..."
                     required
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Danh Mục</label>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Danh Mục</label>
                   <select
                     value={editingProduct.category || ''}
                     onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
                   >
                     {categories.map(c => <option key={c.id} value={c.categoryName}>{c.categoryName}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Thương Hiệu</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Thương Hiệu</label>
                   <input
                     type="text"
                     value={editingProduct.brand || ''}
                     onChange={(e) => setEditingProduct({ ...editingProduct, brand: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                    placeholder="VD: Samsung, Nike..."
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Giá Bán (đ)</label>
-                  <input
-                    type="number"
-                    value={editingProduct.price || 0}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 text-emerald-700 font-bold bg-emerald-50"
-                  />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Giá Bán Lẻ (₫)</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₫</span>
+                    <input
+                      type="number"
+                      value={editingProduct.price || 0}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) })}
+                      className="w-full pl-8 pr-4 py-3 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/50 rounded-xl text-sm font-black text-emerald-700 dark:text-emerald-400 focus:ring-2 focus:ring-emerald-500/50 transition-all shadow-sm"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Giá Vốn (đ)</label>
-                  <input
-                    type="number"
-                    value={editingProduct.costPrice || 0}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, costPrice: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 bg-gray-50"
-                  />
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Giá Vốn (₫)</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₫</span>
+                    <input
+                      type="number"
+                      value={editingProduct.costPrice || 0}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, costPrice: parseFloat(e.target.value) })}
+                      className="w-full pl-8 pr-4 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-gray-500/50 transition-all shadow-sm"
+                    />
+                  </div>
                 </div>
               </div>
               
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Mô tả chi tiết</label>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Mô tả chi tiết</label>
                 <textarea
                   value={editingProduct.description || ''}
                   onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 h-24"
-                  placeholder="Nhập mô tả sản phẩm..."
+                  className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm h-28 resize-none"
+                  placeholder="Nhập thông tin mô tả sản phẩm..."
                 />
               </div>
             </div>
           )}
 
           {activeModalTab === 'units' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">ĐV Tính Cơ Sở (Base Unit)</label>
-                  <input
-                    type="text"
-                    value={editingProduct.unit || 'PCS'}
+            <div className="space-y-6 animate-fade-in">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 p-5 bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800/30 rounded-2xl">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-indigo-800 dark:text-indigo-300 uppercase tracking-wide">ĐV Tính Cơ Sở (Base Unit)</label>
+                  <select
+                    value={editingProduct.unit || 'Cái'}
                     onChange={(e) => setEditingProduct({ ...editingProduct, unit: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 font-mono font-bold bg-gray-100"
-                    placeholder="e.g. PCS, CAI"
-                  />
+                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-indigo-200 dark:border-indigo-700 rounded-xl text-sm font-black text-indigo-700 dark:text-indigo-400 focus:ring-2 focus:ring-indigo-500/50 uppercase shadow-sm appearance-none"
+                  >
+                    {unitsList.length > 0 ? (
+                      unitsList.map(u => <option key={u.id} value={u.unitName}>{u.unitName} ({u.code})</option>)
+                    ) : (
+                      <option value={editingProduct.unit}>{editingProduct.unit}</option>
+                    )}
+                  </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Tồn kho hiện tại</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Tồn kho hiện tại</label>
                   <input
                     type="number"
                     value={editingProduct.onHand || 0}
                     onChange={(e) => setEditingProduct({ ...editingProduct, onHand: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-500/50 shadow-sm"
                   />
                 </div>
               </div>
 
               {/* Product Units Sub-form */}
-              <div className="border border-gray-200 rounded-lg bg-gray-50 p-3">
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-xs font-bold text-gray-700">Các đơn vị quy đổi (Hộp, Lốc, Thùng)</span>
-                  <button type="button" onClick={handleAddUnit} className="text-xs bg-white border border-gray-300 px-3 py-1.5 rounded-lg text-emerald-600 font-semibold hover:bg-gray-100 shadow-sm transition-colors flex items-center gap-1">
-                    <Plus className="w-3.5 h-3.5" /> Thêm quy đổi
+              <div>
+                <div className="flex justify-between items-end mb-3">
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900 dark:text-white">Đơn vị quy đổi phụ</h4>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Thiết lập Hộp, Thùng, Lốc... và giá bán tương ứng.</p>
+                  </div>
+                  <button type="button" onClick={handleAddUnit} className="text-xs bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 dark:text-gray-900 text-white px-4 py-2 rounded-lg font-bold shadow-sm transition-colors flex items-center gap-1.5 active:scale-95">
+                    <Plus className="w-4 h-4" /> Thêm quy đổi
                   </button>
                 </div>
 
-                <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-                  {editingUnits.length === 0 && <p className="text-xs text-gray-400 italic text-center py-4">Chưa có đơn vị quy đổi nào.</p>}
+                <div className="space-y-3">
+                  {editingUnits.length === 0 && (
+                    <div className="p-8 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-2xl flex flex-col items-center justify-center text-center">
+                      <Package2 className="w-8 h-8 text-gray-300 dark:text-gray-600 mb-2" />
+                      <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">Sản phẩm này chỉ bán theo Đơn vị cơ sở.</p>
+                      <p className="text-xs text-gray-400 mt-1">Nhấn "Thêm quy đổi" để thiết lập bán theo thùng/hộp.</p>
+                    </div>
+                  )}
                   {editingUnits.map((u) => (
-                    <div key={u.id} className="bg-white border p-3 rounded-lg relative flex flex-col gap-3 shadow-sm">
-                      <div className="flex gap-3">
-                        <div className="flex-1">
-                          <label className="block text-[10px] text-gray-500 font-bold mb-1 uppercase tracking-wider">Mã ĐV</label>
-                          <input 
-                            type="text" value={u.unitCode} 
+                    <div key={u.id} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4 rounded-2xl flex flex-col gap-4 shadow-sm hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors">
+                      <div className="flex gap-4 items-end">
+                        <div className="flex-1 space-y-1.5">
+                          <label className="block text-[10px] text-gray-500 font-bold uppercase tracking-wider">Mã ĐV Phụ</label>
+                          <select 
+                            value={u.unitCode} 
                             onChange={(e) => handleUpdateUnit(u.id, 'unitCode', e.target.value)}
-                            className="w-full p-1.5 border rounded text-xs font-mono focus:ring-1 focus:ring-emerald-500"
-                            placeholder="vd: BOX"
-                          />
+                            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-bold focus:ring-2 focus:ring-indigo-500/50 appearance-none"
+                          >
+                            <option value="">Chọn ĐV</option>
+                            {unitsList.map(unit => (
+                              <option key={unit.id} value={unit.code}>{unit.unitName} ({unit.code})</option>
+                            ))}
+                          </select>
                         </div>
-                        <div className="w-20">
-                          <label className="block text-[10px] text-gray-500 font-bold mb-1 uppercase tracking-wider">= Base</label>
-                          <input 
-                            type="number" value={u.conversionFactor} 
-                            onChange={(e) => handleUpdateUnit(u.id, 'conversionFactor', parseFloat(e.target.value))}
-                            className="w-full p-1.5 border rounded text-xs text-center focus:ring-1 focus:ring-emerald-500"
-                          />
+                        <div className="w-24 space-y-1.5">
+                          <label className="block text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">= Base</label>
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs">x</span>
+                            <input 
+                              type="number" value={u.conversionFactor} 
+                              onChange={(e) => handleUpdateUnit(u.id, 'conversionFactor', parseFloat(e.target.value))}
+                              className="w-full pl-6 pr-2 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-bold text-center focus:ring-2 focus:ring-indigo-500/50"
+                            />
+                          </div>
                         </div>
-                        <div className="w-28">
-                          <label className="block text-[10px] text-gray-500 font-bold mb-1 uppercase tracking-wider">Giá bán (đ)</label>
+                        <div className="w-32 space-y-1.5">
+                          <label className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">Giá bán (đ)</label>
                           <input 
                             type="number" value={u.price} 
                             onChange={(e) => handleUpdateUnit(u.id, 'price', parseFloat(e.target.value))}
-                            className="w-full p-1.5 border rounded text-xs text-emerald-700 font-bold text-right focus:ring-1 focus:ring-emerald-500 bg-emerald-50"
+                            className="w-full px-3 py-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg text-sm text-emerald-700 dark:text-emerald-400 font-black text-right focus:ring-2 focus:ring-emerald-500/50"
                           />
                         </div>
                       </div>
                       <div className="flex gap-3 items-center">
-                        <input 
-                          type="text" value={u.barcode} placeholder="Mã vạch riêng cho đơn vị này..."
-                          onChange={(e) => handleUpdateUnit(u.id, 'barcode', e.target.value)}
-                          className="flex-1 p-1.5 border rounded text-xs font-mono focus:ring-1 focus:ring-emerald-500"
-                        />
-                        <button type="button" onClick={() => handleRemoveUnit(u.id)} className="text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors" title="Xóa đơn vị">
+                        <div className="flex-1 relative">
+                          <Barcode className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input 
+                            type="text" value={u.barcode || ''} placeholder="Mã vạch riêng cho quy cách đóng gói này..."
+                            onChange={(e) => handleUpdateUnit(u.id, 'barcode', e.target.value)}
+                            className="w-full pl-9 pr-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500/50"
+                          />
+                        </div>
+                        <button type="button" onClick={() => handleRemoveUnit(u.id)} className="w-9 h-9 flex items-center justify-center text-red-500 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-lg transition-colors border border-red-100 dark:border-red-900/30" title="Xóa đơn vị">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -766,15 +863,14 @@ export function InventoryPage() {
           )}
 
           {activeModalTab === 'images' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ảnh chính sản phẩm</label>
-                
+            <div className="space-y-6 animate-fade-in">
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5">
+                <label className="block text-sm font-bold text-gray-900 dark:text-white mb-3">Ảnh chính sản phẩm</label>
                 <div 
-                  className={`border-2 border-dashed rounded-xl p-6 transition-all text-center flex flex-col items-center justify-center gap-2 cursor-pointer ${
+                  className={`border-2 border-dashed rounded-2xl p-8 transition-all text-center flex flex-col items-center justify-center gap-3 cursor-pointer group ${
                     isDragging 
-                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20' 
-                      : 'border-gray-300 dark:border-gray-650 bg-gray-50 dark:bg-gray-900/50 hover:bg-gray-100 dark:hover:bg-gray-800'
+                      ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' 
+                      : 'border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-indigo-300 dark:hover:border-indigo-700'
                   }`}
                   onDragOver={(e) => {
                     e.preventDefault();
@@ -812,15 +908,18 @@ export function InventoryPage() {
                     }}
                   />
                   {editingProduct.mainImage ? (
-                    <div className="relative w-32 h-32 rounded-lg overflow-hidden border bg-white dark:bg-gray-800">
-                      <img src={editingProduct.mainImage} alt="Main preview" className="w-full h-full object-cover" />
+                    <div className="relative w-40 h-40 rounded-xl overflow-hidden shadow-md">
+                      <img src={editingProduct.mainImage} alt="Main preview" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <span className="text-white text-xs font-bold bg-black/60 px-3 py-1.5 rounded-lg backdrop-blur-sm">Thay đổi ảnh</span>
+                      </div>
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setEditingProduct({ ...editingProduct, mainImage: '' });
                         }}
-                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 hover:bg-red-700 shadow"
+                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 hover:scale-110 active:scale-95 transition-all shadow-lg"
                         title="Xóa ảnh"
                       >
                         <X className="w-3 h-3" />
@@ -828,89 +927,95 @@ export function InventoryPage() {
                     </div>
                   ) : (
                     <>
-                      <ImageIcon className="w-10 h-10 text-gray-400" />
-                      <div className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                        Kéo thả hình ảnh vào đây hoặc click để chọn tệp
+                      <div className="w-16 h-16 rounded-full bg-white dark:bg-gray-800 shadow-sm flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
+                        <ImageIcon className="w-8 h-8 text-indigo-400" />
                       </div>
-                      <div className="text-xs text-gray-400">
-                        Hỗ trợ PNG, JPG, JPEG, WEBP
+                      <div>
+                        <div className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
+                          Nhấn để tải lên <span className="text-gray-500 dark:text-gray-400 font-medium">hoặc kéo thả ảnh vào đây</span>
+                        </div>
+                        <div className="text-xs text-gray-400 font-medium mt-1">
+                          PNG, JPG, WEBP (Tối đa 5MB)
+                        </div>
                       </div>
                     </>
                   )}
                 </div>
 
-                <div className="mt-2">
-                  <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">Hoặc nhập URL hình ảnh</label>
+                <div className="mt-5">
+                  <label className="block text-[10px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Hoặc sử dụng URL hình ảnh trực tiếp</label>
                   <input
                     type="text"
                     value={editingProduct.mainImage || ''}
                     onChange={(e) => setEditingProduct({ ...editingProduct, mainImage: e.target.value })}
-                    placeholder="Nhập URL hình ảnh..."
-                    className="w-full px-3 py-1.5 border rounded-lg text-xs focus:ring-2 focus:ring-emerald-500"
+                    placeholder="https://example.com/image.jpg"
+                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-mono focus:ring-2 focus:ring-indigo-500/50 transition-all"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ảnh phụ (Thư viện ảnh)</label>
-                <div className="space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    {(editingProduct.galleryImages || []).map((img, idx) => (
-                      <div key={idx} className="relative w-16 h-16 bg-gray-50 border rounded-lg overflow-hidden group shadow-xs">
-                        <img src={img} alt={`Gallery preview ${idx}`} className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const nextGallery = (editingProduct.galleryImages || []).filter((_, i) => i !== idx);
-                            setEditingProduct({ ...editingProduct, galleryImages: nextGallery });
-                          }}
-                          className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-0.5 hover:bg-red-700 shadow"
-                          title="Xóa ảnh phụ"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                    <label className="w-16 h-16 bg-gray-50 dark:bg-gray-900 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                      <Plus className="w-5 h-5 text-gray-400" />
-                      <span className="text-[10px] text-gray-400">Thêm ảnh</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files || []);
-                          files.forEach((file) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setEditingProduct((prev) => ({
-                                ...prev,
-                                galleryImages: [...(prev.galleryImages || []), reader.result as string],
-                              }));
-                            };
-                            reader.readAsDataURL(file);
-                          });
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-sm font-bold text-gray-900 dark:text-white">Thư viện ảnh phụ</label>
+                  <span className="text-xs font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-1 rounded-lg">{(editingProduct.galleryImages || []).length} / 5 ảnh</span>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {(editingProduct.galleryImages || []).map((img, idx) => (
+                    <div key={idx} className="relative w-24 h-24 bg-gray-50 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden group shadow-sm">
+                      <img src={img} alt={`Gallery preview ${idx}`} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextGallery = (editingProduct.galleryImages || []).filter((_, i) => i !== idx);
+                          setEditingProduct({ ...editingProduct, galleryImages: nextGallery });
                         }}
-                      />
-                    </label>
-                  </div>
+                        className="absolute top-1.5 right-1.5 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 hover:bg-red-600 hover:scale-110 active:scale-95 transition-all shadow-lg"
+                        title="Xóa ảnh phụ"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  <label className="w-24 h-24 bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-indigo-400 transition-colors group">
+                    <Plus className="w-6 h-6 text-gray-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-1" />
+                    <span className="text-[10px] font-bold text-gray-400 group-hover:text-indigo-500">Thêm ảnh</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        files.forEach((file) => {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setEditingProduct((prev) => ({
+                              ...prev,
+                              galleryImages: [...(prev.galleryImages || []), reader.result as string],
+                            }));
+                          };
+                          reader.readAsDataURL(file);
+                        });
+                      }}
+                    />
+                  </label>
                 </div>
               </div>
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 dark:border-gray-800 mt-8">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded-lg text-sm text-gray-700 font-medium hover:bg-gray-50"
+              className="px-6 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
             >
               Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow"
+              className="px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/20 active:scale-95 transition-all"
             >
               Lưu Sản Phẩm
             </button>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Package, Tag, Download, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 
@@ -7,7 +7,12 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type ProductCombo, type ComboDetailItem } from '../store/inventoryStore';
 
 export function CombosPage() {
-  const { combos: data, addCombo, updateCombo, deleteCombo, products } = useInventoryStore();
+  const { combos: data, addCombo, updateCombo, deleteCombo, products, fetchCombos, fetchProducts } = useInventoryStore();
+
+  useEffect(() => {
+    fetchCombos();
+    fetchProducts();
+  }, [fetchCombos, fetchProducts]);
   
   const [search, setSearch] = useState('');
   const [selectedCombo, setSelectedCombo] = useState<ProductCombo | null>(null);
