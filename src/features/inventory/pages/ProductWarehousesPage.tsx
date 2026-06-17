@@ -1,113 +1,42 @@
-import { useMemo, useState } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Calendar, MapPin, Building, Download } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
+import { Search, Eye, Building, RefreshCw } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-
-interface ProductWarehouseRecord {
-  id: string;
-  sku: string;
-  productName: string;
-  warehouseName: string;
-  quantity: number;
-  availableQuantity: number;
-  inTransitQuantity: number;
-  status: 'CON_HANG' | 'SAP_HET' | 'CHAY_HANG';
-  notes?: string;
-}
-
-const MOCK_WAREHOUSE_STOCK: ProductWarehouseRecord[] = [
-  {
-    id: '1',
-    sku: 'SKU-MILK-01',
-    productName: 'Sữa Tươi Tiệt Trùng Vinamilk 1L',
-    warehouseName: 'Kho Tổng Hà Nội',
-    quantity: 1500,
-    availableQuantity: 1450,
-    inTransitQuantity: 50,
-    status: 'CON_HANG',
-    notes: 'Kho bảo quản thực phẩm chính miền Bắc',
-  },
-  {
-    id: '2',
-    sku: 'SKU-COKE-02',
-    productName: 'Nước Ngọt Coca Cola Lon 320ml',
-    warehouseName: 'Kho Cầu Giấy',
-    quantity: 8,
-    availableQuantity: 8,
-    inTransitQuantity: 200,
-    status: 'SAP_HET',
-    notes: 'Đang chờ đợt chuyển hàng 200 lon từ Kho Tổng Hà Nội tới',
-  },
-  {
-    id: '3',
-    sku: 'SKU-Oreo-03',
-    productName: 'Bánh Quy Kem Oreo Hộp Giấy 248g',
-    warehouseName: 'Kho Quận 1 - HCM',
-    quantity: 0,
-    availableQuantity: 0,
-    inTransitQuantity: 0,
-    status: 'CHAY_HANG',
-    notes: 'Hàng đã ngừng bán tại khu vực phía Nam',
-  },
-];
+import { useInventoryStore, type InventoryResponse } from '@/features/inventory/store/inventoryStore';
 
 export function ProductWarehousesPage() {
-  const [data, setData] = useState<ProductWarehouseRecord[]>(MOCK_WAREHOUSE_STOCK);
+  const { inventories, fetchInventories } = useInventoryStore();
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<ProductWarehouseRecord | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<Partial<ProductWarehouseRecord>>({});
+  const [selected, setSelected] = useState<InventoryResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    setIsLoading(true);
+    fetchInventories().finally(() => setIsLoading(false));
+  }, [fetchInventories]);
 
   const filtered = useMemo(() => {
-    if (!search) return data;
+    if (!search) return inventories;
     const q = search.toLowerCase();
-    return data.filter(
+    return inventories.filter(
       (d) =>
-        d.sku.toLowerCase().includes(q) ||
+        d.productCode.toLowerCase().includes(q) ||
         d.productName.toLowerCase().includes(q) ||
-        d.warehouseName.toLowerCase().includes(q)
+        d.branchName.toLowerCase().includes(q)
     );
-  }, [search, data]);
+  }, [search, inventories]);
 
-  const handleOpenAdjust = (item: ProductWarehouseRecord) => {
-    setEditingItem(item);
-    setIsModalOpen(true);
+  const getStockStatus = (inv: InventoryResponse) => {
+    if (inv.quantityOnHand === 0) return 'CHAY_HANG';
+    if (inv.quantityAvailable < 10) return 'SAP_HET';
+    return 'CON_HANG';
   };
 
-  const handleSaveAdjust = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingItem.id) return;
-
-    setData(
-      data.map((d) => {
-        if (d.id === editingItem.id) {
-          const qty = Number(editingItem.quantity || 0);
-          const avail = Number(editingItem.availableQuantity || 0);
-          const transit = Number(editingItem.inTransitQuantity || 0);
-          let status: 'CON_HANG' | 'SAP_HET' | 'CHAY_HANG' = 'CON_HANG';
-          if (qty === 0) status = 'CHAY_HANG';
-          else if (qty < 20) status = 'SAP_HET';
-
-          return {
-            ...d,
-            quantity: qty,
-            availableQuantity: avail,
-            inTransitQuantity: transit,
-            status,
-          };
-        }
-        return d;
-      })
-    );
-    setIsModalOpen(false);
-  };
-
-  const columns = useMemo<ColumnDef<ProductWarehouseRecord>[]>(
+  const columns = useMemo<ColumnDef<InventoryResponse>[]>(
     () => [
       {
-        accessorKey: 'sku',
+        accessorKey: 'productCode',
         header: 'Mã SKU',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
       },
@@ -117,40 +46,45 @@ export function ProductWarehousesPage() {
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
-        accessorKey: 'warehouseName',
-        header: 'Kho Lưu Trữ',
+        accessorKey: 'branchName',
+        header: 'Chi Nhánh / Kho',
         cell: (info) => <span className="font-semibold text-blue-600">{info.getValue() as string}</span>,
       },
       {
-        accessorKey: 'quantity',
+        accessorKey: 'quantityOnHand',
         header: 'Tổng Tồn Thực Tế',
         cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{info.getValue() as number}</span>,
       },
       {
-        accessorKey: 'availableQuantity',
+        accessorKey: 'quantityAvailable',
         header: 'Khả Dụng Bán',
         cell: (info) => <span className="font-mono text-emerald-600 font-bold">{info.getValue() as number}</span>,
       },
       {
-        accessorKey: 'inTransitQuantity',
-        header: 'Đang Vận Chuyển',
-        cell: (info) => <span className="font-mono text-gray-500">{info.getValue() as number}</span>,
+        accessorKey: 'quantityReserved',
+        header: 'Đang Giữ Chỗ',
+        cell: (info) => <span className="font-mono text-amber-600">{info.getValue() as number}</span>,
       },
       {
-        accessorKey: 'status',
+        accessorKey: 'locationBin',
+        header: 'Vị Trí Kệ',
+        cell: (info) => <span className="text-sm text-gray-500 font-mono">{(info.getValue() as string) || '—'}</span>,
+      },
+      {
+        id: 'status',
         header: 'Trạng Thái Tồn',
-        cell: (info) => {
-          const status = info.getValue() as string;
-          let badgeClass = 'bg-emerald-100 text-emerald-800';
+        cell: ({ row }) => {
+          const status = getStockStatus(row.original);
+          let badgeClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300';
           let label = 'Còn Hàng';
           if (status === 'CHAY_HANG') {
-            badgeClass = 'bg-red-100 text-red-800';
+            badgeClass = 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300';
             label = 'Cháy Hàng';
           } else if (status === 'SAP_HET') {
-            badgeClass = 'bg-amber-100 text-amber-800';
+            badgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
             label = 'Sắp Hết Hàng';
           }
-          return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
+          return <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
@@ -160,169 +94,121 @@ export function ProductWarehousesPage() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
-              className="p-1 text-gray-500 hover:text-emerald-600 rounded"
+              className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
               title="Xem Chi Tiết Tồn Kho"
             >
               <Eye className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleOpenAdjust(row.original)}
-              className="p-1 text-gray-500 hover:text-blue-600 rounded"
-              title="Điều Chỉnh Số Liệu"
-            >
-              <Edit className="w-4 h-4" />
             </button>
           </div>
         ),
       },
     ],
-    [data]
+    []
   );
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Báo Cáo Tồn Kho Theo Kho Hàng</h1>
-          <p className="text-sm text-gray-500">
-            Xem và quản lý số lượng sản phẩm chi tiết tại từng kho chi nhánh, kho tổng hoặc kho trung chuyển của doanh nghiệp.
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Báo Cáo Tồn Kho Theo Chi Nhánh</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Xem và giám sát số lượng tồn kho chi tiết tại từng chi nhánh / kho hàng. Dữ liệu được đồng bộ trực tiếp từ hệ thống backend.
           </p>
         </div>
+        <button
+          onClick={() => { setIsLoading(true); fetchInventories().finally(() => setIsLoading(false)); }}
+          className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+        >
+          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          Làm mới
+        </button>
       </div>
 
-      <div className="p-4 bg-white dark:bg-gray-800 rounded shadow flex items-center gap-4">
-        <Building className="w-5 h-5 text-gray-400" />
+      <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-3">
+        <Building className="w-5 h-5 text-gray-400 shrink-0" />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm kiếm mã SKU, tên sản phẩm, tên kho hàng..."
-          className="w-full bg-transparent outline-none text-sm"
+          placeholder="Tìm kiếm mã SKU, tên sản phẩm, chi nhánh..."
+          className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-white placeholder-gray-400"
         />
       </div>
 
-      <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20 text-gray-400">
+          <RefreshCw className="w-6 h-6 animate-spin mr-2" />
+          <span>Đang tải dữ liệu từ backend...</span>
+        </div>
+      ) : inventories.length === 0 ? (
+        <div className="text-center py-20 text-gray-400">
+          <Building className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p className="font-medium">Chưa có dữ liệu tồn kho</p>
+          <p className="text-sm mt-1">Nhập hàng vào hệ thống để xem báo cáo tồn kho tại đây.</p>
+        </div>
+      ) : (
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      )}
 
       <Drawer
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title={`Số dư tồn kho: ${selected?.productName}`}
+        title={`Tồn kho: ${selected?.productName}`}
+        width="max-w-lg"
       >
         {selected && (
-          <div className="space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <span className="text-gray-500">Mã SKU:</span>
-                <p className="font-mono font-semibold">{selected.sku}</p>
+          <div className="space-y-6">
+            <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
+              <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">Chi Nhánh / Kho</p>
+              <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-1">{selected.branchName}</p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm text-center">
+                <p className="text-xs text-gray-500 mb-1">Tổng Tồn</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{selected.quantityOnHand}</p>
               </div>
-              <div>
-                <span className="text-gray-500">Kho Lưu Trữ:</span>
-                <p className="font-semibold text-blue-600">{selected.warehouseName}</p>
+              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm text-center">
+                <p className="text-xs text-gray-500 mb-1">Khả Dụng</p>
+                <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{selected.quantityAvailable}</p>
+              </div>
+              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm text-center">
+                <p className="text-xs text-gray-500 mb-1">Giữ Chỗ</p>
+                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{selected.quantityReserved}</p>
               </div>
             </div>
-            <div>
-              <span className="text-gray-500">Tên Sản Phẩm:</span>
-              <p className="font-semibold text-base">{selected.productName}</p>
-            </div>
-            <div className="grid grid-cols-3 gap-4 border-t pt-2">
-              <div>
-                <span className="text-gray-500">Tổng Tồn Kho:</span>
-                <p className="font-mono font-bold text-lg">{selected.quantity}</p>
+
+            <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Mã SKU:</span>
+                <span className="font-mono font-semibold text-gray-900 dark:text-white">{selected.productCode}</span>
               </div>
-              <div>
-                <span className="text-gray-500 text-emerald-600">Khả Dụng Bán:</span>
-                <p className="font-mono font-bold text-emerald-600 text-lg">{selected.availableQuantity}</p>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Tên sản phẩm:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{selected.productName}</span>
               </div>
-              <div>
-                <span className="text-gray-500">Đang Vận Chuyển:</span>
-                <p className="font-mono font-bold text-lg text-gray-500">{selected.inTransitQuantity}</p>
-              </div>
-            </div>
-            <div>
-              <span className="text-gray-500">Trạng Thái Tồn Kho:</span>
-              <div>
-                <span
-                  className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
-                    selected.status === 'CON_HANG'
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : selected.status === 'SAP_HET'
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}
-                >
-                  {selected.status === 'CON_HANG' ? 'Còn Hàng' : selected.status === 'SAP_HET' ? 'Sắp Cháy Hàng' : 'Hết Hàng'}
+              {selected.locationBin && (
+                <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
+                  <span className="text-gray-500 dark:text-gray-400">Vị trí kệ:</span>
+                  <span className="font-mono font-semibold text-blue-600 dark:text-blue-400">{selected.locationBin}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
+                <span className="text-gray-500 dark:text-gray-400">Trạng thái:</span>
+                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  getStockStatus(selected) === 'CON_HANG'
+                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                    : getStockStatus(selected) === 'SAP_HET'
+                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                    : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+                }`}>
+                  {getStockStatus(selected) === 'CON_HANG' ? 'Còn Hàng' : getStockStatus(selected) === 'SAP_HET' ? 'Sắp Cháy Hàng' : 'Hết Hàng'}
                 </span>
               </div>
             </div>
-            {selected.notes && (
-              <div>
-                <span className="text-gray-500">Ghi Chú Vận Hành Kho:</span>
-                <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
-                  {selected.notes}
-                </p>
-              </div>
-            )}
           </div>
         )}
       </Drawer>
-
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Điều Chỉnh Hạn Mức Tồn Kho Nhanh"
-      >
-        <form onSubmit={handleSaveAdjust} className="space-y-4">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Mặt Hàng & Kho Lưu</label>
-            <p className="font-semibold text-sm">{editingItem.productName} ({editingItem.sku})</p>
-            <p className="text-xs text-blue-600 font-semibold">{editingItem.warehouseName}</p>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Tổng Tồn *</label>
-              <input
-                type="number"
-                value={editingItem.quantity || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, quantity: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Khả Dụng Bán *</label>
-              <input
-                type="number"
-                value={editingItem.availableQuantity || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, availableQuantity: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Đang Đi Đường *</label>
-              <input
-                type="number"
-                value={editingItem.inTransitQuantity || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, inTransitQuantity: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
-                required
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2 border-t">
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded hover:bg-gray-100"
-            >
-              Hủy
-            </button>
-            <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Thay Đổi
-            </button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Layers, Building2, Calendar, FileText, AlertTriangle, ShieldCheck, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
@@ -7,7 +7,13 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type ProductBatchRecord } from '../store/inventoryStore';
 
 export function ProductBatchesPage() {
-  const { productBatches: data, addProductBatch, updateProductBatch, deleteProductBatch } = useInventoryStore();
+  const { productBatches: data, addProductBatch, updateProductBatch, deleteProductBatch, fetchProductBatches, fetchProducts } = useInventoryStore();
+
+  useEffect(() => {
+    fetchProductBatches();
+    fetchProducts();
+  }, [fetchProductBatches, fetchProducts]);
+
   const [search, setSearch] = useState('');
   const [selectedBatch, setSelectedBatch] = useState<ProductBatchRecord | null>(null);
 

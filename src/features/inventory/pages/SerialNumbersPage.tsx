@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, QrCode, Building2, Calendar, FileText, Wrench, RefreshCw, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -6,9 +6,20 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type SerialItemRecord } from '../store/inventoryStore';
 
 export function SerialNumbersPage() {
-  const { serialItems: data, addSerialItem, updateSerialItem, deleteSerialItem, products } = useInventoryStore();
+  const {
+    serialItems: data,
+    addSerialItem,
+    updateSerialItem,
+    deleteSerialItem,
+    products,
+    fetchProducts,
+    fetchSerialsByProduct,
+    addProductSerials
+  } = useInventoryStore();
+
   const [search, setSearch] = useState('');
   const [selectedSerial, setSelectedSerial] = useState<SerialItemRecord | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
 
   // Form states
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -18,6 +29,22 @@ export function SerialNumbersPage() {
 
   // Filter states
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  useEffect(() => {
+    if (products.length > 0 && !selectedProductId) {
+      setSelectedProductId(products[0].id);
+    }
+  }, [products, selectedProductId]);
+
+  useEffect(() => {
+    if (selectedProductId) {
+      fetchSerialsByProduct(Number(selectedProductId));
+    }
+  }, [selectedProductId, fetchSerialsByProduct]);
 
   const filtered = data.filter((item) => {
     // 1. Text search
@@ -40,7 +67,7 @@ export function SerialNumbersPage() {
 
   const handleOpenCreate = () => {
     setFormMode('create');
-    const firstProduct = products[0];
+    const firstProduct = products.find(p => p.id === selectedProductId) || products[0];
     setEditingSerial({
       serialNumber: '',
       sku: firstProduct?.sku || '',
@@ -62,35 +89,22 @@ export function SerialNumbersPage() {
     setIsFormOpen(true);
   };
 
-  const handleSaveSerial = (e: React.FormEvent) => {
+  const handleSaveSerial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingSerial.serialNumber || !editingSerial.sku) return;
 
     const prod = products.find(p => p.sku === editingSerial.sku);
-    const payload = {
-      serialNumber: editingSerial.serialNumber,
-      sku: editingSerial.sku,
-      productName: prod?.name || editingSerial.productName || '',
-      category: prod?.category || editingSerial.category || '',
-      unitCost: Number(editingSerial.unitCost) || 0,
-      status: editingSerial.status || 'IN_STOCK',
-      currentLocation: editingSerial.currentLocation || '',
-      receivedDate: editingSerial.receivedDate || '',
-      warrantyExpiry: editingSerial.warrantyExpiry || '',
-      vendorName: editingSerial.vendorName || '',
-      poReference: editingSerial.poReference || '',
-      macAddress: editingSerial.macAddress || '',
-      imei1: editingSerial.imei1 || '',
-      imei2: editingSerial.imei2 || '',
-      notes: editingSerial.notes || '',
-      associatedInvoice: editingSerial.associatedInvoice || '',
-      associatedCustomer: editingSerial.associatedCustomer || '',
-    };
+    if (!prod) return;
 
     if (formMode === 'create') {
-      addSerialItem(payload);
+      await addProductSerials(Number(prod.id), [editingSerial.serialNumber], editingSerial.notes);
+      if (selectedProductId !== prod.id) {
+        setSelectedProductId(prod.id);
+      } else {
+        await fetchSerialsByProduct(Number(prod.id));
+      }
     } else if (editingSerial.id) {
-      updateSerialItem(editingSerial.id, payload);
+      updateSerialItem(editingSerial.id, editingSerial);
     }
     setIsFormOpen(false);
   };
@@ -230,6 +244,20 @@ export function SerialNumbersPage() {
           {/* Quick Filters Row */}
           <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700/60">
             <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-gray-500 font-medium">Sản phẩm:</span>
+              <select
+                value={selectedProductId}
+                onChange={(e) => setSelectedProductId(e.target.value)}
+                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs cursor-pointer"
+              >
+                <option value="">-- Chọn sản phẩm --</option>
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs">
               <span className="text-gray-500 font-medium">Trạng thái serial:</span>
               <select
                 value={statusFilter}
@@ -245,9 +273,9 @@ export function SerialNumbersPage() {
               </select>
             </div>
 
-            {(statusFilter !== 'all' || search) && (
+            {(statusFilter !== 'all' || search || selectedProductId) && (
               <button
-                onClick={() => { setStatusFilter('all'); setSearch(''); }}
+                onClick={() => { setStatusFilter('all'); setSearch(''); if(products.length > 0) setSelectedProductId(products[0].id); }}
                 className="text-xs text-red-500 hover:text-red-600 font-semibold flex items-center gap-1 ml-auto transition-colors"
               >
                 <X className="w-3.5 h-3.5" /> Xóa bộ lọc

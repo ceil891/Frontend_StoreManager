@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Tag, DollarSign, Calendar, ShieldCheck, Trash2, Edit } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
@@ -15,14 +15,19 @@ const tierBadgeStyles = {
 };
 
 export function PriceListsPage() {
-  const { priceLists: data, addPriceList, updatePriceList, deletePriceList } = useLogisticsStore();
-  const { products } = useInventoryStore(); // Fetch available products to map prices
+  const { priceLists: data, fetchPriceLists, addPriceList, updatePriceList, deletePriceList } = useLogisticsStore();
+  const { products, fetchProducts } = useInventoryStore(); // Fetch available products to map prices
 
   const [search, setSearch] = useState('');
   const [selectedList, setSelectedList] = useState<PriceListSchedule | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+
+  useEffect(() => {
+    fetchPriceLists();
+    fetchProducts();
+  }, [fetchPriceLists, fetchProducts]);
   
   const [editingList, setEditingList] = useState<Partial<PriceListSchedule>>({ details: [] });
   const [editingDetails, setEditingDetails] = useState<PriceListDetail[]>([]);

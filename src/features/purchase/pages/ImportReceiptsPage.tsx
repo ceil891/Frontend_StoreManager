@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Building2, Calendar, FileText, CheckCircle2, Box, Edit, Trash2, X, Package, Clock, TrendingUp } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -9,7 +9,7 @@ const fmtVND = (n: number) => n.toLocaleString('vi-VN') + ' ₫';
 import { toast } from 'sonner';
 
 export function ImportReceiptsPage() {
-  const { importReceipts: data, addImportReceipt, updateImportReceipt, deleteImportReceipt } = usePurchaseStore();
+  const { importReceipts: data, fetchImportReceipts, addImportReceipt, updateImportReceipt, deleteImportReceipt } = usePurchaseStore();
   const [search, setSearch] = useState('');
   const [selectedReceipt, setSelectedReceipt] = useState<ImportReceiptItem | null>(null);
 
@@ -20,6 +20,10 @@ export function ImportReceiptsPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingReceipt, setEditingReceipt] = useState<Partial<ImportReceiptItem>>({});
   const [deletingReceipt, setDeletingReceipt] = useState<ImportReceiptItem | null>(null);
+
+  useEffect(() => {
+    fetchImportReceipts();
+  }, [fetchImportReceipts]);
 
   const filtered = data.filter((item) => {
     // 1. Text search

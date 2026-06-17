@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, ShieldAlert, Barcode, Grid, Package, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 
 interface WarehouseBinRecord {
   id: string;
@@ -16,56 +17,31 @@ interface WarehouseBinRecord {
   description?: string;
 }
 
-const MOCK_BINS: WarehouseBinRecord[] = [
-  {
-    id: '1',
-    binCode: 'BIN-A1-01',
-    barcode: 'BAR-A101',
-    zoneCode: 'ZONE-A (Khu hàng khô)',
-    maxCapacity: 1000,
-    maxVolume: 2.5,
-    status: 'CÒN_TRỐNG',
-    description: 'Dãy kệ A1, tầng 1. Thuận tiện bốc xếp hàng nhanh.',
-  },
-  {
-    id: '2',
-    binCode: 'BIN-A1-02',
-    barcode: 'BAR-A102',
-    zoneCode: 'ZONE-A (Khu hàng khô)',
-    maxCapacity: 1000,
-    maxVolume: 2.5,
-    status: 'ĐẦY_HÀNG',
-    description: 'Đang chứa 800kg thùng mì ăn liền Omachi.',
-  },
-  {
-    id: '3',
-    binCode: 'BIN-B2-05',
-    barcode: 'BAR-B205',
-    zoneCode: 'ZONE-B (Phòng lạnh)',
-    maxCapacity: 500,
-    maxVolume: 1.5,
-    status: 'CÒN_TRỐNG',
-    description: 'Kệ lạnh sâu B2, chuyên dùng cho sữa hộp đặc biệt.',
-  },
-  {
-    id: '4',
-    binCode: 'BIN-C3-01',
-    barcode: 'BAR-C301',
-    zoneCode: 'ZONE-C (Đông lạnh)',
-    maxCapacity: 800,
-    maxVolume: 2.0,
-    status: 'BẢO_TRÌ',
-    description: 'Bị lỗi cảm biến đo nhiệt độ ẩm ô kệ, chờ sửa chữa.',
-  },
-];
-
 export function WarehouseBinsPage() {
-  const [data, setData] = useState<WarehouseBinRecord[]>(MOCK_BINS);
+  const { warehouseBins, fetchWarehouseBins, addWarehouseBin, updateWarehouseBin, deleteWarehouseBin, warehouseZones, fetchWarehouseZones } = useInventoryStore();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<WarehouseBinRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<WarehouseBinRecord>>({});
+
+  useEffect(() => {
+    fetchWarehouseBins();
+    fetchWarehouseZones();
+  }, [fetchWarehouseBins, fetchWarehouseZones]);
+
+  const data = useMemo<WarehouseBinRecord[]>(() => {
+    return warehouseBins.map((b) => ({
+      id: b.id,
+      binCode: b.binCode,
+      barcode: b.barcode,
+      zoneCode: b.areaCode,
+      maxCapacity: b.maxWeightKg,
+      maxVolume: b.maxVolumeM3,
+      status: b.status === 'FULL' ? 'ĐẦY_HÀNG' : 'CÒN_TRỐNG',
+      description: b.notes,
+    }));
+  }, [warehouseBins]);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -83,7 +59,7 @@ export function WarehouseBinsPage() {
     setEditingItem({
       binCode: `BIN-A1-${String(data.length + 1).padStart(2, '0')}`,
       barcode: `BAR-A${data.length + 101}`,
-      zoneCode: 'ZONE-A (Khu hàng khô)',
+      zoneCode: warehouseZones[0]?.zoneCode || 'ZONE-A',
       maxCapacity: 1000,
       maxVolume: 2.5,
       status: 'CÒN_TRỐNG',
@@ -98,31 +74,33 @@ export function WarehouseBinsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.binCode || !editingItem.barcode || !editingItem.zoneCode) return;
 
+    const areaCode = editingItem.zoneCode;
+    const payload = {
+      binCode: editingItem.binCode!,
+      barcode: editingItem.barcode!,
+      areaCode: areaCode,
+      areaName: warehouseZones.find((z) => z.zoneCode === areaCode)?.zoneName || areaCode,
+      maxWeightKg: Number(editingItem.maxCapacity || 0),
+      maxVolumeM3: Number(editingItem.maxVolume || 0),
+      status: editingItem.status === 'ĐẦY_HÀNG' ? ('FULL' as const) : ('EMPTY' as const),
+      notes: editingItem.description,
+    };
+
     if (modalMode === 'create') {
-      const newItem: WarehouseBinRecord = {
-        id: String(data.length + 1),
-        binCode: editingItem.binCode!,
-        barcode: editingItem.barcode!,
-        zoneCode: editingItem.zoneCode!,
-        maxCapacity: Number(editingItem.maxCapacity || 0),
-        maxVolume: Number(editingItem.maxVolume || 0),
-        status: editingItem.status as any || 'CÒN_TRỐNG',
-        description: editingItem.description,
-      };
-      setData([...data, newItem]);
+      await addWarehouseBin(payload);
     } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as WarehouseBinRecord) : d)));
+      await updateWarehouseBin(editingItem.id!, payload);
     }
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa ô kệ này?')) {
-      setData(data.filter((d) => d.id !== id));
+      await deleteWarehouseBin(id);
     }
   };
 
@@ -352,10 +330,11 @@ export function WarehouseBinsPage() {
               className="w-full p-2 border rounded dark:bg-gray-950 dark:border-gray-700"
               required
             >
-              <option value="ZONE-A (Khu hàng khô)">ZONE-A (Khu hàng khô)</option>
-              <option value="ZONE-B (Phòng lạnh)">ZONE-B (Phòng lạnh)</option>
-              <option value="ZONE-C (Đông lạnh)">ZONE-C (Đông lạnh)</option>
-              <option value="ZONE-D (Hàng mẫu)">ZONE-D (Hàng mẫu)</option>
+              {warehouseZones.map((z) => (
+                <option key={z.id} value={z.zoneCode}>
+                  {z.zoneCode} ({z.zoneName})
+                </option>
+              ))}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
