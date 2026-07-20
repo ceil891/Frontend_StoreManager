@@ -21,7 +21,7 @@ const MOCK_PRODUCTS: ProductDetailRecord[] = [
   {
     id: '1',
     barcode: '8934563123456',
-    productName: 'Sữa Tươi Tiệt Trùng Vinamilk Ít Đường 1L',
+    productName: 'Sữa tươi tiệt trùng Vinamilk ít đường 1L',
     categoryName: 'Sữa & Sản phẩm từ sữa',
     brand: 'Vinamilk',
     sellingPrice: 32000,
@@ -32,7 +32,7 @@ const MOCK_PRODUCTS: ProductDetailRecord[] = [
   {
     id: '2',
     barcode: '8934563123457',
-    productName: 'Nước Ngọt Coca Cola Chai 1.5L',
+    productName: 'Nước ngọt Coca Cola chai 1.5L',
     categoryName: 'Nước giải khát',
     brand: 'Coca-Cola',
     sellingPrice: 20000,
@@ -42,7 +42,7 @@ const MOCK_PRODUCTS: ProductDetailRecord[] = [
   {
     id: '3',
     barcode: '8934563123458',
-    productName: 'Bánh Quy Kem Oreo Hộp Giấy 248g',
+    productName: 'Bánh quy kem Oreo hộp giấy 248g',
     categoryName: 'Bánh kẹo',
     brand: 'Oreo',
     sellingPrice: 45000,
@@ -130,48 +130,48 @@ export function ProductDetailsPage() {
     () => [
       {
         accessorKey: 'barcode',
-        header: 'Mã Barcode',
+        header: 'Mã barcode',
         cell: (info) => <span className="font-mono font-semibold text-emerald-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'productName',
-        header: 'Tên Sản Phẩm',
+        header: 'Tên sản phẩm',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'categoryName',
-        header: 'Danh Mục',
+        header: 'Danh mục',
         cell: (info) => <span>{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'brand',
-        header: 'Thương Hiệu',
+        header: 'Thương hiệu',
         cell: (info) => <span>{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'sellingPrice',
-        header: 'Giá Bán',
+        header: 'Giá bán',
         cell: (info) => <span className="font-mono text-emerald-600 font-bold">{formatCurrency(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           const badgeClass = status === 'DANG_KINH_DOANH' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800';
-          const label = status === 'DANG_KINH_DOANH' ? 'Đang Kinh Doanh' : 'Ngừng Kinh Doanh';
+          const label = status === 'DANG_KINH_DOANH' ? 'Đang kinh doanh' : 'Ngừng kinh doanh';
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết Sản Phẩm"
+              title="Xem chi tiết sản phẩm"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -200,7 +200,7 @@ export function ProductDetailsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Danh Mục Sản Phẩm Chi Tiết</h1>
+          <h1 className="text-2xl font-bold">Danh mục sản phẩm chi tiết</h1>
           <p className="text-sm text-gray-500">
             Quản lý cơ sở dữ liệu hàng hóa, thông tin mã vạch, giá nhập/bán, thương hiệu và trạng thái kinh doanh của cửa hàng.
           </p>
@@ -235,47 +235,47 @@ export function ProductDetailsPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã Vạch / Barcode:</span>
+                <span className="text-gray-500">Mã vạch / barcode:</span>
                 <p className="font-mono font-semibold">{selected.barcode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Thương Hiệu:</span>
+                <span className="text-gray-500">Thương hiệu:</span>
                 <p className="font-semibold">{selected.brand}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Tên Sản Phẩm:</span>
+              <span className="text-gray-500">Tên sản phẩm:</span>
               <p className="font-semibold text-base">{selected.productName}</p>
             </div>
             <div>
-              <span className="text-gray-500">Danh Mục Phân Loại:</span>
+              <span className="text-gray-500">Danh mục phân loại:</span>
               <p className="font-semibold text-emerald-600">{selected.categoryName}</p>
             </div>
             <div className="grid grid-cols-2 gap-4 border-t pt-2">
               <div>
-                <span className="text-gray-500">Giá Nhập (VND):</span>
+                <span className="text-gray-500">Giá nhập (VND):</span>
                 <p className="font-mono text-red-500 font-bold">{formatCurrency(selected.costPrice)}</p>
               </div>
               <div>
-                <span className="text-gray-500">Giá Bán Lẻ (VND):</span>
+                <span className="text-gray-500">Giá bán lẻ (VND):</span>
                 <p className="font-mono text-emerald-600 font-bold text-lg">{formatCurrency(selected.sellingPrice)}</p>
               </div>
             </div>
             <div className="border-t pt-2">
-              <span className="text-gray-500">Trạng Thái Kinh Doanh:</span>
+              <span className="text-gray-500">Trạng thái kinh doanh:</span>
               <div>
                 <span
                   className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
                     selected.status === 'DANG_KINH_DOANH' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
                   }`}
                 >
-                  {selected.status === 'DANG_KINH_DOANH' ? 'Đang Kinh Doanh' : 'Ngừng Kinh Doanh'}
+                  {selected.status === 'DANG_KINH_DOANH' ? 'Đang kinh doanh' : 'Ngừng kinh doanh'}
                 </span>
               </div>
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Mô Tả / Ghi Chú:</span>
+                <span className="text-gray-500">Mô tả / ghi chú:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                   {selected.notes}
                 </p>
@@ -288,12 +288,12 @@ export function ProductDetailsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Sản Phẩm Mới' : 'Sửa Thông Tin Sản Phẩm'}
+        title={modalMode === 'create' ? 'Thêm sản phẩm mới' : 'Sửa thông tin sản phẩm'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Vạch / Barcode *</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã vạch / barcode *</label>
               <input
                 type="text"
                 value={editingItem.barcode || ''}
@@ -305,7 +305,7 @@ export function ProductDetailsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Thương Hiệu</label>
+              <label className="block text-xs text-gray-500 mb-1">Thương hiệu</label>
               <input
                 type="text"
                 value={editingItem.brand || ''}
@@ -316,7 +316,7 @@ export function ProductDetailsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Tên Sản Phẩm *</label>
+            <label className="block text-xs text-gray-500 mb-1">Tên sản phẩm *</label>
             <input
               type="text"
               value={editingItem.productName || ''}
@@ -327,7 +327,7 @@ export function ProductDetailsPage() {
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Danh Mục Phân Loại</label>
+            <label className="block text-xs text-gray-500 mb-1">Danh mục phân loại</label>
             <input
               type="text"
               value={editingItem.categoryName || ''}
@@ -338,7 +338,7 @@ export function ProductDetailsPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Giá Nhập (VND) *</label>
+              <label className="block text-xs text-gray-500 mb-1">Giá nhập (VND) *</label>
               <input
                 type="number"
                 value={editingItem.costPrice || 0}
@@ -348,7 +348,7 @@ export function ProductDetailsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Giá Bán Lẻ (VND) *</label>
+              <label className="block text-xs text-gray-500 mb-1">Giá bán lẻ (VND) *</label>
               <input
                 type="number"
                 value={editingItem.sellingPrice || 0}
@@ -359,18 +359,18 @@ export function ProductDetailsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Trạng Thái Kinh Doanh *</label>
+            <label className="block text-xs text-gray-500 mb-1">Trạng thái kinh doanh *</label>
             <select
               value={editingItem.status || 'DANG_KINH_DOANH'}
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
               className="w-full p-2 border rounded"
             >
-              <option value="DANG_KINH_DOANH">Đang Kinh Doanh (Bán hàng)</option>
+              <option value="DANG_KINH_DOANH">Đang kinh doanh (bán hàng)</option>
               <option value="NGUNG_KINH_DOANH">Ngừng Kinh Doanh (Ẩn danh mục)</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú Chi Tiết</label>
+            <label className="block text-xs text-gray-500 mb-1">Ghi chú chi tiết</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
@@ -388,7 +388,7 @@ export function ProductDetailsPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Sản Phẩm
+              Lưu sản phẩm
             </button>
           </div>
         </form>

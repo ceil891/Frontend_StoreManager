@@ -122,7 +122,7 @@ export function SerialNumbersPage() {
     () => [
       {
         accessorKey: 'serialNumber',
-        header: 'Số Serial',
+        header: 'Số serial',
         cell: (info) => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 hover:underline">{info.getValue() as string}</span>,
       },
       {
@@ -341,7 +341,7 @@ export function SerialNumbersPage() {
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedSerial.productName}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Mã SKU / Barcode:</span>
+                <span className="text-gray-500 dark:text-gray-400">Mã SKU / barcode:</span>
                 <span className="font-mono font-semibold text-gray-900 dark:text-white">{selectedSerial.sku}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
@@ -432,13 +432,13 @@ export function SerialNumbersPage() {
       <Modal
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
-        title={formMode === 'create' ? 'Đăng Ký Serial Mới' : 'Cập Nhật Thông Tin Serial'}
+        title={formMode === 'create' ? 'Đăng ký serial mới' : 'Cập nhật thông tin serial'}
         width="max-w-2xl"
       >
         <form onSubmit={handleSaveSerial} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Số Serial *</label>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Số serial *</label>
               <input
                 type="text"
                 value={editingSerial.serialNumber || ''}
@@ -598,7 +598,7 @@ export function SerialNumbersPage() {
       <Modal
         isOpen={!!deletingSerial}
         onClose={() => setDeletingSerial(null)}
-        title="Xóa Số Serial"
+        title="Xóa số serial"
         isDestructive
         width="max-w-md"
       >

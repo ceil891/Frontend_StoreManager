@@ -464,7 +464,7 @@ export function CancelIssuePage() {
       <Modal
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
-        title={formMode === 'create' ? 'Tạo Phiếu Hủy Hàng Mới' : 'Chỉnh Sửa Phiếu Hủy Hàng'}
+        title={formMode === 'create' ? 'Tạo phiếu hủy hàng mới' : 'Chỉnh sửa phiếu hủy hàng'}
         width="max-w-2xl"
       >
         <form onSubmit={handleSaveForm} className="space-y-4">

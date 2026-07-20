@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Building2, Users, UserCheck, Briefcase, DollarSign, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
@@ -15,9 +15,14 @@ const statusStyles = {
 };
 
 export function DepartmentsPage() {
-  const { departments: data, addDepartment, updateDepartment, deleteDepartment } = useHrStore();
-  const { users } = useUserStore();
-  
+  const { departments: data, fetchDepartments, addDepartment, updateDepartment, deleteDepartment } = useHrStore();
+  const { users, fetchUsers } = useUserStore();
+
+  useEffect(() => {
+    fetchDepartments();
+    fetchUsers();
+  }, [fetchDepartments, fetchUsers]);
+
   const [search, setSearch] = useState('');
   const [selectedDept, setSelectedDept] = useState<DepartmentRecord | null>(null);
 
@@ -74,7 +79,7 @@ export function DepartmentsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveDept = (e: React.FormEvent) => {
+  const handleSaveDept = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingDept.departmentCode || !editingDept.departmentName) return;
 
@@ -90,20 +95,21 @@ export function DepartmentsPage() {
       establishedDate: editingDept.establishedDate || '',
       parentId: editingDept.parentId || undefined,
       missionStatement: editingDept.missionStatement || '',
-      locationId: editingDept.locationId || undefined
+      locationId: editingDept.locationId || undefined,
+      description: editingDept.description || '',
     };
 
     if (modalMode === 'create') {
-      addDepartment(payload);
+      await addDepartment(payload);
     } else if (editingDept.id) {
-      updateDepartment(editingDept.id, payload);
+      await updateDepartment(editingDept.id, payload);
     }
     setIsModalOpen(false);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingDept) return;
-    deleteDepartment(deletingDept.id);
+    await deleteDepartment(deletingDept.id);
     setDeletingDept(null);
   };
 
@@ -156,8 +162,8 @@ export function DepartmentsPage() {
         accessorKey: 'ytdSpendUsd',
         header: 'Chi tiêu lũy kế',
         cell: ({ row }) => {
-          const budget = row.original.allocatedAnnualBudgetUsd;
-          const spend = row.original.ytdSpendUsd;
+          const budget = row.original.allocatedAnnualBudgetUsd ?? 0;
+          const spend = row.original.ytdSpendUsd ?? 0;
           const pct = budget > 0 ? ((spend / budget) * 100).toFixed(1) : '0.0';
           return (
             <div>
@@ -303,7 +309,7 @@ export function DepartmentsPage() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Allocated Annual Budget</p>
                   <p className="text-xl font-bold font-mono text-gray-900 mt-0.5">
-                    ${selectedDept.allocatedAnnualBudgetUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    ${(selectedDept.allocatedAnnualBudgetUsd ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
               </div>
@@ -328,7 +334,7 @@ export function DepartmentsPage() {
                   <DollarSign className="w-4 h-4 text-emerald-600" /> YTD Spend Audit
                 </div>
                 <p className="text-base font-bold font-mono text-emerald-600 truncate">
-                  ${selectedDept.ytdSpendUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  ${(selectedDept.ytdSpendUsd ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -398,7 +404,7 @@ export function DepartmentsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Mã Cost Center</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Mã cost center</label>
               <input
                 type="text"
                 value={editingDept.costCenterCode || ''}
@@ -420,7 +426,7 @@ export function DepartmentsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Parent Division (Khối)</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Parent division (khối)</label>
               <select
                 value={editingDept.parentId || ''}
                 onChange={(e) => setEditingDept({ ...editingDept, parentId: e.target.value || undefined })}
@@ -508,7 +514,7 @@ export function DepartmentsPage() {
               type="submit"
               className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold"
             >
-              Lưu Thông Tin
+              Lưu thông tin
             </button>
           </div>
         </form>
@@ -517,7 +523,7 @@ export function DepartmentsPage() {
       <Modal
         isOpen={!!deletingDept}
         onClose={() => setDeletingDept(null)}
-        title="Xóa Phòng Ban"
+        title="Xóa Phòng ban"
         isDestructive
         width="max-w-md"
       >

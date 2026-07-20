@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, Calendar, User, ClipboardList, Briefcase, FileText, CheckCircle2, Clock, XCircle, ChevronRight } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface PurchaseRequestItem {
   id: string;
@@ -18,61 +20,52 @@ interface PurchaseRequestItem {
   itemsList?: { itemName: string; qty: number; unit: string; estimatedPrice: number }[];
 }
 
-const MOCK_DATA: PurchaseRequestItem[] = [
-  {
-    id: '1',
-    requestCode: 'PR-2026-001',
-    requestDate: '2026-06-01',
-    department: 'Bộ phận Kho vận',
-    reason: 'Mua bổ sung 10 xe đẩy hàng và 5 máy quét mã vạch không dây phục vụ phân khu mới',
-    estimatedTotal: 35000000,
-    proposedBy: 'Phạm Minh Hải (Trưởng Kho)',
-    status: 'CHỜ_DUYỆT',
-    notes: 'Ưu tiên mua máy quét Zebra để đồng bộ hệ thống.',
-    itemsList: [
-      { itemName: 'Xe đẩy hàng 2 bánh tải trọng 300kg', qty: 10, unit: 'Cái', estimatedPrice: 2000000 },
-      { itemName: 'Máy quét mã vạch Zebra LI4278', qty: 5, unit: 'Cái', estimatedPrice: 3000000 }
-    ]
-  },
-  {
-    id: '2',
-    requestCode: 'PR-2026-002',
-    requestDate: '2026-05-28',
-    department: 'Bộ phận Hành chính nhân sự',
-    reason: 'Trang bị văn phòng phẩm định kỳ Quý II và 2 máy in Canon LBP2900',
-    estimatedTotal: 12800000,
-    proposedBy: 'Lê Thùy Dương (Hành chính)',
-    status: 'ĐÃ_CHUYỂN_PO',
-    notes: 'Đã tạo PO-2026-045 gửi nhà cung cấp Hồng Hà.',
-    itemsList: [
-      { itemName: 'Giấy Double A A4 70gsm', qty: 50, unit: 'Ram', estimatedPrice: 76000 },
-      { itemName: 'Máy in Canon LBP2900', qty: 2, unit: 'Cái', estimatedPrice: 4500000 }
-    ]
-  },
-  {
-    id: '3',
-    requestCode: 'PR-2026-003',
-    requestDate: '2026-05-25',
-    department: 'Bộ phận Công nghệ (IT)',
-    reason: 'Mua bản quyền phần mềm thiết kế và nâng cấp RAM máy chủ',
-    estimatedTotal: 45000000,
-    proposedBy: 'Nguyễn Tuấn Anh (IT Manager)',
-    status: 'TỪ_CHỐI',
-    notes: 'Hết ngân sách IT tháng 5, dời sang đề xuất tháng 6 duyệt lại.',
-    itemsList: [
-      { itemName: 'Gói Adobe Creative Cloud 1 năm', qty: 3, unit: 'User', estimatedPrice: 10000000 },
-      { itemName: 'RAM Server DDR4 ECC 32GB', qty: 5, unit: 'Thanh', estimatedPrice: 3000000 }
-    ]
-  }
-];
-
 export function PurchaseRequestsPage() {
-  const [data, setData] = useState<PurchaseRequestItem[]>(MOCK_DATA);
+  const [data, setData] = useState<PurchaseRequestItem[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
   const [selectedItem, setSelectedItem] = useState<PurchaseRequestItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Partial<PurchaseRequestItem>>({});
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fetchRequests = async () => {
+    try {
+      setIsLoading(true);
+      const res = await axiosClient.get('/purchase/requests?size=500');
+      const list = res.content || res || [];
+      const mapped: PurchaseRequestItem[] = (Array.isArray(list) ? list : []).map((item: any) => {
+        const statusMap: Record<string, PurchaseRequestItem['status']> = {
+          DRAFT: 'CHỜ_DUYỆT',
+          PENDING_APPROVAL: 'CHỜ_DUYỆT',
+          APPROVED: 'ĐÃ_CHUYỂN_PO',
+          COMPLETED: 'ĐÃ_CHUYỂN_PO',
+          REJECTED: 'TỪ_CHỐI',
+        };
+        return {
+          id: String(item.id),
+          requestCode: item.requestCode || '',
+          requestDate: item.requestDate || '',
+          department: item.branch?.name || item.department || '',
+          reason: item.reason || '',
+          estimatedTotal: item.estimatedTotal || 0,
+          proposedBy: item.proposedBy || item.createdBy || '',
+          status: statusMap[item.status] || 'CHỜ_DUYỆT',
+          notes: item.notes || '',
+        };
+      });
+      setData(mapped);
+    } catch (err) {
+      console.error('Lỗi tải danh sách yêu cầu mua hàng:', err);
+      toast.error('Không thể tải danh sách yêu cầu mua hàng');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRequests();
+  }, []);
 
   const filtered = data.filter((item) => {
     const matchesSearch =
@@ -98,26 +91,32 @@ export function PurchaseRequestsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.reason || !editingItem.estimatedTotal) return;
 
-    const newItem: PurchaseRequestItem = {
-      id: String(data.length + 1),
-      requestCode: editingItem.requestCode || `PR-2026-00${data.length + 1}`,
-      requestDate: editingItem.requestDate || new Date().toISOString().split('T')[0],
-      department: editingItem.department || 'Bộ phận Kho vận',
-      reason: editingItem.reason,
-      estimatedTotal: Number(editingItem.estimatedTotal),
-      proposedBy: editingItem.proposedBy || 'Nhân viên đề xuất',
-      status: (editingItem.status as any) || 'CHỜ_DUYỆT',
-      notes: editingItem.notes || '',
-      itemsList: [
-        { itemName: 'Mặt hàng đề xuất mẫu', qty: 1, unit: 'Cái', estimatedPrice: Number(editingItem.estimatedTotal) }
-      ]
-    };
-    setData([newItem, ...data]);
-    setIsModalOpen(false);
+    try {
+      const statusMap: Record<string, string> = {
+        'CHỜ_DUYỆT': 'PENDING_APPROVAL',
+        'ĐÃ_CHUYỂN_PO': 'APPROVED',
+        'TỪ_CHỐI': 'REJECTED',
+      };
+      const payload = {
+        requestCode: editingItem.requestCode || `PR-2026-00${data.length + 1}`,
+        requestDate: editingItem.requestDate || new Date().toISOString().split('T')[0],
+        reason: editingItem.reason,
+        estimatedTotal: Number(editingItem.estimatedTotal),
+        status: statusMap[editingItem.status || 'CHỜ_DUYỆT'] || 'PENDING_APPROVAL',
+        notes: editingItem.notes || '',
+      };
+      await axiosClient.post('/purchase/requests', payload);
+      toast.success('Tạo yêu cầu mua hàng thành công');
+      await fetchRequests();
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error('Lỗi tạo yêu cầu mua hàng:', err);
+      toast.error('Không thể tạo yêu cầu mua hàng');
+    }
   };
 
   const formatCurrency = (val: number) => {
@@ -128,7 +127,7 @@ export function PurchaseRequestsPage() {
     () => [
       {
         accessorKey: 'requestCode',
-        header: 'Mã Yêu Cầu',
+        header: 'Mã yêu cầu',
         cell: (info) => (
           <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
             {info.getValue() as string}
@@ -137,7 +136,7 @@ export function PurchaseRequestsPage() {
       },
       {
         accessorKey: 'requestDate',
-        header: 'Ngày Đề Xuất',
+        header: 'Ngày đề xuất',
         cell: (info) => (
           <span className="inline-flex items-center gap-1 text-sm text-gray-600 dark:text-gray-300">
             <Calendar className="w-3.5 h-3.5 text-gray-400" />
@@ -147,22 +146,22 @@ export function PurchaseRequestsPage() {
       },
       {
         accessorKey: 'department',
-        header: 'Bộ Phận Đề Xuất',
+        header: 'Bộ phận đề xuất',
         cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'reason',
-        header: 'Lý Do Đề Xuất',
+        header: 'Lý do đề xuất',
         cell: (info) => <span className="text-gray-500 text-sm whitespace-normal max-w-xs block line-clamp-2">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'estimatedTotal',
-        header: 'Tổng Tiền Dự Kiến',
+        header: 'Tổng tiền dự kiến',
         cell: (info) => <span className="font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'proposedBy',
-        header: 'Người Đề Xuất',
+        header: 'Người đề xuất',
         cell: (info) => (
           <span className="inline-flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300">
             <User className="w-3.5 h-3.5 text-gray-400" />
@@ -172,7 +171,7 @@ export function PurchaseRequestsPage() {
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           let badgeClass = '';
@@ -199,7 +198,7 @@ export function PurchaseRequestsPage() {
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <button
@@ -221,7 +220,7 @@ export function PurchaseRequestsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Yêu Cầu Mua Hàng (Purchase Request)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Yêu cầu mua hàng (purchase request)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Phê duyệt các yêu cầu mua sắm thiết bị, vật tư văn phòng hoặc nhập hàng hóa từ các bộ phận trước khi tạo đơn PO chính thức.
             </p>
@@ -267,7 +266,13 @@ export function PurchaseRequestsPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} />
+        {isLoading ? (
+          <div className="flex justify-center items-center py-20">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-500" />
+          </div>
+        ) : (
+          <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} />
+        )}
       </div>
 
       {/* Drawer Chi tiết và mặt hàng mua */}
@@ -406,7 +411,7 @@ export function PurchaseRequestsPage() {
                 <option value="Bộ phận Hành chính nhân sự">Bộ phận Hành chính nhân sự</option>
                 <option value="Bộ phận Công nghệ (IT)">Bộ phận Công nghệ (IT)</option>
                 <option value="Phòng Kinh doanh / Bán hàng">Phòng Kinh doanh / Bán hàng</option>
-                <option value="Ban Giám Đốc">Ban Giám Đốc</option>
+                <option value="Ban giám đốc">Ban giám đốc</option>
               </select>
             </div>
             <div>

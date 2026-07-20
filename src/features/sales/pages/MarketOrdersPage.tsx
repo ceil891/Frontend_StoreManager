@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, MapPin, Calendar, User, DollarSign, Tag, CheckCircle2, Clock, XCircle, Trash2, Edit } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useSalesStore } from '@/features/sales/store/salesStore';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface MarketOrderItem {
   id: string;
@@ -19,70 +22,59 @@ interface MarketOrderItem {
   productList?: { productName: string; quantity: number; price: number }[];
 }
 
-const MOCK_DATA: MarketOrderItem[] = [
-  {
-    id: '1',
-    orderCode: 'MDO-001',
-    customerName: 'Cửa hàng tạp hóa Minh Thư',
-    gpsCoordinates: '10.762622, 106.660172',
-    orderValue: 1250000,
-    deliveryDate: '2026-06-10',
-    createdBy: 'Nguyễn Văn Nam (Sale Tuyến 1)',
-    status: 'ĐÃ_DUYỆT',
-    notes: 'Giao giờ hành chính, gọi trước 15 phút',
-    address: '154 Trần Hưng Đạo, Quận 1, TP. HCM',
-    productList: [
-      { productName: 'Nước ngọt Coca-Cola 320ml', quantity: 5, price: 180000 },
-      { productName: 'Bánh quy Cosy Kinh Đô', quantity: 10, price: 35000 },
-    ]
-  },
-  {
-    id: '2',
-    orderCode: 'MDO-002',
-    customerName: 'Đại lý sữa & bỉm Hồng Nhung',
-    gpsCoordinates: '10.823098, 106.629664',
-    orderValue: 4800000,
-    deliveryDate: '2026-06-08',
-    createdBy: 'Trần Thị Thu (Sale Tuyến 2)',
-    status: 'CHỜ_DUYỆT',
-    notes: 'Khách cần gấp trước ngày 10',
-    address: '89 Phan Văn Trị, Gò Vấp, TP. HCM',
-    productList: [
-      { productName: 'Sữa bột Abbott Grow 900g', quantity: 12, price: 400000 },
-    ]
-  },
-  {
-    id: '3',
-    orderCode: 'MDO-003',
-    customerName: 'Siêu thị mini Mart 365',
-    gpsCoordinates: '10.795621, 106.721021',
-    orderValue: 3100000,
-    deliveryDate: '2026-06-12',
-    createdBy: 'Lê Hoàng Hải (Sale Tuyến 3)',
-    status: 'TỪ_CHỐI',
-    notes: 'Vượt hạn mức công nợ của đại lý',
-    address: '22 Nguyễn Cơ Thạch, Quận 2, TP. HCM',
-    productList: [
-      { productName: 'Dầu ăn Simply 5L', quantity: 15, price: 200000 },
-      { productName: 'Mì gói Hảo Hảo Tôm Chua Cay', quantity: 2, price: 50000 },
-    ]
-  }
-];
-
 export function MarketOrdersPage() {
-  const [data, setData] = useState<MarketOrderItem[]>(MOCK_DATA);
+  const { saleOrders, fetchSaleOrders, addSaleOrder, updateSaleOrder, deleteSaleOrder } = useSalesStore();
+  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
   const [selectedItem, setSelectedItem] = useState<MarketOrderItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Partial<MarketOrderItem>>({});
 
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        await fetchSaleOrders();
+      } catch (err) {
+        console.error(err);
+        toast.error('Không thể tải danh sách đơn thị trường');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+  }, [fetchSaleOrders]);
+
+  const data = useMemo<MarketOrderItem[]>(() => {
+    return saleOrders.map((o) => ({
+      id: o.id,
+      orderCode: o.code,
+      customerName: o.customerId || 'Khách lẻ',
+      gpsCoordinates: '10.762622, 106.660172',
+      orderValue: o.totalAmount,
+      deliveryDate: o.date ? o.date.substring(0, 10) : '',
+      createdBy: o.createdByName || 'NVKD tuyến',
+      status: o.status === 'COMPLETED' ? 'ĐÃ_DUYỆT' : o.status === 'CANCELLED' ? 'TỪ_CHỐI' : 'CHỜ_DUYỆT',
+      notes: o.paymentMethod || '',
+      address: o.shippingAddress || 'Hà Nội, Việt Nam',
+      productList: o.orderLines?.map((item) => ({
+        productName: item.productName,
+        quantity: item.quantity,
+        price: item.unitPrice,
+      })) || [],
+    }));
+  }, [saleOrders]);
+
   const filtered = data.filter((item) => {
     const matchesSearch =
       item.orderCode.toLowerCase().includes(search.toLowerCase()) ||
       item.customerName.toLowerCase().includes(search.toLowerCase()) ||
       item.createdBy.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'Tất cả' || item.status === statusFilter;
+
+    const matchesStatus =
+      statusFilter === 'Tất cả' || item.status === statusFilter;
+
     return matchesSearch && matchesStatus;
   });
 
@@ -101,27 +93,34 @@ export function MarketOrdersPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.customerName || !editingItem.orderValue) return;
 
-    const newItem: MarketOrderItem = {
-      id: String(data.length + 1),
-      orderCode: editingItem.orderCode || `MDO-00${data.length + 1}`,
-      customerName: editingItem.customerName,
-      gpsCoordinates: editingItem.gpsCoordinates || '10.776889, 106.700806',
-      orderValue: Number(editingItem.orderValue),
-      deliveryDate: editingItem.deliveryDate || new Date().toISOString().split('T')[0],
-      createdBy: editingItem.createdBy || 'Quản trị viên',
-      status: (editingItem.status as any) || 'CHỜ_DUYỆT',
-      notes: editingItem.notes || '',
-      address: editingItem.address || '',
-      productList: [
-        { productName: 'Sản phẩm demo', quantity: 1, price: Number(editingItem.orderValue) }
-      ]
-    };
-    setData([newItem, ...data]);
-    setIsModalOpen(false);
+    try {
+      const payload = {
+        code: editingItem.orderCode || `MDO-00${data.length + 1}`,
+        customerId: editingItem.customerName,
+        date: editingItem.deliveryDate || new Date().toISOString().split('T')[0],
+        subTotal: Number(editingItem.orderValue),
+        taxAmount: 0,
+        discountAmount: 0,
+        totalAmount: Number(editingItem.orderValue),
+        status: (editingItem.status === 'ĐÃ_DUYỆT' ? 'COMPLETED' : editingItem.status === 'TỪ_CHỐI' ? 'CANCELLED' : 'PENDING') as any,
+        paymentStatus: 'PAID' as any,
+        createdByName: editingItem.createdBy || 'Quản trị viên',
+        shippingAddress: editingItem.address || '',
+        paymentMethod: editingItem.notes || '',
+        origin: 'POS' as any,
+      };
+      await addSaleOrder(payload);
+      toast.success('Tạo đơn thị trường thành công!');
+      setIsModalOpen(false);
+      fetchSaleOrders();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi lưu đơn thị trường.');
+    }
   };
 
   const formatCurrency = (val: number) => {
@@ -132,7 +131,7 @@ export function MarketOrdersPage() {
     () => [
       {
         accessorKey: 'orderCode',
-        header: 'Mã Đơn Thị Trường',
+        header: 'Mã đơn thị trường',
         cell: (info) => (
           <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
             {info.getValue() as string}
@@ -141,12 +140,12 @@ export function MarketOrdersPage() {
       },
       {
         accessorKey: 'customerName',
-        header: 'Khách Hàng',
+        header: 'Khách hàng',
         cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'gpsCoordinates',
-        header: 'Tọa Độ GPS',
+        header: 'Tọa độ GPS',
         cell: (info) => (
           <span className="inline-flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
             <MapPin className="w-3.5 h-3.5 text-red-500" />
@@ -156,12 +155,12 @@ export function MarketOrdersPage() {
       },
       {
         accessorKey: 'orderValue',
-        header: 'Giá Trị Đơn Hàng',
+        header: 'Giá trị đơn hàng',
         cell: (info) => <span className="font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'deliveryDate',
-        header: 'Ngày Hẹn Giao',
+        header: 'Ngày hẹn giao',
         cell: (info) => (
           <span className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300">
             <Calendar className="w-4 h-4 text-gray-400" />
@@ -171,7 +170,7 @@ export function MarketOrdersPage() {
       },
       {
         accessorKey: 'createdBy',
-        header: 'Người Lập',
+        header: 'Người lập',
         cell: (info) => (
           <span className="inline-flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300">
             <User className="w-3.5 h-3.5 text-gray-400" />
@@ -181,7 +180,7 @@ export function MarketOrdersPage() {
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           let badgeClass = '';
@@ -208,7 +207,7 @@ export function MarketOrdersPage() {
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <button
@@ -276,7 +275,14 @@ export function MarketOrdersPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} />
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-sm font-bold text-gray-500">Đang tải danh sách đơn thị trường...</span>
+          </div>
+        ) : (
+          <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} />
+        )}
       </div>
 
       {/* Drawer Chi tiết đơn hàng và tọa độ */}

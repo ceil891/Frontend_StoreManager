@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, Building2, Calendar, FileText, ShieldCheck, FileCheck, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePurchaseStore, type PurchaseOrderItem } from '../store/purchaseStore';
+import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -15,14 +16,42 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELLED: 'Đã hủy',
 };
 
+interface POLineItem {
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+}
+
 export function PurchaseOrdersPage() {
-  const { purchaseOrders: data, addPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder } = usePurchaseStore();
+  const { purchaseOrders: data, addPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, fetchPurchaseOrders } = usePurchaseStore();
+  const [apiSuppliers, setApiSuppliers] = useState<string[]>([]);
+  const [apiProducts, setApiProducts] = useState<{ name: string; price: number }[]>([]);
+
+  useEffect(() => {
+    fetchPurchaseOrders();
+
+    axiosClient.get('/purchase/suppliers').then((res: any) => {
+      const list = Array.isArray(res) ? res : res?.content || res?.data || [];
+      if (list.length > 0) {
+        setApiSuppliers(list.map((s: any) => s.name || s.supplierName || s.fullName));
+      }
+    }).catch(() => {});
+
+    axiosClient.get('/catalog/products').then((res: any) => {
+      const list = Array.isArray(res) ? res : res?.content || res?.data || [];
+      if (list.length > 0) {
+        setApiProducts(list.map((p: any) => ({ name: p.name, price: Number(p.basePrice || p.costPrice || 50000) })));
+      }
+    }).catch(() => {});
+  }, [fetchPurchaseOrders]);
+
   const [search, setSearch] = useState('');
   const [selectedPO, setSelectedPO] = useState<PurchaseOrderItem | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAutoCode, setIsAutoCode] = useState(true);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  const [editingPO, setEditingPO] = useState<Partial<PurchaseOrderItem>>({});
+  const [editingPO, setEditingPO] = useState<Partial<PurchaseOrderItem> & { poLines?: POLineItem[] }>({});
   const [deletingPO, setDeletingPO] = useState<PurchaseOrderItem | null>(null);
 
   const filtered = data.filter((item) =>
@@ -31,31 +60,130 @@ export function PurchaseOrdersPage() {
     item.destinationStore.toLowerCase().includes(search.toLowerCase())
   );
 
+  const defaultSuppliers = apiSuppliers.length > 0 ? apiSuppliers : [
+    'Công ty TNHH Thực phẩm Vinamilk',
+    'Tập đoàn Điện tử Samsung Việt Nam',
+    'Công ty CP Bách Hóa Xanh',
+    'Công ty TNHH Unilever Việt Nam',
+    'Công ty P&G Việt Nam',
+    'Công ty TNHH Unicharm Việt Nam',
+    'Tổng Công ty Masan Consumer'
+  ];
+
+  const defaultProducts = apiProducts.length > 0 ? apiProducts : [
+    { name: 'Sữa tươi Vinamilk 100% Không đường 1L', price: 28000 },
+    { name: 'Điện thoại iPhone 15 Pro Max 256GB', price: 26500000 },
+    { name: 'Nước Giặt OMO Matic Cửa Trên 3.6kg', price: 175000 },
+    { name: 'Smart TV Samsung QLED 4K 65 inch', price: 15000000 },
+    { name: 'Nước mắm Nam Ngư Đệ Nhị 900ml', price: 25000 },
+    { name: 'Dầu ăn Simply Đậu Nành 1L', price: 62000 },
+    { name: 'Bánh Quy Danisa Butter Cookies 454g', price: 185000 },
+    { name: 'Tã dán Unicharm Bobby Siêu Thấm M76', price: 310000 },
+  ];
+
   const handleOpenCreate = () => {
     setModalMode('create');
+    setIsAutoCode(true);
     const today = new Date().toISOString().split('T')[0];
     const nextWeek = new Date();
     nextWeek.setDate(nextWeek.getDate() + 7);
     
+    const initialLines: POLineItem[] = [
+      { productName: defaultProducts[0].name, quantity: 500, unitPrice: defaultProducts[0].price }
+    ];
+    const totalQty = initialLines.reduce((acc, l) => acc + l.quantity, 0);
+    const totalVal = initialLines.reduce((acc, l) => acc + (l.quantity * l.unitPrice), 0);
+
     setEditingPO({
       poNumber: `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      supplierName: '',
+      supplierName: defaultSuppliers[0],
       destinationStore: 'Main Flagship / HQ',
       orderDate: today,
       estDeliveryDate: nextWeek.toISOString().split('T')[0],
-      totalCost: 0,
+      totalCost: totalVal,
       status: 'DRAFT',
       paymentStatus: 'UNPAID',
       orderedBy: 'Admin User',
-      itemsCount: 1,
-      notes: ''
+      itemsCount: totalQty,
+      notes: 'Giao hàng trong giờ hành chính, kèm đầy đủ chứng từ VAT.',
+      poLines: initialLines
     });
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (po: PurchaseOrderItem) => {
+  const handleAddPOLine = () => {
+    const lines = editingPO.poLines || [];
+    const newLine: POLineItem = { productName: defaultProducts[0].name, quantity: 10, unitPrice: defaultProducts[0].price };
+    const updatedLines = [...lines, newLine];
+    const totalQty = updatedLines.reduce((acc, l) => acc + Number(l.quantity), 0);
+    const totalVal = updatedLines.reduce((acc, l) => acc + (Number(l.quantity) * Number(l.unitPrice)), 0);
+
+    setEditingPO({
+      ...editingPO,
+      poLines: updatedLines,
+      itemsCount: totalQty,
+      totalCost: totalVal
+    });
+  };
+
+  const handlePOLineChange = (index: number, field: keyof POLineItem, val: any) => {
+    const lines = [...(editingPO.poLines || [])];
+    lines[index] = { ...lines[index], [field]: val };
+
+    // Auto-update price if product changed
+    if (field === 'productName') {
+      const found = defaultProducts.find(p => p.name === val);
+      if (found) {
+        lines[index].unitPrice = found.price;
+      }
+    }
+
+    const totalQty = lines.reduce((acc, l) => acc + Number(l.quantity), 0);
+    const totalVal = lines.reduce((acc, l) => acc + (Number(l.quantity) * Number(l.unitPrice)), 0);
+
+    setEditingPO({
+      ...editingPO,
+      poLines: lines,
+      itemsCount: totalQty,
+      totalCost: totalVal
+    });
+  };
+
+  const handleRemovePOLine = (index: number) => {
+    const lines = (editingPO.poLines || []).filter((_, i) => i !== index);
+    const totalQty = lines.reduce((acc, l) => acc + Number(l.quantity), 0);
+    const totalVal = lines.reduce((acc, l) => acc + (Number(l.quantity) * Number(l.unitPrice)), 0);
+
+    setEditingPO({
+      ...editingPO,
+      poLines: lines,
+      itemsCount: totalQty,
+      totalCost: totalVal
+    });
+  };
+
+  const handleOpenEdit = (po: PurchaseOrderItem & { poLines?: POLineItem[] }) => {
     setModalMode('edit');
-    setEditingPO(po);
+    setIsAutoCode(false);
+
+    const existingLines: POLineItem[] = (po.poLines && po.poLines.length > 0)
+      ? po.poLines
+      : [
+          {
+            productName: po.supplierName.includes('Samsung')
+              ? 'Smart TV Samsung QLED 4K 65 inch'
+              : po.supplierName.includes('Unilever')
+              ? 'Nước Giặt OMO Matic Cửa Trên 3.6kg'
+              : 'Sữa tươi Vinamilk 100% Không đường 1L',
+            quantity: po.itemsCount || 1,
+            unitPrice: po.itemsCount && po.itemsCount > 0 ? Math.round(po.totalCost / po.itemsCount) : po.totalCost
+          }
+        ];
+
+    setEditingPO({
+      ...po,
+      poLines: existingLines
+    });
     setIsModalOpen(true);
   };
 
@@ -352,18 +480,40 @@ export function PurchaseOrdersPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo Đơn Đặt Hàng Mua' : 'Cập Nhật Đơn Mua'}
+        title={modalMode === 'create' ? 'Tạo đơn đặt hàng mua' : 'Cập nhật đơn mua'}
         width="max-w-2xl"
       >
         <form onSubmit={handleSavePO} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã PO *</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã PO *</label>
+                {modalMode === 'create' && (
+                  <label className="flex items-center gap-1 text-[10px] text-emerald-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isAutoCode}
+                      onChange={(e) => {
+                        setIsAutoCode(e.target.checked);
+                        if (e.target.checked) {
+                          setEditingPO(prev => ({
+                            ...prev,
+                            poNumber: `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+                          }));
+                        }
+                      }}
+                      className="rounded text-emerald-600 focus:ring-emerald-550 w-3 h-3"
+                    />
+                    <span>Tự động sinh</span>
+                  </label>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingPO.poNumber || ''}
                 onChange={(e) => setEditingPO({ ...editingPO, poNumber: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                disabled={modalMode === 'create' && isAutoCode}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
                 required
               />
             </div>
@@ -371,12 +521,18 @@ export function PurchaseOrdersPage() {
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhà cung cấp *</label>
               <input
                 type="text"
+                list="suppliers-datalist"
                 value={editingPO.supplierName || ''}
                 onChange={(e) => setEditingPO({ ...editingPO, supplierName: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
                 required
-                placeholder="Tên nhà cung cấp..."
+                placeholder="Chọn hoặc nhập tên nhà cung cấp..."
               />
+              <datalist id="suppliers-datalist">
+                {defaultSuppliers.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
             </div>
           </div>
 
@@ -459,19 +615,103 @@ export function PurchaseOrdersPage() {
                 type="number"
                 step="1"
                 value={editingPO.totalCost || 0}
-                onChange={(e) => setEditingPO({ ...editingPO, totalCost: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-400 font-mono text-sm focus:ring-2 focus:ring-emerald-500 cursor-not-allowed"
+                disabled
               />
+              <p className="text-[9px] text-gray-400 mt-1">Hệ thống tự động tính từ danh sách sản phẩm PO.</p>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng số lượng sản phẩm</label>
               <input
                 type="number"
                 value={editingPO.itemsCount || 1}
-                onChange={(e) => setEditingPO({ ...editingPO, itemsCount: parseInt(e.target.value) || 1 })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-400 font-mono text-sm focus:ring-2 focus:ring-emerald-500 cursor-not-allowed"
+                disabled
               />
+              <p className="text-[9px] text-gray-400 mt-1">Hệ thống tự động tính từ số lượng quy đổi thực tế.</p>
             </div>
+          </div>
+
+          {/* Section: Product Line Items (PO) */}
+          <div className="bg-gray-50/50 dark:bg-gray-900/30 p-3 rounded-xl border border-gray-200 dark:border-gray-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-emerald-600 animate-pulse" />
+                Chi tiết các sản phẩm đặt mua (PO Line Items)
+              </h3>
+              <button
+                type="button"
+                onClick={handleAddPOLine}
+                className="px-2.5 py-1 text-xs bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors font-semibold"
+              >
+                + Thêm sản phẩm đặt mua
+              </button>
+            </div>
+
+            {(!editingPO.poLines || editingPO.poLines.length === 0) ? (
+              <p className="text-xs text-gray-400 italic bg-white dark:bg-gray-900/10 p-4 text-center rounded-lg border border-dashed border-gray-300 dark:border-gray-700">
+                Chưa có sản phẩm nào. Vui lòng bấm nút phía trên để thêm mặt hàng đặt mua.
+              </p>
+            ) : (
+              <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+                {editingPO.poLines.map((line, idx) => (
+                  <div key={idx} className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800 space-y-2 relative">
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePOLine(idx)}
+                      className="absolute top-2 right-2 text-gray-400 hover:text-red-500 transition-colors"
+                      title="Xóa mặt hàng này"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pr-6">
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] font-semibold text-gray-400 uppercase">Tên sản phẩm *</label>
+                        <select
+                          value={line.productName}
+                          onChange={(e) => handlePOLineChange(idx, 'productName', e.target.value)}
+                          className="w-full mt-0.5 px-2 py-1 text-xs border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-medium cursor-pointer"
+                        >
+                          {defaultProducts.map((p) => (
+                            <option key={p.name} value={p.name}>
+                              {p.name} ({(p.price).toLocaleString('vi-VN')} ₫)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 sm:col-span-1">
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-400 uppercase">Số lượng</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={line.quantity}
+                            onChange={(e) => handlePOLineChange(idx, 'quantity', parseInt(e.target.value) || 1)}
+                            className="w-full mt-0.5 px-2 py-1 text-xs border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-400 uppercase">Đơn giá (₫)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={line.unitPrice}
+                            onChange={(e) => handlePOLineChange(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
+                            className="w-full mt-0.5 px-2 py-1 text-xs border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                      Thành tiền: {(line.quantity * line.unitPrice).toLocaleString('vi-VN')} ₫
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>

@@ -73,7 +73,7 @@ export function SalesReportPage() {
         color: 'text-indigo-600 bg-indigo-50 border-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/30 dark:border-indigo-900/50',
       },
       {
-        title: 'Số Đơn Hàng',
+        title: 'Số đơn hàng',
         value: orderCount.toLocaleString('vi-VN'),
         trend: `${saleOrders.filter((o) => o.origin === 'POS').length} từ POS`,
         isUp: true,
@@ -81,7 +81,7 @@ export function SalesReportPage() {
         color: 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-900/50',
       },
       {
-        title: 'Giá Trị Đơn TB (AOV)',
+        title: 'Giá trị đơn TB (AOV)',
         value: formatVnd(aovVnd),
         trend: 'Đơn đã thanh toán',
         isUp: aovVnd > 0,
@@ -216,7 +216,7 @@ export function SalesReportPage() {
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
           >
             <Download className="w-4 h-4" />
-            Xuất Excel
+            Xuất excel
           </button>
         </div>
       </div>

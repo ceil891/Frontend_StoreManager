@@ -10,9 +10,9 @@ const MOCK_STATS = {
 };
 
 const MOCK_RECENT_ACTIVITIES = [
-  { id: 1, type: 'IMPORT', code: 'IM-2026-981', item: 'Sữa tươi Vinamilk', qty: 200, time: '10 phút trước', user: 'Lưu Hữu Phước' },
-  { id: 2, type: 'EXPORT', code: 'SOUT-2026-001', item: 'Nước ngọt Coca-Cola', qty: 48, time: '25 phút trước', user: 'Nguyễn Văn Thủ Kho' },
-  { id: 3, type: 'ADJUST', code: 'IADJ-2026-001', item: 'Gạo tám thơm', qty: +5, time: '1 giờ trước', user: 'Lưu Hữu Phước' },
+  { id: 1, type: 'IMPORT', code: 'IM-2026-981', item: 'Sữa tươi Vinamilk', qty: 200, time: '10 phút trước', user: 'Lưu hữu phước' },
+  { id: 2, type: 'EXPORT', code: 'SOUT-2026-001', item: 'Nước ngọt Coca-Cola', qty: 48, time: '25 phút trước', user: 'Nguyễn Văn thủ kho' },
+  { id: 3, type: 'ADJUST', code: 'IADJ-2026-001', item: 'Gạo tám thơm', qty: +5, time: '1 giờ trước', user: 'Lưu hữu phước' },
 ];
 
 export function InventoryDashboardPage() {
@@ -23,7 +23,7 @@ export function InventoryDashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Báo Cáo Tổng Quan Kho Hàng</h1>
+        <h1 className="text-2xl font-bold">Báo cáo tổng quan kho hàng</h1>
         <p className="text-sm text-gray-500">
           Xem chỉ số thống kê, hiệu suất quay vòng tồn kho, giá trị tài sản lưu kho và các biến động xuất nhập tồn.
         </p>
@@ -36,7 +36,7 @@ export function InventoryDashboardPage() {
             <Package className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs text-gray-500">Tổng Số Mặt Hàng (SKUs)</span>
+            <span className="text-xs text-gray-500">Tổng số mặt hàng (skus)</span>
             <h3 className="text-2xl font-bold font-mono">{MOCK_STATS.totalSkus}</h3>
           </div>
         </div>
@@ -46,7 +46,7 @@ export function InventoryDashboardPage() {
             <TrendingUp className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs text-gray-500">Tổng Giá Trị Lưu Kho</span>
+            <span className="text-xs text-gray-500">Tổng giá trị lưu kho</span>
             <h3 className="text-2xl font-bold font-mono text-blue-600">{formatCurrency(MOCK_STATS.totalStockValue)}</h3>
           </div>
         </div>
@@ -56,7 +56,7 @@ export function InventoryDashboardPage() {
             <Layers className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs text-gray-500">Tổng Số Lượng Tồn Kho</span>
+            <span className="text-xs text-gray-500">Tổng số lượng tồn kho</span>
             <h3 className="text-2xl font-bold font-mono">{MOCK_STATS.totalStockQty} sản phẩm</h3>
           </div>
         </div>
@@ -66,7 +66,7 @@ export function InventoryDashboardPage() {
             <AlertTriangle className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs text-gray-500">Cảnh Báo Sắp Hết Hàng</span>
+            <span className="text-xs text-gray-500">Cảnh báo sắp hết hàng</span>
             <h3 className="text-2xl font-bold font-mono text-red-600">{MOCK_STATS.lowStockCount} SKUs</h3>
           </div>
         </div>
@@ -90,7 +90,7 @@ export function InventoryDashboardPage() {
                       ? 'bg-red-50 text-red-700 dark:bg-red-900/30'
                       : 'bg-amber-50 text-amber-700 dark:bg-amber-900/30'
                   }`}>
-                    {act.type === 'IMPORT' ? 'Nhập' : act.type === 'EXPORT' ? 'Xuất' : 'Cân Bằng'}
+                    {act.type === 'IMPORT' ? 'Nhập' : act.type === 'EXPORT' ? 'Xuất' : 'Cân bằng'}
                   </span>
                   <div>
                     <p className="font-semibold">{act.item}</p>
@@ -123,7 +123,7 @@ export function InventoryDashboardPage() {
             </div>
             <div className="p-3 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded flex justify-between items-center">
               <div>
-                <p className="font-semibold text-xs text-red-900 dark:text-red-200">Dầu Ăn Simply 1L</p>
+                <p className="font-semibold text-xs text-red-900 dark:text-red-200">Dầu ăn simply 1L</p>
                 <span className="text-xs text-red-700">Tồn: 12 chai (Định mức min: 40)</span>
               </div>
               <span className="text-xs px-2 py-0.5 bg-red-200 text-red-800 rounded font-semibold">Gấp</span>

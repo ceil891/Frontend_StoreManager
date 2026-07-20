@@ -446,7 +446,7 @@ export function VatConfigPage() {
                   <span className="text-xs text-gray-500">Cấp tài phán quản lý:</span>
                   <span className="inline-block px-2.5 py-0.5 rounded text-xs font-bold border bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-800">
                     {selectedVat.jurisdiction === 'NATIONAL_FEDERAL' ? 'Quốc gia - Liên bang' :
-                     selectedVat.jurisdiction === 'STATE_PROVINCIAL' ? 'Tỉnh - Bang' :
+                     selectedVat.jurisdiction === 'STATE_PROVINCIAL' ? 'Tỉnh - bang' :
                      selectedVat.jurisdiction === 'MUNICIPAL_LOCAL' ? 'Thành phố - Quận huyện' : 'Khu kinh tế đặc quyền'}
                   </span>
                 </div>
@@ -560,7 +560,7 @@ export function VatConfigPage() {
                 className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
               >
                 <option value="NATIONAL_FEDERAL">Quốc gia - Liên bang</option>
-                <option value="STATE_PROVINCIAL">Bang - Tỉnh</option>
+                <option value="STATE_PROVINCIAL">Bang - tỉnh</option>
                 <option value="MUNICIPAL_LOCAL">Thành phố - Quận huyện</option>
                 <option value="SPECIAL_ECONOMIC_ZONE">Khu kinh tế đặc biệt</option>
               </select>
@@ -657,7 +657,7 @@ export function VatConfigPage() {
       <Modal
         isOpen={!!deletingVat}
         onClose={() => setDeletingVat(null)}
-        title="Xóa Quy Tắc Thuế"
+        title="Xóa quy tắc thuế"
         isDestructive
         width="max-w-md"
       >

@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Plus, Download, Search, Filter, Eye, MessageSquareQuote, Building2, Calendar, Star, CheckCircle2, ThumbsUp, Send, Edit, Trash2, TrendingUp, AlertTriangle, Smile, Frown } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface CustomerFeedbackRecord {
   id: string;
@@ -53,7 +55,8 @@ const statusMapFull: Record<string, string> = {
 };
 
 export function FeedbackPage() {
-  const [data, setData] = useState<CustomerFeedbackRecord[]>(MOCK_FEEDBACK);
+  const [data, setData] = useState<CustomerFeedbackRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedFeedback, setSelectedFeedback] = useState<CustomerFeedbackRecord | null>(null);
 
@@ -67,41 +70,43 @@ export function FeedbackPage() {
   const [editingFeedback, setEditingFeedback] = useState<Partial<CustomerFeedbackRecord>>({});
   const [deletingFeedback, setDeletingFeedback] = useState<CustomerFeedbackRecord | null>(null);
 
-  const filtered = data.filter((item) => {
-    const term = search.toLowerCase();
-    const matchText =
-      item.title.toLowerCase().includes(term) ||
-      item.customerName.toLowerCase().includes(term) ||
-      item.feedbackRef.toLowerCase().includes(term) ||
-      item.storeLocation.toLowerCase().includes(term);
+  const fetchFeedback = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const res: any = await axiosClient.get('/crm/feedback');
+      const list = Array.isArray(res) ? res : res?.content || res?.data || [];
+      if (list.length > 0) {
+        const mapped: CustomerFeedbackRecord[] = list.map((item: any) => ({
+          id: String(item.id),
+          feedbackRef: `FB-${item.id}`,
+          customerName: item.customer?.name || 'Khách hàng',
+          customerEmail: item.customer?.email || 'email@khach.com',
+          storeLocation: 'Chi nhánh chính',
+          rating: item.rating || 5,
+          category: 'GENERAL',
+          title: item.title || 'Đánh giá sản phẩm',
+          comments: item.comment || item.comments || '',
+          sentiment: (item.rating || 5) >= 4 ? 'POSITIVE' : (item.rating || 5) <= 2 ? 'NEGATIVE' : 'NEUTRAL',
+          status: item.status || 'NEW',
+          submittedAt: item.createdDate ? String(item.createdDate).split('T')[0] : '2024-05-17',
+          resolutionNotes: item.reply || '',
+        }));
+        setData(mapped);
+      } else {
+        setData(MOCK_FEEDBACK);
+      }
+    } catch (err) {
+      console.error('Error fetching feedback:', err);
+      toast.error('Lỗi khi tải ý kiến phản hồi, dùng dữ liệu tạm');
+      setData(MOCK_FEEDBACK);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-    const matchSentiment = sentimentFilter === 'ALL' ? true : item.sentiment === sentimentFilter;
-    const matchRating =
-      ratingFilter === 'ALL'
-        ? true
-        : ratingFilter === 'LOW'
-          ? item.rating <= 2
-          : ratingFilter === 'MEDIUM'
-            ? item.rating === 3
-            : item.rating >= 4;
-
-    const matchStatus =
-      statusFilter === 'ALL'
-        ? true
-        : statusFilter === 'IN_PROGRESS'
-          ? item.status === 'REVIEWED' || item.status === 'ACTION_TAKEN'
-          : statusFilter === 'CLOSED'
-            ? item.status === 'CLOSED'
-            : item.status === statusFilter;
-
-    return matchText && matchSentiment && matchRating && matchStatus;
-  });
-
-  const totalCount = data.length;
-  const positiveCount = data.filter((f) => f.sentiment === 'POSITIVE').length;
-  const negativeCount = data.filter((f) => f.sentiment === 'NEGATIVE').length;
-  const newNegativeCount = data.filter((f) => f.sentiment === 'NEGATIVE' && (f.status === 'NEW' || f.status === 'ESCALATED')).length;
-  const avgRating = totalCount ? (data.reduce((acc, f) => acc + f.rating, 0) / totalCount).toFixed(1) : '0.0';
+  useEffect(() => {
+    fetchFeedback();
+  }, [fetchFeedback]);
 
   const handleOpenCreate = () => {
     setModalMode('create');
@@ -129,38 +134,46 @@ export function FeedbackPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveFeedback = (e: React.FormEvent) => {
+  const handleSaveFeedback = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingFeedback.title || !editingFeedback.customerName) return;
 
-    if (modalMode === 'create') {
-      const newRecord: CustomerFeedbackRecord = {
-        id: Date.now().toString(),
-        feedbackRef: editingFeedback.feedbackRef || `FB-${Math.floor(2024000 + Math.random() * 9000)}`,
-        customerName: editingFeedback.customerName || 'Khách hàng ẩn danh',
-        customerEmail: editingFeedback.customerEmail || 'noreply@retailhub.local',
-        storeLocation: editingFeedback.storeLocation || 'Main Flagship / HQ',
-        rating: Number(editingFeedback.rating) || 5,
-        category: editingFeedback.category || 'GENERAL',
-        title: editingFeedback.title || '',
-        comments: editingFeedback.comments || '',
-        sentiment: editingFeedback.sentiment || 'POSITIVE',
-        status: editingFeedback.status || 'NEW',
-        submittedAt: editingFeedback.submittedAt || new Date().toISOString().replace('T', ' ').substring(0, 16),
-        assignedManager: editingFeedback.assignedManager,
-        resolutionNotes: editingFeedback.resolutionNotes
-      };
-      setData([newRecord, ...data]);
-    } else {
-      setData(data.map(item => item.id === editingFeedback.id ? { ...item, ...editingFeedback } as CustomerFeedbackRecord : item));
+    const payload = {
+      rating: editingFeedback.rating || 5,
+      comment: editingFeedback.comments || '',
+      title: editingFeedback.title || '',
+      status: editingFeedback.status || 'PENDING',
+      reply: editingFeedback.resolutionNotes || '',
+    };
+
+    try {
+      if (modalMode === 'create') {
+        await axiosClient.post('/crm/feedback', payload);
+        toast.success('Ghi nhận phản hồi mới thành công!');
+      } else {
+        await axiosClient.put(`/crm/feedback/${editingFeedback.id}`, payload);
+        toast.success('Cập nhật phản hồi thành công!');
+      }
+      setIsModalOpen(false);
+      fetchFeedback();
+    } catch (err) {
+      console.error('Error saving feedback:', err);
+      toast.error('Không thể lưu thông tin phản hồi!');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingFeedback) return;
-    setData(data.filter(item => item.id !== deletingFeedback.id));
-    setDeletingFeedback(null);
+    try {
+      await axiosClient.delete(`/crm/feedback/${deletingFeedback.id}`);
+      toast.success(`Đã xóa phiếu phản hồi ${deletingFeedback.feedbackRef}`);
+      setData((prev) => prev.filter((item) => item.id !== deletingFeedback.id));
+    } catch (err) {
+      console.error('Error deleting feedback:', err);
+      toast.error('Không thể xóa phản hồi trên máy chủ');
+    } finally {
+      setDeletingFeedback(null);
+    }
   };
 
   const columns = useMemo<ColumnDef<CustomerFeedbackRecord>[]>(
@@ -288,7 +301,7 @@ export function FeedbackPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ý Kiến Phản Hồi & Khảo Sát NPS (Customer Feedback)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ý kiến phản hồi & khảo sát NPS (customer feedback)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Theo dõi đánh giá chất lượng dịch vụ, giám sát mức độ hài lòng và xử lý khiếu nại khách hàng. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
@@ -519,13 +532,13 @@ export function FeedbackPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedFeedback(row)} />
+        <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row) => setSelectedFeedback(row)} />
       </div>
 
       <Drawer
         isOpen={!!selectedFeedback}
         onClose={() => setSelectedFeedback(null)}
-        title={selectedFeedback ? `Hồ Sơ Phản Hồi: ${selectedFeedback.feedbackRef}` : 'Chi Tiết Phản Hồi'}
+        title={selectedFeedback ? `Hồ Sơ Phản Hồi: ${selectedFeedback.feedbackRef}` : 'Chi tiết phản hồi'}
         width="max-w-lg"
       >
         {selectedFeedback && (
@@ -637,7 +650,7 @@ export function FeedbackPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Ghi Nhận Ý Kiến Phản Hồi' : 'Chỉnh Sửa Phản Hồi'}
+        title={modalMode === 'create' ? 'Ghi nhận Ý kiến phản hồi' : 'Chỉnh sửa phản hồi'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveFeedback} className="space-y-4">

@@ -18,7 +18,7 @@ const REVENUE_DATASET = {
     { name: 'Thứ 5', total: 2400, orders: 48 },
     { name: 'Thứ 6', total: 2800, orders: 56 },
     { name: 'Thứ 7', total: 3200, orders: 64 },
-    { name: 'Chủ Nhật', total: 2900, orders: 58 },
+    { name: 'Chủ nhật', total: 2900, orders: 58 },
   ],
   '30d': [
     { name: 'Tuần 1', total: 14500, orders: 290 },

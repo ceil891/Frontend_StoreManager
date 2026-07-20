@@ -21,10 +21,10 @@ const MOCK_WAREHOUSES: SupplierWarehouseRecord[] = [
   {
     id: '1',
     warehouseCode: 'SWH-GBL-01',
-    warehouseName: 'Kho Đông Anh - Toàn Cầu',
-    supplierName: 'Nhà Cung Cấp Toàn Cầu',
+    warehouseName: 'Kho đông Anh - toàn cầu',
+    supplierName: 'Nhà cung cấp toàn cầu',
     address: 'Khu công nghiệp Đông Anh, Hà Nội',
-    contactPerson: 'Nguyễn Văn Kho',
+    contactPerson: 'Nguyễn Văn kho',
     phone: '0912111222',
     status: 'HOAT_DONG',
     notes: 'Kho lớn hỗ trợ xe tải trên 10 tấn ra vào bốc dỡ hàng',
@@ -32,10 +32,10 @@ const MOCK_WAREHOUSES: SupplierWarehouseRecord[] = [
   {
     id: '2',
     warehouseCode: 'SWH-ASI-02',
-    warehouseName: 'Kho Cát Lái - Á Châu',
-    supplierName: 'Công Ty Nhập Khẩu Á Châu',
+    warehouseName: 'Kho cát lái - Á châu',
+    supplierName: 'Công ty nhập khẩu Á châu',
     address: 'Cảng Cát Lái, Quận 2, TP. HCM',
-    contactPerson: 'Lê Văn Cảng',
+    contactPerson: 'Lê Văn cảng',
     phone: '0988333444',
     status: 'HOAT_DONG',
     notes: 'Kho trung chuyển hàng nhập khẩu cảng biển',
@@ -115,48 +115,48 @@ export function SupplierWarehousesPage() {
     () => [
       {
         accessorKey: 'warehouseCode',
-        header: 'Mã Kho',
+        header: 'Mã kho',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'warehouseName',
-        header: 'Tên Kho Hàng NCC',
+        header: 'Tên kho hàng NCC',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'supplierName',
-        header: 'Nhà Cung Cấp',
+        header: 'Nhà cung cấp',
         cell: (info) => <span className="font-semibold text-blue-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'address',
-        header: 'Địa Chỉ Kho',
+        header: 'Địa chỉ kho',
         cell: (info) => <span className="truncate max-w-xs block">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'phone',
-        header: 'Số Điện Thoại',
+        header: 'Số điện thoại',
         cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           const badgeClass = status === 'HOAT_DONG' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800';
-          const label = status === 'HOAT_DONG' ? 'Hoạt Động' : 'Tạm Ngưng';
+          const label = status === 'HOAT_DONG' ? 'Hoạt động' : 'Tạm ngưng';
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết Kho"
+              title="Xem chi tiết kho"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -185,7 +185,7 @@ export function SupplierWarehousesPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Danh Sách Kho Hàng Nhà Cung Cấp (Supplier Warehouses)</h1>
+          <h1 className="text-2xl font-bold">Danh sách kho hàng nhà cung cấp (supplier warehouses)</h1>
           <p className="text-sm text-gray-500">
             Xem và cập nhật danh sách vị trí kho hàng của các đối tác cung cấp, hỗ trợ lên kế hoạch lấy hàng từ kho nhà cung cấp.
           </p>
@@ -220,20 +220,20 @@ export function SupplierWarehousesPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã Kho Hàng:</span>
+                <span className="text-gray-500">Mã kho hàng:</span>
                 <p className="font-mono font-semibold">{selected.warehouseCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Số Điện Thoại Kho:</span>
+                <span className="text-gray-500">Số điện thoại kho:</span>
                 <p className="font-mono">{selected.phone}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Tên Kho Hàng:</span>
+              <span className="text-gray-500">Tên kho hàng:</span>
               <p className="font-semibold text-base">{selected.warehouseName}</p>
             </div>
             <div>
-              <span className="text-gray-500">Nhà Cung Cấp:</span>
+              <span className="text-gray-500">Nhà cung cấp:</span>
               <p className="font-semibold text-blue-600 text-base">{selected.supplierName}</p>
             </div>
             <div>
@@ -244,25 +244,25 @@ export function SupplierWarehousesPage() {
             </div>
             <div className="grid grid-cols-2 gap-4 border-t pt-2">
               <div>
-                <span className="text-gray-500">Người Liên Hệ Bốc Xếp:</span>
+                <span className="text-gray-500">Người liên hệ bốc xếp:</span>
                 <p className="font-semibold">{selected.contactPerson || 'Không có thông tin'}</p>
               </div>
               <div>
-                <span className="text-gray-500">Trạng Thái Kho:</span>
+                <span className="text-gray-500">Trạng thái kho:</span>
                 <div>
                   <span
                     className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
                       selected.status === 'HOAT_DONG' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
                     }`}
                   >
-                    {selected.status === 'HOAT_DONG' ? 'Hoạt Động' : 'Tạm Ngưng'}
+                    {selected.status === 'HOAT_DONG' ? 'Hoạt động' : 'Tạm ngưng'}
                   </span>
                 </div>
               </div>
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi Chú Vận Chuyển / Lấy Hàng:</span>
+                <span className="text-gray-500">Ghi chú vận chuyển / lấy hàng:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                   {selected.notes}
                 </p>
@@ -275,12 +275,12 @@ export function SupplierWarehousesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Kho Đối Tác NCC Mới' : 'Sửa Kho Đối Tác'}
+        title={modalMode === 'create' ? 'Thêm kho đối tác NCC mới' : 'Sửa kho đối tác'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Kho *</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã kho *</label>
               <input
                 type="text"
                 value={editingItem.warehouseCode || ''}
@@ -292,7 +292,7 @@ export function SupplierWarehousesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Số Điện Thoại Kho *</label>
+              <label className="block text-xs text-gray-500 mb-1">Số điện thoại kho *</label>
               <input
                 type="text"
                 value={editingItem.phone || ''}
@@ -305,7 +305,7 @@ export function SupplierWarehousesPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tên Kho Hàng NCC *</label>
+              <label className="block text-xs text-gray-500 mb-1">Tên kho hàng NCC *</label>
               <input
                 type="text"
                 value={editingItem.warehouseName || ''}
@@ -316,7 +316,7 @@ export function SupplierWarehousesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Nhà Cung Cấp Sở Hữu *</label>
+              <label className="block text-xs text-gray-500 mb-1">Nhà cung cấp sở hữu *</label>
               <input
                 type="text"
                 value={editingItem.supplierName || ''}
@@ -328,7 +328,7 @@ export function SupplierWarehousesPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Địa Chỉ Kho *</label>
+            <label className="block text-xs text-gray-500 mb-1">Địa chỉ kho *</label>
             <input
               type="text"
               value={editingItem.address || ''}
@@ -340,7 +340,7 @@ export function SupplierWarehousesPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Người Liên Hệ Bốc Xếp</label>
+              <label className="block text-xs text-gray-500 mb-1">Người liên hệ bốc xếp</label>
               <input
                 type="text"
                 value={editingItem.contactPerson || ''}
@@ -350,7 +350,7 @@ export function SupplierWarehousesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Trạng Thái</label>
+              <label className="block text-xs text-gray-500 mb-1">Trạng thái</label>
               <select
                 value={editingItem.status || 'HOAT_DONG'}
                 onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
@@ -362,7 +362,7 @@ export function SupplierWarehousesPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú</label>
+            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
@@ -380,7 +380,7 @@ export function SupplierWarehousesPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Kho Đối Tác
+              Lưu kho đối tác
             </button>
           </div>
         </form>

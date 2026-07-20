@@ -103,8 +103,8 @@ const MarketOrdersPage   = lz(() => import('@/features/sales/pages/MarketOrdersP
 const InventoryPage      = lz(() => import('@/features/inventory/pages/InventoryPage'), 'InventoryPage');
 const InventoryCheckPage = lz(() => import('@/features/inventory/pages/InventoryCheckPage'), 'InventoryCheckPage');
 const StockTransferPage  = lz(() => import('@/features/inventory/pages/StockTransferPage'), 'StockTransferPage');
-const ImportReceiptsPage = lz(() => import('@/features/purchase/pages/ImportReceiptsPage'), 'ImportReceiptsPage');
-const ReturnToSupplierPage = lz(() => import('@/features/purchase/pages/ReturnToSupplierPage'), 'ReturnToSupplierPage');
+const ImportReceiptsPage = lz(() => import('@/features/inventory/pages/ImportReceiptsPage'), 'ImportReceiptsPage');
+const ReturnToSupplierPage = lz(() => import('@/features/inventory/pages/ReturnToSupplierPage'), 'ReturnToSupplierPage');
 const CancelIssuePage    = lz(() => import('@/features/inventory/pages/CancelIssuePage'), 'CancelIssuePage');
 const StockLedgerPage    = lz(() => import('@/features/inventory/pages/StockLedgerPage'), 'StockLedgerPage');
 const ProductBatchesPage = lz(() => import('@/features/inventory/pages/ProductBatchesPage'), 'ProductBatchesPage');
@@ -112,12 +112,15 @@ const SerialNumbersPage  = lz(() => import('@/features/inventory/pages/SerialNum
 const CombosPage         = lz(() => import('@/features/inventory/pages/CombosPage'), 'CombosPage');
 const CategoriesPage     = lz(() => import('@/features/inventory/pages/CategoriesPage'), 'CategoriesPage');
 const UnitsPage          = lz(() => import('@/features/inventory/pages/UnitsPage'), 'UnitsPage');
+const ColorsPage         = lz(() => import('@/features/inventory/pages/ColorsPage'), 'ColorsPage');
+const SizesPage          = lz(() => import('@/features/inventory/pages/SizesPage'), 'SizesPage');
 const MobileInventoryPage = lz(() => import('@/features/inventory/pages/MobileInventoryPage'), 'MobileInventoryPage');
 const StockKeepingPage         = lz(() => import('@/features/inventory/pages/StockKeepingPage'), 'StockKeepingPage');
 const StockOutsPage            = lz(() => import('@/features/inventory/pages/StockOutsPage'), 'StockOutsPage');
 const InventoryAdjustmentsPage = lz(() => import('@/features/inventory/pages/InventoryAdjustmentsPage'), 'InventoryAdjustmentsPage');
 const InventoryTransfersPage   = lz(() => import('@/features/inventory/pages/InventoryTransfersPage'), 'InventoryTransfersPage');
 const ProductDetailsPage       = lz(() => import('@/features/inventory/pages/ProductDetailsPage'), 'ProductDetailsPage');
+const ProductVariantsPage      = lz(() => import('@/features/inventory/pages/ProductVariantsPage'), 'ProductVariantsPage');
 const InventoryDashboardPage   = lz(() => import('@/features/inventory/pages/InventoryDashboardPage'), 'default');
 const ProductInStoragesPage    = lz(() => import('@/features/inventory/pages/ProductInStoragesPage'), 'ProductInStoragesPage');
 const ProductWarehousesPage    = lz(() => import('@/features/inventory/pages/ProductWarehousesPage'), 'ProductWarehousesPage');
@@ -156,6 +159,8 @@ const FundBalancesPage      = lz(() => import('@/features/finance/pages/FundBala
 const ChartOfAccountsPage   = lz(() => import('@/features/finance/pages/ChartOfAccountsPage'), 'default');
 const FixedAssetsPage       = lz(() => import('@/features/finance/pages/FixedAssetsPage'), 'FixedAssetsPage');
 const CostCentersPage       = lz(() => import('@/features/finance/pages/CostCentersPage'), 'default');
+const DepreciationHistoryPage = lz(() => import('@/features/finance/pages/DepreciationHistoryPage'), 'DepreciationHistoryPage');
+const OrderPaymentsPage      = lz(() => import('@/features/finance/pages/OrderPaymentsPage'), 'OrderPaymentsPage');
 
 // CRM
 const CustomersPage     = lz(() => import('@/features/crm/pages/CustomersPage'), 'CustomersPage');
@@ -167,6 +172,7 @@ const WarrantyClaimsPage = lz(() => import('@/features/crm/pages/WarrantyClaimsP
 const FeedbackPage      = lz(() => import('@/features/crm/pages/FeedbackPage'), 'FeedbackPage');
 const SupportTicketsPage = lz(() => import('@/features/crm/pages/SupportTicketsPage'), 'SupportTicketsPage');
 const PartnerGroupsPage  = lz(() => import('@/features/crm/pages/PartnerGroupsPage'), 'PartnerGroupsPage');
+const TicketMessagesPage = lz(() => import('@/features/crm/pages/TicketMessagesPage'), 'default');
 const AreasPage          = lz(() => import('@/features/crm/pages/AreasPage'), 'AreasPage');
 const LoyaltyPointHistoryPage = lz(() => import('@/features/crm/pages/LoyaltyPointHistoryPage'), 'LoyaltyPointHistoryPage');
 const MarketingCampaignsPage  = lz(() => import('@/features/crm/pages/MarketingCampaignsPage'), 'default');
@@ -250,7 +256,7 @@ const router = createBrowserRouter([
     children: [
       {
         path: '',
-        element: <RoleGuard requiredPermission="pos:access" />,
+        element: <RoleGuard requiredPermission="catalog:pricelist:view" />,
         children: [{ index: true, element: <L><PosTerminalPage /></L> }],
       },
     ],
@@ -272,154 +278,160 @@ const router = createBrowserRouter([
           { path: 'settings/account', element: <L><AccountSettingsPage /></L> },
 
           // POS sub-pages
-          { path: 'pos/sessions', ...protect(<PosSessionsPage />, 'pos:sessions:view') },
-          { path: 'pos/payment-methods', ...protect(<PaymentMethodsPage />, 'pos:payments:manage') },
+          { path: 'pos/sessions', ...protect(<PosSessionsPage />, 'catalog:pricelist:view') },
+          { path: 'pos/payment-methods', ...protect(<PaymentMethodsPage />, 'catalog:pricelist:view') },
 
           // Sales
-          { path: 'sales', ...protect(<SaleOrdersPage />, 'sales:orders:view') },
-          { path: 'sales/online', ...protect(<OnlineOrdersPage />, 'sales:orders:view') },
-          { path: 'sales/quotes', ...protect(<QuotesPage />, 'sales:quotes:manage') },
-          { path: 'sales/invoices', ...protect(<ExportInvoicesPage />, 'sales:invoices:manage') },
-          { path: 'sales/returns', ...protect(<CustomerReturnsPage />, 'sales:returns:manage') },
-          { path: 'sales/offers', ...protect(<SaleOffersPage />, 'sales:quotes:manage') },
-          { path: 'sales/invoices-list', ...protect(<SalesInvoicesPage />, 'sales:invoices:manage') },
-          { path: 'sales/payments', ...protect(<SalesPaymentsPage />, 'sales:invoices:manage') },
-          { path: 'sales/receivables', ...protect(<ReceivablesPage />, 'sales:orders:view') },
-          { path: 'sales/invoice-lists', ...protect(<InvoiceListsPage />, 'sales:invoices:manage') },
-          { path: 'sales/delivery-lists', ...protect(<DeliveryListsPage />, 'sales:orders:view') },
-          { path: 'sales/delivery-notes', ...protect(<DeliveryNotesPage />, 'sales:orders:view') },
-          { path: 'sales/returns-list', ...protect(<ReturnsPage />, 'sales:returns:manage') },
-          { path: 'sales/returns-history', ...protect(<ReturnsListsPage />, 'sales:returns:manage') },
-          { path: 'sales/market-orders', ...protect(<MarketOrdersPage />, 'sales:orders:view') },
+          { path: 'sales', ...protect(<SaleOrdersPage />, 'catalog:inventory:view') },
+          { path: 'sales/online', ...protect(<OnlineOrdersPage />, 'catalog:inventory:view') },
+          { path: 'sales/quotes', ...protect(<QuotesPage />, 'catalog:pricelist:view') },
+          { path: 'sales/invoices', ...protect(<ExportInvoicesPage />, 'catalog:inventory:view') },
+          { path: 'sales/returns', ...protect(<CustomerReturnsPage />, 'catalog:inventory:adjust') },
+          { path: 'sales/offers', ...protect(<SaleOffersPage />, 'catalog:pricelist:view') },
+          { path: 'sales/invoices-list', ...protect(<SalesInvoicesPage />, 'catalog:inventory:view') },
+          { path: 'sales/payments', ...protect(<SalesPaymentsPage />, 'catalog:inventory:view') },
+          { path: 'sales/receivables', ...protect(<ReceivablesPage />, 'catalog:inventory:view') },
+          { path: 'sales/invoice-lists', ...protect(<InvoiceListsPage />, 'catalog:inventory:view') },
+          { path: 'sales/delivery-lists', ...protect(<DeliveryListsPage />, 'catalog:inventory:view') },
+          { path: 'sales/delivery-notes', ...protect(<DeliveryNotesPage />, 'catalog:inventory:view') },
+          { path: 'sales/returns-list', ...protect(<ReturnsPage />, 'catalog:inventory:adjust') },
+          { path: 'sales/returns-history', ...protect(<ReturnsListsPage />, 'catalog:inventory:adjust') },
+          { path: 'sales/market-orders', ...protect(<MarketOrdersPage />, 'catalog:inventory:view') },
 
           // Inventory
-          { path: 'inventory', ...protect(<InventoryPage />, 'inventory:products:view') },
-          { path: 'inventory/transfers', ...protect(<StockTransferPage />, 'inventory:transfers:manage') },
-          { path: 'inventory/checks', ...protect(<InventoryCheckPage />, 'inventory:checks:manage') },
-          { path: 'inventory/imports', ...protect(<ImportReceiptsPage />, 'inventory:imports:manage') },
-          { path: 'inventory/returns', ...protect(<ReturnToSupplierPage />, 'inventory:returns:manage') },
-          { path: 'inventory/cancel', ...protect(<CancelIssuePage />, 'inventory:writeoff:manage') },
-          { path: 'inventory/ledger', ...protect(<StockLedgerPage />, 'inventory:ledger:view') },
-          { path: 'inventory/batches', ...protect(<ProductBatchesPage />, 'inventory:ledger:view') },
-          { path: 'inventory/serials', ...protect(<SerialNumbersPage />, 'inventory:products:view') },
-          { path: 'inventory/categories', ...protect(<CategoriesPage />, 'inventory:categories:manage') },
-          { path: 'inventory/units', ...protect(<UnitsPage />, 'inventory:categories:manage') },
-          { path: 'inventory/combos', ...protect(<CombosPage />, 'inventory:products:view') },
-          { path: 'inventory/mobile', ...protect(<MobileInventoryPage />, 'inventory:products:view') },
-          { path: 'inventory/stock-keeping', ...protect(<StockKeepingPage />, 'inventory:products:view') },
-          { path: 'inventory/stock-outs', ...protect(<StockOutsPage />, 'inventory:transfers:manage') },
-          { path: 'inventory/adjustments', ...protect(<InventoryAdjustmentsPage />, 'inventory:checks:manage') },
-          { path: 'inventory/transfers-list', ...protect(<InventoryTransfersPage />, 'inventory:transfers:manage') },
-          { path: 'inventory/details', ...protect(<ProductDetailsPage />, 'inventory:products:view') },
-          { path: 'inventory/dashboard', ...protect(<InventoryDashboardPage />, 'inventory:ledger:view') },
-          { path: 'inventory/product-storages', ...protect(<ProductInStoragesPage />, 'inventory:products:view') },
-          { path: 'inventory/product-warehouses', ...protect(<ProductWarehousesPage />, 'inventory:products:view') },
-          { path: 'inventory/supplier-products', ...protect(<SupplierProductsPage />, 'inventory:products:view') },
-          { path: 'inventory/supplier-storages', ...protect(<SupplierStoragesPage />, 'inventory:products:view') },
-          { path: 'inventory/supplier-warehouses', ...protect(<SupplierWarehousesPage />, 'inventory:products:view') },
-          { path: 'inventory/storage-areas', ...protect(<StorageAreasPage />, 'inventory:categories:manage') },
-          { path: 'inventory/warehouse-areas', ...protect(<WarehouseAreasPage />, 'inventory:categories:manage') },
-          { path: 'inventory/warehouse-zones', ...protect(<WarehouseZonesPage />, 'inventory:categories:manage') },
-          { path: 'inventory/warehouse-bins', ...protect(<WarehouseBinsPage />, 'inventory:categories:manage') },
-          { path: 'inventory/transfer-requests', ...protect(<StockTransferRequestsPage />, 'inventory:transfers:manage') },
+          { path: 'inventory', ...protect(<InventoryPage />, 'catalog:product:view') },
+          { path: 'inventory/transfers', ...protect(<StockTransferPage />, 'catalog:inventory:adjust') },
+          { path: 'inventory/checks', ...protect(<InventoryCheckPage />, 'catalog:inventory:adjust') },
+          { path: 'inventory/imports', ...protect(<ImportReceiptsPage />, 'catalog:inventory:adjust') },
+          { path: 'inventory/returns', ...protect(<ReturnToSupplierPage />, 'catalog:inventory:adjust') },
+          { path: 'inventory/cancel', ...protect(<CancelIssuePage />, 'catalog:inventory:adjust') },
+          { path: 'inventory/ledger', ...protect(<StockLedgerPage />, 'catalog:inventory:view') },
+          { path: 'inventory/batches', ...protect(<ProductBatchesPage />, 'catalog:inventory:view') },
+          { path: 'inventory/serials', ...protect(<SerialNumbersPage />, 'catalog:product:view') },
+          { path: 'inventory/categories', ...protect(<CategoriesPage />, 'catalog:category:view') },
+          { path: 'inventory/units', ...protect(<UnitsPage />, 'catalog:unit:view') },
+          { path: 'inventory/colors', ...protect(<ColorsPage />, 'catalog:color:view') },
+          { path: 'inventory/sizes', ...protect(<SizesPage />, 'catalog:size:view') },
+          { path: 'inventory/combos', ...protect(<CombosPage />, 'catalog:combo:view') },
+          { path: 'inventory/mobile', ...protect(<MobileInventoryPage />, 'catalog:product:view') },
+          { path: 'inventory/stock-keeping', ...protect(<StockKeepingPage />, 'catalog:inventory:search') },
+          { path: 'inventory/stock-outs', ...protect(<StockOutsPage />, 'catalog:inventory:adjust') },
+          { path: 'inventory/adjustments', ...protect(<InventoryAdjustmentsPage />, 'catalog:inventory:adjust') },
+          { path: 'inventory/transfers-list', ...protect(<InventoryTransfersPage />, 'catalog:inventory:adjust') },
+          { path: 'inventory/details', ...protect(<ProductDetailsPage />, 'catalog:product:view') },
+          { path: 'inventory/variants', ...protect(<ProductVariantsPage />, 'catalog:product:view') },
+          { path: 'inventory/dashboard', ...protect(<InventoryDashboardPage />, 'catalog:inventory:view') },
+          { path: 'inventory/product-storages', ...protect(<ProductInStoragesPage />, 'catalog:inventory:view') },
+          { path: 'inventory/product-warehouses', ...protect(<ProductWarehousesPage />, 'catalog:inventory:view') },
+          { path: 'inventory/supplier-products', ...protect(<SupplierProductsPage />, 'catalog:product:view') },
+          { path: 'inventory/supplier-storages', ...protect(<SupplierStoragesPage />, 'catalog:inventory:view') },
+          { path: 'inventory/supplier-warehouses', ...protect(<SupplierWarehousesPage />, 'catalog:inventory:view') },
+          { path: 'inventory/storage-areas', ...protect(<StorageAreasPage />, 'catalog:category:view') },
+          { path: 'inventory/warehouse-areas', ...protect(<WarehouseAreasPage />, 'catalog:category:view') },
+          { path: 'inventory/warehouse-zones', ...protect(<WarehouseZonesPage />, 'catalog:category:view') },
+          { path: 'inventory/warehouse-bins', ...protect(<WarehouseBinsPage />, 'catalog:category:view') },
+          { path: 'inventory/transfer-requests', ...protect(<StockTransferRequestsPage />, 'catalog:inventory:adjust') },
 
           // Purchase
-          { path: 'purchase/suppliers', ...protect(<SuppliersPage />, 'purchase:suppliers:manage') },
-          { path: 'purchase/orders', ...protect(<PurchaseOrdersPage />, 'purchase:orders:manage') },
-          { path: 'purchase/requests', ...protect(<PurchaseRequestsPage />, 'purchase:orders:manage') },
-          { path: 'purchase/contracts', ...protect(<SupplierContractsPage />, 'purchase:suppliers:manage') },
-          { path: 'purchase/evaluations', ...protect(<SupplierEvaluationsPage />, 'purchase:suppliers:manage') },
-          { path: 'purchase/deliveries', ...protect(<SupplierDeliveriesPage />, 'purchase:orders:manage') },
-          { path: 'purchase/invoices', ...protect(<PurchaseInvoicesPage />, 'purchase:orders:manage') },
-          { path: 'purchase/payments', ...protect(<PurchasePaymentsPage />, 'purchase:orders:manage') },
-          { path: 'purchase/returns-list', ...protect(<PurchaseReturnsPage />, 'purchase:orders:manage') },
-          { path: 'purchase/returns-history', ...protect(<PurchaseReturnsListsPage />, 'purchase:orders:manage') },
-          { path: 'purchase/supplier-requests', ...protect(<SupplierRequestsPage />, 'purchase:orders:manage') },
+          { path: 'purchase/suppliers', ...protect(<SuppliersPage />, 'catalog:product:view') },
+          { path: 'purchase/orders', ...protect(<PurchaseOrdersPage />, 'catalog:inventory:adjust') },
+          { path: 'purchase/requests', ...protect(<PurchaseRequestsPage />, 'catalog:inventory:adjust') },
+          { path: 'purchase/contracts', ...protect(<SupplierContractsPage />, 'catalog:product:view') },
+          { path: 'purchase/evaluations', ...protect(<SupplierEvaluationsPage />, 'catalog:product:view') },
+          { path: 'purchase/deliveries', ...protect(<SupplierDeliveriesPage />, 'catalog:inventory:adjust') },
+          { path: 'purchase/invoices', ...protect(<PurchaseInvoicesPage />, 'catalog:inventory:adjust') },
+          { path: 'purchase/payments', ...protect(<PurchasePaymentsPage />, 'catalog:inventory:adjust') },
+          { path: 'purchase/returns-list', ...protect(<PurchaseReturnsPage />, 'catalog:inventory:adjust') },
+          { path: 'purchase/returns-history', ...protect(<PurchaseReturnsListsPage />, 'catalog:inventory:adjust') },
+          { path: 'purchase/supplier-requests', ...protect(<SupplierRequestsPage />, 'catalog:pricelist:view') },
 
           // Finance
-          { path: 'finance/receipts', ...protect(<ReceiptVouchersPage />, 'finance:receipts:manage') },
-          { path: 'finance/payments', ...protect(<PaymentVouchersPage />, 'finance:payments:manage') },
-          { path: 'finance/debts', ...protect(<DebtLedgerPage />, 'finance:debts:view') },
-          { path: 'finance/costs', ...protect(<OperatingCostsPage />, 'finance:costs:manage') },
-          { path: 'finance/banks', ...protect(<BankAccountsPage />, 'finance:banks:manage') },
-          { path: 'finance/journal', ...protect(<JournalEntriesPage />, 'finance:journal:manage') },
-          { path: 'finance/transaction-reasons', ...protect(<TransactionReasonsPage />, 'finance:reasons:manage') },
-          { path: 'finance/tax-duties', ...protect(<TaxDutiesPage />, 'finance:journal:manage') },
-          { path: 'finance/fund-balances', ...protect(<FundBalancesPage />, 'finance:journal:manage') },
-          { path: 'finance/chart-of-accounts', ...protect(<ChartOfAccountsPage />, 'finance:journal:manage') },
-          { path: 'finance/fixed-assets', ...protect(<FixedAssetsPage />, 'finance:journal:manage') },
-          { path: 'finance/cost-centers', ...protect(<CostCentersPage />, 'finance:costs:manage') },
+          { path: 'finance/receipts', ...protect(<ReceiptVouchersPage />, 'catalog:inventory:view') },
+          { path: 'finance/payments', ...protect(<PaymentVouchersPage />, 'catalog:inventory:view') },
+          { path: 'finance/debts', ...protect(<DebtLedgerPage />, 'catalog:inventory:view') },
+          { path: 'finance/costs', ...protect(<OperatingCostsPage />, 'catalog:inventory:view') },
+          { path: 'finance/banks', ...protect(<BankAccountsPage />, 'system:branch:view') },
+          { path: 'finance/journal', ...protect(<JournalEntriesPage />, 'catalog:inventory:view') },
+          { path: 'finance/transaction-reasons', ...protect(<TransactionReasonsPage />, 'catalog:inventory:view') },
+          { path: 'finance/tax-duties', ...protect(<TaxDutiesPage />, 'catalog:inventory:view') },
+          { path: 'finance/fund-balances', ...protect(<FundBalancesPage />, 'catalog:inventory:view') },
+          { path: 'finance/chart-of-accounts', ...protect(<ChartOfAccountsPage />, 'catalog:inventory:view') },
+          { path: 'finance/fixed-assets', ...protect(<FixedAssetsPage />, 'catalog:inventory:view') },
+          { path: 'finance/cost-centers', ...protect(<CostCentersPage />, 'catalog:inventory:view') },
+          { path: 'finance/depreciation-history', ...protect(<DepreciationHistoryPage />, 'catalog:inventory:view') },
+          { path: 'finance/order-payments', ...protect(<OrderPaymentsPage />, 'catalog:inventory:view') },
 
           // CRM
-          { path: 'crm', ...protect(<CustomersPage />, 'crm:customers:manage') },
-          { path: 'crm/tiers', ...protect(<LoyaltyTiersPage />, 'crm:loyalty:manage') },
-          { path: 'crm/vouchers', ...protect(<VouchersPage />, 'crm:vouchers:manage') },
-          { path: 'crm/feedback', ...protect(<FeedbackPage />, 'crm:feedback:manage') },
-          { path: 'crm/tickets', ...protect(<SupportTicketsPage />, 'crm:feedback:manage') },
-          { path: 'crm/customer-vouchers', ...protect(<CustomerVouchersPage />, 'crm:vouchers:manage') },
-          { path: 'crm/warranties', ...protect(<ProductWarrantiesPage />, 'crm:warranties:manage') },
-          { path: 'crm/warranty-claims', ...protect(<WarrantyClaimsPage />, 'crm:warranty-claims:manage') },
-          { path: 'crm/partner-groups', ...protect(<PartnerGroupsPage />, 'crm:customers:manage') },
-          { path: 'crm/areas', ...protect(<AreasPage />, 'crm:customers:manage') },
-          { path: 'crm/loyalty-history', ...protect(<LoyaltyPointHistoryPage />, 'crm:loyalty:manage') },
-          { path: 'crm/campaigns', ...protect(<MarketingCampaignsPage />, 'crm:vouchers:manage') },
+          { path: 'crm', ...protect(<CustomersPage />, 'catalog:product:view') },
+          { path: 'crm/tiers', ...protect(<LoyaltyTiersPage />, 'catalog:pricelist:view') },
+          { path: 'crm/vouchers', ...protect(<VouchersPage />, 'catalog:pricelist:view') },
+          { path: 'crm/feedback', ...protect(<FeedbackPage />, 'catalog:product:view') },
+          { path: 'crm/tickets', ...protect(<SupportTicketsPage />, 'catalog:product:view') },
+          { path: 'crm/ticket-messages', ...protect(<TicketMessagesPage />, 'catalog:product:view') },
+          { path: 'crm/customer-vouchers', ...protect(<CustomerVouchersPage />, 'catalog:pricelist:view') },
+          { path: 'crm/warranties', ...protect(<ProductWarrantiesPage />, 'catalog:product:view') },
+          { path: 'crm/warranty-claims', ...protect(<WarrantyClaimsPage />, 'catalog:product:view') },
+          { path: 'crm/partner-groups', ...protect(<PartnerGroupsPage />, 'catalog:product:view') },
+          { path: 'crm/areas', ...protect(<AreasPage />, 'catalog:product:view') },
+          { path: 'crm/loyalty-history', ...protect(<LoyaltyPointHistoryPage />, 'catalog:pricelist:view') },
+          { path: 'crm/campaigns', ...protect(<MarketingCampaignsPage />, 'catalog:pricelist:view') },
 
           // Logistics
-          { path: 'logistics/shippers', ...protect(<ShippersPage />, 'logistics:shippers:manage') },
-          { path: 'logistics/trips', ...protect(<DeliveryTripsPage />, 'logistics:trips:manage') },
-          { path: 'logistics/prices', ...protect(<PriceListsPage />, 'logistics:prices:manage') },
-          { path: 'logistics/promotions', ...protect(<PromotionsPage />, 'logistics:prices:manage') },
-          { path: 'logistics/carriers', ...protect(<ShippingCarriersPage />, 'logistics:shippers:manage') },
-          { path: 'logistics/methods', ...protect(<ShippingMethodsPage />, 'logistics:shippers:manage') },
-          { path: 'logistics/charges', ...protect(<ShippingChargesPage />, 'logistics:shippers:manage') },
-          { path: 'logistics/fees', ...protect(<ShippingFeesPage />, 'logistics:shippers:manage') },
-          { path: 'logistics/fee-rates', ...protect(<ShippingFeeRatesPage />, 'logistics:shippers:manage') },
-          { path: 'logistics/fee-groups', ...protect(<ShippingFeeGroupsPage />, 'logistics:shippers:manage') },
-          { path: 'logistics/shipments', ...protect(<ShipmentsPage />, 'logistics:trips:manage') },
-          { path: 'logistics/notes', ...protect(<ShippingNotesPage />, 'logistics:trips:manage') },
-          { path: 'logistics/orders', ...protect(<ShippingOrdersPage />, 'logistics:trips:manage') },
-          { path: 'logistics/locations', ...protect(<ShippingLocationsListPage />, 'logistics:shippers:manage') },
-          { path: 'logistics/contacts', ...protect(<ShippingContactsPage />, 'logistics:shippers:manage') },
-          { path: 'logistics/addresses', ...protect(<ShippingAddressesPage />, 'logistics:shippers:manage') },
-          { path: 'logistics/batches', ...protect(<ShippingOrderBatchesPage />, 'logistics:trips:manage') },
-          { path: 'logistics/packing-lists', ...protect(<PackingListsPage />, 'logistics:trips:manage') },
-          { path: 'logistics/delivery-notes', ...protect(<DeliveryNotesPageLogistics />, 'logistics:trips:manage') },
+          { path: 'logistics/shippers', ...protect(<ShippersPage />, 'catalog:inventory:view') },
+          { path: 'logistics/trips', ...protect(<DeliveryTripsPage />, 'catalog:inventory:view') },
+          { path: 'logistics/prices', ...protect(<PriceListsPage />, 'catalog:pricelist:view') },
+          { path: 'logistics/promotions', ...protect(<PromotionsPage />, 'catalog:pricelist:view') },
+          { path: 'logistics/carriers', ...protect(<ShippingCarriersPage />, 'catalog:inventory:view') },
+          { path: 'logistics/methods', ...protect(<ShippingMethodsPage />, 'catalog:inventory:view') },
+          { path: 'logistics/charges', ...protect(<ShippingChargesPage />, 'catalog:pricelist:view') },
+          { path: 'logistics/fees', ...protect(<ShippingFeesPage />, 'catalog:pricelist:view') },
+          { path: 'logistics/fee-rates', ...protect(<ShippingFeeRatesPage />, 'catalog:pricelist:view') },
+          { path: 'logistics/fee-groups', ...protect(<ShippingFeeGroupsPage />, 'catalog:pricelist:view') },
+          { path: 'logistics/shipments', ...protect(<ShipmentsPage />, 'catalog:inventory:view') },
+          { path: 'logistics/notes', ...protect(<ShippingNotesPage />, 'catalog:inventory:view') },
+          { path: 'logistics/orders', ...protect(<ShippingOrdersPage />, 'catalog:inventory:view') },
+          { path: 'logistics/locations', ...protect(<ShippingLocationsListPage />, 'catalog:inventory:view') },
+          { path: 'logistics/contacts', ...protect(<ShippingContactsPage />, 'catalog:inventory:view') },
+          { path: 'logistics/addresses', ...protect(<ShippingAddressesPage />, 'catalog:inventory:view') },
+          { path: 'logistics/batches', ...protect(<ShippingOrderBatchesPage />, 'catalog:inventory:view') },
+          { path: 'logistics/packing-lists', ...protect(<PackingListsPage />, 'catalog:inventory:view') },
+          { path: 'logistics/delivery-notes', ...protect(<DeliveryNotesPageLogistics />, 'catalog:inventory:view') },
 
           // Omnichannel
-          { path: 'omnichannel/channels', ...protect(<SalesChannelsPage />, 'system:settings:manage') },
-          { path: 'omnichannel/mappings', ...protect(<ChannelProductMappingPage />, 'system:settings:manage') },
-          { path: 'omnichannel/webhook-logs', ...protect(<WebhookLogsPage />, 'system:settings:manage') },
+          { path: 'omnichannel/channels', ...protect(<SalesChannelsPage />, 'system:branch:view') },
+          { path: 'omnichannel/mappings', ...protect(<ChannelProductMappingPage />, 'system:branch:view') },
+          { path: 'omnichannel/webhook-logs', ...protect(<WebhookLogsPage />, 'system:branch:view') },
 
           // Reports
-          { path: 'reports/sales', ...protect(<SalesReportPage />, 'sales:orders:view') },
-          { path: 'reports/inventory', ...protect(<InventoryReportPage />, 'inventory:ledger:view') },
-          { path: 'reports/finance', ...protect(<FinanceReportPage />, 'finance:debts:view') },
-          { path: 'reports/crm', ...protect(<CrmReportPage />, 'crm:customers:manage') },
+          { path: 'reports/sales', ...protect(<SalesReportPage />, 'catalog:inventory:view') },
+          { path: 'reports/inventory', ...protect(<InventoryReportPage />, 'catalog:inventory:view') },
+          { path: 'reports/finance', ...protect(<FinanceReportPage />, 'catalog:inventory:view') },
+          { path: 'reports/crm', ...protect(<CrmReportPage />, 'catalog:product:view') },
 
           // HR
-          { path: 'hr/users', ...protect(<UsersPage />, 'admin:users:manage') },
-          { path: 'hr/roles', ...protect(<RolesPage />, 'admin:roles:manage') },
-          { path: 'hr/departments', ...protect(<DepartmentsPage />, 'admin:departments:manage') },
-          { path: 'hr/positions', ...protect(<PositionsPage />, 'admin:positions:manage') },
-          { path: 'hr/logs', ...protect(<ActivityLogsPage />, 'admin:logs:view') },
-          { path: 'hr/contracts', ...protect(<EmployeeContractsPage />, 'admin:users:manage') },
-          { path: 'hr/attendance', ...protect(<AttendancePage />, 'admin:users:manage') },
-          { path: 'hr/leave-requests', ...protect(<LeaveRequestsPage />, 'admin:users:manage') },
-          { path: 'hr/kpis', ...protect(<KpiRecordsPage />, 'admin:users:manage') },
-          { path: 'hr/payroll', ...protect(<PayrollPage />, 'admin:users:manage') },
+          { path: 'hr/users', ...protect(<UsersPage />, 'system:user:view') },
+          { path: 'hr/roles', ...protect(<RolesPage />, 'system:role:view') },
+          { path: 'hr/departments', ...protect(<DepartmentsPage />, 'catalog:department:view') },
+          { path: 'hr/positions', ...protect(<PositionsPage />, 'catalog:department:view') },
+          { path: 'hr/logs', ...protect(<ActivityLogsPage />, 'system:user:view') },
+          { path: 'hr/contracts', ...protect(<EmployeeContractsPage />, 'system:user:view') },
+          { path: 'hr/attendance', ...protect(<AttendancePage />, 'hrm:attendance:view') },
+          { path: 'hr/leave-requests', ...protect(<LeaveRequestsPage />, 'hrm:attendance:view') },
+          { path: 'hr/kpis', ...protect(<KpiRecordsPage />, 'system:user:view') },
+          { path: 'hr/payroll', ...protect(<PayrollPage />, 'system:user:view') },
 
           // System
-          { path: 'system/branches', ...protect(<BranchManagementPage />, 'system:branches:manage') },
-          { path: 'system/settings', ...protect(<SettingsPage />, 'system:settings:manage') },
-          { path: 'system/config', ...protect(<SystemConfigPage />, 'system:settings:manage') },
-          { path: 'system/vat', ...protect(<VatConfigPage />, 'system:settings:manage') },
-          { path: 'system/templates', ...protect(<PrintTemplatesPage />, 'system:settings:manage') },
-          { path: 'system/notifications', ...protect(<NotificationsPage />, 'system:settings:manage') },
-          { path: 'system/errors', ...protect(<SystemErrorLogPage />, 'system:settings:manage') },
-          { path: 'system/banners', ...protect(<BannerManagementPage />, 'system:settings:manage') },
-          { path: 'system/permissions', ...protect(<PermissionsPage />, 'admin:roles:manage') },
-          { path: 'system/device-sessions', ...protect(<DeviceSessionsPage />, 'system:settings:manage') },
-          { path: 'system/password-history', ...protect(<PasswordHistoryPage />, 'system:settings:manage') },
+          { path: 'system/branches', ...protect(<BranchManagementPage />, 'system:branch:view') },
+          { path: 'system/settings', ...protect(<SettingsPage />, 'system:branch:view') },
+          { path: 'system/config', ...protect(<SystemConfigPage />, 'system:branch:view') },
+          { path: 'system/vat', ...protect(<VatConfigPage />, 'system:branch:view') },
+          { path: 'system/templates', ...protect(<PrintTemplatesPage />, 'system:branch:view') },
+          { path: 'system/notifications', ...protect(<NotificationsPage />, 'system:branch:view') },
+          { path: 'system/errors', ...protect(<SystemErrorLogPage />, 'system:branch:view') },
+          { path: 'system/banners', ...protect(<BannerManagementPage />, 'system:branch:view') },
+          { path: 'system/permissions', ...protect(<PermissionsPage />, 'system:permission:view') },
+          { path: 'system/device-sessions', ...protect(<DeviceSessionsPage />, 'system:branch:view') },
+          { path: 'system/password-history', ...protect(<PasswordHistoryPage />, 'system:user:view') },
         ],
       },
     ],

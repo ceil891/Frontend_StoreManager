@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, AlertOctagon, Terminal, ShieldAlert, Cpu, CheckCircle2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface SystemErrorLogRecord {
   id: string;
@@ -46,8 +48,31 @@ const subsystemStyles = {
 type SearchField = 'all' | 'errorHash' | 'errorCode' | 'errorMessage' | 'subsystem' | 'nodeHostname';
 
 export function SystemErrorLogPage() {
-  const [data, setData] = useState<SystemErrorLogRecord[]>(MOCK_ERROR_LOGS);
+  const [data, setData] = useState<SystemErrorLogRecord[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [search, setSearch] = useState('');
+
+  const fetchErrorLogs = async () => {
+    setIsLoading(true);
+    try {
+      const res = await axiosClient.get<any, SystemErrorLogRecord[]>('/system/errors');
+      if (Array.isArray(res) && res.length > 0) {
+        setData(res);
+      } else {
+        setData(MOCK_ERROR_LOGS);
+      }
+    } catch (error) {
+      console.error('Failed to fetch error logs:', error);
+      toast.error('Không thể tải nhật ký lỗi hệ thống. Đang hiển thị dữ liệu mẫu.');
+      setData(MOCK_ERROR_LOGS);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchErrorLogs();
+  }, []);
   const [searchField, setSearchField] = useState<SearchField>('all');
   const [selectedError, setSelectedError] = useState<SystemErrorLogRecord | null>(null);
 
@@ -333,7 +358,7 @@ export function SystemErrorLogPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedError(row)} />
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedError(row)} isLoading={isLoading} />
       </div>
 
       <Drawer

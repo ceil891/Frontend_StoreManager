@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, Building2, CreditCard, Building, ShieldCheck, DollarSign, Lock, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
@@ -46,6 +46,12 @@ export function BankAccountsPage() {
   const addBankAccount = useFinanceStore((s) => s.addBankAccount);
   const updateBankAccount = useFinanceStore((s) => s.updateBankAccount);
   const deleteBankAccount = useFinanceStore((s) => s.deleteBankAccount);
+  const fetchBankAccounts = useFinanceStore((s) => s.fetchBankAccounts);
+
+  useEffect(() => {
+    fetchBankAccounts();
+  }, [fetchBankAccounts]);
+
   const [search, setSearch] = useState('');
   const [selectedAccount, setSelectedAccount] = useState<CorporateBankAccount | null>(null);
 
@@ -219,7 +225,7 @@ export function BankAccountsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tài Khoản Ngân Hàng & Kho Bạc (Treasury Accounts)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tài khoản ngân hàng & kho bạc (treasury accounts)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý các tài khoản liên kết với các định chế tài chính, giám sát số dư vốn lưu động khả dụng, lịch trình giải ngân và người được ủy quyền ký quỹ. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
@@ -262,7 +268,7 @@ export function BankAccountsPage() {
       <Drawer
         isOpen={!!selectedAccount}
         onClose={() => setSelectedAccount(null)}
-        title={selectedAccount ? `Chi Tiết Tài Khoản: ${selectedAccount.bankName}` : 'Chi Tiết Thông Tin'}
+        title={selectedAccount ? `Chi Tiết Tài Khoản: ${selectedAccount.bankName}` : 'Chi tiết thông tin'}
         width="max-w-lg"
       >
         {selectedAccount && (
@@ -401,7 +407,7 @@ export function BankAccountsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Liên Kết Tài Khoản Ngân Hàng Mới' : 'Chỉnh Sửa Thông Tin Tài Khoản'}
+        title={modalMode === 'create' ? 'Liên kết tài khoản ngân hàng mới' : 'Chỉnh sửa thông tin tài khoản'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveAccount} className="space-y-4">
@@ -423,7 +429,7 @@ export function BankAccountsPage() {
                 type="text"
                 value={editingAccount.branchName || ''}
                 onChange={(e) => setEditingAccount({ ...editingAccount, branchName: e.target.value })}
-                placeholder="Chi nhánh Hà Nội, London Flagship..."
+                placeholder="Chi nhánh Hà Nội, london flagship..."
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
                 required
               />
@@ -463,10 +469,10 @@ export function BankAccountsPage() {
                 onChange={(e) => setEditingAccount({ ...editingAccount, currency: e.target.value as any })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
               >
-                <option value="VND">VND - Đồng Việt Nam</option>
+                <option value="VND">VND - đồng Việt Nam</option>
                 <option value="USD">USD - Đô la Mỹ</option>
-                <option value="EUR">EUR - Đồng Euro</option>
-                <option value="GBP">GBP - Bảng Anh</option>
+                <option value="EUR">EUR - đồng euro</option>
+                <option value="GBP">GBP - bảng Anh</option>
               </select>
             </div>
             <div>

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   UserPlus, Download, Search, Star, Eye, Mail, Phone, MapPin, Award,
   Gift, Clock, Edit, Trash2, ShoppingBag, TrendingUp, CheckCircle, Loader2,
@@ -51,7 +51,7 @@ type Transaction = {
   status: 'Hoàn thành' | 'Đang xử lý';
 };
 const MOCK_TRANSACTIONS: Transaction[] = [
-  { id: 't1', orderId: 'ORD-8821', date: '2024-05-10', summary: 'Laptop Dell XPS 15, Chuột Logitech', total: 1250.00, status: 'Hoàn thành' },
+  { id: 't1', orderId: 'ORD-8821', date: '2024-05-10', summary: 'Laptop Dell XPS 15, chuột Logitech', total: 1250.00, status: 'Hoàn thành' },
   { id: 't2', orderId: 'ORD-8745', date: '2024-04-22', summary: 'Tai nghe Sony WH-1000XM5', total: 349.00, status: 'Hoàn thành' },
   { id: 't3', orderId: 'ORD-8690', date: '2024-03-15', summary: 'iPhone 15 Pro Max 256GB', total: 1199.00, status: 'Hoàn thành' },
   { id: 't4', orderId: 'ORD-8630', date: '2024-02-28', summary: 'Màn hình LG 27" 4K', total: 599.00, status: 'Hoàn thành' },
@@ -79,7 +79,11 @@ type DrawerTab = 'info' | 'transactions' | 'points';
 
 // ─────────────────────────────────────────────────────────────────────────────
 export function CustomersPage() {
-  const { customers: data, addCustomer, updateCustomer, deleteCustomer } = useCrmStore();
+  const { customers: data, addCustomer, updateCustomer, deleteCustomer, fetchCustomers, isLoadingCustomers } = useCrmStore();
+  
+  useEffect(() => {
+    fetchCustomers();
+  }, [fetchCustomers]);
   const [search, setSearch] = useState('');
   const [selectedTier, setSelectedTier] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerProfile | null>(null);
@@ -87,6 +91,7 @@ export function CustomersPage() {
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAutoCode, setIsAutoCode] = useState(true);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingCustomer, setEditingCustomer] = useState<Partial<CustomerProfile>>({});
   const [deletingCustomer, setDeletingCustomer] = useState<CustomerProfile | null>(null);
@@ -110,6 +115,7 @@ export function CustomersPage() {
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleOpenCreate = () => {
     setModalMode('create');
+    setIsAutoCode(true);
     setEditingCustomer({
       customerCode: `CUST-${Math.floor(10000 + Math.random() * 90000)}`,
       name: '', phone: '', email: '', address: '',
@@ -125,6 +131,7 @@ export function CustomersPage() {
 
   const handleOpenEdit = (customer: CustomerProfile) => {
     setModalMode('edit');
+    setIsAutoCode(false);
     setEditingCustomer(customer);
     setIsModalOpen(true);
   };
@@ -179,7 +186,7 @@ export function CustomersPage() {
       },
       {
         accessorKey: 'name',
-        header: 'Tên & Email Khách Hàng',
+        header: 'Tên & email khách hàng',
         cell: ({ row }) => (
           <div className="flex items-center gap-3">
             <UserAvatar name={row.original.name} avatarUrl={row.original.avatarUrl} seed={row.original.email} size="sm" />
@@ -281,9 +288,9 @@ export function CustomersPage() {
   // ── Tier progress helper ─────────────────────────────────────────────────────
   function getTierProgress(spent: number) {
     if (spent >= TIER_THRESHOLDS.DIAMOND) return { label: 'Kim Cương – Hạng tối đa', percent: 100, next: null };
-    if (spent >= TIER_THRESHOLDS.GOLD)   return { label: 'Lên Kim Cương', percent: Math.round((spent - TIER_THRESHOLDS.GOLD) / (TIER_THRESHOLDS.DIAMOND - TIER_THRESHOLDS.GOLD) * 100), next: 'DIAMOND' };
-    if (spent >= TIER_THRESHOLDS.SILVER) return { label: 'Lên Vàng', percent: Math.round((spent - TIER_THRESHOLDS.SILVER) / (TIER_THRESHOLDS.GOLD - TIER_THRESHOLDS.SILVER) * 100), next: 'GOLD' };
-    return { label: 'Lên Bạc', percent: Math.round(spent / TIER_THRESHOLDS.SILVER * 100), next: 'SILVER' };
+    if (spent >= TIER_THRESHOLDS.GOLD)   return { label: 'Lên kim Cương', percent: Math.round((spent - TIER_THRESHOLDS.GOLD) / (TIER_THRESHOLDS.DIAMOND - TIER_THRESHOLDS.GOLD) * 100), next: 'DIAMOND' };
+    if (spent >= TIER_THRESHOLDS.SILVER) return { label: 'Lên vàng', percent: Math.round((spent - TIER_THRESHOLDS.SILVER) / (TIER_THRESHOLDS.GOLD - TIER_THRESHOLDS.SILVER) * 100), next: 'GOLD' };
+    return { label: 'Lên bạc', percent: Math.round(spent / TIER_THRESHOLDS.SILVER * 100), next: 'SILVER' };
   }
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -324,7 +331,7 @@ export function CustomersPage() {
           <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <Star className="w-4 h-4 text-blue-400" />
-              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Khách VIP (Kim Cương & Vàng)</h3>
+              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Khách VIP (kim Cương & vàng)</h3>
             </div>
             <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{vipCount}</p>
           </div>
@@ -379,7 +386,7 @@ export function CustomersPage() {
               className="border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
             >
               <option value="">Tất cả hạng thành viên</option>
-              <option value="DIAMOND">VIP Kim Cương</option>
+              <option value="DIAMOND">VIP kim Cương</option>
               <option value="GOLD">Thành viên Vàng</option>
               <option value="SILVER">Thành viên Bạc</option>
               <option value="BRONZE">Thành viên Đồng</option>
@@ -390,6 +397,7 @@ export function CustomersPage() {
               columns={columns}
               data={filtered}
               onRowClick={(row) => { setDrawerTab('info'); setSelectedCustomer(row); }}
+              isLoading={isLoadingCustomers}
             />
           </div>
         </div>
@@ -401,7 +409,7 @@ export function CustomersPage() {
       <Drawer
         isOpen={!!selectedCustomer}
         onClose={() => setSelectedCustomer(null)}
-        title={selectedCustomer ? `Thẻ Khách Hàng: ${selectedCustomer.customerCode}` : 'Hồ Sơ Khách Hàng'}
+        title={selectedCustomer ? `Thẻ Khách Hàng: ${selectedCustomer.customerCode}` : 'Hồ sơ khách hàng'}
         width="max-w-lg"
       >
         {selectedCustomer && (() => {
@@ -632,7 +640,7 @@ export function CustomersPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Khách Hàng Mới' : 'Chỉnh Sửa Hồ Sơ Khách Hàng'}
+        title={modalMode === 'create' ? 'Thêm khách hàng mới' : 'Chỉnh sửa hồ sơ khách hàng'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveCustomer} className="space-y-4">
@@ -644,36 +652,77 @@ export function CustomersPage() {
               size="lg"
             />
             <div className="flex-1 w-full space-y-2">
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">URL ảnh đại diện *</label>
-              <input
-                type="url"
-                required
-                value={editingCustomer.avatarUrl || ''}
-                onChange={(e) => setEditingCustomer({ ...editingCustomer, avatarUrl: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm focus:ring-2 focus:ring-primary"
-              />
-              <button
-                type="button"
-                onClick={() =>
-                  setEditingCustomer((p) => ({
-                    ...p,
-                    avatarUrl: buildUserAvatarUrl(p.email || p.name || 'customer'),
-                  }))
-                }
-                className="text-xs text-primary font-semibold hover:underline"
-              >
-                Tạo ảnh mặc định theo email
-              </button>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Ảnh đại diện khách hàng</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="file"
+                  accept="image/*"
+                  id="customer-avatar-input"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        setEditingCustomer(prev => ({ ...prev, avatarUrl: reader.result as string }));
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('customer-avatar-input')?.click()}
+                  className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-750 text-xs font-semibold shadow-sm"
+                >
+                  Tải ảnh từ thiết bị
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditingCustomer((p) => ({
+                      ...p,
+                      avatarUrl: buildUserAvatarUrl(p.email || p.name || 'customer'),
+                    }))
+                  }
+                  className="text-xs text-primary font-semibold hover:underline"
+                >
+                  Tạo ảnh mặc định
+                </button>
+              </div>
+              <p className="text-[10px] text-gray-400">Hỗ trợ JPG, PNG. Ảnh mặc định sẽ được sinh ra từ email/tên nếu để trống.</p>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã khách hàng</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã khách hàng</label>
+                {modalMode === 'create' && (
+                  <label className="flex items-center gap-1 text-[10px] text-primary cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isAutoCode}
+                      onChange={(e) => {
+                        setIsAutoCode(e.target.checked);
+                        if (e.target.checked) {
+                          setEditingCustomer(prev => ({
+                            ...prev,
+                            customerCode: `CUST-${Math.floor(10000 + Math.random() * 90000)}`
+                          }));
+                        }
+                      }}
+                      className="rounded text-primary focus:ring-primary w-3 h-3"
+                    />
+                    <span>Tự động sinh</span>
+                  </label>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingCustomer.customerCode || ''}
                 onChange={(e) => setEditingCustomer({ ...editingCustomer, customerCode: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                disabled={modalMode === 'create' && isAutoCode}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-60"
                 required
               />
             </div>
@@ -747,40 +796,61 @@ export function CustomersPage() {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Điểm tích lũy</label>
-              <input
-                type="number"
-                value={editingCustomer.loyaltyPoints ?? 0}
-                onChange={(e) => setEditingCustomer({ ...editingCustomer, loyaltyPoints: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary font-mono"
-              />
+          {modalMode === 'edit' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Điểm tích lũy</label>
+                <input
+                  type="number"
+                  value={editingCustomer.loyaltyPoints ?? 0}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, loyaltyPoints: parseInt(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng chi tiêu ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editingCustomer.lifetimeSpent ?? 0}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, lifetimeSpent: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
+                <select
+                  value={editingCustomer.status || 'ACTIVE'}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, status: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                >
+                  <option value="ACTIVE">Hoạt động</option>
+                  <option value="DORMANT">Không hoạt động</option>
+                  <option value="CHURNED">Đã rời đi</option>
+                </select>
+              </div>
             </div>
-            <div>
-              {/* NOTE: lifetimeSpent dùng đơn vị USD ($) – giữ nguyên để tương thích với store */}
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng chi tiêu ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={editingCustomer.lifetimeSpent ?? 0}
-                onChange={(e) => setEditingCustomer({ ...editingCustomer, lifetimeSpent: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary font-mono"
-              />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
+                <select
+                  value={editingCustomer.status || 'ACTIVE'}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, status: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                >
+                  <option value="ACTIVE">Hoạt động</option>
+                  <option value="DORMANT">Không hoạt động</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Phân hạng khởi tạo</label>
+                <div className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-sm font-semibold">
+                  Đồng (0 điểm / $0.00 chi tiêu)
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
-              <select
-                value={editingCustomer.status || 'ACTIVE'}
-                onChange={(e) => setEditingCustomer({ ...editingCustomer, status: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-              >
-                <option value="ACTIVE">Hoạt động</option>
-                <option value="DORMANT">Không hoạt động</option>
-                <option value="CHURNED">Đã rời đi</option>
-              </select>
-            </div>
-          </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú CSKH</label>

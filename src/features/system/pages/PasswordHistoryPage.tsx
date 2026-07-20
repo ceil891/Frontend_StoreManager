@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search, Download, Eye, KeyRound, ShieldCheck } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface PasswordHistoryItem {
   id: string;
@@ -15,11 +17,11 @@ interface PasswordHistoryItem {
 }
 
 const MOCK_DATA: PasswordHistoryItem[] = [
-  { id: '1', userId: 'U001', userName: 'Nguyễn Văn An', changedAt: '2026-05-15 09:30', changeReason: 'Tự thay đổi', ipAddress: '192.168.1.105', deviceInfo: 'Chrome / Windows 11' },
-  { id: '2', userId: 'U002', userName: 'Trần Thị Bích', changedAt: '2026-04-20 14:00', changeReason: 'Reset bởi Admin', ipAddress: '10.0.0.22', deviceInfo: 'Safari / iPhone 15' },
+  { id: '1', userId: 'U001', userName: 'Nguyễn Văn an', changedAt: '2026-05-15 09:30', changeReason: 'Tự thay đổi', ipAddress: '192.168.1.105', deviceInfo: 'Chrome / Windows 11' },
+  { id: '2', userId: 'U002', userName: 'Trần thị Bích', changedAt: '2026-04-20 14:00', changeReason: 'Reset bởi Admin', ipAddress: '10.0.0.22', deviceInfo: 'Safari / iPhone 15' },
   { id: '3', userId: 'U003', userName: 'Lê Hoàng Nam', changedAt: '2026-03-01 08:15', changeReason: 'Yêu cầu hệ thống', ipAddress: '172.16.0.8', deviceInfo: 'Firefox / Ubuntu' },
-  { id: '4', userId: 'U001', userName: 'Nguyễn Văn An', changedAt: '2026-01-10 11:00', changeReason: 'Đổi định kỳ', ipAddress: '192.168.1.100', deviceInfo: 'Edge / Windows 10' },
-  { id: '5', userId: 'U004', userName: 'Phạm Thị Lan', changedAt: '2026-02-28 16:45', changeReason: 'Tự thay đổi', ipAddress: '192.168.2.50', deviceInfo: 'Chrome / macOS' },
+  { id: '4', userId: 'U001', userName: 'Nguyễn Văn an', changedAt: '2026-01-10 11:00', changeReason: 'Đổi định kỳ', ipAddress: '192.168.1.100', deviceInfo: 'Edge / Windows 10' },
+  { id: '5', userId: 'U004', userName: 'Phạm thị Lan', changedAt: '2026-02-28 16:45', changeReason: 'Tự thay đổi', ipAddress: '192.168.2.50', deviceInfo: 'Chrome / macOS' },
 ];
 
 const reasonConfig: Record<string, string> = {
@@ -30,13 +32,36 @@ const reasonConfig: Record<string, string> = {
 };
 
 export function PasswordHistoryPage() {
+  const [data, setData] = useState<PasswordHistoryItem[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<PasswordHistoryItem | null>(null);
   const [userFilter, setUserFilter] = useState('Tất cả');
 
-  const users = useMemo(() => ['Tất cả', ...Array.from(new Set(MOCK_DATA.map(d => d.userName)))], []);
+  useEffect(() => {
+    const fetchPasswordHistory = async () => {
+      setIsLoading(true);
+      try {
+        const res = await axiosClient.get<any, PasswordHistoryItem[]>('/system/password-history');
+        if (Array.isArray(res) && res.length > 0) {
+          setData(res);
+        } else {
+          setData(MOCK_DATA);
+        }
+      } catch (error) {
+        console.error('Failed to fetch password history:', error);
+        toast.error('Không thể tải lịch sử mật khẩu. Đang hiển thị dữ liệu mẫu.');
+        setData(MOCK_DATA);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchPasswordHistory();
+  }, []);
 
-  const filtered = MOCK_DATA.filter((item) => {
+  const users = useMemo(() => ['Tất cả', ...Array.from(new Set(data.map(d => d.userName)))], [data]);
+
+  const filtered = data.filter((item) => {
     const q = search.toLowerCase();
     const matchSearch = item.userName.toLowerCase().includes(q) || item.changeReason.toLowerCase().includes(q);
     const matchUser = userFilter === 'Tất cả' || item.userName === userFilter;
@@ -46,7 +71,7 @@ export function PasswordHistoryPage() {
   const columns = useMemo<ColumnDef<PasswordHistoryItem>[]>(() => [
     {
       accessorKey: 'userName',
-      header: 'Nhân Viên',
+      header: 'Nhân viên',
       cell: ({ row }) => (
         <div>
           <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.userName}</p>
@@ -56,12 +81,12 @@ export function PasswordHistoryPage() {
     },
     {
       accessorKey: 'changedAt',
-      header: 'Thời Điểm Thay Đổi',
+      header: 'Thời điểm thay đổi',
       cell: (info) => <span className="text-sm text-gray-700 dark:text-gray-300 font-mono">{info.getValue() as string}</span>,
     },
     {
       accessorKey: 'changeReason',
-      header: 'Lý Do Thay Đổi',
+      header: 'Lý do thay đổi',
       cell: (info) => {
         const reason = info.getValue() as string;
         return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${reasonConfig[reason] || ''}`}>{reason}</span>;
@@ -69,12 +94,12 @@ export function PasswordHistoryPage() {
     },
     {
       accessorKey: 'ipAddress',
-      header: 'Địa Chỉ IP',
+      header: 'Địa chỉ IP',
       cell: (info) => <span className="font-mono text-sm text-gray-500">{info.getValue() as string}</span>,
     },
     {
       accessorKey: 'deviceInfo',
-      header: 'Thiết Bị',
+      header: 'Thiết bị',
       cell: (info) => <span className="text-sm text-gray-500">{info.getValue() as string}</span>,
     },
     {
@@ -115,7 +140,7 @@ export function PasswordHistoryPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected} />
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected} isLoading={isLoading} />
       </div>
 
       <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title="Chi tiết lần thay đổi mật khẩu">

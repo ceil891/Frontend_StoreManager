@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, Building2, Phone, Mail, MapPin, Star, FileText, CheckCircle2, User, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -7,11 +7,16 @@ import { usePurchaseStore, type SupplierRecord } from '../store/purchaseStore';
 import { toast } from 'sonner';
 
 export function SuppliersPage() {
-  const { suppliers: data, addSupplier, updateSupplier, deleteSupplier } = usePurchaseStore();
+  const { suppliers: data, addSupplier, updateSupplier, deleteSupplier, fetchSuppliers, isLoadingSuppliers } = usePurchaseStore();
+  
+  useEffect(() => {
+    fetchSuppliers();
+  }, [fetchSuppliers]);
   const [search, setSearch] = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierRecord | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAutoCode, setIsAutoCode] = useState(true);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingSupplier, setEditingSupplier] = useState<Partial<SupplierRecord>>({});
   const [deletingSupplier, setDeletingSupplier] = useState<SupplierRecord | null>(null);
@@ -24,6 +29,7 @@ export function SuppliersPage() {
 
   const handleOpenCreate = () => {
     setModalMode('create');
+    setIsAutoCode(true);
     setEditingSupplier({
       code: `SUP-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
       supplierName: '',
@@ -44,6 +50,7 @@ export function SuppliersPage() {
 
   const handleOpenEdit = (supplier: SupplierRecord) => {
     setModalMode('edit');
+    setIsAutoCode(false);
     setEditingSupplier(supplier);
     setIsModalOpen(true);
   };
@@ -219,7 +226,7 @@ export function SuppliersPage() {
           </button>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedSupplier(row)} />
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedSupplier(row)} isLoading={isLoadingSuppliers}/>
       </div>
 
       {/* Details Modal */}
@@ -326,18 +333,40 @@ export function SuppliersPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Nhà Cung Cấp' : 'Cập Nhật Nhà Cung Cấp'}
+        title={modalMode === 'create' ? 'Thêm nhà cung cấp' : 'Cập nhật nhà cung cấp'}
         width="max-w-2xl"
       >
         <form onSubmit={handleSaveSupplier} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã nhà cung cấp *</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã nhà cung cấp *</label>
+                {modalMode === 'create' && (
+                  <label className="flex items-center gap-1 text-[10px] text-emerald-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isAutoCode}
+                      onChange={(e) => {
+                        setIsAutoCode(e.target.checked);
+                        if (e.target.checked) {
+                          setEditingSupplier(prev => ({
+                            ...prev,
+                            code: `SUP-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`
+                          }));
+                        }
+                      }}
+                      className="rounded text-emerald-600 focus:ring-emerald-550 w-3 h-3"
+                    />
+                    <span>Tự động sinh</span>
+                  </label>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingSupplier.code || ''}
                 onChange={(e) => setEditingSupplier({ ...editingSupplier, code: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                disabled={modalMode === 'create' && isAutoCode}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
                 required
               />
             </div>

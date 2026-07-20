@@ -34,9 +34,9 @@ const RECENT_EXPENSES: ExpenseTransaction[] = [
 ];
 
 const KPI_CARDS = [
-  { title: 'Tổng Thu', value: '850.000.000đ', trend: '+15%', isUp: true, icon: Wallet, color: 'text-indigo-600 bg-indigo-50 border-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/30 dark:border-indigo-900/50' },
-  { title: 'Tổng Chi', value: '420.000.000đ', trend: '+5%', isUp: false, icon: CreditCard, color: 'text-rose-600 bg-rose-50 border-rose-100 dark:text-rose-400 dark:bg-rose-900/30 dark:border-rose-900/50' },
-  { title: 'Lợi Nhuận Gộp', value: '430.000.000đ', trend: '+25%', isUp: true, icon: Activity, color: 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-900/50' },
+  { title: 'Tổng thu', value: '850.000.000đ', trend: '+15%', isUp: true, icon: Wallet, color: 'text-indigo-600 bg-indigo-50 border-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/30 dark:border-indigo-900/50' },
+  { title: 'Tổng chi', value: '420.000.000đ', trend: '+5%', isUp: false, icon: CreditCard, color: 'text-rose-600 bg-rose-50 border-rose-100 dark:text-rose-400 dark:bg-rose-900/30 dark:border-rose-900/50' },
+  { title: 'Lợi nhuận gộp', value: '430.000.000đ', trend: '+25%', isUp: true, icon: Activity, color: 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-900/50' },
 ];
 
 export function FinanceReportPage() {
@@ -46,7 +46,7 @@ export function FinanceReportPage() {
     () => [
       {
         accessorKey: 'id',
-        header: 'Mã Phiếu',
+        header: 'Mã phiếu',
         cell: (info) => <span className="font-mono text-xs font-semibold text-gray-500">{info.getValue() as string}</span>,
       },
       {
@@ -109,7 +109,7 @@ export function FinanceReportPage() {
           </select>
           <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
             <Download className="w-4 h-4" />
-            Xuất Báo Cáo
+            Xuất báo cáo
           </button>
         </div>
       </div>
@@ -137,7 +137,7 @@ export function FinanceReportPage() {
 
       {/* Charts */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
-        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Biểu đồ Thu Chi & Lợi Nhuận (Triệu VNĐ)</h3>
+        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Biểu đồ thu chi & Lợi nhuận (triệu VNĐ)</h3>
         <div className="h-[400px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={FINANCE_DATA} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
@@ -151,7 +151,7 @@ export function FinanceReportPage() {
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
               <Bar dataKey="income" name="Thu" fill="#6366F1" radius={[4, 4, 0, 0]} barSize={20} />
               <Bar dataKey="expense" name="Chi" fill="#F43F5E" radius={[4, 4, 0, 0]} barSize={20} />
-              <Bar dataKey="profit" name="Lợi Nhuận" fill="#10B981" radius={[4, 4, 0, 0]} barSize={20} />
+              <Bar dataKey="profit" name="Lợi nhuận" fill="#10B981" radius={[4, 4, 0, 0]} barSize={20} />
             </BarChart>
           </ResponsiveContainer>
         </div>

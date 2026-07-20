@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, User, Calendar, CheckCircle2, RefreshCw, AlertTriangle, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -9,6 +9,7 @@ import { useCrmStore } from '@/features/crm/store/crmStore';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { OrderLinesEditor, sumOrderLines } from '@/shared/components/sales/OrderLinesEditor';
 import { CustomerSelect } from '@/shared/components/sales/CustomerSelect';
+import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 
 const CONDITION_LABELS: Record<string, string> = {
@@ -27,10 +28,23 @@ const REFUND_METHOD_LABELS: Record<RefundMethod, string> = {
 export function CustomerReturnsPage() {
   const canManage = usePermission('sales:returns:manage');
   const customers = useCrmStore((s) => s.customers);
-  const customerReturns = useSalesStore((s) => s.customerReturns);
-  const addCustomerReturn = useSalesStore((s) => s.addCustomerReturn);
-  const updateCustomerReturn = useSalesStore((s) => s.updateCustomerReturn);
-  const deleteCustomerReturn = useSalesStore((s) => s.deleteCustomerReturn);
+  const { customerReturns, addCustomerReturn, updateCustomerReturn, deleteCustomerReturn, fetchCustomerReturns } = useSalesStore();
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        await fetchCustomerReturns();
+      } catch (err) {
+        console.error(err);
+        toast.error('Không thể tải danh sách hoàn trả');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+  }, [fetchCustomerReturns]);
 
   const [search, setSearch] = useState('');
   const [selectedReturn, setSelectedReturn] = useState<CustomerReturnItem | null>(null);
@@ -86,55 +100,84 @@ export function CustomerReturnsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing.returnCode || !editing.customerId || !editing.orderCode) return;
     const lines = editing.returnLines ?? [];
     const refundFromLines = sumOrderLines(lines);
     const refundAmount = lines.length ? refundFromLines : Number(editing.refundAmount) || 0;
 
-    if (modalMode === 'create') {
-      addCustomerReturn({
-        returnCode: editing.returnCode,
-        orderCode: editing.orderCode,
-        customerId: editing.customerId,
-        refundAmount,
-        refundMethod: (editing.refundMethod as RefundMethod) || 'CASH',
-        isRestocked: editing.isRestocked ?? editing.condition === 'UNOPENED',
-        returnBranchId: editing.returnBranchId || 'BR-001',
-        returnLines: lines,
-        returnDate: editing.returnDate || new Date().toISOString().split('T')[0],
-        reason: editing.reason || '',
-        condition: (editing.condition as CustomerReturnItem['condition']) || 'UNOPENED',
-        status: (editing.status as CustomerReturnItem['status']) || 'PENDING_INSPECTION',
-        inspector: editing.inspector || '—',
-        notes: editing.notes,
-      });
-    } else if (editing.id) {
-      updateCustomerReturn(editing.id, { ...editing, refundAmount, returnLines: lines } as Partial<CustomerReturnItem>);
-      const merged = customerReturns.find((r) => r.id === editing.id);
-      if (merged) syncSelected({ ...merged, ...editing } as CustomerReturnItem);
+    try {
+      if (modalMode === 'create') {
+        await addCustomerReturn({
+          returnCode: editing.returnCode,
+          orderCode: editing.orderCode,
+          customerId: editing.customerId,
+          refundAmount,
+          refundMethod: (editing.refundMethod as RefundMethod) || 'CASH',
+          isRestocked: editing.isRestocked ?? editing.condition === 'UNOPENED',
+          returnBranchId: editing.returnBranchId || 'BR-001',
+          returnLines: lines,
+          returnDate: editing.returnDate || new Date().toISOString().split('T')[0],
+          reason: editing.reason || '',
+          condition: (editing.condition as CustomerReturnItem['condition']) || 'UNOPENED',
+          status: (editing.status as CustomerReturnItem['status']) || 'PENDING_INSPECTION',
+          inspector: editing.inspector || '—',
+          notes: editing.notes,
+        });
+        toast.success('Tạo phiếu hoàn trả thành công!');
+      } else if (editing.id) {
+        await updateCustomerReturn(editing.id, { ...editing, refundAmount, returnLines: lines } as Partial<CustomerReturnItem>);
+        toast.success('Cập nhật phiếu hoàn trả thành công!');
+        const merged = customerReturns.find((r) => r.id === editing.id);
+        if (merged) syncSelected({ ...merged, ...editing } as CustomerReturnItem);
+      }
+      setIsModalOpen(false);
+      fetchCustomerReturns();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi lưu phiếu hoàn trả.');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deleting) return;
-    deleteCustomerReturn(deleting.id);
-    if (selectedReturn?.id === deleting.id) setSelectedReturn(null);
-    setDeleting(null);
+    try {
+      await deleteCustomerReturn(deleting.id);
+      toast.success('Đã xóa phiếu hoàn trả!');
+      if (selectedReturn?.id === deleting.id) setSelectedReturn(null);
+      setDeleting(null);
+      fetchCustomerReturns();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi xóa phiếu hoàn trả.');
+    }
   };
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (!selectedReturn) return;
-    updateCustomerReturn(selectedReturn.id, { status: 'APPROVED_REFUNDED' });
-    syncSelected({ ...selectedReturn, status: 'APPROVED_REFUNDED' });
+    try {
+      await updateCustomerReturn(selectedReturn.id, { status: 'APPROVED_REFUNDED' });
+      syncSelected({ ...selectedReturn, status: 'APPROVED_REFUNDED' });
+      toast.success('Đã duyệt hoàn tiền!');
+      fetchCustomerReturns();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi duyệt hoàn tiền.');
+    }
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!selectedReturn) return;
-    updateCustomerReturn(selectedReturn.id, { status: 'REJECTED' });
-    syncSelected({ ...selectedReturn, status: 'REJECTED' });
+    try {
+      await updateCustomerReturn(selectedReturn.id, { status: 'REJECTED' });
+      syncSelected({ ...selectedReturn, status: 'REJECTED' });
+      toast.success('Đã từ chối hoàn tiền!');
+      fetchCustomerReturns();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi từ chối hoàn tiền.');
+    }
   };
 
   const columns = useMemo<ColumnDef<CustomerReturnItem>[]>(
@@ -301,7 +344,14 @@ export function CustomerReturnsPage() {
           </button>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedReturn(row)} />
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-sm font-bold text-gray-500">Đang tải danh sách hoàn trả...</span>
+          </div>
+        ) : (
+          <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedReturn(row)} />
+        )}
       </div>
 
       <Modal

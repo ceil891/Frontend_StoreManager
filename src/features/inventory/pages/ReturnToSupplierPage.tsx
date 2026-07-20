@@ -3,7 +3,7 @@ import { Plus, Download, Search, Eye, Building2, Calendar, FileText, CheckCircle
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-import { usePurchaseStore, type ReturnToSupplierItem } from '../store/purchaseStore';
+import { useInventoryStore, type ReturnToSupplierItem } from '../store/inventoryStore';
 
 interface UiReturnItem extends ReturnToSupplierItem {
   returnNumber: string;
@@ -16,7 +16,7 @@ interface UiReturnItem extends ReturnToSupplierItem {
 }
 
 export function ReturnToSupplierPage() {
-  const { returnToSuppliers, fetchReturnToSuppliers, addReturnToSupplier, updateReturnToSupplier, deleteReturnToSupplier } = usePurchaseStore();
+  const { returnToSuppliers, fetchReturnToSuppliers, addReturnToSupplier, updateReturnToSupplier, deleteReturnToSupplier } = useInventoryStore();
   const [search, setSearch] = useState('');
   const [selectedRTV, setSelectedRTV] = useState<UiReturnItem | null>(null);
 
@@ -398,7 +398,7 @@ export function ReturnToSupplierPage() {
       <Modal
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
-        title={formMode === 'create' ? 'Tạo Đơn Trả Hàng Cho NCC Mới' : 'Chỉnh Sửa Đơn Trả Hàng NCC'}
+        title={formMode === 'create' ? 'Tạo đơn trả hàng cho NCC mới' : 'Chỉnh sửa đơn trả hàng NCC'}
         width="max-w-2xl"
       >
         <form onSubmit={handleSaveRTV} className="space-y-4">
@@ -580,7 +580,7 @@ export function ReturnToSupplierPage() {
       <Modal
         isOpen={!!deletingRTV}
         onClose={() => setDeletingRTV(null)}
-        title="Xóa Đơn Trả Hàng Nhà Cung Cấp"
+        title="Xóa đơn trả hàng nhà cung cấp"
         isDestructive
         width="max-w-md"
       >

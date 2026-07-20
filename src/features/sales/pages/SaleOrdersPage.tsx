@@ -31,7 +31,8 @@ function formatOrderTotal(o: SaleOrder): string {
 }
 
 export function SaleOrdersPage() {
-  const { saleOrders: data, addSaleOrder, updateSaleOrder, deleteSaleOrder } = useSalesStore();
+  const { saleOrders: data, addSaleOrder, updateSaleOrder, deleteSaleOrder, fetchSaleOrders } = useSalesStore();
+
   const customers = useCrmStore((s) => s.customers);
   const customerLabel = (id: string) => resolveCustomerName(id, customers);
   const canManage = usePermission('sales:orders:create');
@@ -54,12 +55,21 @@ export function SaleOrdersPage() {
   const [deletingOrder, setDeletingOrder] = useState<SaleOrder | null>(null);
   const [deletingBulkOrders, setDeletingBulkOrders] = useState<{ rows: SaleOrder[], clear: () => void } | null>(null);
 
-  // Simulate loading state
+  // Fetch real data & manage loading state
   const [isLoading, setIsLoading] = useState(true);
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 800);
-    return () => clearTimeout(timer);
-  }, []);
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        await fetchSaleOrders();
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, [fetchSaleOrders]);
 
   const filtered = useMemo(() => {
     return storeOrders.filter((item) => {
@@ -536,7 +546,7 @@ export function SaleOrdersPage() {
 
             <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 space-y-1 text-sm">
               <div className="flex justify-between"><span className="text-gray-500">Tiền hàng</span><span className="font-mono">{formatMoney(selectedOrder.subTotal, 'VND')}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Thuế / Giảm</span><span className="font-mono">+{formatMoney(selectedOrder.taxAmount, 'VND')} / −{formatMoney(selectedOrder.discountAmount, 'VND')}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Thuế / giảm</span><span className="font-mono">+{formatMoney(selectedOrder.taxAmount, 'VND')} / −{formatMoney(selectedOrder.discountAmount, 'VND')}</span></div>
               {selectedOrder.origin === 'POS' && selectedOrder.shiftId && (
                 <div className="flex justify-between"><span className="text-gray-500">Ca làm việc</span><span className="font-mono text-xs">{selectedOrder.shiftId}</span></div>
               )}
@@ -605,7 +615,7 @@ export function SaleOrdersPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo Đơn Hàng Mới' : 'Cập Nhật Đơn Hàng'}
+        title={modalMode === 'create' ? 'Tạo đơn hàng mới' : 'Cập nhật đơn hàng'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveOrder} className="space-y-4">

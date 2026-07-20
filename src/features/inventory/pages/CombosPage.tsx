@@ -142,7 +142,7 @@ export function CombosPage() {
     () => [
       {
         accessorKey: 'comboCode',
-        header: 'Mã Combo',
+        header: 'Mã combo',
         cell: (info) => <span className="font-mono font-bold text-emerald-600 hover:underline">{info.getValue() as string}</span>,
       },
       {
@@ -152,7 +152,7 @@ export function CombosPage() {
       },
       {
         accessorKey: 'comboType',
-        header: 'Loại Combo',
+        header: 'Loại combo',
         cell: (info) => {
           const t = info.getValue() as string;
           return (
@@ -164,12 +164,12 @@ export function CombosPage() {
       },
       {
         accessorKey: 'comboName',
-        header: 'Tên Gói',
+        header: 'Tên gói',
         cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'comboPrice',
-        header: 'Giá Gói',
+        header: 'Giá gói',
         cell: (info) => <span className="font-bold text-emerald-600">{(info.getValue() as number).toLocaleString('vi-VN')} ₫</span>,
       },
       {
@@ -229,7 +229,7 @@ export function CombosPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Gói Sản Phẩm (Combos)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý gói sản phẩm (combos)</h1>
             <p className="text-sm text-gray-500 mt-1">Gộp nhiều sản phẩm thành một mã chung để bán với giá ưu đãi.</p>
           </div>
           <div className="flex items-center gap-3">
@@ -307,11 +307,11 @@ export function CombosPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="border p-4 rounded-xl bg-gray-50 border-gray-200">
-                <p className="text-xs font-semibold uppercase text-gray-600">Giá Gói (Combo Price)</p>
+                <p className="text-xs font-semibold uppercase text-gray-600">Giá gói (combo price)</p>
                 <p className="text-2xl font-bold text-emerald-700">{selectedCombo.comboPrice.toLocaleString('vi-VN')} ₫</p>
               </div>
               <div className="border p-4 rounded-xl bg-gray-50 border-gray-200">
-                <p className="text-xs font-semibold uppercase text-gray-600">Tổng Giá Trị Gốc</p>
+                <p className="text-xs font-semibold uppercase text-gray-600">Tổng giá trị gốc</p>
                 <p className="text-2xl font-bold text-gray-900 line-through">
                   {selectedCombo.details.reduce((sum, i) => sum + (i.quantity * i.unitPriceAtCreation), 0).toLocaleString('vi-VN')} ₫
                 </p>
@@ -346,7 +346,7 @@ export function CombosPage() {
                 <span className="font-mono font-semibold">{selectedCombo.comboBarcode || '—'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Loại Combo:</span>
+                <span className="text-gray-500">Loại combo:</span>
                 <span className="font-semibold">
                   {selectedCombo.comboType === 'PRE_ASSEMBLED' ? 'Pre-assembled (trừ tồn khi đóng gói)' : 'Dynamic/Virtual (trừ khi bán POS)'}
                 </span>
@@ -373,7 +373,7 @@ export function CombosPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo Gói Combo Mới' : 'Cập Nhật Combo'}
+        title={modalMode === 'create' ? 'Tạo gói combo mới' : 'Cập nhật combo'}
         width="max-w-3xl"
       >
         <form onSubmit={handleSaveCombo} className="space-y-6">
@@ -383,7 +383,7 @@ export function CombosPage() {
               
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Mã Combo *</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Mã combo *</label>
                   <input
                     type="text"
                     value={editingCombo.comboCode || ''}
@@ -405,7 +405,7 @@ export function CombosPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Loại Combo</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Loại combo</label>
                   <select
                     value={editingCombo.comboType || 'PRE_ASSEMBLED'}
                     onChange={(e) => setEditingCombo({ ...editingCombo, comboType: e.target.value as ProductCombo['comboType'] })}
@@ -429,7 +429,7 @@ export function CombosPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Tên Gói Combo *</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Tên gói combo *</label>
                 <input
                   type="text"
                   value={editingCombo.comboName || ''}
@@ -553,7 +553,7 @@ export function CombosPage() {
               type="submit"
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow"
             >
-              Lưu Combo
+              Lưu combo
             </button>
           </div>
         </form>
@@ -562,7 +562,7 @@ export function CombosPage() {
       <Modal
         isOpen={!!deletingCombo}
         onClose={() => setDeletingCombo(null)}
-        title="Xóa Gói Sản Phẩm"
+        title="Xóa gói sản phẩm"
         isDestructive
         width="max-w-md"
       >

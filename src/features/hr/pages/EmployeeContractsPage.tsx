@@ -13,10 +13,10 @@ interface ContractItem {
 }
 
 const MOCK: ContractItem[] = [
-  { id:'1', contractNumber:'HĐLĐ-2024-001', userName:'Nguyễn Văn An', userId:'U001', position:'Trưởng phòng Kinh doanh', startDate:'2024-01-01', endDate:'2026-01-01', contractType:'Xác định thời hạn', status:'ĐANG_HIỆU_LỰC' },
-  { id:'2', contractNumber:'HĐLĐ-2024-002', userName:'Trần Thị Bích', userId:'U002', position:'Nhân viên Kho', startDate:'2024-03-15', endDate:'2025-03-15', contractType:'Xác định thời hạn', status:'HẾT_HẠN' },
+  { id:'1', contractNumber:'HĐLĐ-2024-001', userName:'Nguyễn Văn an', userId:'U001', position:'Trưởng phòng Kinh doanh', startDate:'2024-01-01', endDate:'2026-01-01', contractType:'Xác định thời hạn', status:'ĐANG_HIỆU_LỰC' },
+  { id:'2', contractNumber:'HĐLĐ-2024-002', userName:'Trần thị Bích', userId:'U002', position:'Nhân viên Kho', startDate:'2024-03-15', endDate:'2025-03-15', contractType:'Xác định thời hạn', status:'HẾT_HẠN' },
   { id:'3', contractNumber:'HĐLĐ-2025-003', userName:'Lê Hoàng Nam', userId:'U003', position:'Kế toán viên', startDate:'2025-01-01', endDate:'', contractType:'Vô thời hạn', status:'ĐANG_HIỆU_LỰC' },
-  { id:'4', contractNumber:'HĐTV-2026-001', userName:'Phạm Thị Lan', userId:'U004', position:'Lễ tân', startDate:'2026-04-01', endDate:'2026-07-01', contractType:'Thử việc', status:'ĐANG_HIỆU_LỰC' },
+  { id:'4', contractNumber:'HĐTV-2026-001', userName:'Phạm thị Lan', userId:'U004', position:'Lễ tân', startDate:'2026-04-01', endDate:'2026-07-01', contractType:'Thử việc', status:'ĐANG_HIỆU_LỰC' },
 ];
 
 const statusCfg: Record<string,{cls:string;label:string}> = {
@@ -51,15 +51,15 @@ export function EmployeeContractsPage() {
   };
 
   const columns = useMemo<ColumnDef<ContractItem>[]>(() => [
-    { accessorKey:'contractNumber', header:'Số Hợp Đồng', cell:info=><span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{info.getValue() as string}</span> },
-    { accessorKey:'userName', header:'Nhân Viên', cell:({row})=>(
+    { accessorKey:'contractNumber', header:'Số hợp đồng', cell:info=><span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{info.getValue() as string}</span> },
+    { accessorKey:'userName', header:'Nhân viên', cell:({row})=>(
       <div><p className="font-medium text-gray-900 dark:text-white">{row.original.userName}</p><p className="text-xs text-gray-400">{row.original.position}</p></div>
     )},
     { accessorKey:'contractType', header:'Loại HĐ', cell:info=><span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${typeCfg[info.getValue() as string]}`}>{info.getValue() as string}</span> },
-    { accessorKey:'startDate', header:'Ngày Bắt Đầu', cell:info=><span className="text-sm text-gray-500">{info.getValue() as string}</span> },
-    { accessorKey:'endDate', header:'Ngày Kết Thúc', cell:info=><span className="text-sm text-gray-500">{(info.getValue() as string)||'Vô thời hạn'}</span> },
-    { accessorKey:'status', header:'Trạng Thái', cell:info=>{ const s=statusCfg[info.getValue() as string]; return <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${s?.cls}`}>{s?.label}</span>; }},
-    { id:'actions', header:'Thao Tác', cell:({row})=>(
+    { accessorKey:'startDate', header:'Ngày bắt đầu', cell:info=><span className="text-sm text-gray-500">{info.getValue() as string}</span> },
+    { accessorKey:'endDate', header:'Ngày kết thúc', cell:info=><span className="text-sm text-gray-500">{(info.getValue() as string)||'Vô thời hạn'}</span> },
+    { accessorKey:'status', header:'Trạng thái', cell:info=>{ const s=statusCfg[info.getValue() as string]; return <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${s?.cls}`}>{s?.label}</span>; }},
+    { id:'actions', header:'Thao tác', cell:({row})=>(
       <div className="flex gap-1" onClick={e=>e.stopPropagation()}>
         <button onClick={()=>setSelected(row.original)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"><Eye className="w-4 h-4"/></button>
         <button onClick={()=>openEdit(row.original)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"><Edit className="w-4 h-4"/></button>
@@ -73,12 +73,12 @@ export function EmployeeContractsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hợp Đồng Lao Động</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hợp đồng lao động</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý và theo dõi hợp đồng lao động của toàn bộ nhân viên.</p>
           </div>
           <div className="flex gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium shadow-sm"><Download className="w-4 h-4"/>Xuất Excel</button>
-            <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm"><Plus className="w-4 h-4"/>Lập Hợp Đồng Mới</button>
+            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium shadow-sm"><Download className="w-4 h-4"/>Xuất excel</button>
+            <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm"><Plus className="w-4 h-4"/>Lập hợp đồng mới</button>
           </div>
         </div>
         <div className="flex gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -106,28 +106,28 @@ export function EmployeeContractsPage() {
         )}
       </Drawer>
 
-      <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title={mode==='create'?'Lập Hợp Đồng Lao Động Mới':'Cập Nhật Hợp Đồng'} width="max-w-lg">
+      <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title={mode==='create'?'Lập hợp đồng lao động mới':'Cập nhật hợp đồng'} width="max-w-lg">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số Hợp Đồng *</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số hợp đồng *</label>
               <input required value={form.contractNumber||''} onChange={e=>setForm({...form,contractNumber:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-mono"/></div>
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên Nhân Viên *</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên nhân viên *</label>
               <input required value={form.userName||''} onChange={e=>setForm({...form,userName:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
           </div>
-          <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chức Vụ</label>
+          <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chức vụ</label>
             <input value={form.position||''} onChange={e=>setForm({...form,position:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày Bắt Đầu</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày bắt đầu</label>
               <input type="date" value={form.startDate||''} onChange={e=>setForm({...form,startDate:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày Kết Thúc</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày kết thúc</label>
               <input type="date" value={form.endDate||''} onChange={e=>setForm({...form,endDate:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại Hợp Đồng</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại hợp đồng</label>
               <select value={form.contractType||'Xác định thời hạn'} onChange={e=>setForm({...form,contractType:e.target.value as any})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500">
                 <option>Thử việc</option><option>Xác định thời hạn</option><option>Vô thời hạn</option>
               </select></div>
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng Thái</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
               <select value={form.status||'ĐANG_HIỆU_LỰC'} onChange={e=>setForm({...form,status:e.target.value as any})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500">
                 <option value="ĐANG_HIỆU_LỰC">Đang hiệu lực</option><option value="HẾT_HẠN">Đã hết hạn</option><option value="ĐÃ_HỦY">Đã huỷ</option>
               </select></div>

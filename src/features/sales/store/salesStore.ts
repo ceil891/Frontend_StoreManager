@@ -126,27 +126,34 @@ export interface CustomerReturnItem {
   returnLines?: OrderLineItem[];
 }
 
+import { axiosClient } from '@/shared/lib/axiosClient';
+
 interface SalesState {
   saleOrders: SaleOrder[];
   quotes: QuoteItem[];
   exportInvoices: ExportInvoiceItem[];
   customerReturns: CustomerReturnItem[];
 
-  addSaleOrder: (order: Omit<SaleOrder, 'id'>) => void;
-  updateSaleOrder: (id: string, data: Partial<SaleOrder>) => void;
-  deleteSaleOrder: (id: string) => void;
+  fetchSaleOrders: () => Promise<void>;
+  fetchQuotes: () => Promise<void>;
+  fetchExportInvoices: () => Promise<void>;
+  fetchCustomerReturns: () => Promise<void>;
 
-  addQuote: (quote: Omit<QuoteItem, 'id'>) => void;
-  updateQuote: (id: string, data: Partial<QuoteItem>) => void;
-  deleteQuote: (id: string) => void;
+  addSaleOrder: (order: Omit<SaleOrder, 'id'>) => Promise<void>;
+  updateSaleOrder: (id: string, data: Partial<SaleOrder>) => Promise<void>;
+  deleteSaleOrder: (id: string) => Promise<void>;
 
-  addExportInvoice: (row: Omit<ExportInvoiceItem, 'id'>) => void;
-  updateExportInvoice: (id: string, data: Partial<ExportInvoiceItem>) => void;
-  deleteExportInvoice: (id: string) => void;
+  addQuote: (quote: Omit<QuoteItem, 'id'>) => Promise<void>;
+  updateQuote: (id: string, data: Partial<QuoteItem>) => Promise<void>;
+  deleteQuote: (id: string) => Promise<void>;
 
-  addCustomerReturn: (row: Omit<CustomerReturnItem, 'id'>) => void;
-  updateCustomerReturn: (id: string, data: Partial<CustomerReturnItem>) => void;
-  deleteCustomerReturn: (id: string) => void;
+  addExportInvoice: (row: Omit<ExportInvoiceItem, 'id'>) => Promise<void>;
+  updateExportInvoice: (id: string, data: Partial<ExportInvoiceItem>) => Promise<void>;
+  deleteExportInvoice: (id: string) => Promise<void>;
+
+  addCustomerReturn: (row: Omit<CustomerReturnItem, 'id'>) => Promise<void>;
+  updateCustomerReturn: (id: string, data: Partial<CustomerReturnItem>) => Promise<void>;
+  deleteCustomerReturn: (id: string) => Promise<void>;
 }
 
 const SAMPLE_LINES = {
@@ -172,7 +179,7 @@ const MOCK_ORDERS: SaleOrder[] = [
     shippingFee: 30000,
     totalAmount: 20530000,
     orderLines: SAMPLE_LINES.onl1,
-    itemsSummary: 'Samsung Galaxy S24×1, Ốp lưng Silicon×2',
+    itemsSummary: 'Samsung Galaxy S24×1, ốp lưng Silicon×2',
     status: 'COMPLETED',
     paymentStatus: 'PAID',
     paymentMethod: 'Online Card',
@@ -184,7 +191,7 @@ const MOCK_ORDERS: SaleOrder[] = [
     currency: 'VND',
     branchId: 'BR-001',
     branchName: 'CH Quận 1',
-    recipientName: 'Nguyễn Văn An',
+    recipientName: 'Nguyễn Văn an',
     recipientPhone: '0909111222',
     shippingAddress: '12 Lê Lợi, P. Bến Nghé',
     province: 'TP.HCM',
@@ -291,7 +298,7 @@ const MOCK_ORDERS: SaleOrder[] = [
     currency: 'VND',
     branchId: 'BR-004',
     branchName: 'CH Quận 7',
-    recipientName: 'Phạm Thị Dung',
+    recipientName: 'Phạm thị dung',
     recipientPhone: '0938444555',
     shippingAddress: '10 Nguyễn Văn Linh',
     province: 'TP.HCM',
@@ -491,10 +498,10 @@ const MOCK_RETURNS: CustomerReturnItem[] = [
 ];
 
 const defaultData = {
-  saleOrders: MOCK_ORDERS,
-  quotes: MOCK_QUOTES,
-  exportInvoices: MOCK_INVOICES,
-  customerReturns: MOCK_RETURNS,
+  saleOrders: [],
+  quotes: [],
+  exportInvoices: [],
+  customerReturns: [],
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -564,65 +571,185 @@ export const useSalesStore = create<SalesState>()(
     (set) => ({
       ...defaultData,
 
-      addSaleOrder: (order) =>
+      fetchSaleOrders: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/sales/orders');
+          const data = res.content || res || [];
+          if (Array.isArray(data) && data.length > 0) {
+            set({ saleOrders: data.map(migrateLegacyOrder) });
+          }
+        } catch (e) {
+          console.error('Failed to fetch sale orders:', e);
+        }
+      },
+
+      fetchQuotes: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/sales/quotes');
+          const data = res.content || res || [];
+          if (Array.isArray(data) && data.length > 0) {
+            set({ quotes: data.map(migrateLegacyQuote) });
+          }
+        } catch (e) {
+          console.error('Failed to fetch quotes:', e);
+        }
+      },
+
+      fetchExportInvoices: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/sales/invoices');
+          const data = res.content || res || [];
+          if (Array.isArray(data) && data.length > 0) {
+            set({ exportInvoices: data.map(migrateLegacyInvoice) });
+          }
+        } catch (e) {
+          console.error('Failed to fetch invoices:', e);
+        }
+      },
+
+      fetchCustomerReturns: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/sales/returns');
+          const data = res.content || res || [];
+          if (Array.isArray(data) && data.length > 0) {
+            set({ customerReturns: data.map(migrateLegacyReturn) });
+          }
+        } catch (e) {
+          console.error('Failed to fetch customer returns:', e);
+        }
+      },
+
+      addSaleOrder: async (order) => {
+        try {
+          await axiosClient.post('/sales/orders', order);
+        } catch (e) {
+          console.error(e);
+        }
         set((state) => ({
           saleOrders: [{ id: Date.now().toString(), ...order }, ...state.saleOrders],
-        })),
+        }));
+      },
 
-      updateSaleOrder: (id, data) =>
+      updateSaleOrder: async (id, data) => {
+        try {
+          await axiosClient.put(`/sales/orders/${id}`, data);
+        } catch (e) {
+          console.error(e);
+        }
         set((state) => ({
           saleOrders: state.saleOrders.map((o) => (o.id === id ? { ...o, ...data } : o)),
-        })),
+        }));
+      },
 
-      deleteSaleOrder: (id) =>
+      deleteSaleOrder: async (id) => {
+        try {
+          await axiosClient.delete(`/sales/orders/${id}`);
+        } catch (e) {
+          console.error(e);
+        }
         set((state) => ({
           saleOrders: state.saleOrders.filter((o) => o.id !== id),
-        })),
+        }));
+      },
 
-      addQuote: (quote) =>
+      addQuote: async (quote) => {
+        try {
+          await axiosClient.post('/sales/quotes', quote);
+        } catch (e) {
+          console.error(e);
+        }
         set((state) => ({
           quotes: [{ id: Date.now().toString(), ...quote }, ...state.quotes],
-        })),
+        }));
+      },
 
-      updateQuote: (id, data) =>
+      updateQuote: async (id, data) => {
+        try {
+          await axiosClient.put(`/sales/quotes/${id}`, data);
+        } catch (e) {
+          console.error(e);
+        }
         set((state) => ({
           quotes: state.quotes.map((q) => (q.id === id ? { ...q, ...data } : q)),
-        })),
+        }));
+      },
 
-      deleteQuote: (id) =>
+      deleteQuote: async (id) => {
+        try {
+          await axiosClient.delete(`/sales/quotes/${id}`);
+        } catch (e) {
+          console.error(e);
+        }
         set((state) => ({
           quotes: state.quotes.filter((q) => q.id !== id),
-        })),
+        }));
+      },
 
-      addExportInvoice: (row) =>
+      addExportInvoice: async (row) => {
+        try {
+          await axiosClient.post('/sales/invoices', row);
+        } catch (e) {
+          console.error(e);
+        }
         set((state) => ({
           exportInvoices: [{ id: Date.now().toString(), ...row }, ...state.exportInvoices],
-        })),
+        }));
+      },
 
-      updateExportInvoice: (id, data) =>
+      updateExportInvoice: async (id, data) => {
+        try {
+          await axiosClient.put(`/sales/invoices/${id}`, data);
+        } catch (e) {
+          console.error(e);
+        }
         set((state) => ({
           exportInvoices: state.exportInvoices.map((inv) => (inv.id === id ? { ...inv, ...data } : inv)),
-        })),
+        }));
+      },
 
-      deleteExportInvoice: (id) =>
+      deleteExportInvoice: async (id) => {
+        try {
+          await axiosClient.delete(`/sales/invoices/${id}`);
+        } catch (e) {
+          console.error(e);
+        }
         set((state) => ({
           exportInvoices: state.exportInvoices.filter((inv) => inv.id !== id),
-        })),
+        }));
+      },
 
-      addCustomerReturn: (row) =>
+      addCustomerReturn: async (row) => {
+        try {
+          await axiosClient.post('/sales/returns', row);
+        } catch (e) {
+          console.error(e);
+        }
         set((state) => ({
           customerReturns: [{ id: Date.now().toString(), ...row }, ...state.customerReturns],
-        })),
+        }));
+      },
 
-      updateCustomerReturn: (id, data) =>
+      updateCustomerReturn: async (id, data) => {
+        try {
+          await axiosClient.put(`/sales/returns/${id}`, data);
+        } catch (e) {
+          console.error(e);
+        }
         set((state) => ({
           customerReturns: state.customerReturns.map((r) => (r.id === id ? { ...r, ...data } : r)),
-        })),
+        }));
+      },
 
-      deleteCustomerReturn: (id) =>
+      deleteCustomerReturn: async (id) => {
+        try {
+          await axiosClient.delete(`/sales/returns/${id}`);
+        } catch (e) {
+          console.error(e);
+        }
         set((state) => ({
           customerReturns: state.customerReturns.filter((r) => r.id !== id),
-        })),
+        }));
+      },
     }),
     {
       name: 'retailhub-sales-storage',

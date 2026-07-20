@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, Receipt } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useSalesStore } from '@/features/sales/store/salesStore';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface SalesInvoiceRecord {
   id: string;
@@ -19,55 +22,45 @@ interface SalesInvoiceRecord {
   notes?: string;
 }
 
-const MOCK_INVOICES: SalesInvoiceRecord[] = [
-  {
-    id: '1',
-    invoiceCode: 'INV-2026-001',
-    orderCode: 'SO-2026-001',
-    customerName: 'Nguyễn Văn A',
-    invoiceDate: '2026-06-04',
-    dueDate: '2026-06-04',
-    subTotal: 1500000,
-    discount: 50000,
-    totalAmount: 1450000,
-    status: 'DA_THANH_TOAN',
-    notes: 'Khách hàng thanh toán qua VNPay',
-  },
-  {
-    id: '2',
-    invoiceCode: 'INV-2026-002',
-    orderCode: 'SO-2026-002',
-    customerName: 'Trần Thị B',
-    invoiceDate: '2026-06-04',
-    dueDate: '2026-06-18',
-    subTotal: 3400000,
-    discount: 0,
-    totalAmount: 3400000,
-    status: 'CHO_THANH_TOAN',
-    notes: 'Đơn hàng giao COD đi tỉnh',
-  },
-  {
-    id: '3',
-    invoiceCode: 'INV-2026-003',
-    orderCode: 'SO-2026-003',
-    customerName: 'Lê Văn C',
-    invoiceDate: '2026-06-03',
-    dueDate: '2026-06-17',
-    subTotal: 850000,
-    discount: 100000,
-    totalAmount: 750000,
-    status: 'DA_HUY',
-    notes: 'Hủy đơn do khách đổi ý không mua nữa',
-  },
-];
-
 export function SalesInvoicesPage() {
-  const [data, setData] = useState<SalesInvoiceRecord[]>(MOCK_INVOICES);
+  const { exportInvoices, fetchExportInvoices, addExportInvoice, updateExportInvoice, deleteExportInvoice } = useSalesStore();
+  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<SalesInvoiceRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<SalesInvoiceRecord>>({});
+
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        await fetchExportInvoices();
+      } catch (err) {
+        console.error(err);
+        toast.error('Không thể tải danh sách hóa đơn bán');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+  }, [fetchExportInvoices]);
+
+  const data = useMemo<SalesInvoiceRecord[]>(() => {
+    return exportInvoices.map((inv) => ({
+      id: inv.id,
+      invoiceCode: inv.invoiceNumber,
+      orderCode: inv.orderIds?.[0] || inv.invoiceNumber,
+      customerName: inv.customerId || 'Khách lẻ',
+      invoiceDate: inv.issueDate ? inv.issueDate.substring(0, 10) : '',
+      dueDate: inv.dueDate ? inv.dueDate.substring(0, 10) : '',
+      subTotal: inv.subtotal,
+      discount: 0,
+      totalAmount: inv.totalAmount,
+      status: inv.status === 'PAID' ? 'DA_THANH_TOAN' : inv.status === 'CANCELLED' ? 'DA_HUY' : 'CHO_THANH_TOAN',
+      notes: inv.notes,
+    }));
+  }, [exportInvoices]);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -103,44 +96,56 @@ export function SalesInvoicesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.invoiceCode || !editingItem.orderCode || !editingItem.customerName) return;
 
-    const sub = Number(editingItem.subTotal || 0);
-    const disc = Number(editingItem.discount || 0);
-    const total = sub - disc;
+    try {
+      const sub = Number(editingItem.subTotal || 0);
+      const disc = Number(editingItem.discount || 0);
+      const tot = sub - disc;
 
-    if (modalMode === 'create') {
-      const newItem: SalesInvoiceRecord = {
-        id: String(data.length + 1),
-        invoiceCode: editingItem.invoiceCode!,
-        orderCode: editingItem.orderCode!,
-        customerName: editingItem.customerName!,
-        invoiceDate: editingItem.invoiceDate!,
-        dueDate: editingItem.dueDate || editingItem.invoiceDate!,
-        subTotal: sub,
-        discount: disc,
-        totalAmount: total,
-        status: editingItem.status as any || 'CHO_THANH_TOAN',
-        notes: editingItem.notes,
+      const payload = {
+        invoiceNumber: editingItem.invoiceCode,
+        customerId: editingItem.customerName,
+        taxId: 'VAT10',
+        billingAddress: 'Hà Nội, Việt Nam',
+        orderIds: [editingItem.orderCode],
+        issueDate: editingItem.invoiceDate || new Date().toISOString().split('T')[0],
+        dueDate: editingItem.dueDate || new Date().toISOString().split('T')[0],
+        subtotal: sub,
+        vatAmount: sub * 0.1,
+        totalAmount: tot,
+        status: (editingItem.status === 'DA_THANH_TOAN' ? 'PAID' : editingItem.status === 'DA_HUY' ? 'CANCELLED' : 'ISSUED') as any,
+        paymentTerms: 'COD',
+        notes: editingItem.notes || '',
       };
-      setData([...data, newItem]);
-    } else {
-      const updated = {
-        ...editingItem,
-        subTotal: sub,
-        discount: disc,
-        totalAmount: total,
-      } as SalesInvoiceRecord;
-      setData(data.map((d) => (d.id === editingItem.id ? updated : d)));
+
+      if (modalMode === 'create') {
+        await addExportInvoice(payload);
+        toast.success('Tạo hóa đơn thành công!');
+      } else {
+        await updateExportInvoice(editingItem.id!, payload);
+        toast.success('Cập nhật hóa đơn thành công!');
+      }
+      setIsModalOpen(false);
+      fetchExportInvoices();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi lưu hóa đơn.');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa hóa đơn bán hàng này?')) {
-      setData(data.filter((d) => d.id !== id));
+  const handleDelete = async (id: string) => {
+    if (confirm('Bạn có chắc chắn muốn xóa hóa đơn này?')) {
+      try {
+        await deleteExportInvoice(id);
+        toast.success('Đã xóa hóa đơn thành công!');
+        fetchExportInvoices();
+      } catch (err) {
+        console.error(err);
+        toast.error('Lỗi khi xóa hóa đơn.');
+      }
     }
   };
 
@@ -152,32 +157,32 @@ export function SalesInvoicesPage() {
     () => [
       {
         accessorKey: 'invoiceCode',
-        header: 'Mã Hóa Đơn',
+        header: 'Mã hóa đơn',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'orderCode',
-        header: 'Mã Đơn SO',
+        header: 'Mã đơn SO',
         cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'customerName',
-        header: 'Tên Khách Hàng',
+        header: 'Tên khách hàng',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'invoiceDate',
-        header: 'Ngày Hóa Đơn',
+        header: 'Ngày hóa đơn',
         cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'totalAmount',
-        header: 'Thành Tiền',
+        header: 'Thành tiền',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{formatCurrency(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           const badgeClass =
@@ -186,19 +191,19 @@ export function SalesInvoicesPage() {
               : status === 'CHO_THANH_TOAN'
               ? 'bg-amber-100 text-amber-800'
               : 'bg-red-100 text-red-800';
-          const label = status === 'DA_THANH_TOAN' ? 'Đã Thanh Toán' : status === 'CHO_THANH_TOAN' ? 'Chờ Thanh Toán' : 'Đã Hủy';
+          const label = status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : status === 'CHO_THANH_TOAN' ? 'Chờ thanh toán' : 'Đã hủy';
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết"
+              title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -227,7 +232,7 @@ export function SalesInvoicesPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Hóa Đơn Bán Hàng (Đầu Ra)</h1>
+          <h1 className="text-2xl font-bold">Hóa đơn bán hàng (đầu ra)</h1>
           <p className="text-sm text-gray-500">
             Quản lý và xuất hóa đơn bán hàng cho khách hàng, hỗ trợ in hóa đơn, ghi nhận doanh thu và báo cáo VAT.
           </p>
@@ -251,7 +256,14 @@ export function SalesInvoicesPage() {
         />
       </div>
 
-      <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-sm font-bold text-gray-500">Đang tải danh sách hóa đơn...</span>
+        </div>
+      ) : (
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      )}
 
       <Drawer
         isOpen={!!selected}
@@ -262,25 +274,25 @@ export function SalesInvoicesPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã Hóa Đơn:</span>
+                <span className="text-gray-500">Mã hóa đơn:</span>
                 <p className="font-mono font-semibold">{selected.invoiceCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Mã Đơn Hàng (SO):</span>
+                <span className="text-gray-500">Mã đơn hàng (SO):</span>
                 <p className="font-mono font-semibold">{selected.orderCode}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Khách Hàng:</span>
+              <span className="text-gray-500">Khách hàng:</span>
               <p className="font-semibold">{selected.customerName}</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Ngày Hóa Đơn:</span>
+                <span className="text-gray-500">Ngày hóa đơn:</span>
                 <p className="font-mono">{selected.invoiceDate}</p>
               </div>
               <div>
-                <span className="text-gray-500">Hạn Thanh Toán:</span>
+                <span className="text-gray-500">Hạn thanh toán:</span>
                 <p className="font-mono">{selected.dueDate}</p>
               </div>
             </div>
@@ -299,7 +311,7 @@ export function SalesInvoicesPage() {
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Trạng Thái:</span>
+              <span className="text-gray-500">Trạng thái:</span>
               <div>
                 <span
                   className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
@@ -310,13 +322,13 @@ export function SalesInvoicesPage() {
                       : 'bg-red-100 text-red-800'
                   }`}
                 >
-                  {selected.status === 'DA_THANH_TOAN' ? 'Đã Thanh Toán' : selected.status === 'CHO_THANH_TOAN' ? 'Chờ Thanh Toán' : 'Đã Hủy'}
+                  {selected.status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : selected.status === 'CHO_THANH_TOAN' ? 'Chờ thanh toán' : 'Đã hủy'}
                 </span>
               </div>
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi Chú:</span>
+                <span className="text-gray-500">Ghi chú:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                   {selected.notes}
                 </p>
@@ -329,12 +341,12 @@ export function SalesInvoicesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Lập Hóa Đơn Bán Mới' : 'Sửa Thông Tin Hóa Đơn Bán'}
+        title={modalMode === 'create' ? 'Lập hóa đơn bán mới' : 'Sửa thông tin hóa đơn bán'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Hóa Đơn *</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã hóa đơn *</label>
               <input
                 type="text"
                 value={editingItem.invoiceCode || ''}
@@ -344,7 +356,7 @@ export function SalesInvoicesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Đơn SO *</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã đơn SO *</label>
               <input
                 type="text"
                 value={editingItem.orderCode || ''}
@@ -356,7 +368,7 @@ export function SalesInvoicesPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Tên Khách Hàng *</label>
+            <label className="block text-xs text-gray-500 mb-1">Tên khách hàng *</label>
             <input
               type="text"
               value={editingItem.customerName || ''}
@@ -368,7 +380,7 @@ export function SalesInvoicesPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày Hóa Đơn *</label>
+              <label className="block text-xs text-gray-500 mb-1">Ngày hóa đơn *</label>
               <input
                 type="date"
                 value={editingItem.invoiceDate || ''}
@@ -378,7 +390,7 @@ export function SalesInvoicesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Hạn Thanh Toán *</label>
+              <label className="block text-xs text-gray-500 mb-1">Hạn thanh toán *</label>
               <input
                 type="date"
                 value={editingItem.dueDate || ''}
@@ -390,7 +402,7 @@ export function SalesInvoicesPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Thành Tiền Hàng *</label>
+              <label className="block text-xs text-gray-500 mb-1">Thành tiền hàng *</label>
               <input
                 type="number"
                 value={editingItem.subTotal || 0}
@@ -400,7 +412,7 @@ export function SalesInvoicesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Chiết Khấu</label>
+              <label className="block text-xs text-gray-500 mb-1">Chiết khấu</label>
               <input
                 type="number"
                 value={editingItem.discount || 0}
@@ -410,19 +422,19 @@ export function SalesInvoicesPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Trạng Thái</label>
+            <label className="block text-xs text-gray-500 mb-1">Trạng thái</label>
             <select
               value={editingItem.status || 'CHO_THANH_TOAN'}
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
               className="w-full p-2 border rounded"
             >
-              <option value="CHO_THANH_TOAN">Chờ Thanh Toán</option>
-              <option value="DA_THANH_TOAN">Đã Thanh Toán</option>
-              <option value="DA_HUY">Đã Hủy</option>
+              <option value="CHO_THANH_TOAN">Chờ thanh toán</option>
+              <option value="DA_THANH_TOAN">Đã thanh toán</option>
+              <option value="DA_HUY">Đã hủy</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú</label>
+            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
@@ -440,7 +452,7 @@ export function SalesInvoicesPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Hóa Đơn
+              Lưu hóa đơn
             </button>
           </div>
         </form>

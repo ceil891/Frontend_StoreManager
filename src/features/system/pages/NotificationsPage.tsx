@@ -172,12 +172,12 @@ export function NotificationsPage() {
     () => [
       {
         accessorKey: 'ruleCode',
-        header: 'Mã Luật NTF',
+        header: 'Mã luật NTF',
         cell: (info) => <span className="font-mono font-bold text-primary px-2 py-0.5 bg-primary/10 rounded border border-primary/20 hover:underline">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'eventName',
-        header: 'Sự Kiện & Tiêu Đề Cảnh Báo',
+        header: 'Sự kiện & tiêu đề cảnh báo',
         cell: ({ row }) => (
           <div>
             <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.eventName}</p>
@@ -187,7 +187,7 @@ export function NotificationsPage() {
       },
       {
         accessorKey: 'urgency',
-        header: 'Độ Khẩn Cấp',
+        header: 'Độ khẩn cấp',
         cell: (info) => {
           const u = info.getValue() as keyof typeof urgencyBadgeStyles;
           return (
@@ -199,7 +199,7 @@ export function NotificationsPage() {
       },
       {
         accessorKey: 'channel',
-        header: 'Kênh Truyền Tải',
+        header: 'Kênh truyền tải',
         cell: (info) => {
           const c = info.getValue() as keyof typeof channelBadgeStyles;
           return (
@@ -211,17 +211,17 @@ export function NotificationsPage() {
       },
       {
         accessorKey: 'recipientRoleScope',
-        header: 'Đối Tượng Nhận',
+        header: 'Đối tượng nhận',
         cell: (info) => <span className="font-mono text-xs text-gray-700 dark:text-gray-300 font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'deliveryCountYtd',
-        header: 'Tần Suất Gửi (YTD)',
+        header: 'Tần suất gửi (YTD)',
         cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{((info.getValue() as number)).toLocaleString()} msgs</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           return (
@@ -273,7 +273,7 @@ export function NotificationsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Luật Cảnh Báo & Gửi Thông Báo (Event Dispatcher)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Luật cảnh báo & gửi thông báo (event dispatcher)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Định nghĩa các sự kiện kích hoạt (Hết kho, Biến động két tiền POS, Giao dịch lớn) và thiết lập kênh phân phối tin nhắn tương ứng.</p>
           </div>
           <div className="flex items-center gap-3">

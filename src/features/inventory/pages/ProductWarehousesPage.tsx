@@ -42,60 +42,60 @@ export function ProductWarehousesPage() {
       },
       {
         accessorKey: 'productName',
-        header: 'Sản Phẩm',
+        header: 'Sản phẩm',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'branchName',
-        header: 'Chi Nhánh / Kho',
+        header: 'Chi nhánh / kho',
         cell: (info) => <span className="font-semibold text-blue-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'quantityOnHand',
-        header: 'Tổng Tồn Thực Tế',
+        header: 'Tổng tồn thực tế',
         cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{info.getValue() as number}</span>,
       },
       {
         accessorKey: 'quantityAvailable',
-        header: 'Khả Dụng Bán',
+        header: 'Khả dụng bán',
         cell: (info) => <span className="font-mono text-emerald-600 font-bold">{info.getValue() as number}</span>,
       },
       {
         accessorKey: 'quantityReserved',
-        header: 'Đang Giữ Chỗ',
+        header: 'Đang giữ chỗ',
         cell: (info) => <span className="font-mono text-amber-600">{info.getValue() as number}</span>,
       },
       {
         accessorKey: 'locationBin',
-        header: 'Vị Trí Kệ',
+        header: 'Vị trí kệ',
         cell: (info) => <span className="text-sm text-gray-500 font-mono">{(info.getValue() as string) || '—'}</span>,
       },
       {
         id: 'status',
-        header: 'Trạng Thái Tồn',
+        header: 'Trạng thái tồn',
         cell: ({ row }) => {
           const status = getStockStatus(row.original);
           let badgeClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300';
-          let label = 'Còn Hàng';
+          let label = 'Còn hàng';
           if (status === 'CHAY_HANG') {
             badgeClass = 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300';
-            label = 'Cháy Hàng';
+            label = 'Cháy hàng';
           } else if (status === 'SAP_HET') {
             badgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
-            label = 'Sắp Hết Hàng';
+            label = 'Sắp hết hàng';
           }
           return <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
-              title="Xem Chi Tiết Tồn Kho"
+              title="Xem chi tiết tồn kho"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -110,7 +110,7 @@ export function ProductWarehousesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Báo Cáo Tồn Kho Theo Chi Nhánh</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Báo cáo tồn kho theo chi nhánh</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Xem và giám sát số lượng tồn kho chi tiết tại từng chi nhánh / kho hàng. Dữ liệu được đồng bộ trực tiếp từ hệ thống backend.
           </p>
@@ -159,21 +159,21 @@ export function ProductWarehousesPage() {
         {selected && (
           <div className="space-y-6">
             <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
-              <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">Chi Nhánh / Kho</p>
+              <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">Chi nhánh / kho</p>
               <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-1">{selected.branchName}</p>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm text-center">
-                <p className="text-xs text-gray-500 mb-1">Tổng Tồn</p>
+                <p className="text-xs text-gray-500 mb-1">Tổng tồn</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">{selected.quantityOnHand}</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm text-center">
-                <p className="text-xs text-gray-500 mb-1">Khả Dụng</p>
+                <p className="text-xs text-gray-500 mb-1">Khả dụng</p>
                 <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{selected.quantityAvailable}</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm text-center">
-                <p className="text-xs text-gray-500 mb-1">Giữ Chỗ</p>
+                <p className="text-xs text-gray-500 mb-1">Giữ chỗ</p>
                 <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{selected.quantityReserved}</p>
               </div>
             </div>
@@ -202,7 +202,7 @@ export function ProductWarehousesPage() {
                     ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
                     : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
                 }`}>
-                  {getStockStatus(selected) === 'CON_HANG' ? 'Còn Hàng' : getStockStatus(selected) === 'SAP_HET' ? 'Sắp Cháy Hàng' : 'Hết Hàng'}
+                  {getStockStatus(selected) === 'CON_HANG' ? 'Còn hàng' : getStockStatus(selected) === 'SAP_HET' ? 'Sắp cháy hàng' : 'Hết hàng'}
                 </span>
               </div>
             </div>

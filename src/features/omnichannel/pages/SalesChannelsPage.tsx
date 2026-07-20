@@ -19,7 +19,7 @@ const MOCK_CHANNELS: SalesChannelRecord[] = [
   {
     id: '1',
     channelCode: 'CH-SHOPEE-01',
-    channelName: 'Shopee - Gian Hàng Thời Trang RetailHub',
+    channelName: 'Shopee - gian hàng thời Trang RetailHub',
     channelType: 'SHOPEE',
     apiStatus: 'CONNECTED',
     connectedDate: '2026-05-10',
@@ -114,17 +114,17 @@ export function SalesChannelsPage() {
     () => [
       {
         accessorKey: 'channelCode',
-        header: 'Mã Kênh',
+        header: 'Mã kênh',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'channelName',
-        header: 'Tên Gian Hàng',
+        header: 'Tên gian hàng',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'channelType',
-        header: 'Loại Kênh',
+        header: 'Loại kênh',
         cell: (info) => {
           const val = info.getValue() as string;
           let label = 'Shopee';
@@ -139,7 +139,7 @@ export function SalesChannelsPage() {
             label = 'Website WooCommerce';
             color = 'text-purple-600 bg-purple-50';
           } else if (val === 'SOCIAL') {
-            label = 'Mạng Xã Hội';
+            label = 'Mạng xã hội';
             color = 'text-blue-500 bg-blue-50/50';
           }
           return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${color}`}>{label}</span>;
@@ -147,49 +147,49 @@ export function SalesChannelsPage() {
       },
       {
         accessorKey: 'connectedDate',
-        header: 'Ngày Kết Nối',
+        header: 'Ngày kết nối',
         cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'apiStatus',
-        header: 'Trạng Thái API',
+        header: 'Trạng thái API',
         cell: (info) => {
           const status = info.getValue() as string;
           let badgeClass = 'bg-gray-100 text-gray-800';
-          let label = 'Chưa Kết Nối';
+          let label = 'Chưa kết nối';
           if (status === 'CONNECTED') {
             badgeClass = 'bg-emerald-100 text-emerald-800';
-            label = 'Hoạt Động';
+            label = 'Hoạt động';
           } else if (status === 'ERROR') {
             badgeClass = 'bg-red-100 text-red-800';
-            label = 'Lỗi Kết Nối';
+            label = 'Lỗi kết nối';
           }
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết Kênh"
+              title="Xem chi tiết kênh"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleOpenEdit(row.original)}
               className="p-1 text-gray-500 hover:text-blue-600 rounded"
-              title="Sửa Cấu Hình"
+              title="Sửa cấu hình"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleDelete(row.original.id)}
               className="p-1 text-gray-500 hover:text-red-600 rounded"
-              title="Ngắt Kết Nối"
+              title="Ngắt kết nối"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -204,7 +204,7 @@ export function SalesChannelsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Quản Lý Kênh Bán Hàng Đa Kênh (Sales Channels)</h1>
+          <h1 className="text-2xl font-bold">Quản lý kênh bán hàng đa kênh (sales channels)</h1>
           <p className="text-sm text-gray-500">
             Tích hợp, cấu hình đồng bộ gian hàng trực tuyến trên các sàn TMĐT (Shopee, Lazada, TikTok) hoặc Website bán hàng của doanh nghiệp.
           </p>
@@ -239,16 +239,16 @@ export function SalesChannelsPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã Kênh Kết Nối:</span>
+                <span className="text-gray-500">Mã kênh kết nối:</span>
                 <p className="font-mono font-semibold">{selected.channelCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Loại Gian Hàng:</span>
+                <span className="text-gray-500">Loại gian hàng:</span>
                 <p className="font-semibold text-emerald-600">{selected.channelType}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Tên Gian Hàng / Kênh:</span>
+              <span className="text-gray-500">Tên gian hàng / kênh:</span>
               <p className="font-semibold text-base">{selected.channelName}</p>
             </div>
             <div className="grid grid-cols-2 gap-4 border-t pt-2">
@@ -259,7 +259,7 @@ export function SalesChannelsPage() {
                 <p className="font-mono">{selected.connectedDate}</p>
               </div>
               <div>
-                <span className="text-gray-500">Trạng Thái Đồng Bộ API:</span>
+                <span className="text-gray-500">Trạng thái đồng bộ API:</span>
                 <div>
                   <span
                     className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
@@ -271,24 +271,24 @@ export function SalesChannelsPage() {
                     }`}
                   >
                     {selected.apiStatus === 'CONNECTED'
-                      ? 'Đang Kết Nối Hoạt Động'
+                      ? 'Đang kết nối hoạt động'
                       : selected.apiStatus === 'DISCONNECTED'
-                      ? 'Đã Ngắt Kết Nối'
-                      : 'Lỗi Đồng Bộ Sync'}
+                      ? 'Đã ngắt kết nối'
+                      : 'Lỗi đồng bộ sync'}
                   </span>
                 </div>
               </div>
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi Chú Kênh:</span>
+                <span className="text-gray-500">Ghi chú kênh:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                   {selected.notes}
                 </p>
               </div>
             )}
             <div className="border-t pt-4">
-              <h3 className="font-semibold mb-2">Thông Số Kỹ Thuật API</h3>
+              <h3 className="font-semibold mb-2">Thông số kỹ thuật API</h3>
               <div className="p-3 bg-gray-50 dark:bg-gray-900 font-mono text-xs space-y-1 rounded">
                 <p><span className="text-gray-400">Endpoint:</span> https://api.shopee.vn/v2/shop/get_info</p>
                 <p><span className="text-gray-400">Token Status:</span> ACTIVE (Expires in 15 days)</p>
@@ -302,12 +302,12 @@ export function SalesChannelsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tích Hợp Kênh TMĐT Mới' : 'Sửa Thông Tin Kênh Tích Hợp'}
+        title={modalMode === 'create' ? 'Tích hợp kênh TMĐT mới' : 'Sửa thông tin kênh tích hợp'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Kênh *</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã kênh *</label>
               <input
                 type="text"
                 value={editingItem.channelCode || ''}
@@ -319,7 +319,7 @@ export function SalesChannelsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Loại Kênh *</label>
+              <label className="block text-xs text-gray-500 mb-1">Loại kênh *</label>
               <select
                 value={editingItem.channelType || 'SHOPEE'}
                 onChange={(e) => setEditingItem({ ...editingItem, channelType: e.target.value as any })}
@@ -329,12 +329,12 @@ export function SalesChannelsPage() {
                 <option value="LAZADA">Lazada Vietnam</option>
                 <option value="TIKTOK">TikTok Shop Vietnam</option>
                 <option value="WEBSITE">WooCommerce Website</option>
-                <option value="SOCIAL">Mạng Xã Hội (Facebook/Zalo)</option>
+                <option value="SOCIAL">Mạng xã hội (Facebook/Zalo)</option>
               </select>
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Tên Gian Hàng Hiển Thị *</label>
+            <label className="block text-xs text-gray-500 mb-1">Tên gian hàng hiển thị *</label>
             <input
               type="text"
               value={editingItem.channelName || ''}
@@ -346,7 +346,7 @@ export function SalesChannelsPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày Tích Hợp *</label>
+              <label className="block text-xs text-gray-500 mb-1">Ngày tích hợp *</label>
               <input
                 type="date"
                 value={editingItem.connectedDate || ''}
@@ -356,20 +356,20 @@ export function SalesChannelsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Trạng Thái API</label>
+              <label className="block text-xs text-gray-500 mb-1">Trạng thái API</label>
               <select
                 value={editingItem.apiStatus || 'DISCONNECTED'}
                 onChange={(e) => setEditingItem({ ...editingItem, apiStatus: e.target.value as any })}
                 className="w-full p-2 border rounded"
               >
-                <option value="DISCONNECTED">Chưa Kết Nối API</option>
+                <option value="DISCONNECTED">Chưa kết nối API</option>
                 <option value="CONNECTED">Đang Hoạt Động (Đã ủy quyền)</option>
                 <option value="ERROR">Gặp Lỗi (Cần cấp lại Token)</option>
               </select>
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú</label>
+            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
@@ -387,7 +387,7 @@ export function SalesChannelsPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Cấu Hình
+              Lưu cấu hình
             </button>
           </div>
         </form>

@@ -29,10 +29,12 @@ export function CategoriesPage() {
     let matchesSearch = true;
     const q = search.toLowerCase();
     if (q) {
+      const deptStr = typeof item.department === 'string' ? item.department : (item.department as any)?.deptName || '';
       matchesSearch = (
         item.categoryName.toLowerCase().includes(q) ||
         item.code.toLowerCase().includes(q) ||
-        item.department.toLowerCase().includes(q)
+        deptStr.toLowerCase().includes(q) ||
+        item.status.toLowerCase().includes(q)
       );
     }
 
@@ -134,8 +136,11 @@ export function CategoriesPage() {
       },
       {
         accessorKey: 'department',
-        header: 'Bộ phận / Ngành hàng',
-        cell: (info) => <span className="text-sm text-gray-600 dark:text-gray-300">{info.getValue() as string}</span>,
+        header: 'Phòng ban / Nhóm',
+        cell: ({ row }) => {
+          const val = row.original.department;
+          return <span className="text-sm text-gray-600 dark:text-gray-300">{typeof val === 'string' ? val : (val as any)?.deptName || 'Chung'}</span>;
+        },
       },
       {
         accessorKey: 'itemsCount',
@@ -272,7 +277,9 @@ export function CategoriesPage() {
                   <Tag className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">{selectedCategory.department}</p>
+                  <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">
+                    {typeof selectedCategory.department === 'string' ? selectedCategory.department : (selectedCategory.department as any)?.deptName}
+                  </p>
                   <p className="text-xl font-bold text-gray-900 dark:text-white">{selectedCategory.categoryName}</p>
                 </div>
               </div>
@@ -302,7 +309,9 @@ export function CategoriesPage() {
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Assigned Department:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedCategory.department}</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {typeof selectedCategory.department === 'string' ? selectedCategory.department : (selectedCategory.department as any)?.deptName}
+                </span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Danh mục cha:</span>
@@ -359,7 +368,7 @@ export function CategoriesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Danh Mục Sản Phẩm' : 'Cập Nhật Danh Mục'}
+        title={modalMode === 'create' ? 'Thêm danh mục sản phẩm' : 'Cập nhật danh mục'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveCategory} className="space-y-4">

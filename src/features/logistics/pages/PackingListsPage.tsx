@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, FileText, UserCheck, CheckCircle2, Clock, Scale, Box, ArrowRight } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface PackageItem {
   productName: string;
@@ -24,75 +26,56 @@ interface PackingListRecord {
   items: PackageItem[];
 }
 
-const MOCK_PACKAGES: PackingListRecord[] = [
-  {
-    id: '1',
-    packingCode: 'PKG-2026-001',
-    sourceOrder: 'SO-2026-105',
-    weight: 2.3,
-    dimensions: '20 x 15 x 10',
-    packerName: 'Trần Minh Hoàng',
-    packingDate: '2026-06-04',
-    status: 'ĐÃ_ĐÓNG_GÓI',
-    notes: 'Kèm quà tặng móc khóa và bọc xốp chống sốc dày.',
-    items: [
-      { productName: 'Bình nước giữ nhiệt inox 500ml', sku: 'BINH-INON-500', quantity: 2 },
-      { productName: 'Đầu sạc nhanh Anker 30W', sku: 'ANKER-30W', quantity: 1 },
-    ],
-  },
-  {
-    id: '2',
-    packingCode: 'PKG-2026-002',
-    sourceOrder: 'SO-2026-106',
-    weight: 5.5,
-    dimensions: '35 x 25 x 20',
-    packerName: 'Nguyễn Văn Đạt',
-    packingDate: '2026-06-04',
-    status: 'CHỜ_ĐÓNG_GÓI',
-    notes: 'Hàng dễ vỡ, lưu ý dán tem cảnh báo ngoài thùng.',
-    items: [
-      { productName: 'Bộ bát đĩa sứ Minh Long 10 món', sku: 'MINHLONG-10', quantity: 1 },
-    ],
-  },
-  {
-    id: '3',
-    packingCode: 'PKG-2026-003',
-    sourceOrder: 'SO-2026-108',
-    weight: 0.8,
-    dimensions: '15 x 10 x 5',
-    packerName: 'Trần Minh Hoàng',
-    packingDate: '2026-06-03',
-    status: 'ĐÃ_ĐÓNG_GÓI',
-    notes: 'Đóng gói trong túi nilon đen niêm phong chuyên dụng.',
-    items: [
-      { productName: 'Áo thun thể thao nam thấm hút', sku: 'AO-THUN-M', quantity: 3 },
-    ],
-  },
-];
-
 export function PackingListsPage() {
-  const [data, setData] = useState<PackingListRecord[]>(MOCK_PACKAGES);
+  const [data, setData] = useState<PackingListRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<PackingListRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<PackingListRecord>>({});
 
-  const filtered = useMemo(() => {
-    if (!search) return data;
-    const q = search.toLowerCase();
-    return data.filter(
-      (d) =>
-        d.packingCode.toLowerCase().includes(q) ||
-        d.sourceOrder.toLowerCase().includes(q) ||
-        d.packerName.toLowerCase().includes(q)
-    );
-  }, [search, data]);
+  const fetchPackingLists = async () => {
+    setIsLoading(true);
+    try {
+      const res = await axiosClient.get<any, any[]>('/wms/packing-lists');
+      if (Array.isArray(res)) {
+        const mapped = res.map((item: any) => ({
+          id: String(item.id),
+          packingCode: item.packingCode || `PKG-${item.id}`,
+          sourceOrder: item.sourceOrder || 'SO-2026-X',
+          weight: Number(item.weight || 0),
+          dimensions: item.dimensions || '20 x 15 x 10',
+          packerName: item.packerName || 'Nhân viên kho',
+          packingDate: item.packingDate || '2026-06-04',
+          status: item.status === 'COMPLETED' ? 'ĐÃ_ĐÓNG_GÓI' : 'CHỜ_ĐÓNG_GÓI',
+          notes: item.notes || '',
+          items: Array.isArray(item.items) ? item.items.map((it: any) => ({
+            productName: it.productName || 'Sản phẩm',
+            sku: it.sku || 'SKU',
+            quantity: Number(it.quantity || 1)
+          })) : []
+        }));
+        setData(mapped);
+      } else {
+        setData([]);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi tải danh sách phiếu đóng gói.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPackingLists();
+  }, []);
 
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingItem({
-      packingCode: `PKG-2026-${Date.now().toString().slice(-4)}`,
+      packingCode: `PKG-${Date.now().toString().slice(-6)}`,
       sourceOrder: '',
       weight: 1.0,
       dimensions: '20 x 20 x 20',
@@ -100,7 +83,7 @@ export function PackingListsPage() {
       packingDate: new Date().toISOString().split('T')[0],
       status: 'CHỜ_ĐÓNG_GÓI',
       notes: '',
-      items: [{ productName: '', sku: '', quantity: 1 }],
+      items: [{ productName: 'Sản phẩm demo', sku: 'DEMO-SKU', quantity: 1 }],
     });
     setIsModalOpen(true);
   };
@@ -111,33 +94,48 @@ export function PackingListsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.packingCode || !editingItem.sourceOrder || !editingItem.packerName) return;
 
-    if (modalMode === 'create') {
-      const newItem: PackingListRecord = {
-        id: String(data.length + 1),
-        packingCode: editingItem.packingCode!,
-        sourceOrder: editingItem.sourceOrder!,
+    try {
+      const payload = {
+        packingCode: editingItem.packingCode,
+        sourceOrder: editingItem.sourceOrder,
         weight: Number(editingItem.weight || 0),
-        dimensions: editingItem.dimensions || '20 x 20 x 20',
-        packerName: editingItem.packerName!,
-        packingDate: editingItem.packingDate!,
-        status: editingItem.status as any || 'CHỜ_ĐÓNG_GÓI',
+        dimensions: editingItem.dimensions,
+        packerName: editingItem.packerName,
+        packingDate: editingItem.packingDate,
+        status: editingItem.status === 'ĐÃ_ĐÓNG_GÓI' ? 'COMPLETED' : 'PENDING',
         notes: editingItem.notes,
-        items: editingItem.items || [],
+        items: editingItem.items
       };
-      setData([...data, newItem]);
-    } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as PackingListRecord) : d)));
+
+      if (modalMode === 'create') {
+        await axiosClient.post('/wms/packing-lists', payload);
+        toast.success('Tạo phiếu đóng gói thành công!');
+      } else {
+        await axiosClient.put(`/wms/packing-lists/${editingItem.id}`, payload);
+        toast.success('Cập nhật phiếu đóng gói thành công!');
+      }
+      setIsModalOpen(false);
+      fetchPackingLists();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi lưu phiếu đóng gói.');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa phiếu đóng gói này?')) {
-      setData(data.filter((d) => d.id !== id));
+      try {
+        await axiosClient.delete(`/wms/packing-lists/${id}`);
+        toast.success('Đã xóa phiếu đóng gói thành công!');
+        fetchPackingLists();
+      } catch (err) {
+        console.error(err);
+        toast.error('Lỗi khi xóa phiếu đóng gói.');
+      }
     }
   };
 
@@ -145,12 +143,12 @@ export function PackingListsPage() {
     () => [
       {
         accessorKey: 'packingCode',
-        header: 'Mã Đóng Gói',
+        header: 'Mã đóng gói',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'sourceOrder',
-        header: 'Đơn Hàng Nguồn',
+        header: 'Đơn hàng nguồn',
         cell: (info) => <span className="font-mono font-semibold text-gray-800 dark:text-gray-200">{info.getValue() as string}</span>,
       },
       {
@@ -175,7 +173,7 @@ export function PackingListsPage() {
       },
       {
         accessorKey: 'packerName',
-        header: 'Người Đóng Gói',
+        header: 'Người đóng gói',
         cell: (info) => (
           <span className="flex items-center gap-1 text-xs">
             <UserCheck className="w-3.5 h-3.5 text-gray-400" />
@@ -185,7 +183,7 @@ export function PackingListsPage() {
       },
       {
         accessorKey: 'packingDate',
-        header: 'Ngày Đóng Gói',
+        header: 'Ngày đóng gói',
         cell: (info) => (
           <span className="font-mono flex items-center gap-1 text-xs">
             <Calendar className="w-3.5 h-3.5 text-gray-400" />
@@ -195,7 +193,7 @@ export function PackingListsPage() {
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           const isPacked = status === 'ĐÃ_ĐÓNG_GÓI';
@@ -213,13 +211,13 @@ export function PackingListsPage() {
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết"
+              title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -248,7 +246,7 @@ export function PackingListsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu Đóng Gói Kiện Hàng</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu đóng gói kiện hàng</h1>
           <p className="text-sm text-gray-500">
             Theo dõi quá trình cân đo trọng lượng, kích thước kiện hàng, người thực hiện đóng gói đơn hàng trước khi xuất kho giao nhận.
           </p>
@@ -272,7 +270,14 @@ export function PackingListsPage() {
         />
       </div>
 
-      <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-850 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm">
+          <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-sm font-bold text-gray-500">Đang tải danh sách phiếu đóng gói...</span>
+        </div>
+      ) : (
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      )}
 
       {/* Drawer Chi Tiết Kiện Hàng */}
       <Drawer
@@ -284,39 +289,39 @@ export function PackingListsPage() {
           <div className="space-y-6 text-sm text-gray-700 dark:text-gray-300">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-400">Mã Đóng Gói:</span>
+                <span className="text-gray-400">Mã đóng gói:</span>
                 <p className="font-mono font-semibold text-gray-900 dark:text-white">{selected.packingCode}</p>
               </div>
               <div>
-                <span className="text-gray-400">Đơn Hàng Nguồn:</span>
+                <span className="text-gray-400">Đơn hàng nguồn:</span>
                 <p className="font-mono font-semibold text-gray-900 dark:text-white">{selected.sourceOrder}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4 border-t border-b border-gray-100 dark:border-gray-800 py-3">
               <div>
-                <span className="text-gray-400 block text-xs">Trọng Lượng Thực Tế:</span>
+                <span className="text-gray-400 block text-xs">Trọng lượng thực tế:</span>
                 <p className="font-mono font-semibold text-gray-900 dark:text-white">{selected.weight} kg</p>
               </div>
               <div>
-                <span className="text-gray-400 block text-xs">Kích Thước Thùng (DxRxC):</span>
+                <span className="text-gray-400 block text-xs">Kích thước thùng (dxrxc):</span>
                 <p className="font-mono font-semibold text-gray-900 dark:text-white">{selected.dimensions} cm</p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-400">Người Đóng Gói:</span>
+                <span className="text-gray-400">Người đóng gói:</span>
                 <p className="text-gray-900 dark:text-white">{selected.packerName}</p>
               </div>
               <div>
-                <span className="text-gray-400">Ngày Đóng Gói:</span>
+                <span className="text-gray-400">Ngày đóng gói:</span>
                 <p className="font-mono text-gray-900 dark:text-white">{selected.packingDate}</p>
               </div>
             </div>
 
             <div>
-              <span className="text-gray-400">Tình Trạng Kiện Hàng:</span>
+              <span className="text-gray-400">Tình trạng kiện hàng:</span>
               <div>
                 <span
                   className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
@@ -332,7 +337,7 @@ export function PackingListsPage() {
 
             {selected.notes && (
               <div>
-                <span className="text-gray-400">Ghi Chú Đóng Gói:</span>
+                <span className="text-gray-400">Ghi chú đóng gói:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2.5 rounded text-gray-800 dark:text-gray-300 font-sans">
                   {selected.notes}
                 </p>
@@ -340,14 +345,14 @@ export function PackingListsPage() {
             )}
 
             <div>
-              <span className="text-gray-400 block mb-2">Các Mặt Hàng Bên Trong Kiện:</span>
+              <span className="text-gray-400 block mb-2">Các mặt hàng bên trong kiện:</span>
               <div className="border rounded-lg overflow-hidden dark:border-gray-700">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-gray-900 text-xs text-gray-500 uppercase font-bold border-b dark:border-gray-750">
-                      <th className="p-2.5">Tên Mặt Hàng</th>
+                      <th className="p-2.5">Tên mặt hàng</th>
                       <th className="p-2.5">Mã SKU</th>
-                      <th className="p-2.5 text-right">Số Lượng Đóng</th>
+                      <th className="p-2.5 text-right">Số lượng đóng</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y dark:divide-gray-750 text-xs">
@@ -372,12 +377,12 @@ export function PackingListsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo Phiếu Đóng Gói Đơn Hàng' : 'Cập Nhật Phiếu Đóng Gói'}
+        title={modalMode === 'create' ? 'Tạo phiếu đóng gói đơn hàng' : 'Cập nhật phiếu đóng gói'}
       >
         <form onSubmit={handleSave} className="space-y-4 text-sm">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Phiếu Đóng Gói *</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã phiếu đóng gói *</label>
               <input
                 type="text"
                 value={editingItem.packingCode || ''}
@@ -388,7 +393,7 @@ export function PackingListsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Đơn Hàng Nguồn (Mã SO) *</label>
+              <label className="block text-xs text-gray-500 mb-1">Đơn hàng nguồn (mã SO) *</label>
               <input
                 type="text"
                 value={editingItem.sourceOrder || ''}
@@ -402,7 +407,7 @@ export function PackingListsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Trọng Lượng Thực Tế (kg) *</label>
+              <label className="block text-xs text-gray-500 mb-1">Trọng lượng thực tế (kg) *</label>
               <input
                 type="number"
                 step="0.01"
@@ -414,7 +419,7 @@ export function PackingListsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Kích Thước Thùng (DxRxC cm) *</label>
+              <label className="block text-xs text-gray-500 mb-1">Kích thước thùng (dxrxc cm) *</label>
               <input
                 type="text"
                 value={editingItem.dimensions || ''}
@@ -428,7 +433,7 @@ export function PackingListsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Nhân Viên Đóng Gói *</label>
+              <label className="block text-xs text-gray-500 mb-1">Nhân viên đóng gói *</label>
               <input
                 type="text"
                 value={editingItem.packerName || ''}
@@ -438,20 +443,20 @@ export function PackingListsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Trạng Thái Đóng Gói *</label>
+              <label className="block text-xs text-gray-500 mb-1">Trạng thái đóng gói *</label>
               <select
                 value={editingItem.status || 'CHỜ_ĐÓNG_GÓI'}
                 onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
                 className="w-full p-2 border rounded dark:bg-gray-950 dark:border-gray-700"
               >
-                <option value="CHỜ_ĐÓNG_GÓI">Chờ Đóng Gói</option>
-                <option value="ĐÃ_ĐÓNG_GÓI">Đã Đóng Gói Xong</option>
+                <option value="CHỜ_ĐÓNG_GÓI">Chờ đóng gói</option>
+                <option value="ĐÃ_ĐÓNG_GÓI">Đã đóng gói xong</option>
               </select>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú Đóng Gói / Vật Liệu Phụ Trợ</label>
+            <label className="block text-xs text-gray-500 mb-1">Ghi chú đóng gói / vật liệu phụ trợ</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
@@ -470,7 +475,7 @@ export function PackingListsPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition">
-              {modalMode === 'create' ? 'Tạo Phiếu Đóng Gói' : 'Cập Nhật'}
+              {modalMode === 'create' ? 'Tạo phiếu đóng gói' : 'Cập nhật'}
             </button>
           </div>
         </form>

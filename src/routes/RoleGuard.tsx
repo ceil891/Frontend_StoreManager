@@ -1,6 +1,5 @@
 import { Navigate, Outlet } from 'react-router';
-import { useAuthRole } from '@/features/auth/store/authStore';
-import { useRoleStore } from '@/features/hr/store/roleStore';
+import { useAuthRole, useAuthPermissions } from '@/features/auth/store/authStore';
 import type { RoleType } from '@/features/auth/types';
 
 interface RoleGuardProps {
@@ -10,21 +9,21 @@ interface RoleGuardProps {
 
 export function RoleGuard({ allowedRoles, requiredPermission }: RoleGuardProps) {
   const role = useAuthRole();
-  const checkPermission = useRoleStore((s) => s.checkPermission);
+  const permissions = useAuthPermissions();
 
   if (!role) {
     return <Navigate to="/login" replace />;
   }
 
-  // Check dynamic permissions if provided
+  // Kiểm tra quyền động từ backend
   if (requiredPermission) {
-    if (!checkPermission(role, requiredPermission)) {
+    if (!permissions.includes(requiredPermission)) {
       return <Navigate to="/403" replace />;
     }
     return <Outlet />;
   }
 
-  // Fallback to legacy role checks
+  // Fallback kiểm tra role tĩnh (legacy)
   if (allowedRoles && !allowedRoles.includes(role)) {
     return <Navigate to="/403" replace />;
   }

@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
-import { Download, Search, Eye, Award, TrendingUp, Calendar, AlertCircle } from 'lucide-react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
+import { Download, Search, Eye, Award, AlertCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface LoyaltyPointHistoryItem {
   id: string;
@@ -18,19 +20,55 @@ interface LoyaltyPointHistoryItem {
 }
 
 const MOCK_DATA: LoyaltyPointHistoryItem[] = [
-  { id: 'GD-10021', customerName: 'Nguyễn Văn A', customerPhone: '0901234567', pointChange: 150, transactionType: 'TÍCH_ĐIỂM_ĐƠN_HÀNG', referenceCode: 'HD0001042', transactionDate: '2026-06-04 10:15:30', operatorName: 'Trần Thị Thuỷ (Thu ngân)', pointBalanceAfter: 1250, notes: 'Tích điểm tự động từ hoá đơn mua sắm hàng tiêu dùng nhanh.' },
-  { id: 'GD-10022', customerName: 'Lê Hoàng Long', customerPhone: '0987654321', pointChange: -500, transactionType: 'ĐỔI_QUÀ', referenceCode: 'QC00084', transactionDate: '2026-06-04 11:20:00', operatorName: 'Trần Thị Thuỷ (Thu ngân)', pointBalanceAfter: 350, notes: 'Khách hàng đổi 500 điểm lấy Voucher giảm giá 50k.' },
+  { id: 'GD-10021', customerName: 'Nguyễn Văn A', customerPhone: '0901234567', pointChange: 150, transactionType: 'TÍCH_ĐIỂM_ĐƠN_HÀNG', referenceCode: 'HD0001042', transactionDate: '2026-06-04 10:15:30', operatorName: 'Trần thị thuỷ (thu ngân)', pointBalanceAfter: 1250, notes: 'Tích điểm tự động từ hoá đơn mua sắm hàng tiêu dùng nhanh.' },
+  { id: 'GD-10022', customerName: 'Lê Hoàng long', customerPhone: '0987654321', pointChange: -500, transactionType: 'ĐỔI_QUÀ', referenceCode: 'QC00084', transactionDate: '2026-06-04 11:20:00', operatorName: 'Trần thị thuỷ (thu ngân)', pointBalanceAfter: 350, notes: 'Khách hàng đổi 500 điểm lấy Voucher giảm giá 50k.' },
   { id: 'GD-10023', customerName: 'Phạm Thanh Bình', customerPhone: '0912345678', pointChange: 50, transactionType: 'ĐIỀU_CHỈNH_HỆ_THỐNG', referenceCode: 'ADJ-9921', transactionDate: '2026-06-03 14:05:12', operatorName: 'Nguyễn Văn B (Quản trị viên)', pointBalanceAfter: 420, notes: 'Điều chỉnh điểm bù lỗi hệ thống tính toán sai lệch ngày 02-06.' },
-  { id: 'GD-10024', customerName: 'Trần Minh Quân', customerPhone: '0933445566', pointChange: 220, transactionType: 'TÍCH_ĐIỂM_ĐƠN_HÀNG', referenceCode: 'HD0001048', transactionDate: '2026-06-03 16:42:01', operatorName: 'Lê Văn C (Bán hàng)', pointBalanceAfter: 880, notes: 'Tích điểm đơn hàng mua Tủ lạnh Panasonic.' },
-  { id: 'GD-10025', customerName: 'Vũ Thị Hương', customerPhone: '0944556677', pointChange: -100, transactionType: 'ĐỔI_QUÀ', referenceCode: 'QC00089', transactionDate: '2026-06-02 09:12:45', operatorName: 'Trần Thị Thuỷ (Thu ngân)', pointBalanceAfter: 150, notes: 'Đổi 100 điểm lấy 01 Ly sứ RetailHub.' }
+  { id: 'GD-10024', customerName: 'Trần minh quân', customerPhone: '0933445566', pointChange: 220, transactionType: 'TÍCH_ĐIỂM_ĐƠN_HÀNG', referenceCode: 'HD0001048', transactionDate: '2026-06-03 16:42:01', operatorName: 'Lê Văn C (Bán hàng)', pointBalanceAfter: 880, notes: 'Tích điểm đơn hàng mua Tủ lạnh Panasonic.' },
+  { id: 'GD-10025', customerName: 'Vũ thị hương', customerPhone: '0944556677', pointChange: -100, transactionType: 'ĐỔI_QUÀ', referenceCode: 'QC00089', transactionDate: '2026-06-02 09:12:45', operatorName: 'Trần thị thuỷ (thu ngân)', pointBalanceAfter: 150, notes: 'Đổi 100 điểm lấy 01 Ly sứ RetailHub.' }
 ];
 
 export function LoyaltyPointHistoryPage() {
-  const [data] = useState<LoyaltyPointHistoryItem[]>(MOCK_DATA);
+  const [data, setData] = useState<LoyaltyPointHistoryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('Tất cả');
   
   const [selectedItem, setSelectedItem] = useState<LoyaltyPointHistoryItem | null>(null);
+
+  const fetchLoyaltyHistory = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const res: any = await axiosClient.get('/crm/loyalty-history');
+      const list = Array.isArray(res) ? res : res?.content || res?.data || [];
+      if (list.length > 0) {
+        const mapped: LoyaltyPointHistoryItem[] = list.map((item: any) => ({
+          id: `GD-${item.id}`,
+          customerName: item.customer?.name || 'Khách hàng',
+          customerPhone: item.customer?.phone || '0900000000',
+          pointChange: item.pointsChange || 0,
+          transactionType: item.transactionType === 'EARN' ? 'TÍCH_ĐIỂM_ĐƠN_HÀNG' : item.transactionType === 'REDEEM' ? 'ĐỔI_QUÀ' : 'ĐIỀU_CHỈNH_HỆ_THỐNG',
+          referenceCode: item.refCode || `REF-${item.id}`,
+          transactionDate: item.createdDate ? String(item.createdDate).split('T')[0] : '2026-06-04',
+          operatorName: 'Hệ thống tự động',
+          pointBalanceAfter: item.currentPoints || 0,
+          notes: item.description || '',
+        }));
+        setData(mapped);
+      } else {
+        setData(MOCK_DATA);
+      }
+    } catch (err) {
+      console.error('Error fetching loyalty history:', err);
+      toast.error('Lỗi khi tải lịch sử tích điểm, dùng dữ liệu tạm');
+      setData(MOCK_DATA);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLoyaltyHistory();
+  }, [fetchLoyaltyHistory]);
 
   const filtered = useMemo(() => {
     return data.filter((item) => {
@@ -57,7 +95,7 @@ export function LoyaltyPointHistoryPage() {
       },
       {
         accessorKey: 'customerName',
-        header: 'Khách Hàng',
+        header: 'Khách hàng',
         cell: ({ row }) => (
           <div className="flex flex-col">
             <span className="font-semibold text-gray-900 dark:text-white">{row.original.customerName}</span>
@@ -67,7 +105,7 @@ export function LoyaltyPointHistoryPage() {
       },
       {
         accessorKey: 'pointChange',
-        header: 'Điểm Thay Đổi',
+        header: 'Điểm thay đổi',
         cell: (info) => {
           const val = info.getValue() as number;
           const isPositive = val >= 0;
@@ -86,7 +124,7 @@ export function LoyaltyPointHistoryPage() {
       },
       {
         accessorKey: 'transactionType',
-        header: 'Loại Giao Dịch',
+        header: 'Loại giao dịch',
         cell: (info) => {
           const val = info.getValue() as string;
           const typeMap: Record<string, { label: string; color: string }> = {
@@ -104,7 +142,7 @@ export function LoyaltyPointHistoryPage() {
       },
       {
         accessorKey: 'referenceCode',
-        header: 'Chứng Từ Tham Chiếu',
+        header: 'Chứng từ tham chiếu',
         cell: (info) => (
           <span className="font-mono font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">
             {info.getValue() as string}
@@ -113,7 +151,7 @@ export function LoyaltyPointHistoryPage() {
       },
       {
         accessorKey: 'transactionDate',
-        header: 'Ngày Giao Dịch',
+        header: 'Ngày giao dịch',
         cell: (info) => (
           <span className="text-gray-500 font-mono text-sm">
             {info.getValue() as string}
@@ -122,7 +160,7 @@ export function LoyaltyPointHistoryPage() {
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <button
@@ -130,7 +168,7 @@ export function LoyaltyPointHistoryPage() {
               className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors shrink-0"
               title="Xem nhật ký chi tiết"
             >
-              <Eye className="w-4 h-4" /> Chi tiết
+              <Eye className="w-4 h-4 text-primary" /> Chi tiết
             </button>
           </div>
         ),
@@ -144,7 +182,7 @@ export function LoyaltyPointHistoryPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Lịch Sử Tích & Tiêu Điểm Loyalty</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Lịch sử tích & tiêu điểm loyalty</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Nhật ký tự động theo dõi biến động điểm thành viên của khách hàng qua hoạt động mua hàng, đổi quà tặng, và hiệu chỉnh hệ thống.
             </p>
@@ -184,7 +222,7 @@ export function LoyaltyPointHistoryPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} />
+        <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={setSelectedItem} />
       </div>
 
       {/* Drawer Chi tiết */}
@@ -259,3 +297,4 @@ export function LoyaltyPointHistoryPage() {
     </>
   );
 }
+

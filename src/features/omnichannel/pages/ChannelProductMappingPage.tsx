@@ -22,9 +22,9 @@ const MOCK_MAPPINGS: MappingRecord[] = [
     id: '1',
     channelItemId: 'SP-10023412',
     sku: 'SKU-MILK-01',
-    systemProductName: 'Sữa Tươi Tiệt Trùng Vinamilk 1L',
+    systemProductName: 'Sữa tươi tiệt trùng Vinamilk 1L',
     channelProductName: '[Hỏa Tốc] Sữa tươi nguyên chất tiệt trùng Vinamilk 1 Lít',
-    channelName: 'Shopee - Gian Hàng Thời Trang',
+    channelName: 'Shopee - gian hàng thời Trang',
     channelStock: 120,
     syncStatus: 'SYNCED',
     notes: 'Đã khớp tồn kho tự động lúc 16:30',
@@ -33,7 +33,7 @@ const MOCK_MAPPINGS: MappingRecord[] = [
     id: '2',
     channelItemId: 'TT-98124512',
     sku: 'SKU-COKE-02',
-    systemProductName: 'Nước Ngọt Coca Cola Lon 320ml',
+    systemProductName: 'Nước ngọt Coca Cola lon 320ml',
     channelProductName: 'Nước giải khát lon Coca-Cola 320ml (Combo 6 lon)',
     channelName: 'TikTok Shop - RetailHub',
     channelStock: 50,
@@ -116,48 +116,48 @@ export function ChannelProductMappingPage() {
     () => [
       {
         accessorKey: 'channelItemId',
-        header: 'Mã Sản Phẩm Sàn',
+        header: 'Mã sản phẩm sàn',
         cell: (info) => <span className="font-mono font-bold text-gray-700 dark:text-gray-300">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'sku',
-        header: 'SKU Hệ Thống',
+        header: 'SKU hệ thống',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'systemProductName',
-        header: 'Sản Phẩm Trong POS',
+        header: 'Sản phẩm trong POS',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'channelName',
-        header: 'Kênh Liên Kết',
+        header: 'Kênh liên kết',
         cell: (info) => <span className="font-semibold text-blue-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'channelStock',
-        header: 'Tồn Kho Sàn',
+        header: 'Tồn kho sàn',
         cell: (info) => <span className="font-mono font-semibold">{info.getValue() as number} món</span>,
       },
       {
         accessorKey: 'syncStatus',
-        header: 'Trạng Thái Kho',
+        header: 'Trạng thái kho',
         cell: (info) => {
           const status = info.getValue() as string;
           const badgeClass = status === 'SYNCED' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800';
-          const label = status === 'SYNCED' ? 'Đã Đồng Bộ' : 'Sai Lệch Tồn';
+          const label = status === 'SYNCED' ? 'Đã đồng bộ' : 'Sai lệch tồn';
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết Liên Kết"
+              title="Xem chi tiết liên kết"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -171,7 +171,7 @@ export function ChannelProductMappingPage() {
             <button
               onClick={() => handleDelete(row.original.id)}
               className="p-1 text-gray-500 hover:text-red-600 rounded"
-              title="Xóa Liên Kết"
+              title="Xóa liên kết"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -186,7 +186,7 @@ export function ChannelProductMappingPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Liên Kết Sản Phẩm Đa Kênh (Channel Mapping)</h1>
+          <h1 className="text-2xl font-bold">Liên kết sản phẩm đa kênh (channel mapping)</h1>
           <p className="text-sm text-gray-500">
             Xem và cấu hình liên kết mã sản phẩm SKU trên sàn TMĐT với mã SKU trong kho hàng POS, tự động đồng bộ số dư kho.
           </p>
@@ -221,47 +221,47 @@ export function ChannelProductMappingPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã SKU Trên Sàn:</span>
+                <span className="text-gray-500">Mã SKU trên sàn:</span>
                 <p className="font-mono font-semibold">{selected.channelItemId}</p>
               </div>
               <div>
-                <span className="text-gray-500">Mã SKU Trong POS:</span>
+                <span className="text-gray-500">Mã SKU trong POS:</span>
                 <p className="font-mono font-semibold text-emerald-600">{selected.sku}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Tên Sản Phẩm Trong POS:</span>
+              <span className="text-gray-500">Tên sản phẩm trong POS:</span>
               <p className="font-semibold text-base">{selected.systemProductName}</p>
             </div>
             <div>
-              <span className="text-gray-500">Tên Sản Phẩm Trên Sàn TMĐT:</span>
+              <span className="text-gray-500">Tên sản phẩm trên sàn TMĐT:</span>
               <p className="font-semibold text-gray-700 dark:text-gray-300 text-base">{selected.channelProductName}</p>
             </div>
             <div>
-              <span className="text-gray-500">Gian Hàng / Kênh:</span>
+              <span className="text-gray-500">Gian hàng / kênh:</span>
               <p className="font-semibold text-blue-600">{selected.channelName}</p>
             </div>
             <div className="grid grid-cols-2 gap-4 border-t pt-2">
               <div>
-                <span className="text-gray-500">Tồn Kho Trên Sàn:</span>
+                <span className="text-gray-500">Tồn kho trên sàn:</span>
                 <p className="font-mono font-bold text-lg">{selected.channelStock} món</p>
               </div>
               <div>
-                <span className="text-gray-500">Trạng Thái Đồng Bộ:</span>
+                <span className="text-gray-500">Trạng thái đồng bộ:</span>
                 <div>
                   <span
                     className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
                       selected.syncStatus === 'SYNCED' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
                     }`}
                   >
-                    {selected.syncStatus === 'SYNCED' ? 'Đã Đồng Bộ Khớp' : 'Lệch Số Dư Tồn Kho'}
+                    {selected.syncStatus === 'SYNCED' ? 'Đã đồng bộ khớp' : 'Lệch số dư tồn kho'}
                   </span>
                 </div>
               </div>
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi Chú Liên Kết:</span>
+                <span className="text-gray-500">Ghi chú liên kết:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                   {selected.notes}
                 </p>
@@ -274,12 +274,12 @@ export function ChannelProductMappingPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo Liên Kết Sản Phẩm TMĐT' : 'Sửa Liên Kết Sản Phẩm'}
+        title={modalMode === 'create' ? 'Tạo liên kết sản phẩm TMĐT' : 'Sửa liên kết sản phẩm'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã SKU Trên Sàn *</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã SKU trên sàn *</label>
               <input
                 type="text"
                 value={editingItem.channelItemId || ''}
@@ -290,7 +290,7 @@ export function ChannelProductMappingPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">SKU Hệ Thống *</label>
+              <label className="block text-xs text-gray-500 mb-1">SKU hệ thống *</label>
               <input
                 type="text"
                 value={editingItem.sku || ''}
@@ -302,7 +302,7 @@ export function ChannelProductMappingPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Tên Hàng Hóa Trên Sàn *</label>
+            <label className="block text-xs text-gray-500 mb-1">Tên hàng hóa trên sàn *</label>
             <input
               type="text"
               value={editingItem.channelProductName || ''}
@@ -314,7 +314,7 @@ export function ChannelProductMappingPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Kênh Bán TMĐT *</label>
+              <label className="block text-xs text-gray-500 mb-1">Kênh bán TMĐT *</label>
               <input
                 type="text"
                 value={editingItem.channelName || ''}
@@ -325,7 +325,7 @@ export function ChannelProductMappingPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tồn Kho Sàn Hiện Tại</label>
+              <label className="block text-xs text-gray-500 mb-1">Tồn kho sàn hiện tại</label>
               <input
                 type="number"
                 value={editingItem.channelStock || 0}
@@ -335,18 +335,18 @@ export function ChannelProductMappingPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Trạng Thái Đồng Bộ *</label>
+            <label className="block text-xs text-gray-500 mb-1">Trạng thái đồng bộ *</label>
             <select
               value={editingItem.syncStatus || 'SYNCED'}
               onChange={(e) => setEditingItem({ ...editingItem, syncStatus: e.target.value as any })}
               className="w-full p-2 border rounded"
             >
-              <option value="SYNCED">Đồng Bộ Khớp Số Liệu</option>
+              <option value="SYNCED">Đồng bộ khớp số liệu</option>
               <option value="OUT_OF_SYNC">Sai Lệch Tồn Kho (Yêu cầu Sync lại)</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú</label>
+            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
@@ -364,7 +364,7 @@ export function ChannelProductMappingPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Liên Kết
+              Lưu liên kết
             </button>
           </div>
         </form>

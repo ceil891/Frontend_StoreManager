@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation, Link } from 'react-router';
 import { LogOut, Search, Menu, Store, ChevronRight, X, Moon, Sun, Command } from 'lucide-react';
-import { useAuthStore, useAuthUser, useAuthRole } from '@/features/auth/store/authStore';
-import { useRoleStore } from '@/features/hr/store/roleStore';
+import { useAuthStore, useAuthUser, useAuthRole, useAuthPermissions } from '@/features/auth/store/authStore';
 import { NAV_GROUPS } from '@/shared/config/navigation';
 import { UserAvatar } from '@/shared/components/ui/UserAvatar';
 import { useThemeStore } from '@/shared/store/themeStore';
@@ -91,12 +90,12 @@ export function MainLayout() {
     return false;
   };
 
-  const checkPermission = useRoleStore((s) => s.checkPermission);
+  const permissions = useAuthPermissions();
 
   const filteredGroups = NAV_GROUPS.map((group) => ({
     ...group,
     items: group.items.filter(
-      (item) => !item.permission || (role && checkPermission(role, item.permission))
+      (item) => !item.permission || permissions.includes(item.permission)
     ),
   })).filter((g) => g.items.length > 0);
 

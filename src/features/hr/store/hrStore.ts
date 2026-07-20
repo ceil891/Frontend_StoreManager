@@ -1,23 +1,22 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { axiosClient } from '@/shared/lib/axiosClient';
 
-// ---------------------------
-// TYPES: DEPARTMENTS & POSITIONS
-// ---------------------------
 export interface DepartmentRecord {
   id: string;
   departmentCode: string;
   departmentName: string;
   headUserId?: string;
-  totalEmployees: number;
-  allocatedAnnualBudgetUsd: number;
-  ytdSpendUsd: number;
-  costCenterCode: string;
-  status: 'ACTIVE' | 'MERGING' | 'RESTRUCTURING' | 'INACTIVE';
-  establishedDate: string;
+  totalEmployees?: number;
+  allocatedAnnualBudgetUsd?: number;
+  ytdSpendUsd?: number;
+  costCenterCode?: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'RESTRUCTURING' | 'MERGING';
+  establishedDate?: string;
   parentId?: string;
   missionStatement?: string;
   locationId?: string;
+  description?: string;
 }
 
 export interface JobPositionRecord {
@@ -25,42 +24,33 @@ export interface JobPositionRecord {
   positionCode: string;
   positionTitle: string;
   departmentName: string;
-  jobGradeTier: 'EXECUTIVE_L6' | 'DIRECTOR_L5' | 'SENIOR_MGR_L4' | 'TEAM_LEAD_L3' | 'ASSOCIATE_L2' | 'ENTRY_L1';
+  jobGradeTier: string;
   salaryRangeMin: number;
   salaryRangeMax: number;
   activeHeadcount: number;
   approvedHeadcountQuota: number;
   isOvertimeEligible: boolean;
-  status: 'OPEN_HIRING' | 'FULL_QUOTA' | 'FROZEN' | 'PHASING_OUT';
-  lastReviewedDate: string;
+  status: 'OPEN_HIRING' | 'FULL_QUOTA' | 'FROZEN_BUDGET' | 'DEPRECATED';
+  lastReviewedDate?: string;
   qualificationRequirement?: string;
 }
 
-// ---------------------------
-// STATE INTERFACE
-// ---------------------------
 interface HrState {
   departments: DepartmentRecord[];
   positions: JobPositionRecord[];
+  isLoading: boolean;
+  error: string | null;
   
-  // Department Actions
-  addDepartment: (dept: Omit<DepartmentRecord, 'id'>) => void;
-  updateDepartment: (id: string, data: Partial<DepartmentRecord>) => void;
-  deleteDepartment: (id: string) => void;
+  fetchDepartments: () => Promise<void>;
+  addDepartment: (dept: Omit<DepartmentRecord, 'id' | 'totalEmployees' | 'ytdSpendUsd'>) => Promise<void>;
+  updateDepartment: (id: string, data: Partial<DepartmentRecord>) => Promise<void>;
+  deleteDepartment: (id: string) => Promise<void>;
 
-  // Position Actions
+  // Position Actions (Mock for now)
   addPosition: (pos: Omit<JobPositionRecord, 'id'>) => void;
   updatePosition: (id: string, data: Partial<JobPositionRecord>) => void;
   deletePosition: (id: string) => void;
 }
-
-// ---------------------------
-// MOCK DATA SEED
-// ---------------------------
-const MOCK_DEPARTMENTS: DepartmentRecord[] = [
-  { id: '1', departmentCode: 'DPT-SLS-01', departmentName: 'Omnichannel Retail & Store Operations', headUserId: '1', totalEmployees: 480, allocatedAnnualBudgetUsd: 4500000.00, ytdSpendUsd: 1850400.00, costCenterCode: 'CC-SALES-101', status: 'ACTIVE', establishedDate: '2018-01-15', parentId: undefined, missionStatement: 'Maximizing retail gross margin performance across brick-and-mortar storefronts.', locationId: 'HQ' },
-  { id: '2', departmentCode: 'DPT-LOG-02', departmentName: 'Supply Chain & Regional Warehousing', headUserId: '2', totalEmployees: 185, allocatedAnnualBudgetUsd: 2800000.00, ytdSpendUsd: 1120000.00, costCenterCode: 'CC-LOG-202', status: 'ACTIVE', establishedDate: '2019-06-01', parentId: undefined, locationId: 'BR-001' },
-];
 
 const MOCK_POSITIONS: JobPositionRecord[] = [
   { id: '1', positionCode: 'POS-RTL-L3', positionTitle: 'Omnichannel Retail Store Supervisor', departmentName: 'Omnichannel Retail & Store Operations', jobGradeTier: 'TEAM_LEAD_L3', salaryRangeMin: 65000, salaryRangeMax: 88000, activeHeadcount: 42, approvedHeadcountQuota: 50, isOvertimeEligible: true, status: 'OPEN_HIRING', lastReviewedDate: '2024-03-15', qualificationRequirement: '3+ years supervisory experience.' },
@@ -69,16 +59,92 @@ const MOCK_POSITIONS: JobPositionRecord[] = [
 
 export const useHrStore = create<HrState>()(
   persist(
-    (set) => ({
-      departments: MOCK_DEPARTMENTS,
+    (set, get) => ({
+      departments: [],
       positions: MOCK_POSITIONS,
+      isLoading: false,
+      error: null,
 
-      // Department Actions
-      addDepartment: (dept) => set((state) => ({ departments: [{ id: Date.now().toString(), ...dept }, ...state.departments] })),
-      updateDepartment: (id, data) => set((state) => ({ departments: state.departments.map((d) => (d.id === id ? { ...d, ...data } : d)) })),
-      deleteDepartment: (id) => set((state) => ({ departments: state.departments.filter((d) => d.id !== id) })),
+      fetchDepartments: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const res = await axiosClient.get<any, any[]>('/departments?includeDeleted=false');
+          const mapped = res.map((d: any) => ({
+            id: String(d.id),
+            departmentCode: d.deptCode || '',
+            departmentName: d.deptName || '',
+            description: d.description || '',
+            status: (d.isActive ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE' | 'RESTRUCTURING' | 'MERGING',
+            totalEmployees: 10, // Mock
+            allocatedAnnualBudgetUsd: 100000, // Mock
+            ytdSpendUsd: 45000, // Mock
+            costCenterCode: 'CC-GEN',
+            establishedDate: d.createdAt ? d.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
+          }));
+          set({ departments: mapped, isLoading: false });
+        } catch (err: any) {
+          console.error('Failed to fetch departments:', err);
+          set({ isLoading: false, error: err.message || 'Lỗi khi tải danh sách ngành hàng' });
+        }
+      },
 
-      // Position Actions
+      addDepartment: async (dept) => {
+        set({ isLoading: true, error: null });
+        try {
+          const payload = {
+            deptCode: dept.departmentCode,
+            deptName: dept.departmentName,
+            description: dept.description || '',
+            isActive: dept.status === 'ACTIVE',
+          };
+          await axiosClient.post('/departments', payload);
+          await get().fetchDepartments();
+        } catch (err: any) {
+          console.error('Failed to add department:', err);
+          set({ isLoading: false, error: err.message || 'Lỗi khi tạo ngành hàng mới' });
+          throw err;
+        }
+      },
+
+      updateDepartment: async (id, data) => {
+        set({ isLoading: true, error: null });
+        try {
+          const original = get().departments.find((d) => d.id === id);
+          const payload = {
+            deptCode: data.departmentCode || original?.departmentCode,
+            deptName: data.departmentName || original?.departmentName,
+            description: data.description !== undefined ? data.description : original?.description,
+          };
+          await axiosClient.put(`/departments/${id}`, payload);
+
+          // Cập nhật status
+          if (data.status !== undefined && original && (data.status === 'ACTIVE') !== (original.status === 'ACTIVE')) {
+            await axiosClient.put(`/departments/${id}/status?isActive=${data.status === 'ACTIVE'}`);
+          }
+
+          await get().fetchDepartments();
+        } catch (err: any) {
+          console.error('Failed to update department:', err);
+          set({ isLoading: false, error: err.message || 'Lỗi khi cập nhật ngành hàng' });
+          throw err;
+        }
+      },
+
+      deleteDepartment: async (id) => {
+        set({ isLoading: true, error: null });
+        try {
+          // Tắt hoạt động trước khi xóa
+          await axiosClient.put(`/departments/${id}/status?isActive=false`);
+          await axiosClient.delete(`/departments/${id}`);
+          await get().fetchDepartments();
+        } catch (err: any) {
+          console.error('Failed to delete department:', err);
+          set({ isLoading: false, error: err.message || 'Lỗi khi xóa ngành hàng' });
+          throw err;
+        }
+      },
+
+      // Position Actions (Mock)
       addPosition: (pos) => set((state) => ({ positions: [{ id: Date.now().toString(), ...pos }, ...state.positions] })),
       updatePosition: (id, data) => set((state) => ({ positions: state.positions.map((p) => (p.id === id ? { ...p, ...data } : p)) })),
       deletePosition: (id) => set((state) => ({ positions: state.positions.filter((p) => p.id !== id) })),

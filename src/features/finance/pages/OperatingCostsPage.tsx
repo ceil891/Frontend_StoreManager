@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, Calendar, Building, FileText, TrendingDown, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
@@ -28,6 +28,12 @@ export function OperatingCostsPage() {
   const addOperatingCost = useFinanceStore((s) => s.addOperatingCost);
   const updateOperatingCost = useFinanceStore((s) => s.updateOperatingCost);
   const deleteOperatingCost = useFinanceStore((s) => s.deleteOperatingCost);
+  const fetchOperatingCosts = useFinanceStore((s) => s.fetchOperatingCosts);
+
+  useEffect(() => {
+    fetchOperatingCosts();
+  }, [fetchOperatingCosts]);
+
   const [search, setSearch] = useState('');
   const [selectedCost, setSelectedCost] = useState<OperatingCost | null>(null);
 
@@ -186,7 +192,7 @@ export function OperatingCostsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Chi Phí Vận Hành & Quản Lý (Operating Costs)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Chi phí vận hành & quản lý (operating costs)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Ghi nhận các chi phí hoạt động thường xuyên, tiền thuê mặt bằng, ngân sách tiếp thị và bảo trì khẩn cấp. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
@@ -226,7 +232,7 @@ export function OperatingCostsPage() {
       <Drawer
         isOpen={!!selectedCost}
         onClose={() => setSelectedCost(null)}
-        title={selectedCost ? `Khoản Chi: ${selectedCost.costCode}` : 'Chi Tiết Khoản Chi'}
+        title={selectedCost ? `Khoản Chi: ${selectedCost.costCode}` : 'Chi tiết khoản chi'}
         width="max-w-lg"
       >
         {selectedCost && (
@@ -310,7 +316,7 @@ export function OperatingCostsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Ghi Nhận Chi Phí Vận Hành Mới' : 'Chỉnh Sửa Thông Tin Chi Phí'}
+        title={modalMode === 'create' ? 'Ghi nhận chi phí vận hành mới' : 'Chỉnh sửa thông tin chi phí'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveCost} className="space-y-4">
@@ -362,7 +368,7 @@ export function OperatingCostsPage() {
                 type="text"
                 value={editingCost.branch || ''}
                 onChange={(e) => setEditingCost({ ...editingCost, branch: e.target.value })}
-                placeholder="Phòng Marketing, Chi nhánh Quận 1..."
+                placeholder="Phòng marketing, chi nhánh quận 1..."
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
                 required
               />

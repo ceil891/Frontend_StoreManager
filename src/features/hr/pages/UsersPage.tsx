@@ -1,14 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Mail, Phone, MapPin, Building, Key, ShieldCheck, UserX, UserCheck, Trash2, X, Edit, Scan } from 'lucide-react';
 import { toast } from 'sonner';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
-import { useUserStore, BRANCH_OPTIONS, type SystemUserRecord } from '../store/userStore';
+import { useUserStore, type SystemUserRecord } from '../store/userStore';
 import { UserAvatar } from '@/shared/components/ui/UserAvatar';
 import { buildUserAvatarUrl } from '@/shared/utils/userAvatar';
 import { useRoleStore } from '../store/roleStore';
 import { useHrStore } from '../store/hrStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 import type { ColumnDef } from '@tanstack/react-table';
 
 const statusBadgeStyles = {
@@ -21,9 +22,16 @@ const statusBadgeStyles = {
 type SearchField = 'all' | 'userCode' | 'fullName' | 'emailAddress' | 'assignedRole' | 'primaryDepartment' | 'branchLocation';
 
 export function UsersPage() {
-  const { users, addUser, updateUser, deleteUser } = useUserStore();
-  const roles = useRoleStore((s) => s.roles);
+  const { users, fetchUsers, addUser, updateUser, deleteUser } = useUserStore();
+  const { roles, fetchRoles } = useRoleStore();
+  const { branches, fetchBranches } = useBranchStore();
   const { departments, positions } = useHrStore();
+
+  useEffect(() => {
+    fetchUsers();
+    fetchRoles();
+    fetchBranches();
+  }, [fetchUsers, fetchRoles, fetchBranches]);
 
   const [search, setSearch] = useState('');
   const [searchField, setSearchField] = useState<SearchField>('all');
@@ -176,8 +184,8 @@ export function UsersPage() {
       avatarUrl: buildUserAvatarUrl('new-user@retailhub.vn'),
       assignedRole: roles.length > 0 ? roles[0].roleCode : 'STAFF',
       departmentId: departments.length > 0 ? departments[0].id : '1',
-      branchId: 'BR-001',
-      branchLocation: 'CH Quận 1',
+      branchId: branches.length > 0 ? branches[0].id : '1',
+      branchLocation: branches.length > 0 ? branches[0].name : 'Chi nhánh',
       positionId: positions.length > 0 ? positions[0].id : '1',
       managerId: '',
       timezone: 'Asia/Ho_Chi_Minh',
@@ -678,27 +686,45 @@ export function UsersPage() {
               size="lg"
             />
             <div className="flex-1 w-full space-y-2">
-              <label className="block text-xs font-bold text-gray-500 uppercase">URL ảnh đại diện *</label>
-              <input
-                type="url"
-                required
-                placeholder="https://..."
-                value={formData.avatarUrl}
-                onChange={(e) => setFormData((p) => ({ ...p, avatarUrl: e.target.value }))}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-              />
-              <button
-                type="button"
-                onClick={() =>
-                  setFormData((p) => ({
-                    ...p,
-                    avatarUrl: buildUserAvatarUrl(p.emailAddress || p.fullName || 'retailhub'),
-                  }))
-                }
-                className="text-xs text-primary font-semibold hover:underline"
-              >
-                Tạo ảnh mặc định theo email
-              </button>
+              <label className="block text-xs font-bold text-gray-500 uppercase">Ảnh đại diện nhân viên</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="file"
+                  accept="image/*"
+                  id="user-avatar-input"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        setFormData(prev => ({ ...prev, avatarUrl: reader.result as string }));
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('user-avatar-input')?.click()}
+                  className="px-3 py-1.5 bg-white dark:bg-gray-850 border border-gray-300 dark:border-gray-650 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 text-xs font-semibold shadow-sm animate-pulse-subtle"
+                >
+                  Tải ảnh từ thiết bị
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFormData((p) => ({
+                      ...p,
+                      avatarUrl: buildUserAvatarUrl(p.emailAddress || p.fullName || 'retailhub'),
+                    }))
+                  }
+                  className="text-xs text-primary font-semibold hover:underline"
+                >
+                  Tạo ảnh mặc định
+                </button>
+              </div>
+              <p className="text-[10px] text-gray-400">Hỗ trợ JPG, PNG. Ảnh mặc định sẽ được tự động sinh nếu bỏ trống.</p>
             </div>
           </div>
 
@@ -797,13 +823,13 @@ export function UsersPage() {
                 value={formData.branchId}
                 onChange={(e) => {
                   const branchId = e.target.value;
-                  const label = BRANCH_OPTIONS.find((b) => b.id === branchId)?.label ?? branchId;
+                  const label = branches.find((b) => b.id === branchId)?.name ?? branchId;
                   setFormData((p) => ({ ...p, branchId, branchLocation: label }));
                 }}
                 className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
               >
-                {BRANCH_OPTIONS.map((b) => (
-                  <option key={b.id} value={b.id}>{b.label}</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
             </div>
@@ -956,7 +982,7 @@ export function UsersPage() {
       <Modal
         isOpen={!!deletingUser}
         onClose={() => setDeletingUser(null)}
-        title="Xóa Tài Khoản Nhân Sự"
+        title="Xóa tài khoản nhân sự"
         isDestructive
         width="max-w-md"
       >
@@ -972,7 +998,7 @@ export function UsersPage() {
       <Modal
         isOpen={!!errorNotice}
         onClose={() => setErrorNotice(null)}
-        title="Thông Báo"
+        title="Thông báo"
         width="max-w-md"
       >
         <div className="space-y-4">
@@ -987,7 +1013,7 @@ export function UsersPage() {
       <Modal
         isOpen={!!faceScanUser}
         onClose={() => setFaceScanUser(null)}
-        title={faceScanUser?.faceEnrolled ? 'Cập Nhật Nhận Diện Khuôn Mặt' : 'Đăng Ký Nhận Diện Khuôn Mặt'}
+        title={faceScanUser?.faceEnrolled ? 'Cập nhật nhận diện khuôn mặt' : 'Đăng ký nhận diện khuôn mặt'}
         width="max-w-md"
       >
         {faceScanUser && (

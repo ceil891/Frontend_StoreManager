@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { axiosClient } from '@/shared/lib/axiosClient';
 
 // ---------------------------
 // TYPES
@@ -53,21 +54,22 @@ interface SystemState {
   configs: SystemConfigParameter[];
   printTemplates: PrintTemplateRecord[];
   notifications: NotificationRuleRecord[];
+  isLoading: boolean;
 
-  // Config Actions
-  addConfig: (config: Omit<SystemConfigParameter, 'id'>) => void;
-  updateConfig: (id: string, data: Partial<SystemConfigParameter>) => void;
-  deleteConfig: (id: string) => void;
+  fetchConfigs: () => Promise<void>;
+  addConfig: (config: Omit<SystemConfigParameter, 'id'>) => Promise<void>;
+  updateConfig: (id: string, data: Partial<SystemConfigParameter>) => Promise<void>;
+  deleteConfig: (id: string) => Promise<void>;
 
-  // Print Template Actions
-  addPrintTemplate: (tpl: Omit<PrintTemplateRecord, 'id'>) => void;
-  updatePrintTemplate: (id: string, data: Partial<PrintTemplateRecord>) => void;
-  deletePrintTemplate: (id: string) => void;
+  fetchPrintTemplates: () => Promise<void>;
+  addPrintTemplate: (tpl: Omit<PrintTemplateRecord, 'id'>) => Promise<void>;
+  updatePrintTemplate: (id: string, data: Partial<PrintTemplateRecord>) => Promise<void>;
+  deletePrintTemplate: (id: string) => Promise<void>;
 
-  // Notification Actions
-  addNotificationRule: (rule: Omit<NotificationRuleRecord, 'id'>) => void;
-  updateNotificationRule: (id: string, data: Partial<NotificationRuleRecord>) => void;
-  deleteNotificationRule: (id: string) => void;
+  fetchNotificationRules: () => Promise<void>;
+  addNotificationRule: (rule: Omit<NotificationRuleRecord, 'id'>) => Promise<void>;
+  updateNotificationRule: (id: string, data: Partial<NotificationRuleRecord>) => Promise<void>;
+  deleteNotificationRule: (id: string) => Promise<void>;
 }
 
 // ---------------------------
@@ -94,28 +96,120 @@ const MOCK_NOTIFICATIONS: NotificationRuleRecord[] = [
 
 export const useSystemStore = create<SystemState>()(
   persist(
-    (set) => ({
-      configs: MOCK_CONFIGS,
-      printTemplates: MOCK_PRINT_TEMPLATES,
-      notifications: MOCK_NOTIFICATIONS,
+    (set, get) => ({
+      configs: [],
+      printTemplates: [],
+      notifications: [],
+      isLoading: false,
 
-      // Config Actions
-      addConfig: (config) => set((state) => ({ configs: [{ id: Date.now().toString(), ...config }, ...state.configs] })),
-      updateConfig: (id, data) => set((state) => ({ configs: state.configs.map((c) => (c.id === id ? { ...c, ...data } : c)) })),
-      deleteConfig: (id) => set((state) => ({ configs: state.configs.filter((c) => c.id !== id) })),
+      fetchConfigs: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/system/config');
+          const data = res.content || res || [];
+          if (Array.isArray(data) && data.length > 0) {
+            set({ configs: data.map((item: any) => ({
+              id: String(item.id),
+              configKey: item.configKey || '',
+              category: item.category || 'SECURITY_POLICIES',
+              value: item.value || '',
+              dataType: item.dataType || 'STRING',
+              isEncrypted: Boolean(item.isEncrypted),
+              requiresRebootToApply: Boolean(item.requiresRebootToApply),
+              lastUpdatedTimestamp: item.updatedAt ? item.updatedAt.split('T')[0] : '',
+              updatedByRole: item.updatedBy || 'ROLE-SUPERADMIN',
+              description: item.description || '',
+            })) });
+          }
+        } catch (e) {
+          console.error('Failed to fetch configs:', e);
+        }
+      },
+      addConfig: async (config) => {
+        try { await axiosClient.post('/system/config', config); } catch (e) { console.error(e); }
+        set((state) => ({ configs: [{ id: Date.now().toString(), ...config }, ...state.configs] }));
+      },
+      updateConfig: async (id, data) => {
+        try { await axiosClient.put(`/system/config/${id}`, data); } catch (e) { console.error(e); }
+        set((state) => ({ configs: state.configs.map((c) => (c.id === id ? { ...c, ...data } : c)) }));
+      },
+      deleteConfig: async (id) => {
+        try { await axiosClient.delete(`/system/config/${id}`); } catch (e) { console.error(e); }
+        set((state) => ({ configs: state.configs.filter((c) => c.id !== id) }));
+      },
 
-      // Print Template Actions
-      addPrintTemplate: (tpl) => set((state) => ({ printTemplates: [{ id: Date.now().toString(), ...tpl }, ...state.printTemplates] })),
-      updatePrintTemplate: (id, data) => set((state) => ({ printTemplates: state.printTemplates.map((t) => (t.id === id ? { ...t, ...data } : t)) })),
-      deletePrintTemplate: (id) => set((state) => ({ printTemplates: state.printTemplates.filter((t) => t.id !== id) })),
+      fetchPrintTemplates: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/system/templates');
+          const data = res.content || res || [];
+          if (Array.isArray(data) && data.length > 0) {
+            set({ printTemplates: data.map((item: any) => ({
+              id: String(item.id),
+              templateCode: item.templateCode || '',
+              templateName: item.templateName || '',
+              documentType: item.documentType || 'POS_RECEIPT_80MM',
+              printerTarget: item.printerTarget || 'EPSON_TM_T88VI',
+              formatSyntax: item.formatSyntax || 'ESC_POS_RAW_HEX',
+              version: item.version || '1.0.0',
+              isDefault: Boolean(item.isDefault),
+              status: item.status || 'ACTIVE',
+              lastModifiedTimestamp: item.updatedAt ? item.updatedAt.split('T')[0] : '',
+              author: item.updatedBy || 'System',
+              sampleCodeSnippet: item.templateBody || '',
+            })) });
+          }
+        } catch (e) {
+          console.error('Failed to fetch print templates:', e);
+        }
+      },
+      addPrintTemplate: async (tpl) => {
+        try { await axiosClient.post('/system/templates', tpl); } catch (e) { console.error(e); }
+        set((state) => ({ printTemplates: [{ id: Date.now().toString(), ...tpl }, ...state.printTemplates] }));
+      },
+      updatePrintTemplate: async (id, data) => {
+        try { await axiosClient.put(`/system/templates/${id}`, data); } catch (e) { console.error(e); }
+        set((state) => ({ printTemplates: state.printTemplates.map((t) => (t.id === id ? { ...t, ...data } : t)) }));
+      },
+      deletePrintTemplate: async (id) => {
+        try { await axiosClient.delete(`/system/templates/${id}`); } catch (e) { console.error(e); }
+        set((state) => ({ printTemplates: state.printTemplates.filter((t) => t.id !== id) }));
+      },
 
-      // Notification Actions
-      addNotificationRule: (rule) => set((state) => ({ notifications: [{ id: Date.now().toString(), ...rule }, ...state.notifications] })),
-      updateNotificationRule: (id, data) => set((state) => ({ notifications: state.notifications.map((n) => (n.id === id ? { ...n, ...data } : n)) })),
-      deleteNotificationRule: (id) => set((state) => ({ notifications: state.notifications.filter((n) => n.id !== id) })),
+      fetchNotificationRules: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/system/notifications');
+          const data = res.content || res || [];
+          if (Array.isArray(data) && data.length > 0) {
+            set({ notifications: data.map((item: any) => ({
+              id: String(item.id),
+              ruleCode: item.ruleCode || '',
+              eventName: item.eventName || '',
+              channel: item.channel || 'EMAIL',
+              recipientRoleScope: item.recipientRoleScope || '',
+              urgency: item.urgency || 'NORMAL',
+              templateSubject: item.templateSubject || '',
+              deliveryCountYtd: Number(item.deliveryCount || 0),
+              status: item.status || 'ACTIVE',
+              lastDispatchedTimestamp: item.updatedAt ? item.updatedAt.split('T')[0] : '',
+              templateBody: item.templateBody || '',
+            })) });
+          }
+        } catch (e) {
+          console.error('Failed to fetch notification rules:', e);
+        }
+      },
+      addNotificationRule: async (rule) => {
+        set((state) => ({ notifications: [{ id: Date.now().toString(), ...rule }, ...state.notifications] }));
+      },
+      updateNotificationRule: async (id, data) => {
+        set((state) => ({ notifications: state.notifications.map((n) => (n.id === id ? { ...n, ...data } : n)) }));
+      },
+      deleteNotificationRule: async (id) => {
+        set((state) => ({ notifications: state.notifications.filter((n) => n.id !== id) }));
+      },
     }),
     {
       name: 'retailhub-system-storage',
+      storage: createJSONStorage(() => localStorage),
     }
   )
 );

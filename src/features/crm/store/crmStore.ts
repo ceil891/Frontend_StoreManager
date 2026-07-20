@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { buildUserAvatarUrl } from '@/shared/utils/userAvatar';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { extractPageContent, toFormData } from '@/shared/lib/apiHelpers';
 
 export interface CustomerProfile {
   id: string;
@@ -55,12 +57,25 @@ function normalizeCustomer(partial: Partial<CustomerProfile> & Pick<CustomerProf
   };
 }
 
+function mapCustomer(item: any): CustomerProfile {
+  return normalizeCustomer({
+    id: String(item.id),
+    customerCode: item.customerCode || `CUST-${item.id}`,
+    name: item.name || '',
+    phone: item.phone || '',
+    email: item.email || '',
+    address: item.address || '',
+    status: item.isActive === false ? 'DORMANT' : 'ACTIVE',
+    notes: item.notes || '',
+  });
+}
+
 const DEFAULT_CUSTOMERS: CustomerProfile[] = [
-  normalizeCustomer({ id: '1', customerCode: 'CUST-88102', name: 'Nguyễn Văn An', phone: '0909111222', email: 'nguyen.van.an@email.com', address: '12 Lê Lợi, Q.1, TP.HCM', avatarUrl: buildUserAvatarUrl('nguyen.van.an@email.com'), loyaltyTier: 'DIAMOND', loyaltyPoints: 12500, lifetimeSpent: 14500.5, registeredDate: '2023-01-15', lastActive: '2024-05-17', status: 'ACTIVE', notes: 'Khách hàng doanh nghiệp VIP.' }),
+  normalizeCustomer({ id: '1', customerCode: 'CUST-88102', name: 'Nguyễn Văn an', phone: '0909111222', email: 'nguyen.van.an@email.com', address: '12 Lê Lợi, Q.1, TP.HCM', avatarUrl: buildUserAvatarUrl('nguyen.van.an@email.com'), loyaltyTier: 'DIAMOND', loyaltyPoints: 12500, lifetimeSpent: 14500.5, registeredDate: '2023-01-15', lastActive: '2024-05-17', status: 'ACTIVE', notes: 'Khách hàng doanh nghiệp VIP.' }),
   normalizeCustomer({ id: '2', customerCode: 'CUST-88105', name: 'Trần Thị Bình', phone: '0918222333', email: 'tran.thi.binh@email.com', address: '45 Cộng Hòa, Tân Bình', avatarUrl: buildUserAvatarUrl('tran.thi.binh@email.com'), loyaltyTier: 'GOLD', loyaltyPoints: 4500, lifetimeSpent: 4200, registeredDate: '2023-06-10', lastActive: '2024-05-14', status: 'ACTIVE' }),
   normalizeCustomer({ id: '3', customerCode: 'CUST-88112', name: 'Lê Hoàng Cường', phone: '0929333444', email: 'le.hoang.cuong@email.com', address: '89 Quang Trung, Gò Vấp', avatarUrl: buildUserAvatarUrl('le.hoang.cuong@email.com'), loyaltyTier: 'SILVER', loyaltyPoints: 850, lifetimeSpent: 950, registeredDate: '2023-11-01', lastActive: '2024-04-20', status: 'ACTIVE' }),
-  normalizeCustomer({ id: '4', customerCode: 'CUST-88119', name: 'Phạm Thị Dung', phone: '0938444555', email: 'pham.thi.dung@email.com', address: '10 Nguyễn Văn Linh, Q.7', avatarUrl: buildUserAvatarUrl('pham.thi.dung@email.com'), loyaltyTier: 'BRONZE', loyaltyPoints: 120, lifetimeSpent: 185, registeredDate: '2024-02-14', lastActive: '2024-02-14', status: 'DORMANT', notes: 'Chưa mua lại 90 ngày.' }),
-  normalizeCustomer({ id: '5', customerCode: 'CUST-88125', name: 'Hoàng Văn Em', phone: '0947555666', email: 'hoang.van.em@email.com', address: '56 Lê Lợi, Thủ Dầu Một', avatarUrl: buildUserAvatarUrl('hoang.van.em@email.com'), loyaltyTier: 'GOLD', loyaltyPoints: 5200, lifetimeSpent: 5800.75, registeredDate: '2023-03-25', lastActive: '2024-05-16', status: 'ACTIVE' }),
+  normalizeCustomer({ id: '4', customerCode: 'CUST-88119', name: 'Phạm thị dung', phone: '0938444555', email: 'pham.thi.dung@email.com', address: '10 Nguyễn Văn Linh, Q.7', avatarUrl: buildUserAvatarUrl('pham.thi.dung@email.com'), loyaltyTier: 'BRONZE', loyaltyPoints: 120, lifetimeSpent: 185, registeredDate: '2024-02-14', lastActive: '2024-02-14', status: 'DORMANT', notes: 'Chưa mua lại 90 ngày.' }),
+  normalizeCustomer({ id: '5', customerCode: 'CUST-88125', name: 'Hoàng Văn em', phone: '0947555666', email: 'hoang.van.em@email.com', address: '56 Lê Lợi, Thủ Dầu Một', avatarUrl: buildUserAvatarUrl('hoang.van.em@email.com'), loyaltyTier: 'GOLD', loyaltyPoints: 5200, lifetimeSpent: 5800.75, registeredDate: '2023-03-25', lastActive: '2024-05-16', status: 'ACTIVE' }),
 ];
 
 const MOCK_TIERS: LoyaltyTierConfig[] = [
@@ -88,51 +103,150 @@ function mergeCustomers(users: CustomerProfile[]): CustomerProfile[] {
 interface CRMState {
   customers: CustomerProfile[];
   loyaltyTiers: LoyaltyTierConfig[];
-  addCustomer: (customer: CustomerInput) => void;
-  updateCustomer: (id: string, data: Partial<CustomerProfile>) => void;
-  deleteCustomer: (id: string) => void;
-  addTier: (tier: Omit<LoyaltyTierConfig, 'id'>) => void;
-  updateTier: (id: string, data: Partial<LoyaltyTierConfig>) => void;
-  deleteTier: (id: string) => void;
+  isLoadingCustomers: boolean;
+
+  fetchCustomers: () => Promise<void>;
+  addCustomer: (customer: CustomerInput) => Promise<void>;
+  updateCustomer: (id: string, data: Partial<CustomerProfile>) => Promise<void>;
+  deleteCustomer: (id: string) => Promise<void>;
+  toggleCustomerStatus: (id: string, isActive: boolean) => Promise<void>;
+
+  fetchTiers: () => Promise<void>;
+  addTier: (tier: Omit<LoyaltyTierConfig, 'id'>) => Promise<void>;
+  updateTier: (id: string, data: Partial<LoyaltyTierConfig>) => Promise<void>;
+  deleteTier: (id: string) => Promise<void>;
 }
 
 export const useCrmStore = create<CRMState>()(
   persist(
-    (set) => ({
-      customers: DEFAULT_CUSTOMERS,
-      loyaltyTiers: MOCK_TIERS,
+    (set, get) => ({
+      customers: [],
+      loyaltyTiers: [],
+      isLoadingCustomers: false,
 
-      addCustomer: (customer) =>
-        set((state) => ({
-          customers: [normalizeCustomer({ ...customer, id: `cust_${Date.now()}` }), ...state.customers],
-        })),
+      fetchCustomers: async () => {
+        set({ isLoadingCustomers: true });
+        try {
+          const data = await axiosClient.get<any, unknown>('/partnerarea/customers?size=500');
+          const list = extractPageContent<any>(data);
+          set({ customers: list.map(mapCustomer), isLoadingCustomers: false });
+        } catch (err) {
+          console.error('Failed to fetch customers:', err);
+          set({ isLoadingCustomers: false });
+        }
+      },
 
-      updateCustomer: (id, data) =>
-        set((state) => ({
-          customers: state.customers.map((c) =>
-            c.id === id ? normalizeCustomer({ ...c, ...data, id: c.id, name: data.name ?? c.name }) : c
-          ),
-        })),
+      addCustomer: async (customer) => {
+        try {
+          const form = toFormData({
+            name: customer.name,
+            phone: customer.phone,
+            email: customer.email,
+            address: customer.address,
+            notes: customer.notes,
+            isActive: customer.status === 'ACTIVE'
+          });
+          await axiosClient.post('/partnerarea/customers', form, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          await get().fetchCustomers();
+        } catch (err) {
+          console.error('Failed to add customer:', err);
+        }
+      },
 
-      deleteCustomer: (id) =>
-        set((state) => ({
-          customers: state.customers.filter((c) => c.id !== id),
-        })),
+      updateCustomer: async (id, data) => {
+        try {
+          const form = toFormData({
+            name: data.name,
+            phone: data.phone,
+            email: data.email,
+            address: data.address,
+            notes: data.notes,
+          });
+          await axiosClient.put(`/partnerarea/customers/${id}`, form, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          await get().fetchCustomers();
+        } catch (err) {
+          console.error('Failed to update customer:', err);
+        }
+      },
 
-      addTier: (tier) =>
+      deleteCustomer: async (id) => {
+        try {
+          await axiosClient.delete(`/partnerarea/customers/${id}`);
+          set((state) => ({ customers: state.customers.filter((c) => c.id !== id) }));
+        } catch (err) {
+          console.error('Failed to delete customer:', err);
+        }
+      },
+      
+      toggleCustomerStatus: async (id, isActive) => {
+        try {
+          await axiosClient.patch(`/partnerarea/customers/${id}/status`, null, { params: { isActive } });
+          await get().fetchCustomers();
+        } catch (err) {
+          console.error('Failed to toggle customer status:', err);
+        }
+      },
+
+      fetchTiers: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/crm/tiers');
+          const data = res.content || res || [];
+          if (Array.isArray(data) && data.length > 0) {
+            set({ loyaltyTiers: data.map((item: any) => ({
+              id: String(item.id),
+              tierCode: item.tierCode || `TR-${item.id}`,
+              tierName: item.tierName || 'BRONZE',
+              minSpendThreshold: Number(item.minSpendThreshold || 0),
+              pointsMultiplier: Number(item.pointsMultiplier || 1.0),
+              discountPercentage: Number(item.discountPercentage || 0),
+              activeMembersCount: Number(item.activeMembersCount || 0),
+              freeShippingEligible: Boolean(item.freeShippingEligible),
+              prioritySupport: Boolean(item.prioritySupport),
+              status: item.status || 'ACTIVE',
+              description: item.description || '',
+            })) });
+          }
+        } catch (e) {
+          console.error('Failed to fetch tiers:', e);
+        }
+      },
+
+      addTier: async (tier) => {
+        try {
+          await axiosClient.post('/crm/tiers', tier);
+        } catch (e) {
+          console.error(e);
+        }
         set((state) => ({
           loyaltyTiers: [{ id: `tier_${Date.now()}`, ...tier }, ...state.loyaltyTiers],
-        })),
+        }));
+      },
 
-      updateTier: (id, data) =>
+      updateTier: async (id, data) => {
+        try {
+          await axiosClient.put(`/crm/tiers/${id}`, data);
+        } catch (e) {
+          console.error(e);
+        }
         set((state) => ({
           loyaltyTiers: state.loyaltyTiers.map((t) => (t.id === id ? { ...t, ...data } : t)),
-        })),
+        }));
+      },
 
-      deleteTier: (id) =>
+      deleteTier: async (id) => {
+        try {
+          await axiosClient.delete(`/crm/tiers/${id}`);
+        } catch (e) {
+          console.error(e);
+        }
         set((state) => ({
           loyaltyTiers: state.loyaltyTiers.filter((t) => t.id !== id),
-        })),
+        }));
+      },
     }),
     {
       name: 'retailhub-crm-storage',

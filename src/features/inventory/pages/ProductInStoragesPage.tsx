@@ -98,22 +98,22 @@ export function ProductInStoragesPage() {
       },
       {
         accessorKey: 'productName',
-        header: 'Tên Sản Phẩm',
+        header: 'Tên sản phẩm',
         cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'zoneCode',
-        header: 'Phân Khu Kho',
+        header: 'Phân khu kho',
         cell: (info) => <span className="text-gray-700 dark:text-gray-300">{(info.getValue() as string) || '—'}</span>,
       },
       {
         accessorKey: 'binCode',
-        header: 'Kệ / Ô Kệ',
+        header: 'Kệ / Ô kệ',
         cell: (info) => <span className="font-semibold text-blue-600 dark:text-blue-400">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'quantity',
-        header: 'Số Lượng Tồn Kệ',
+        header: 'Số lượng tồn kệ',
         cell: (info) => {
           const qty = info.getValue() as number;
           return (
@@ -125,29 +125,29 @@ export function ProductInStoragesPage() {
       },
       {
         id: 'binStatus',
-        header: 'Tình Trạng Kệ',
+        header: 'Tình trạng kệ',
         cell: ({ row }) => {
           const qty = row.original.quantity;
-          if (qty === 0) return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">Trống Kệ</span>;
-          return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">Có Hàng</span>;
+          if (qty === 0) return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">Trống kệ</span>;
+          return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">Có hàng</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={(e) => { e.stopPropagation(); setSelected(row.original); }}
               className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
-              title="Xem Chi Tiết Vị Trí"
+              title="Xem chi tiết vị trí"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
               className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-              title="Cập Nhật Vị Trí / Số Lượng"
+              title="Cập nhật vị trí / số lượng"
             >
               <Edit className="w-4 h-4" />
             </button>
@@ -163,7 +163,7 @@ export function ProductInStoragesPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Vị Trí Lưu Kho Hàng Hóa Chi Tiết</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Vị trí lưu kho hàng hóa chi tiết</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Xem vị trí phân khu kho, số ô kệ (bin) chi tiết của từng SKU. Dữ liệu đồng bộ trực tiếp từ backend.
             </p>
@@ -222,7 +222,7 @@ export function ProductInStoragesPage() {
         {selected && (
           <div className="space-y-6">
             <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
-              <p className="text-xs text-blue-700 dark:text-blue-400 font-semibold uppercase tracking-wider">Ô Kệ Lưu Trữ</p>
+              <p className="text-xs text-blue-700 dark:text-blue-400 font-semibold uppercase tracking-wider">Ô kệ lưu trữ</p>
               <p className="text-xl font-bold text-blue-700 dark:text-blue-300 mt-1">{selected.binCode}</p>
               <p className="text-sm text-blue-500 dark:text-blue-400">{selected.zoneCode || '—'}</p>
             </div>
@@ -233,7 +233,7 @@ export function ProductInStoragesPage() {
                 <span className="font-mono font-semibold text-gray-900 dark:text-white">{selected.productCode}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Tên Sản Phẩm:</span>
+                <span className="text-gray-500 dark:text-gray-400">Tên sản phẩm:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selected.productName}</span>
               </div>
               <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
@@ -243,11 +243,11 @@ export function ProductInStoragesPage() {
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Tình Trạng Kệ:</span>
+                <span className="text-gray-500 dark:text-gray-400">Tình trạng kệ:</span>
                 <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
                   selected.quantity === 0 ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
                 }`}>
-                  {selected.quantity === 0 ? 'Trống Kệ' : 'Có Hàng'}
+                  {selected.quantity === 0 ? 'Trống kệ' : 'Có hàng'}
                 </span>
               </div>
             </div>
@@ -259,7 +259,7 @@ export function ProductInStoragesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Gán / Cập Nhật Vị Trí Lưu Kho"
+        title="Gán / cập nhật vị trí lưu kho"
         width="max-w-lg"
       >
         <form onSubmit={handleSaveAssign} className="space-y-4">
@@ -269,7 +269,7 @@ export function ProductInStoragesPage() {
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sản Phẩm *</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sản phẩm *</label>
             <select
               value={assignForm.productId}
               onChange={(e) => setAssignForm({ ...assignForm, productId: Number(e.target.value) })}
@@ -283,7 +283,7 @@ export function ProductInStoragesPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ô Kệ (Bin) *</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ô kệ (bin) *</label>
             <select
               value={assignForm.binId}
               onChange={(e) => setAssignForm({ ...assignForm, binId: Number(e.target.value) })}
@@ -297,7 +297,7 @@ export function ProductInStoragesPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Số Lượng *</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Số lượng *</label>
             <input
               type="number"
               min={0}
@@ -321,7 +321,7 @@ export function ProductInStoragesPage() {
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
             >
               {isSaving && <RefreshCw className="w-4 h-4 animate-spin" />}
-              {isSaving ? 'Đang lưu...' : 'Xác Nhận Gán'}
+              {isSaving ? 'Đang lưu...' : 'Xác nhận gán'}
             </button>
           </div>
         </form>

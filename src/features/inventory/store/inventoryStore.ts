@@ -10,6 +10,23 @@ const resolveBranchId = (name?: string): number => {
   return 1;
 };
 
+const mapImportReceiptStatus = (status?: string): ImportReceiptItem['status'] => {
+  switch ((status || '').toUpperCase()) {
+    case 'COMPLETE':
+    case 'COMPLETED':
+      return 'INSPECTED_ACCEPTED';
+    case 'CANCELLED':
+      return 'REJECTED';
+    default:
+      return 'PENDING_INSPECTION';
+  }
+};
+
+const formatApiDate = (value?: string): string => {
+  if (!value) return '';
+  return value.includes('T') ? value.split('T')[0] : value;
+};
+
 // ---------------------------
 // Shared enums & helpers
 // ---------------------------
@@ -22,6 +39,56 @@ export type VarianceReason =
   | 'EXPIRED'
   | 'COUNT_ERROR'
   | 'OTHER';
+
+const resolveProductId = (): number => {
+  const products = useInventoryStore.getState().products;
+  return products.length > 0 ? Number(products[0].id) : 1;
+};
+
+export interface ImportReceiptLine {
+  productVariantId: number;
+  productName?: string;
+  sku?: string;
+  quantity: number;
+  unitPrice: number;
+  targetBinId: number;
+  targetBinCode?: string;
+  batchCode: string;
+  manufactureDate?: string;
+  expiryDate?: string;
+}
+
+export interface ImportReceiptItem {
+  id: string;
+  grnNumber: string; // Goods Received Note
+  poNumber: string;
+  supplierName: string;
+  receivingStore: string;
+  receivedDate: string;
+  totalItems: number;
+  acceptedItems: number;
+  rejectedItems: number;
+  totalValuation: number;
+  status: 'INSPECTED_ACCEPTED' | 'PARTIAL_ACCEPTANCE' | 'PENDING_INSPECTION' | 'REJECTED';
+  inspectedBy: string;
+  notes?: string;
+  lines?: ImportReceiptLine[];
+}
+
+
+export interface ReturnToSupplierItem {
+  id: string;
+  rtvNumber: string;
+  grnRefNumber: string;
+  supplierName: string;
+  returnDate: string;
+  totalItems: number;
+  refundValue: number;
+  status: 'PENDING_SUPPLIER_APPROVAL' | 'APPROVED_CREDIT_NOTE' | 'REPLACEMENT_DISPATCHED' | 'REJECTED' | 'COMPLETED';
+  reason: string;
+  notes?: string;
+  dispatchingStore?: string;
+}
 
 export interface ProductVariant {
   size?: string;
@@ -77,12 +144,14 @@ export interface StockTransferOrder {
   estArrivalDate: string;
   totalUnits: number;
   totalValuation: number;
-  status: 'DRAFT' | 'PENDING_APPROVAL' | 'IN_TRANSIT' | 'COMPLETED' | 'REJECTED' | 'DISCREPANCY_HELD';
+  status: 'DRAFT' | 'PENDING_APPROVAL' | 'IN_TRANSIT' | 'COMPLETED' | 'REJECTED' | 'DISCREPANCY_HELD' | 'CANCELLED' | 'CANCELLED_DISCREPANCY';
   logisticsPartner: string;
   trackingRef?: string;
   requestedBy: string;
   approvedBy?: string;
   notes?: string;
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH';
+  reason?: 'RESTOCK' | 'REBALANCE' | 'PROMO' | 'LAYOUT_CHANGE' | 'OTHER';
 }
 
 // ---------------------------
@@ -90,11 +159,27 @@ export interface StockTransferOrder {
 // ---------------------------
 export interface ProductUnit {
   id: string;
+  unitId: string;
   unitCode: string;
-  conversionFactor: number;
+  unitName: string;
+  conversionRate: number;
   barcode: string;
   price: number;
+  isBaseUnit?: boolean;
+  isActive?: boolean;
 }
+
+const mapProductUnitFromApi = (u: any): ProductUnit => ({
+  id: String(u.id),
+  unitId: String(u.unitId ?? ''),
+  unitCode: u.unitCode || '',
+  unitName: u.unitName || u.unitCode || '',
+  conversionRate: Number(u.conversionRate ?? 1),
+  barcode: u.barcode || '',
+  price: Number(u.price || 0),
+  isBaseUnit: Boolean(u.isBaseUnit),
+  isActive: u.isActive !== false,
+});
 
 export interface ProductInventory {
   id: string;
@@ -297,24 +382,120 @@ export interface WarehouseZoneRecord {
   id: string;
   zoneCode: string;
   zoneName: string;
-  condition: string;
-  capacity: number;
-  branchName: string;
-  status: 'HOẠT_ĐỘNG' | 'TẠM_NGƯNG';
+  condition?: string;     // Backward compatibility
+  conditions?: string;    // Backend compatibility
+  capacity?: number;
+  status: 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE' | 'HOẠT_ĐỘNG' | 'TẠM_NGƯNG'; // Allow both
   description?: string;
+  branchId?: string;
+  branchName?: string;
+  zoneType?: string;
+  priority?: string;
+  allowImport?: boolean;
+  allowExport?: boolean;
+  allowExpired?: boolean;
 }
+
 
 export interface WarehouseBinRecord {
   id: string;
   binCode: string;
-  barcode: string;
+  barcode?: string;
+  maxWeightKg?: number;
+  maxVolumeM3?: number;
+  maxPallet?: number;
+  status: 'EMPTY' | 'OCCUPIED' | 'FULL';
+  description?: string;
+  // Rack info
+  rackId?: string;
+  rackCode?: string;
+  rackName?: string;
+  // Area info
+  areaId?: string;
+  areaCode?: string;
+  areaName?: string; // Backward compatibility
+  // Zone info
+  zoneId?: string;
+  zoneCode?: string;
+  // Branch info
+  branchId?: string;
+  branchName?: string;
+}
+
+export interface AreaRecord {
+  id: string;
   areaCode: string;
   areaName: string;
-  maxWeightKg: number;
-  maxVolumeM3: number;
-  status: 'EMPTY' | 'FULL';
-  notes?: string;
+  description?: string;
+  isActive: boolean;
+  zoneId: string;
+  zoneCode?: string;
+  zoneName?: string;
+  branchId?: string;
+  branchName?: string;
 }
+
+export interface RackRecord {
+  id: string;
+  rackCode: string;
+  rackName: string;
+  maxWeightKg?: number;
+  maxVolumeM3?: number;
+  maxPallet?: number;
+  description?: string;
+  isActive: boolean;
+  areaId: string;
+  areaCode?: string;
+  areaName?: string;
+  zoneId?: string;
+  zoneCode?: string;
+  branchId?: string;
+  branchName?: string;
+}
+
+export interface LocationTransferRecord {
+  id: string;
+  transferCode: string;
+  transferDate: string;
+  status: 'PENDING' | 'COMPLETED' | 'CANCELLED';
+  reason?: string;
+  quantity: number;
+  executedBy?: string;
+  // Product
+  productVariantId: string;
+  productName?: string;
+  sku?: string;
+  // From bin
+  fromBinId: string;
+  fromBinCode: string;
+  fromBinLocation?: string;
+  // To bin
+  toBinId: string;
+  toBinCode: string;
+  toBinLocation?: string;
+  // Branch
+  branchId: string;
+  branchName?: string;
+}
+
+export interface SupplierProductRecord {
+  id: string;
+  supplierSku?: string;
+  unitPrice?: number;
+  currency: string;
+  moq?: number;
+  leadTimeDays?: number;
+  isPreferred: boolean;
+  isActive: boolean;
+  supplierId: string;
+  supplierName?: string;
+  supplierCode?: string;
+  productId: string;
+  productName?: string;
+  productCode?: string;
+  mainImageUrl?: string;
+}
+
 
 // ---------------------------
 // Inventory (tồn kho chi tiết theo chi nhánh)
@@ -326,11 +507,60 @@ export interface InventoryResponse {
   productName: string;
   branchId: string;
   branchName: string;
+  warehouseZoneId?: string;
+  warehouseZoneName?: string;
   quantityOnHand: number;
   quantityReserved: number;
   quantityAvailable: number;
   locationBin?: string;
 }
+
+export interface LowStockItem {
+  id: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  branchId: string;
+  branchName: string;
+  warehouseZoneId: string;
+  warehouseZoneName: string;
+  currentQuantity: number;
+  minStock: number;
+  shortage: number;
+}
+
+export interface StockAdjustPayload {
+  warehouseZoneId: number;
+  productId: number;
+  actualQty: number;
+  reason: string;
+  sizeId?: number;
+  colorId?: number;
+}
+
+export interface StockAdjustResult {
+  inventoryId: number;
+  oldQuantity: number;
+  newQuantity: number;
+  changeQty: number;
+  transactionType: string;
+  reason: string;
+}
+
+const mapLedgerTransactionType = (
+  transactionType: string,
+  quantityChange: number
+): StockLedgerEntry['type'] => {
+  const normalized = (transactionType || '').toUpperCase();
+  if (normalized === 'IMPORT') return 'STOCK_IN';
+  if (normalized === 'EXPORT') return 'STOCK_OUT';
+  if (normalized === 'TRANSFER') return 'TRANSFER';
+  if (normalized === 'RETURN') return 'VENDOR_RETURN';
+  if (normalized === 'ADJUSTMENT') {
+    return quantityChange >= 0 ? 'ADJUSTMENT_UP' : 'ADJUSTMENT_DOWN';
+  }
+  return quantityChange >= 0 ? 'STOCK_IN' : 'STOCK_OUT';
+};
 
 // ---------------------------
 // Product Location (vị trí lưu kho)
@@ -383,7 +613,10 @@ interface InventoryState {
   warehouseZones: WarehouseZoneRecord[];
   warehouseBins: WarehouseBinRecord[];
   inventories: InventoryResponse[];
+  lowStockItems: LowStockItem[];
   productLocations: ProductLocationRecord[];
+  importReceipts: ImportReceiptItem[];
+  returnToSuppliers: ReturnToSupplierItem[];
 
   addCategory: (category: Omit<ProductCategory, 'id'>) => void;
   updateCategory: (id: string, data: Partial<ProductCategory>) => void;
@@ -392,10 +625,15 @@ interface InventoryState {
   addProductBatch: (batch: Omit<ProductBatchRecord, 'id'>) => void;
   updateProductBatch: (id: string, data: Partial<ProductBatchRecord>) => void;
   deleteProductBatch: (id: string) => void;
+  adjustProductBatch: (id: string, adjustedQuantity: number, reason: string) => Promise<void>;
+  expireProductBatch: (id: string) => Promise<void>;
+  fetchExpiringBatches: (days?: number) => Promise<void>;
 
   addStockTransfer: (transfer: Omit<StockTransferOrder, 'id'>) => void;
   updateStockTransfer: (id: string, data: Partial<StockTransferOrder>) => void;
   deleteStockTransfer: (id: string) => void;
+  completeStockTransfer: (id: string, notes?: string) => Promise<void>;
+  cancelStockTransfer: (id: string, cancelReason: string) => Promise<void>;
 
   addProduct: (product: Omit<ProductInventory, 'id'>) => void;
   updateProduct: (id: string, data: Partial<ProductInventory>) => void;
@@ -408,10 +646,23 @@ interface InventoryState {
   addCancelIssue: (issue: Omit<CancelIssueRecord, 'id'>) => Promise<void>;
   updateCancelIssue: (id: string, data: Partial<CancelIssueRecord>) => Promise<void>;
   deleteCancelIssue: (id: string) => Promise<void>;
+  approveCancelIssue: (id: string, approvalNotes?: string) => Promise<void>;
+  rejectCancelIssue: (id: string, rejectNotes?: string) => Promise<void>;
 
   addInventoryAudit: (audit: Omit<InventoryAuditSession, 'id'>) => void;
   updateInventoryAudit: (id: string, data: Partial<InventoryAuditSession>) => void;
   deleteInventoryAudit: (id: string) => void;
+
+  fetchImportReceipts: () => Promise<void>;
+  addImportReceipt: (receipt: Omit<ImportReceiptItem, 'id'>) => Promise<void>;
+  updateImportReceipt: (id: string, data: Partial<ImportReceiptItem>) => Promise<void>;
+  deleteImportReceipt: (id: string) => Promise<void>;
+  cancelImportReceipt: (id: string, cancelReason: string) => Promise<void>;
+
+  fetchReturnToSuppliers: () => Promise<void>;
+  addReturnToSupplier: (rtv: Omit<ReturnToSupplierItem, 'id'>) => Promise<void>;
+  updateReturnToSupplier: (id: string, data: Partial<ReturnToSupplierItem>) => Promise<void>;
+  deleteReturnToSupplier: (id: string) => Promise<void>;
 
   // Inventory Checks — wired to backend /inventories/checks
   fetchInventoryChecks: () => Promise<void>;
@@ -439,12 +690,25 @@ interface InventoryState {
 
   fetchCategories: () => Promise<void>;
   fetchProducts: () => Promise<void>;
+  fetchProductUnits: (productId: string) => Promise<ProductUnit[]>;
+  createProductUnit: (
+    productId: string,
+    payload: { unitId: number; conversionRate: number; price: number; barcode?: string }
+  ) => Promise<ProductUnit>;
+  updateProductUnit: (
+    productId: string,
+    productUnitId: string,
+    payload: { conversionRate?: number; price?: number; barcode?: string }
+  ) => Promise<void>;
+  deleteProductUnit: (productId: string, productUnitId: string) => Promise<void>;
   fetchCombos: () => Promise<void>;
   fetchProductBatches: () => Promise<void>;
   fetchStockTransfers: () => Promise<void>;
   fetchCancelIssues: () => Promise<void>;
   fetchStockLedger: () => Promise<void>;
   fetchInventories: () => Promise<void>;
+  fetchLowStock: () => Promise<void>;
+  adjustStock: (payload: StockAdjustPayload) => Promise<StockAdjustResult>;
   fetchProductLocations: (productId?: number, binId?: number) => Promise<void>;
   assignProductLocation: (payload: { productId: number; binId: number; quantity: number }) => Promise<void>;
 
@@ -462,6 +726,35 @@ interface InventoryState {
   addWarehouseBin: (bin: Omit<WarehouseBinRecord, 'id'>) => Promise<void>;
   updateWarehouseBin: (id: string, data: Partial<WarehouseBinRecord>) => Promise<void>;
   deleteWarehouseBin: (id: string) => Promise<void>;
+
+  // --- WMS: Area ---
+  areas: AreaRecord[];
+  fetchAreas: (zoneId?: string) => Promise<void>;
+  addArea: (area: Omit<AreaRecord, 'id'>) => Promise<void>;
+  updateArea: (id: string, data: Partial<AreaRecord>) => Promise<void>;
+  deleteArea: (id: string) => Promise<void>;
+
+  // --- WMS: Rack ---
+  racks: RackRecord[];
+  fetchRacks: (areaId?: string) => Promise<void>;
+  addRack: (rack: Omit<RackRecord, 'id'>) => Promise<void>;
+  updateRack: (id: string, data: Partial<RackRecord>) => Promise<void>;
+  deleteRack: (id: string) => Promise<void>;
+
+  // --- WMS: LocationTransfer ---
+  locationTransfers: LocationTransferRecord[];
+  fetchLocationTransfers: (branchId?: string) => Promise<void>;
+  createLocationTransfer: (data: Omit<LocationTransferRecord, 'id' | 'transferCode' | 'transferDate' | 'status'>) => Promise<void>;
+  completeLocationTransfer: (id: string) => Promise<void>;
+  cancelLocationTransfer: (id: string) => Promise<void>;
+
+  // --- Purchase: SupplierProduct ---
+  supplierProducts: SupplierProductRecord[];
+  fetchSupplierProducts: (supplierId?: string) => Promise<void>;
+  addSupplierProduct: (data: Omit<SupplierProductRecord, 'id'>) => Promise<void>;
+  updateSupplierProduct: (id: string, data: Partial<SupplierProductRecord>) => Promise<void>;
+  deleteSupplierProduct: (id: string) => Promise<void>;
+  setSupplierProductPreferred: (id: string, value: boolean) => Promise<void>;
 }
 
 // ---------------------------
@@ -539,7 +832,7 @@ const MOCK_PRODUCTS: ProductInventory[] = [
       'https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=600&q=80',
       'https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=600&q=80',
     ],
-    units: [{ id: 'u1', unitCode: 'Thùng', conversionFactor: 10, barcode: '893NKAM24BOX', price: 22000000 }],
+    units: [{ id: 'u1', unitId: 'unit-box', unitCode: 'Thùng', unitName: 'Thùng', conversionRate: 10, barcode: '893NKAM24BOX', price: 22000000 }],
   },
   {
     id: '2',
@@ -596,7 +889,7 @@ export const MOCK_CANCEL_ISSUES: CancelIssueRecord[] = [
     reason: 'DAMAGED',
     locationHub: 'Downtown Branch',
     loggedDate: '2024-05-18',
-    reportedBy: 'Nguyễn Văn Kho',
+    reportedBy: 'Nguyễn Văn kho',
     authorizedBy: 'Michael Chang',
     proofImages: ['https://images.unsplash.com/photo-1586201375774-2817e6f5c2a0?w=400'],
     status: 'APPROVED',
@@ -613,7 +906,7 @@ export const MOCK_CANCEL_ISSUES: CancelIssueRecord[] = [
     reason: 'EXPIRED',
     locationHub: 'Northside Store',
     loggedDate: '2024-05-17',
-    reportedBy: 'Trần Thị Lan',
+    reportedBy: 'Trần thị Lan',
     authorizedBy: 'David Ross',
     batchLotNumber: 'LOT-BEV-2023-Q4',
     expiryDate: '2024-05-01',
@@ -664,9 +957,9 @@ export const INITIAL_INVENTORY_AUDITS: InventoryAuditSession[] = [
     discrepancySkusCount: 12,
     netValuationVariance: -350000,
     status: 'RECONCILED_CLOSED',
-    leadAuditor: 'Nguyễn Minh Châu',
+    leadAuditor: 'Nguyễn minh châu',
     isBlindCount: false,
-    approvedBy: 'Giám đốc Kho - Phạm Văn Đức',
+    approvedBy: 'Giám đốc kho - Phạm Văn Đức',
     lineItems: MOCK_AUDIT_LINE_ITEMS,
     notes: 'Kiểm kê toàn bộ kho tháng 5.',
   },
@@ -696,7 +989,7 @@ export const INITIAL_INVENTORY_AUDITS: InventoryAuditSession[] = [
     discrepancySkusCount: 0,
     netValuationVariance: 0,
     status: 'IN_PROGRESS',
-    leadAuditor: 'Lê Thị Hương',
+    leadAuditor: 'Lê thị hương',
     isBlindCount: true,
     notes: 'Kiểm danh mục đồ uống.',
   },
@@ -942,7 +1235,7 @@ const MOCK_MOBILE_PRODUCTS: MobileProduct[] = [
     reorderPoint: 3,
     minStock: 2,
     maxStock: 25,
-    variants: [{ color: 'Tím Titan' }],
+    variants: [{ color: 'Tím titan' }],
   },
 ];
 
@@ -974,25 +1267,36 @@ export const useInventoryStore = create<InventoryState>()(
       warehouseZones: [],
       warehouseBins: [],
       inventories: [],
+      lowStockItems: [],
       productLocations: [],
+      importReceipts: [],
+      returnToSuppliers: [],
+
+      // New WMS state
+      areas: [],
+      racks: [],
+      locationTransfers: [],
+      supplierProducts: [],
 
       fetchCategories: async () => {
         try {
-          const data = await axiosClient.get<any, any[]>('/categories');
-          const mapped = data.map((item: any) => ({
+          // axiosClient interceptor unwrap ApiResponse.data
+          const data = await axiosClient.get<any, any>('/categories');
+          const content: any[] = Array.isArray(data) ? data : (data?.content || []);
+          const mapped = content.map((item: any) => ({
             id: String(item.id),
-            code: item.code || `CAT-${item.id}`,
+            code: item.categoryCode || `CAT-${item.id}`,
             categoryName: item.categoryName,
             parentId: item.parentId ? String(item.parentId) : undefined,
-            department: item.department || 'Chung',
+            department: item.department?.deptName || 'Chung',
             itemsCount: item.productCount || 0,
             totalValuation: 0,
             status: (item.isActive ? 'ACTIVE' : 'ARCHIVED') as 'ACTIVE' | 'ARCHIVED',
-            description: item.description,
-            manager: item.manager || 'N/A',
-            inventoryGlCode: item.inventoryGlCode,
-            cogsGlCode: item.cogsGlCode,
-            taxClass: item.taxClass,
+            description: item.description || '',
+            manager: item.createdBy || 'N/A',
+            inventoryGlCode: '',
+            cogsGlCode: '',
+            taxClass: 'VAT_10' as TaxClass, // Default mock
           }));
           set({ categories: mapped });
         } catch (error) {
@@ -1002,50 +1306,86 @@ export const useInventoryStore = create<InventoryState>()(
 
       fetchProducts: async () => {
         try {
-          const pageData = await axiosClient.get<any, any>('/products?size=10000');
-          const content = pageData.content || [];
-          const safeParse = (str: string, fallback: any = []) => {
-            if (!str) return fallback;
-            try { return JSON.parse(str); } catch (e) { return fallback; }
-          };
+          // 1. Lấy danh sách sản phẩm từ catalog API
+          const res = await axiosClient.get<any, any>('/products');
+          const content: any[] = Array.isArray(res) ? res : (res?.content || []);
           const mapped = content.map((item: any) => ({
             id: String(item.id),
-            sku: item.productCode,
-            name: item.name,
+            sku: item.productCode || '',
+            name: item.name || '',
             category: item.categoryName || 'Chung',
-            price: Number(item.basePrice),
+            price: Number(item.basePrice || 0),
             costPrice: Number(item.costPrice || 0),
             brand: item.brand || 'N/A',
-            unit: item.baseUnitName || 'Cái',
-            weight: item.weight ? `${item.weight} kg` : '0 kg',
+            unit: item.baseUnitName || item.baseUnitCode || 'Cái',
+            weight: '0 kg',
             location: 'Kệ chính',
-            onHand: item.onHand || 0,
+            onHand: 0, // sẽ được cập nhật từ inventory stock bên dưới
             status: (item.isActive ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE',
-            description: item.description,
-            mainImage: item.mainImageUrl,
-            galleryImages: safeParse(item.galleryImages),
+            description: item.description || '',
+            mainImage: item.mainImageUrl || '',
+            galleryImages: [],
             barcodes: item.barcode ? [item.barcode] : [],
-            reorderPoint: Number(item.reorderPoint || 0),
-            minStock: Number(item.minStock || 0),
-            maxStock: Number(item.maxStock || 0),
-            variants: safeParse(item.variants),
-            units: item.units ? item.units.map((u: any) => ({
-              id: String(u.id),
-              unitCode: u.unitName || 'Cái',
-              conversionFactor: Number(u.conversionValue || 1),
-              barcode: u.barcode || '',
-              price: Number(u.price || 0),
-            })) : [],
+            reorderPoint: 0,
+            minStock: 0,
+            maxStock: 0,
+            variants: [],
+            units: [],
+            lastUpdated: item.createdAt ? new Date(item.createdAt).toLocaleString('vi-VN') : undefined,
           }));
-          set({ products: mapped });
+
+          // 2. Fetch tồn kho thực tế từ size_inventory (đã được cộng qua completeImportReceipt)
+          let stockMap: Record<string, number> = {};
+          try {
+            const stockRes = await axiosClient.get<any, any>('/inventory/stock');
+            const stockList: any[] = Array.isArray(stockRes) ? stockRes : (stockRes?.data || stockRes || []);
+            // Gộp quantityPhysical theo productId (tổng tất cả khu vực/zone)
+            stockList.forEach((s: any) => {
+              const pid = String(s.productId);
+              const qty = Number(s.quantityPhysical || s.quantity || 0);
+              stockMap[pid] = (stockMap[pid] || 0) + qty;
+            });
+          } catch {
+            // Nếu stock API lỗi, giữ onHand = 0 (không ảnh hưởng danh sách sản phẩm)
+          }
+
+          // 3. Merge tồn kho vào danh sách sản phẩm
+          const withStock = mapped.map(p => ({
+            ...p,
+            onHand: stockMap[p.id] || 0,
+          }));
+
+          set({ products: withStock });
         } catch (error) {
           console.error('Failed to fetch products:', error);
         }
       },
 
+      fetchProductUnits: async (productId) => {
+
+        const data = await axiosClient.get<any, any[]>(`/products/${productId}/units`);
+        return (data || []).map(mapProductUnitFromApi);
+      },
+
+      createProductUnit: async (productId, payload) => {
+        const created = await axiosClient.post<any, any>(`/products/${productId}/units`, payload);
+        await get().fetchProducts();
+        return mapProductUnitFromApi(created);
+      },
+
+      updateProductUnit: async (productId, productUnitId, payload) => {
+        await axiosClient.put(`/products/${productId}/units/${productUnitId}`, payload);
+        await get().fetchProducts();
+      },
+
+      deleteProductUnit: async (productId, productUnitId) => {
+        await axiosClient.delete(`/products/${productId}/units/${productUnitId}`);
+        await get().fetchProducts();
+      },
+
       fetchCombos: async () => {
         try {
-          const pageData = await axiosClient.get<any, any>('/combos?size=10000');
+          const pageData = await axiosClient.get<any, any>('/catalog/combos?size=10000');
           const content = pageData.content || [];
           const mapped = content.map((item: any) => ({
             id: String(item.id),
@@ -1108,14 +1448,16 @@ export const useInventoryStore = create<InventoryState>()(
               transferNumber: item.transferCode,
               sourceHub: item.fromBranchName || 'Chi nhánh gửi',
               destinationHub: item.toBranchName || 'Chi nhánh nhận',
-              dispatchDate: item.transferDate || item.createdAt || '',
-              estArrivalDate: item.updatedAt || '',
+              dispatchDate: formatApiDate(item.transferDate || item.createdAt),
+              estArrivalDate: formatApiDate(item.estArrivalDate),
               totalUnits,
               totalValuation: 0,
               status: (item.status || 'PENDING_APPROVAL') as 'DRAFT' | 'PENDING_APPROVAL' | 'IN_TRANSIT' | 'COMPLETED' | 'REJECTED' | 'DISCREPANCY_HELD',
-              logisticsPartner: 'GHTK',
-              requestedBy: item.createdBy || 'System',
-              notes: '',
+              logisticsPartner: item.logisticsPartner || 'GHTK',
+              trackingRef: item.trackingRef || '',
+              requestedBy: item.requestedBy || item.createdBy || 'System',
+              approvedBy: item.approvedBy || '',
+              notes: item.note || '',
             };
           });
           set({ stockTransfers: mapped });
@@ -1159,22 +1501,25 @@ export const useInventoryStore = create<InventoryState>()(
       fetchStockLedger: async () => {
         try {
           const data = await axiosClient.get<any, any[]>('/inventories/ledger');
-          const mapped = data.map((item: any) => ({
-            id: String(item.id),
-            transactionCode: item.referenceDocument || `TRX-${item.id}`,
-            sku: item.productCode || '',
-            productName: item.productName || '',
-            type: (item.transactionType || 'STOCK_IN') as any,
-            quantityChange: Number(item.quantityChange || 0),
-            runningBalance: Number(item.runningBalance || 0),
-            unitPrice: 0,
-            totalValuation: 0,
-            timestamp: item.transactionDate || '',
-            location: item.branchName || '',
-            referenceDoc: item.referenceDocument || '',
-            notes: item.notes,
-            loggedBy: item.createdBy || 'System',
-          }));
+          const mapped = data.map((item: any) => {
+            const quantityChange = Number(item.quantityChange || 0);
+            return {
+              id: String(item.id),
+              transactionCode: item.referenceDocument || `TRX-${item.id}`,
+              sku: item.productCode || '',
+              productName: item.productName || '',
+              type: mapLedgerTransactionType(item.transactionType || '', quantityChange),
+              quantityChange,
+              runningBalance: Number(item.runningBalance || 0),
+              unitPrice: 0,
+              totalValuation: 0,
+              timestamp: item.transactionDate || '',
+              location: item.branchName || '',
+              referenceDoc: item.referenceDocument || '',
+              notes: item.notes,
+              loggedBy: item.createdBy || 'System',
+            };
+          });
           set({ stockLedger: mapped });
         } catch (error) {
           console.error('Failed to fetch stock ledger:', error);
@@ -1283,6 +1628,54 @@ export const useInventoryStore = create<InventoryState>()(
           console.error('Failed to delete product batch:', error);
         }
       },
+      adjustProductBatch: async (id, adjustedQuantity, reason) => {
+        try {
+          await axiosClient.post(`/inventories/batches/${id}/adjust`, { adjustedQuantity, reason });
+          get().fetchProductBatches();
+        } catch (error) {
+          console.error('Failed to adjust product batch:', error);
+          throw error;
+        }
+      },
+      expireProductBatch: async (id) => {
+        try {
+          await axiosClient.post(`/inventories/batches/${id}/expire`);
+          get().fetchProductBatches();
+        } catch (error) {
+          console.error('Failed to expire product batch:', error);
+          throw error;
+        }
+      },
+      fetchExpiringBatches: async (days = 30) => {
+        try {
+          const data = await axiosClient.get<any, any[]>(`/inventories/batches/expiring?days=${days}`);
+          const mapped: ProductBatchRecord[] = (data || []).map((b: any) => ({
+            id: String(b.id),
+            batchNumber: b.batchNumber || '',
+            sku: b.sku || '',
+            productName: b.productName || '',
+            manufactureDate: b.manufactureDate || '',
+            expiryDate: b.expiryDate || '',
+            initialUnits: Number(b.initialUnits || 0),
+            remainingUnits: Number(b.remainingUnits || 0),
+            unitCost: Number(b.unitCost || 0),
+            supplierName: b.supplierName || '',
+            location: b.location || '',
+            qualityStatus: b.status === 'EXPIRED' ? 'EXPIRED' : (b.qualityStatus || 'PASSED_QA'),
+            inspector: b.inspector || '',
+            notes: b.notes || '',
+          }));
+          // Merge expiring with existing list
+          set((state) => ({
+            productBatches: [
+              ...mapped,
+              ...state.productBatches.filter(x => !mapped.find(m => m.id === x.id)),
+            ],
+          }));
+        } catch (error) {
+          console.error('Failed to fetch expiring batches:', error);
+        }
+      },
 
       addStockTransfer: async (transfer) => {
         try {
@@ -1310,6 +1703,15 @@ export const useInventoryStore = create<InventoryState>()(
       },
       updateStockTransfer: async (id, data) => {
         try {
+          if (data.status === 'COMPLETED') {
+            await get().completeStockTransfer(id, data.notes);
+            return;
+          }
+          if (data.status === 'CANCELLED' || data.status === 'CANCELLED_DISCREPANCY') {
+            await get().cancelStockTransfer(id, data.notes || 'Hủy chuyển kho');
+            return;
+          }
+
           const products = get().products;
           const productId = products.length > 0 ? Number(products[0].id) : 1;
           const payload = {
@@ -1340,6 +1742,24 @@ export const useInventoryStore = create<InventoryState>()(
           console.error('Failed to delete stock transfer:', error);
         }
       },
+      completeStockTransfer: async (id, notes) => {
+        try {
+          await axiosClient.post(`/inventories/transfers/${id}/complete`, { notes: notes || '' });
+          get().fetchStockTransfers();
+        } catch (error) {
+          console.error('Failed to complete stock transfer:', error);
+          throw error;
+        }
+      },
+      cancelStockTransfer: async (id, cancelReason) => {
+        try {
+          await axiosClient.post(`/inventories/transfers/${id}/cancel`, { cancelReason });
+          get().fetchStockTransfers();
+        } catch (error) {
+          console.error('Failed to cancel stock transfer:', error);
+          throw error;
+        }
+      },
 
       addProduct: async (product) => {
         try {
@@ -1367,11 +1787,26 @@ export const useInventoryStore = create<InventoryState>()(
             maxStock: product.maxStock || 0,
             galleryImages: JSON.stringify(product.galleryImages || []),
             variants: JSON.stringify(product.variants || []),
+            conversionUnits: (product.units || [])
+              .filter(u => !u.isBaseUnit)
+              .map(u => {
+                const unitMaster = get().unitsList.find(
+                  x => x.code === u.unitCode || x.unitName === u.unitCode
+                );
+                return {
+                  unitId: unitMaster ? Number(unitMaster.id) : Number(u.unitId || 0),
+                  conversionRate: u.conversionRate,
+                  price: u.price,
+                  barcode: u.barcode || undefined,
+                };
+              })
+              .filter(u => u.unitId > 0),
           };
           await axiosClient.post('/products', payload);
-          get().fetchProducts();
+          await get().fetchProducts();
         } catch (error) {
           console.error('Failed to add product:', error);
+          throw error;
         }
       },
       updateProduct: async (id, data) => {
@@ -1402,9 +1837,10 @@ export const useInventoryStore = create<InventoryState>()(
             variants: data.variants ? JSON.stringify(data.variants) : undefined,
           };
           await axiosClient.put(`/products/${id}`, payload);
-          get().fetchProducts();
+          await get().fetchProducts();
         } catch (error) {
           console.error('Failed to update product:', error);
+          throw error;
         }
       },
       deleteProduct: async (id) => {
@@ -1423,16 +1859,25 @@ export const useInventoryStore = create<InventoryState>()(
             return {
               productId: product ? Number(product.id) : 1,
               quantity: d.quantity,
+              unitPriceAtCreation: d.unitPriceAtCreation,
             };
           });
           const payload = {
             comboCode: combo.comboCode,
             comboName: combo.comboName,
+            barcode: combo.comboBarcode,
+            description: combo.description,
+            comboType: combo.comboType,
             price: combo.comboPrice,
+            startDate: combo.validFrom ? `${combo.validFrom}T00:00:00` : undefined,
+            endDate: combo.validUntil ? `${combo.validUntil}T00:00:00` : undefined,
             isActive: combo.status === 'ACTIVE',
             details,
           };
-          await axiosClient.post('/combos', payload);
+          const res = await axiosClient.post<any, any>('/catalog/combos', payload);
+          if (res?.warningCode === 'COMBO_PRICE_ABOVE_RETAIL' && res.warnings?.length) {
+            console.warn('[Combo]', res.warnings[0]);
+          }
           get().fetchCombos();
         } catch (error) {
           console.error('Failed to add combo:', error);
@@ -1445,16 +1890,25 @@ export const useInventoryStore = create<InventoryState>()(
             return {
               productId: product ? Number(product.id) : 1,
               quantity: d.quantity,
+              unitPriceAtCreation: d.unitPriceAtCreation,
             };
           });
           const payload = {
             comboCode: data.comboCode,
             comboName: data.comboName,
+            barcode: data.comboBarcode,
+            description: data.description,
+            comboType: data.comboType,
             price: data.comboPrice,
+            startDate: data.validFrom ? `${data.validFrom}T00:00:00` : undefined,
+            endDate: data.validUntil ? `${data.validUntil}T00:00:00` : undefined,
             isActive: data.status === undefined ? undefined : data.status === 'ACTIVE',
             details,
           };
-          await axiosClient.put(`/combos/${id}`, payload);
+          const res = await axiosClient.put<any, any>(`/catalog/combos/${id}`, payload);
+          if (res?.warningCode === 'COMBO_PRICE_ABOVE_RETAIL' && res.warnings?.length) {
+            console.warn('[Combo]', res.warnings[0]);
+          }
           get().fetchCombos();
         } catch (error) {
           console.error('Failed to update combo:', error);
@@ -1462,7 +1916,7 @@ export const useInventoryStore = create<InventoryState>()(
       },
       deleteCombo: async (id) => {
         try {
-          await axiosClient.delete(`/combos/${id}`);
+          await axiosClient.delete(`/catalog/combos/${id}`);
           get().fetchCombos();
         } catch (error) {
           console.error('Failed to delete combo:', error);
@@ -1504,32 +1958,37 @@ export const useInventoryStore = create<InventoryState>()(
         try {
           const masterId = id.includes('-') ? id.split('-')[0] : id;
           if (data.status === 'APPROVED') {
-            await axiosClient.put(`/inventories/cancel-issues/${masterId}/approve`);
-          } else {
-            const product = data.sku ? get().products.find(p => p.sku === data.sku) : undefined;
-            const productId = product ? Number(product.id) : undefined;
-            const unitPrice = product ? product.price : 0;
-            const subTotal = data.quantity && unitPrice ? unitPrice * data.quantity : 0;
-
-            const payload = {
-              cancelCode: data.issueCode,
-              cancelDate: new Date().toISOString().split('T')[0],
-              totalValue: subTotal || undefined,
-              reason: data.reason,
-              status: data.status,
-              branchId: 1,
-              note: data.notes,
-              cancelLines: [
-                {
-                  productId: productId || 1,
-                  quantity: data.quantity || 1,
-                  unitPrice,
-                  subTotal: subTotal || unitPrice,
-                }
-              ],
-            };
-            await axiosClient.put(`/inventories/cancel-issues/${masterId}`, payload);
+            await get().approveCancelIssue(masterId, data.notes);
+            return;
           }
+          if (data.status === 'REJECTED') {
+            await get().rejectCancelIssue(masterId, data.notes);
+            return;
+          }
+
+          const product = data.sku ? get().products.find(p => p.sku === data.sku) : undefined;
+          const productId = product ? Number(product.id) : undefined;
+          const unitPrice = product ? product.price : 0;
+          const subTotal = data.quantity && unitPrice ? unitPrice * data.quantity : 0;
+
+          const payload = {
+            cancelCode: data.issueCode,
+            cancelDate: new Date().toISOString().split('T')[0],
+            totalValue: subTotal || undefined,
+            reason: data.reason,
+            status: data.status,
+            branchId: 1,
+            note: data.notes,
+            cancelLines: [
+              {
+                productId: productId || 1,
+                quantity: data.quantity || 1,
+                unitPrice,
+                subTotal: subTotal || unitPrice,
+              }
+            ],
+          };
+          await axiosClient.put(`/inventories/cancel-issues/${masterId}`, payload);
           await get().fetchCancelIssues();
         } catch (error) {
           console.error('Failed to update cancel issue:', error);
@@ -1543,6 +2002,30 @@ export const useInventoryStore = create<InventoryState>()(
           await get().fetchCancelIssues();
         } catch (error) {
           console.error('Failed to delete cancel issue:', error);
+          throw error;
+        }
+      },
+      approveCancelIssue: async (id, approvalNotes) => {
+        try {
+          const masterId = id.includes('-') ? id.split('-')[0] : id;
+          await axiosClient.post(`/inventories/cancel-issues/${masterId}/approve`, {
+            approvalNotes: approvalNotes || 'Duyệt phiếu hủy xuất',
+          });
+          await get().fetchCancelIssues();
+        } catch (error) {
+          console.error('Failed to approve cancel issue:', error);
+          throw error;
+        }
+      },
+      rejectCancelIssue: async (id, rejectNotes) => {
+        try {
+          const masterId = id.includes('-') ? id.split('-')[0] : id;
+          await axiosClient.post(`/inventories/cancel-issues/${masterId}/reject`, {
+            rejectNotes: rejectNotes || 'Từ chối phiếu hủy xuất',
+          });
+          await get().fetchCancelIssues();
+        } catch (error) {
+          console.error('Failed to reject cancel issue:', error);
           throw error;
         }
       },
@@ -1560,25 +2043,36 @@ export const useInventoryStore = create<InventoryState>()(
       fetchInventoryChecks: async () => {
         try {
           const data = await axiosClient.get<any, any[]>('/inventories/checks');
-          const mapped: InventoryCheckRecord[] = data.map((item: any) => ({
-            id: String(item.id),
-            checkCode: item.checkCode || `CHK-${item.id}`,
-            branchId: String(item.branchId || ''),
-            branchName: item.branchName || 'Chi nhánh',
-            checkDate: item.checkDate ? item.checkDate.split('T')[0] : '',
-            status: (() => {
-              const s = (item.status || '').toUpperCase();
-              if (s === 'IN_PROGRESS') return 'IN_PROGRESS';
-              if (s === 'COMPLETED') return 'COMPLETED';
-              if (s === 'CANCELLED') return 'CANCELLED';
-              return 'DRAFT';
-            })() as InventoryCheckRecord['status'],
-            totalItems: Number(item.totalItems || 0),
-            discrepancyCount: Number(item.discrepancyCount || 0),
-            netVariance: Number(item.netVariance || 0),
-            checkedBy: item.createdBy || item.checkedBy || '',
-            notes: item.notes || '',
-          }));
+          const mapped: InventoryCheckRecord[] = data.map((item: any) => {
+            const lines = item.checkLines || [];
+            const computedDiscrepancyCount = lines.filter(
+              (line: any) => Number(line.diffQty || 0) !== 0
+            ).length;
+            const computedNetVariance = lines.reduce(
+              (acc: number, line: any) => acc + Number(line.diffQty || 0),
+              0
+            );
+
+            return {
+              id: String(item.id),
+              checkCode: item.checkCode || `CHK-${item.id}`,
+              branchId: String(item.branchId || ''),
+              branchName: item.branchName || 'Chi nhánh',
+              checkDate: formatApiDate(item.checkDate),
+              status: (() => {
+                const s = (item.status || '').toUpperCase();
+                if (s === 'IN_PROGRESS') return 'IN_PROGRESS';
+                if (s === 'COMPLETED' || s === 'BALANCED') return 'COMPLETED';
+                if (s === 'CANCELLED') return 'CANCELLED';
+                return 'DRAFT';
+              })() as InventoryCheckRecord['status'],
+              totalItems: Number(item.totalItems ?? lines.length),
+              discrepancyCount: Number(item.discrepancyCount ?? computedDiscrepancyCount),
+              netVariance: Number(item.netVariance ?? computedNetVariance),
+              checkedBy: item.createdBy || item.checkedBy || '',
+              notes: item.notes || item.note || '',
+            };
+          });
           set({ inventoryChecks: mapped });
         } catch (error) {
           console.error('Failed to fetch inventory checks:', error);
@@ -1644,18 +2138,13 @@ export const useInventoryStore = create<InventoryState>()(
           throw error;
         }
       },
-      startInventoryCheck: async (id) => {
-        try {
-          await axiosClient.put(`/inventories/checks/${id}/start`);
-          await get().fetchInventoryChecks();
-        } catch (error) {
-          console.error('Failed to start inventory check:', error);
-          throw error;
-        }
+      // startInventoryCheck: backend không có endpoint này — giữ lại noop để không break UI
+      startInventoryCheck: async (_id) => {
+        console.warn('startInventoryCheck: backend không có endpoint /checks/{id}/start, bỏ qua.');
       },
       completeInventoryCheck: async (id) => {
         try {
-          await axiosClient.put(`/inventories/checks/${id}/complete`);
+          await axiosClient.post(`/inventories/checks/${id}/approve`);
           await get().fetchInventoryChecks();
         } catch (error) {
           console.error('Failed to complete inventory check:', error);
@@ -1742,10 +2231,12 @@ export const useInventoryStore = create<InventoryState>()(
             productName: item.productName || '',
             branchId: String(item.branchId),
             branchName: item.branchName || 'Chi nhánh',
-            quantityOnHand: Number(item.quantityOnHand || 0),
-            quantityReserved: Number(item.quantityReserved || 0),
-            quantityAvailable: Number(item.quantityAvailable || 0),
-            locationBin: item.locationBin || '',
+            warehouseZoneId: item.warehouseZoneId ? String(item.warehouseZoneId) : undefined,
+            warehouseZoneName: item.warehouseZoneName || '',
+            quantityOnHand: Number(item.quantityPhysical ?? item.quantityOnHand ?? 0),
+            quantityReserved: Number(item.quantityAllocated ?? item.quantityReserved ?? 0),
+            quantityAvailable: Number(item.quantityAvailable ?? 0),
+            locationBin: item.warehouseZoneName || item.locationBin || '',
           }));
           set({ inventories: mapped });
         } catch (error) {
@@ -1753,12 +2244,47 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
 
+      fetchLowStock: async () => {
+        try {
+          const data = await axiosClient.get<any, any[]>('/inventories/low-stock');
+          const mapped: LowStockItem[] = (data || []).map((item: any) => ({
+            id: `${item.productId}-${item.warehouseZoneId}`,
+            productId: String(item.productId),
+            productCode: item.productCode || '',
+            productName: item.productName || '',
+            branchId: String(item.branchId),
+            branchName: item.branchName || '',
+            warehouseZoneId: String(item.warehouseZoneId),
+            warehouseZoneName: item.warehouseZoneName || '',
+            currentQuantity: Number(item.currentQuantity || 0),
+            minStock: Number(item.minStock || 0),
+            shortage: Number(item.shortage || 0),
+          }));
+          set({ lowStockItems: mapped });
+        } catch (error) {
+          console.error('Failed to fetch low stock:', error);
+        }
+      },
+
+      adjustStock: async (payload) => {
+        const res = await axiosClient.post<any, any>('/inventories/adjust', payload);
+        await Promise.all([get().fetchStockLedger(), get().fetchInventories(), get().fetchLowStock()]);
+        return {
+          inventoryId: Number(res.inventoryId),
+          oldQuantity: Number(res.oldQuantity),
+          newQuantity: Number(res.newQuantity),
+          changeQty: Number(res.changeQty),
+          transactionType: res.transactionType || 'ADJUSTMENT',
+          reason: res.reason || payload.reason,
+        };
+      },
+
       fetchProductLocations: async (productId?: number, binId?: number) => {
         try {
           const params = new URLSearchParams();
           if (productId) params.append('productId', String(productId));
           if (binId) params.append('binId', String(binId));
-          const url = `/product-locations${params.toString() ? `?${params.toString()}` : ''}`;
+          const url = `/wms/product-locations${params.toString() ? `?${params.toString()}` : ''}`;
           const data = await axiosClient.get<any, any[]>(url);
           const mapped = data.map((item: any) => ({
             id: String(item.id),
@@ -1778,7 +2304,7 @@ export const useInventoryStore = create<InventoryState>()(
 
       assignProductLocation: async (payload) => {
         try {
-          await axiosClient.post('/product-locations/assign', payload);
+          await axiosClient.post('/wms/product-locations/assign', payload);
           await get().fetchProductLocations();
         } catch (error) {
           console.error('Failed to assign product location:', error);
@@ -1872,7 +2398,7 @@ export const useInventoryStore = create<InventoryState>()(
 
       fetchWarehouseZones: async () => {
         try {
-          const res = await axiosClient.get<any, any[]>('/warehouse/zones');
+          const res = await axiosClient.get<any, any[]>('/warehouses/zones');
           const zones = res.map((z: any) => ({
             id: String(z.id),
             zoneCode: z.zoneCode || '',
@@ -1896,7 +2422,7 @@ export const useInventoryStore = create<InventoryState>()(
             conditions: zone.condition,
             branchId: resolveBranchId(zone.branchName),
           };
-          await axiosClient.post('/warehouse/zones', payload);
+          await axiosClient.post('/warehouses/zones', payload);
           await get().fetchWarehouseZones();
         } catch (error) {
           console.error('Failed to add warehouse zone:', error);
@@ -1910,7 +2436,7 @@ export const useInventoryStore = create<InventoryState>()(
             conditions: data.condition,
             branchId: data.branchName ? resolveBranchId(data.branchName) : undefined,
           };
-          await axiosClient.put(`/warehouse/zones/${id}`, payload);
+          await axiosClient.put(`/warehouses/zones/${id}`, payload);
           await get().fetchWarehouseZones();
         } catch (error) {
           console.error('Failed to update warehouse zone:', error);
@@ -1918,7 +2444,7 @@ export const useInventoryStore = create<InventoryState>()(
       },
       deleteWarehouseZone: async (id) => {
         try {
-          await axiosClient.delete(`/warehouse/zones/${id}`);
+          await axiosClient.delete(`/warehouses/zones/${id}`);
           await get().fetchWarehouseZones();
         } catch (error) {
           console.error('Failed to delete warehouse zone:', error);
@@ -1927,7 +2453,7 @@ export const useInventoryStore = create<InventoryState>()(
 
       fetchWarehouseBins: async () => {
         try {
-          const res = await axiosClient.get<any, any[]>('/warehouse/bins');
+          const res = await axiosClient.get<any, any[]>('/warehouses/bins');
           const bins = res.map((b: any) => ({
             id: String(b.id),
             binCode: b.binCode || '',
@@ -1954,7 +2480,7 @@ export const useInventoryStore = create<InventoryState>()(
             maxCapacity: bin.maxWeightKg,
             zoneId: zoneId,
           };
-          await axiosClient.post('/warehouse/bins', payload);
+          await axiosClient.post('/warehouses/bins', payload);
           await get().fetchWarehouseBins();
         } catch (error) {
           console.error('Failed to add warehouse bin:', error);
@@ -1970,7 +2496,7 @@ export const useInventoryStore = create<InventoryState>()(
             maxCapacity: data.maxWeightKg,
             zoneId: zoneId,
           };
-          await axiosClient.put(`/warehouse/bins/${id}`, payload);
+          await axiosClient.put(`/warehouses/bins/${id}`, payload);
           await get().fetchWarehouseBins();
         } catch (error) {
           console.error('Failed to update warehouse bin:', error);
@@ -1978,19 +2504,464 @@ export const useInventoryStore = create<InventoryState>()(
       },
       deleteWarehouseBin: async (id) => {
         try {
-          await axiosClient.delete(`/warehouse/bins/${id}`);
+          await axiosClient.delete(`/warehouses/bins/${id}`); // Note: path changed from /warehouse/bins to /warehouses/bins to match backend @RequestMapping("/api/v1/warehouses")
           await get().fetchWarehouseBins();
         } catch (error) {
           console.error('Failed to delete warehouse bin:', error);
         }
       },
+
+      // --- WMS: Area ---
+      fetchAreas: async (zoneId) => {
+        try {
+          const url = zoneId ? `/wms/areas/by-zone/${zoneId}` : '/wms/areas';
+          const data = await axiosClient.get<any, any>(url);
+          const list = Array.isArray(data) ? data : (data?.data || data?.content || []);
+          const mapped = list.map((item: any) => ({
+            id: String(item.id),
+            areaCode: item.areaCode,
+            areaName: item.areaName,
+            description: item.description,
+            isActive: !!item.isActive,
+            zoneId: String(item.zoneId || ''),
+            zoneCode: item.zoneCode || '',
+            zoneName: item.zoneName || '',
+            branchId: String(item.branchId || ''),
+            branchName: item.branchName || '',
+          }));
+          set({ areas: mapped });
+        } catch (error) {
+          console.error('Failed to fetch areas:', error);
+        }
+      },
+      addArea: async (area) => {
+        try {
+          await axiosClient.post('/wms/areas', area);
+          await get().fetchAreas();
+        } catch (error) {
+          console.error('Failed to add area:', error);
+        }
+      },
+      updateArea: async (id, data) => {
+        try {
+          await axiosClient.put(`/wms/areas/${id}`, data);
+          await get().fetchAreas();
+        } catch (error) {
+          console.error('Failed to update area:', error);
+        }
+      },
+      deleteArea: async (id) => {
+        try {
+          await axiosClient.delete(`/wms/areas/${id}`);
+          await get().fetchAreas();
+        } catch (error) {
+          console.error('Failed to delete area:', error);
+        }
+      },
+
+      // --- WMS: Rack ---
+      fetchRacks: async (areaId) => {
+        try {
+          const url = areaId ? `/wms/racks/by-area/${areaId}` : '/wms/racks';
+          const data = await axiosClient.get<any, any>(url);
+          const list = Array.isArray(data) ? data : (data?.data || data?.content || []);
+          const mapped = list.map((item: any) => ({
+            id: String(item.id),
+            rackCode: item.rackCode,
+            rackName: item.rackName,
+            maxWeightKg: item.maxWeightKg,
+            maxVolumeM3: item.maxVolumeM3,
+            maxPallet: item.maxPallet,
+            description: item.description,
+            isActive: !!item.isActive,
+            areaId: String(item.areaId || ''),
+            areaCode: item.areaCode || '',
+            areaName: item.areaName || '',
+            zoneId: String(item.zoneId || ''),
+            zoneCode: item.zoneCode || '',
+            branchId: String(item.branchId || ''),
+            branchName: item.branchName || '',
+          }));
+          set({ racks: mapped });
+        } catch (error) {
+          console.error('Failed to fetch racks:', error);
+        }
+      },
+      addRack: async (rack) => {
+        try {
+          await axiosClient.post('/wms/racks', rack);
+          await get().fetchRacks();
+        } catch (error) {
+          console.error('Failed to add rack:', error);
+        }
+      },
+      updateRack: async (id, data) => {
+        try {
+          await axiosClient.put(`/wms/racks/${id}`, data);
+          await get().fetchRacks();
+        } catch (error) {
+          console.error('Failed to update rack:', error);
+        }
+      },
+      deleteRack: async (id) => {
+        try {
+          await axiosClient.delete(`/wms/racks/${id}`);
+          await get().fetchRacks();
+        } catch (error) {
+          console.error('Failed to delete rack:', error);
+        }
+      },
+
+      // --- WMS: LocationTransfer ---
+      fetchLocationTransfers: async (branchId) => {
+        try {
+          const url = branchId ? `/wms/location-transfers/by-branch/${branchId}` : '/wms/location-transfers';
+          const data = await axiosClient.get<any, any>(url);
+          const list = Array.isArray(data) ? data : (data?.data || data?.content || []);
+          const mapped = list.map((item: any) => ({
+            id: String(item.id),
+            transferCode: item.transferCode,
+            transferDate: item.transferDate,
+            status: item.status,
+            reason: item.reason,
+            quantity: item.quantity,
+            executedBy: item.executedBy,
+            productVariantId: String(item.productVariantId || ''),
+            productName: item.productName || '',
+            sku: item.sku || '',
+            fromBinId: String(item.fromBinId || ''),
+            fromBinCode: item.fromBinCode || '',
+            fromBinLocation: item.fromBinLocation || '',
+            toBinId: String(item.toBinId || ''),
+            toBinCode: item.toBinCode || '',
+            toBinLocation: item.toBinLocation || '',
+            branchId: String(item.branchId || ''),
+            branchName: item.branchName || '',
+          }));
+          set({ locationTransfers: mapped });
+        } catch (error) {
+          console.error('Failed to fetch location transfers:', error);
+        }
+      },
+      createLocationTransfer: async (data) => {
+        try {
+          await axiosClient.post('/wms/location-transfers', data);
+          await get().fetchLocationTransfers(data.branchId);
+        } catch (error) {
+          console.error('Failed to create location transfer:', error);
+        }
+      },
+      completeLocationTransfer: async (id) => {
+        try {
+          await axiosClient.patch(`/wms/location-transfers/${id}/complete`);
+          await get().fetchLocationTransfers();
+          await get().fetchWarehouseBins(); // Refresh bins since statuses change
+        } catch (error) {
+          console.error('Failed to complete location transfer:', error);
+        }
+      },
+      cancelLocationTransfer: async (id) => {
+        try {
+          await axiosClient.patch(`/wms/location-transfers/${id}/cancel`);
+          await get().fetchLocationTransfers();
+        } catch (error) {
+          console.error('Failed to cancel location transfer:', error);
+        }
+      },
+
+      // --- Purchase: SupplierProduct ---
+      fetchSupplierProducts: async (supplierId) => {
+        try {
+          const url = supplierId ? `/partnerarea/supplier-products/by-supplier/${supplierId}` : '/partnerarea/supplier-products';
+          const data = await axiosClient.get<any, any>(url);
+          const list = Array.isArray(data) ? data : (data?.content || []);
+          const mapped = list.map((item: any) => ({
+            id: String(item.id),
+            supplierSku: item.supplierSku,
+            unitPrice: item.unitPrice,
+            currency: item.currency || 'VND',
+            moq: item.moq,
+            leadTimeDays: item.leadTimeDays,
+            isPreferred: !!item.isPreferred,
+            isActive: !!item.isActive,
+            supplierId: String(item.supplierId || ''),
+            supplierName: item.supplierName || '',
+            supplierCode: item.supplierCode || '',
+            productId: String(item.productId || ''),
+            productName: item.productName || '',
+            productCode: item.productCode || '',
+            mainImageUrl: item.mainImageUrl || '',
+          }));
+          set({ supplierProducts: mapped });
+        } catch (error) {
+          console.error('Failed to fetch supplier products:', error);
+        }
+      },
+      addSupplierProduct: async (data) => {
+        try {
+          await axiosClient.post('/partnerarea/supplier-products', data);
+          await get().fetchSupplierProducts();
+        } catch (error) {
+          console.error('Failed to add supplier product:', error);
+        }
+      },
+      updateSupplierProduct: async (id, data) => {
+        try {
+          await axiosClient.put(`/partnerarea/supplier-products/${id}`, data);
+          await get().fetchSupplierProducts();
+        } catch (error) {
+          console.error('Failed to update supplier product:', error);
+        }
+      },
+      deleteSupplierProduct: async (id) => {
+        try {
+          await axiosClient.delete(`/partnerarea/supplier-products/${id}`);
+          await get().fetchSupplierProducts();
+        } catch (error) {
+          console.error('Failed to delete supplier product:', error);
+        }
+      },
+      setSupplierProductPreferred: async (id, value) => {
+        try {
+          await axiosClient.patch(`/partnerarea/supplier-products/${id}/preferred?value=${value}`);
+          await get().fetchSupplierProducts();
+        } catch (error) {
+          console.error('Failed to set supplier product preferred status:', error);
+        }
+      },
+
+
+      fetchImportReceipts: async () => {
+        try {
+          const res = await axiosClient.get<any, any[]>('/inventories/imports');
+          const mapped = res.map((r: any) => {
+            const lineQty = (r.receiptLines || []).reduce(
+              (acc: number, cur: any) => acc + (cur.quantity || 0),
+              0
+            );
+            const lines: ImportReceiptLine[] = (r.receiptLines || []).map((l: any) => ({
+              productVariantId: l.productVariantId || l.productId || 1,
+              productName: l.productNameSnapshot || l.productName || '',
+              sku: l.skuSnapshot || l.sku || '',
+              quantity: Number(l.quantity || 0),
+              unitPrice: Number(l.unitCostSnapshot || l.unitPrice || l.unitCost || 0),
+              targetBinId: l.targetBinId || 1,
+              targetBinCode: l.targetBinCode || l.binCode || '',
+              batchCode: l.batchNumber || '',
+              expiryDate: l.expiryDate || '',
+            }));
+            return {
+              id: String(r.id),
+              grnNumber: r.receiptCode,
+              poNumber: r.purchaseOrderCode || '',
+              supplierName: r.supplierName || '',
+              receivingStore: r.branchName || '',
+              receivedDate: formatApiDate(r.receiptDate),
+              totalItems: lineQty,
+              acceptedItems: lineQty,
+              rejectedItems: 0,
+              totalValuation: Number(r.totalAmount || 0),
+              status: mapImportReceiptStatus(r.status),
+              inspectedBy: r.inspectedBy || r.createdBy || '',
+              notes: r.note || '',
+              lines,
+            };
+          });
+          set({ importReceipts: mapped });
+        } catch (error) {
+          console.error('Failed to fetch import receipts:', error);
+        }
+      },
+      addImportReceipt: async (receipt) => {
+        try {
+          const payload = {
+            receiptCode: receipt.grnNumber || `GRN-${Date.now()}`,
+            receiptDate: new Date(receipt.receivedDate || Date.now()).toISOString(),
+            branchId: (receipt as any).branchId || resolveBranchId(receipt.receivingStore),
+            supplierId: (receipt as any).supplierId || null,
+            inspectedBy: receipt.inspectedBy || null,
+            note: receipt.notes || null,
+            totalAmount: receipt.totalValuation,
+            status: 'PENDING',
+            receiptLines: receipt.lines && receipt.lines.length > 0
+              ? receipt.lines.map((line) => ({
+                  productVariantId: line.productVariantId,
+                  quantity: line.quantity,
+                  unitCost: line.unitPrice,
+                  subTotal: line.quantity * line.unitPrice,
+                  targetBinId: line.targetBinId,
+                  batchNumber: line.batchCode,
+                  expiryDate: line.expiryDate ? line.expiryDate : null,
+                }))
+              : [
+                  {
+                    productVariantId: resolveProductId(),
+                    quantity: receipt.totalItems || 1,
+                    unitCost: receipt.totalValuation ? receipt.totalValuation / (receipt.totalItems || 1) : 0,
+                    subTotal: receipt.totalValuation || 0,
+                  }
+                ],
+          };
+          await axiosClient.post('/inventories/imports', payload);
+          await get().fetchImportReceipts();
+
+        } catch (error) {
+          console.error('Failed to add import receipt:', error);
+        }
+      },
+      updateImportReceipt: async (id, data) => {
+        try {
+          if (data.status === 'INSPECTED_ACCEPTED') {
+            await axiosClient.post(`/inventories/imports/${id}/complete`);
+          } else {
+            const payload = {
+              receiptCode: data.grnNumber,
+              receiptDate: new Date().toISOString(),
+              branchId: (data as any).branchId || resolveBranchId(data.receivingStore),
+              supplierId: (data as any).supplierId || null,
+              inspectedBy: data.inspectedBy || null,
+              note: data.notes || null,
+              totalAmount: data.totalValuation,
+              status: 'PENDING',
+              receiptLines: data.lines && data.lines.length > 0
+                ? data.lines.map((line: any) => ({
+                    productVariantId: line.productVariantId,
+                    quantity: line.quantity,
+                    unitCost: line.unitPrice,
+                    subTotal: line.quantity * line.unitPrice,
+                    targetBinId: line.targetBinId,
+                    batchNumber: line.batchCode,
+                    expiryDate: line.expiryDate ? line.expiryDate : null,
+                  }))
+                : [
+                    {
+                      productId: resolveProductId(),
+                      quantity: data.totalItems || 1,
+                      unitPrice: data.totalValuation ? data.totalValuation / (data.totalItems || 1) : 0,
+                      subTotal: data.totalValuation || 0,
+                    }
+                  ],
+            };
+            await axiosClient.put(`/inventories/imports/${id}`, payload);
+          }
+          await get().fetchImportReceipts();
+        } catch (error) {
+          console.error('Failed to update import receipt:', error);
+        }
+      },
+      deleteImportReceipt: async (id) => {
+        try {
+          await axiosClient.delete(`/inventories/imports/${id}`);
+          await get().fetchImportReceipts();
+        } catch (error) {
+          console.error('Failed to delete import receipt:', error);
+        }
+      },
+      cancelImportReceipt: async (id, cancelReason) => {
+        try {
+          await axiosClient.post(`/inventories/imports/${id}/cancel`, { cancelReason });
+          await get().fetchImportReceipts();
+        } catch (error) {
+          console.error('Failed to cancel import receipt:', error);
+          throw error;
+        }
+      },
+
+      fetchReturnToSuppliers: async () => {
+        try {
+          const res = await axiosClient.get<any, any[]>('/inventories/returns');
+          const mapped = res.map((r: any) => ({
+            id: String(r.id),
+            rtvNumber: r.returnCode,
+            grnRefNumber: r.grnRefNumber || '',
+            supplierName: r.supplierName || '',
+            returnDate: r.returnDate ? r.returnDate.split('T')[0] : '',
+            totalItems: r.returnLines ? r.returnLines.reduce((acc: number, cur: any) => acc + (cur.quantity || 0), 0) : 0,
+            refundValue: Number(r.totalAmount || 0),
+            status: r.status as any,
+            reason: r.reason || '',
+            notes: r.note || '',
+          }));
+          set({ returnToSuppliers: mapped });
+        } catch (error) {
+          console.error('Failed to fetch return to suppliers:', error);
+        }
+      },
+      addReturnToSupplier: async (rtv) => {
+        try {
+          const payload = {
+            returnCode: rtv.rtvNumber || `RTV-${Date.now()}`,
+            returnDate: new Date().toISOString(),
+            grnRefNumber: rtv.grnRefNumber || '',
+            totalAmount: rtv.refundValue,
+            status: rtv.status || 'PENDING_SUPPLIER_APPROVAL',
+            reason: rtv.reason,
+            supplierId: 1,
+            branchId: resolveBranchId(rtv.dispatchingStore),
+            note: rtv.notes || '',
+            returnLines: [
+              {
+                productId: resolveProductId(),
+                quantity: rtv.totalItems || 1,
+                unitPrice: rtv.refundValue / (rtv.totalItems || 1),
+                subTotal: rtv.refundValue,
+              }
+            ],
+          };
+          await axiosClient.post('/inventories/returns', payload);
+          await get().fetchReturnToSuppliers();
+        } catch (error) {
+          console.error('Failed to add return to supplier:', error);
+        }
+      },
+      updateReturnToSupplier: async (id, data) => {
+        try {
+          if (data.status === 'APPROVED_CREDIT_NOTE') {
+            await axiosClient.post(`/inventories/returns/${id}/approve`);
+          } else if (data.status === 'REJECTED') {
+            await axiosClient.post(`/inventories/returns/${id}/reject`);
+          } else {
+            const payload = {
+              returnCode: data.rtvNumber,
+              returnDate: new Date().toISOString(),
+              grnRefNumber: data.grnRefNumber,
+              totalAmount: data.refundValue,
+              status: data.status,
+              reason: data.reason,
+              supplierId: 1,
+              branchId: resolveBranchId(data.dispatchingStore),
+              note: data.notes,
+              returnLines: [
+                {
+                  productId: resolveProductId(),
+                  quantity: data.totalItems || 1,
+                  unitPrice: data.refundValue ? data.refundValue / (data.totalItems || 1) : 0,
+                  subTotal: data.refundValue || 0,
+                }
+              ],
+            };
+            await axiosClient.put(`/inventories/returns/${id}`, payload);
+          }
+          await get().fetchReturnToSuppliers();
+        } catch (error) {
+          console.error('Failed to update return to supplier:', error);
+        }
+      },
+      deleteReturnToSupplier: async (id) => {
+        try {
+          await axiosClient.delete(`/inventories/returns/${id}`);
+          await get().fetchReturnToSuppliers();
+        } catch (error) {
+          console.error('Failed to delete return to supplier:', error);
+        }
+      },
     }),
     {
       name: 'retailhub-inventory-storage',
-      version: 4,
+      version: 5,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as InventoryState;
-        if (version < 4) {
+        if (version < 5) {
           return {
             ...state,
             cancelIssues: [],
@@ -2004,6 +2975,8 @@ export const useInventoryStore = create<InventoryState>()(
             products: [],
             inventories: [],
             productLocations: [],
+            importReceipts: [],
+            returnToSuppliers: [],
           };
         }
         return state;

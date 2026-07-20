@@ -1,8 +1,11 @@
-import { useMemo, useState } from 'react';
-import { Plus, Download, Search, Filter, Eye, Truck, Star, Phone, Mail, MapPin, ShieldCheck, FileText, CheckCircle2 } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
+import { Plus, Download, Search, Filter, Eye, Truck, Star, Phone, Mail, MapPin, ShieldCheck, FileText, CheckCircle2, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
+import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface ShipperPartnerRecord {
   id: string;
@@ -21,13 +24,6 @@ interface ShipperPartnerRecord {
   notes?: string;
 }
 
-const MOCK_SHIPPERS: ShipperPartnerRecord[] = [
-  { id: '1', partnerCode: 'SHP-DHL-EXP', companyName: 'DHL Global Express logistics', contactPerson: 'Heinrich Zimmer', contactPhone: '+1 (800) 225-5345', contactEmail: 'h.zimmer@dhl-partners.com', serviceTier: 'EXPRESS_AIR', baseRatePerKg: 12.50, activeFleetSize: 450, averageDeliveryHours: 24, slaComplianceRate: 99.4, status: 'ACTIVE', headquarters: 'Bonn, Germany / Americas HQ Miami', notes: 'Preferred partner for high-value enterprise serial electronics and urgent cross-border replacement parts.' },
-  { id: '2', partnerCode: 'SHP-FEDEX-GND', companyName: 'FedEx Freight Standard Ground', contactPerson: 'Sarah Jenkins', contactPhone: '+1 (800) 463-3339', contactEmail: 'dispatch@fedex-commercial.net', serviceTier: 'STANDARD_GROUND', baseRatePerKg: 4.25, activeFleetSize: 1200, averageDeliveryHours: 72, slaComplianceRate: 98.1, status: 'ACTIVE', headquarters: 'Memphis, TN', notes: 'Handles heavy retail shelving fixtures and bulk packaging supply distribution across North America.' },
-  { id: '3', partnerCode: 'SHP-SWIFT-SAME', companyName: 'Swift Same-Day Metro Dispatch', contactPerson: 'Alex Rivera', contactPhone: '+1 (555) 312-9900', contactEmail: 'ops@swift-sameday.org', serviceTier: 'SAME_DAY_COURIER', baseRatePerKg: 18.00, activeFleetSize: 85, averageDeliveryHours: 4, slaComplianceRate: 96.8, status: 'ACTIVE', headquarters: 'Downtown Logistics Strip, NY', notes: 'Guarantees 4-hour local fulfillment for premium VIP loyalty client cart orders.' },
-  { id: '4', partnerCode: 'SHP-HEAVY-X', companyName: 'Titan Freight & Rigging', contactPerson: 'Bruce Banner', contactPhone: '+1 (555) 888-1122', contactEmail: 'logistics@titan-heavy.com', serviceTier: 'HEAVY_FREIGHT_PALLET', baseRatePerKg: 2.10, activeFleetSize: 40, averageDeliveryHours: 120, slaComplianceRate: 92.5, status: 'ON_HOLD', headquarters: 'Industrial District, Chicago', notes: 'Account currently on hold pending annual SLA performance review and insurance bond renewal.' },
-];
-
 const tierStyles = {
   EXPRESS_AIR: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200',
   SAME_DAY_COURIER: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200',
@@ -43,9 +39,123 @@ const shipperStatusLabels = {
 } as const;
 
 export function ShippersPage() {
-  const [data] = useState<ShipperPartnerRecord[]>(MOCK_SHIPPERS);
+  const [data, setData] = useState<ShipperPartnerRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedShipper, setSelectedShipper] = useState<ShipperPartnerRecord | null>(null);
+
+  // States for creation/edit
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const [editingItem, setEditingItem] = useState<Partial<ShipperPartnerRecord>>({});
+
+  const fetchShippers = async () => {
+    setIsLoading(true);
+    try {
+      const res = await axiosClient.get<any, any[]>('/logistics/shippers');
+      if (Array.isArray(res)) {
+        const mapped = res.map((item: any) => ({
+          id: String(item.id),
+          partnerCode: item.shipperCode || `SHP-${item.id}`,
+          companyName: item.fullName || 'Đơn vị giao hàng',
+          contactPerson: item.fullName || 'Người liên hệ',
+          contactPhone: item.phone || '',
+          contactEmail: item.email || '',
+          serviceTier: (item.vehicleType || 'STANDARD_GROUND') as any,
+          baseRatePerKg: 15000,
+          activeFleetSize: 50,
+          averageDeliveryHours: 24,
+          slaComplianceRate: 98.8,
+          status: item.isActive ? 'ACTIVE' : 'TERMINATED',
+          headquarters: item.address || 'Hà Nội, Việt Nam',
+          notes: item.note || ''
+        }));
+        setData(mapped);
+      } else {
+        setData([]);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi tải danh sách người giao hàng.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchShippers();
+  }, []);
+
+  const handleOpenCreate = () => {
+    setModalMode('create');
+    setEditingItem({
+      partnerCode: `SHP-${Date.now().toString().slice(-6)}`,
+      companyName: '',
+      contactPerson: '',
+      contactPhone: '',
+      contactEmail: '',
+      serviceTier: 'STANDARD_GROUND',
+      baseRatePerKg: 15000,
+      activeFleetSize: 10,
+      averageDeliveryHours: 24,
+      slaComplianceRate: 95.0,
+      status: 'ACTIVE',
+      headquarters: '',
+      notes: ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: ShipperPartnerRecord) => {
+    setModalMode('edit');
+    setEditingItem(item);
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem.companyName || !editingItem.contactPhone) return;
+
+    try {
+      const payload = {
+        shipperCode: editingItem.partnerCode,
+        fullName: editingItem.companyName,
+        phone: editingItem.contactPhone,
+        email: editingItem.contactEmail,
+        vehicleType: editingItem.serviceTier,
+        address: editingItem.headquarters,
+        isActive: editingItem.status === 'ACTIVE',
+        note: editingItem.notes
+      };
+
+      if (modalMode === 'create') {
+        await axiosClient.post('/logistics/shippers', payload);
+        toast.success('Tạo đối tác giao hàng thành công!');
+      } else {
+        await axiosClient.put(`/logistics/shippers/${editingItem.id}`, payload);
+        toast.success('Cập nhật đối tác thành công!');
+      }
+      setIsModalOpen(false);
+      fetchShippers();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi lưu đối tác giao hàng.');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (confirm('Bạn có chắc chắn muốn ngừng hợp tác với đối tác này?')) {
+      try {
+        await axiosClient.delete(`/logistics/shippers/${id}`);
+        toast.success('Đã xóa/chấm dứt hợp tác thành công!');
+        setSelectedShipper(null);
+        fetchShippers();
+      } catch (err) {
+        console.error(err);
+        toast.error('Lỗi khi xóa đối tác.');
+      }
+    }
+  };
 
   const filtered = data.filter((item) =>
     item.partnerCode.toLowerCase().includes(search.toLowerCase()) ||
@@ -77,8 +187,8 @@ export function ShippersPage() {
         cell: (info) => {
           const t = info.getValue() as keyof typeof tierStyles;
           return (
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${tierStyles[t]}`}>
-              {t.replace(/_/g, ' ')}
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${tierStyles[t] || tierStyles.STANDARD_GROUND}`}>
+              {(t || 'STANDARD_GROUND').replace(/_/g, ' ')}
             </span>
           );
         },
@@ -86,7 +196,7 @@ export function ShippersPage() {
       {
         accessorKey: 'baseRatePerKg',
         header: 'Cước cơ bản',
-        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">${(info.getValue() as number).toFixed(2)} / kg</span>,
+        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{Number(info.getValue()).toLocaleString('vi-VN')} ₫ / kg</span>,
       },
       {
         accessorKey: 'slaComplianceRate',
@@ -126,12 +236,26 @@ export function ShippersPage() {
         id: 'actions',
         header: 'Hành động',
         cell: ({ row }) => (
-          <button
-            onClick={(e) => { e.stopPropagation(); setSelectedShipper(row.original); }}
-            className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); setSelectedShipper(row.original); }}
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDelete(row.original.id); }}
+              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         ),
       },
     ],
@@ -150,7 +274,10 @@ export function ShippersPage() {
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
               <Download className="w-4 h-4" /> Xuất ma trận đối tác
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
+            <button
+              onClick={handleOpenCreate}
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
+            >
               <Plus className="w-4 h-4" /> Thêm đối tác 3PL
             </button>
           </div>
@@ -169,12 +296,16 @@ export function ShippersPage() {
               className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-all"
             />
           </div>
-          <button className="flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors text-sm">
-            <Filter className="w-4 h-4" /> Lọc SLA
-          </button>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} />
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-sm font-bold text-gray-500">Đang tải danh sách đối tác...</span>
+          </div>
+        ) : (
+          <ReusableDataTable columns={columns} data={filtered} />
+        )}
       </div>
 
       <Drawer
@@ -231,8 +362,8 @@ export function ShippersPage() {
               <div className="border-b border-gray-200 dark:border-gray-700 pb-3">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Đơn vị logistics</span>
                 <h3 className="text-base font-bold text-gray-900 dark:text-white">{selectedShipper.companyName}</h3>
-                <span className={`inline-block mt-1 text-xs px-2.5 py-0.5 rounded-full font-bold border ${tierStyles[selectedShipper.serviceTier]}`}>
-                  Loại dịch vụ: {selectedShipper.serviceTier.replace(/_/g, ' ')}
+                <span className={`inline-block mt-1 text-xs px-2.5 py-0.5 rounded-full font-bold border ${tierStyles[selectedShipper.serviceTier] || tierStyles.STANDARD_GROUND}`}>
+                  Loại dịch vụ: {(selectedShipper.serviceTier || 'STANDARD_GROUND').replace(/_/g, ' ')}
                 </span>
               </div>
 
@@ -253,7 +384,7 @@ export function ShippersPage() {
 
               <div className="flex justify-between items-center pt-3 border-t border-gray-200 dark:border-gray-700 text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Cước vận chuyển:</span>
-                <span className="font-mono font-bold text-gray-900 dark:text-white">${selectedShipper.baseRatePerKg.toFixed(2)} / kg</span>
+                <span className="font-mono font-bold text-gray-900 dark:text-white">{Number(selectedShipper.baseRatePerKg).toLocaleString('vi-VN')} ₫ / kg</span>
               </div>
 
               {selectedShipper.notes && (
@@ -266,17 +397,136 @@ export function ShippersPage() {
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
               {selectedShipper.status !== 'ACTIVE' && (
-                <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                  <CheckCircle2 className="w-4 h-4" /> Activate Carrier Contract
+                <button
+                  onClick={() => handleSave({ preventDefault: () => {} } as any)}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                >
+                  <CheckCircle2 className="w-4 h-4" /> Kích hoạt lại đối tác
                 </button>
               )}
-              <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
-                <ShieldCheck className="w-4 h-4 inline mr-1" /> Review Insurance Bond
-              </button>
             </div>
           </div>
         )}
       </Drawer>
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={modalMode === 'create' ? 'Thêm đối tác vận chuyển mới (3PL)' : 'Cập nhật đối tác vận chuyển'}
+        width="max-w-md"
+      >
+        <form onSubmit={handleSave} className="space-y-4 text-sm">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mã đối tác *</label>
+            <input
+              type="text"
+              value={editingItem.partnerCode || ''}
+              onChange={(e) => setEditingItem({ ...editingItem, partnerCode: e.target.value })}
+              required
+              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Tên đối tác / Công ty *</label>
+            <input
+              type="text"
+              value={editingItem.companyName || ''}
+              onChange={(e) => setEditingItem({ ...editingItem, companyName: e.target.value })}
+              required
+              placeholder="VD: Viettel Post, Giao Hàng Tiết Kiệm..."
+              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Số điện thoại *</label>
+              <input
+                type="text"
+                value={editingItem.contactPhone || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, contactPhone: e.target.value })}
+                required
+                className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Email</label>
+              <input
+                type="email"
+                value={editingItem.contactEmail || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, contactEmail: e.target.value })}
+                className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Loại hình dịch vụ</label>
+              <select
+                value={editingItem.serviceTier || 'STANDARD_GROUND'}
+                onChange={(e) => setEditingItem({ ...editingItem, serviceTier: e.target.value as any })}
+                className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
+              >
+                <option value="STANDARD_GROUND">Standard Ground</option>
+                <option value="EXPRESS_AIR">Express Air</option>
+                <option value="SAME_DAY_COURIER">Same-Day Courier</option>
+                <option value="HEAVY_FREIGHT_PALLET">Heavy Freight Pallet</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Trạng thái hợp đồng</label>
+              <select
+                value={editingItem.status || 'ACTIVE'}
+                onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
+                className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
+              >
+                <option value="ACTIVE">Hoạt động (Active)</option>
+                <option value="ON_HOLD">Tạm dừng (On Hold)</option>
+                <option value="TERMINATED">Chấm dứt (Terminated)</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Trụ sở chính / Địa chỉ</label>
+            <input
+              type="text"
+              value={editingItem.headquarters || ''}
+              onChange={(e) => setEditingItem({ ...editingItem, headquarters: e.target.value })}
+              placeholder="VD: Hai Bà Trưng, Quận 1, HCM"
+              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Ghi chú đối tác</label>
+            <textarea
+              value={editingItem.notes || ''}
+              onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
+              rows={2}
+              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t mt-6">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold shadow-sm"
+            >
+              Lưu đối tác
+            </button>
+          </div>
+        </form>
+      </Modal>
     </>
   );
 }

@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Plus, Download, Search, Filter, Eye, LifeBuoy, Building2, CheckCircle2, Clock, ShieldAlert, Send, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface SupportTicketRecord {
   id: string;
@@ -60,7 +62,8 @@ const catMapFull: Record<string, string> = {
 };
 
 export function SupportTicketsPage() {
-  const [data, setData] = useState<SupportTicketRecord[]>(MOCK_TICKETS);
+  const [data, setData] = useState<SupportTicketRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedTicket, setSelectedTicket] = useState<SupportTicketRecord | null>(null);
 
@@ -70,12 +73,43 @@ export function SupportTicketsPage() {
   const [editingTicket, setEditingTicket] = useState<Partial<SupportTicketRecord>>({});
   const [deletingTicket, setDeletingTicket] = useState<SupportTicketRecord | null>(null);
 
-  const filtered = data.filter((item) =>
-    item.ticketNumber.toLowerCase().includes(search.toLowerCase()) ||
-    item.subject.toLowerCase().includes(search.toLowerCase()) ||
-    item.customerName.toLowerCase().includes(search.toLowerCase()) ||
-    item.assignedAgent.toLowerCase().includes(search.toLowerCase())
-  );
+  const fetchTickets = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const res: any = await axiosClient.get('/crm/tickets');
+      const list = Array.isArray(res) ? res : res?.content || res?.data || [];
+      if (list.length > 0) {
+        const mapped: SupportTicketRecord[] = list.map((item: any) => ({
+          id: String(item.id),
+          ticketNumber: item.ticketNumber || `TCK-${item.id}`,
+          customerName: item.customer?.name || item.customerName || 'Khách hàng',
+          customerEmail: item.customer?.email || item.customerEmail || 'customer@email.com',
+          subject: item.title || item.subject || 'Hỗ trợ khách hàng',
+          category: item.category || 'GENERAL_INQUIRY',
+          priority: item.priority || 'MEDIUM',
+          status: item.status || 'OPEN',
+          assignedAgent: item.assignedTo?.name || item.assignedAgent || 'Unassigned',
+          createdAt: item.createdDate ? String(item.createdDate).split('T')[0] : '2024-05-17',
+          updatedAt: item.lastModifiedDate ? String(item.lastModifiedDate).split('T')[0] : '2024-05-17',
+          lastMessage: item.description || item.lastMessage || 'Chi tiết hỗ trợ...',
+          internalNotes: item.internalNotes || '',
+        }));
+        setData(mapped);
+      } else {
+        setData(MOCK_TICKETS);
+      }
+    } catch (err) {
+      console.error('Error fetching tickets:', err);
+      toast.error('Lỗi khi tải phiếu hỗ trợ, dùng dữ liệu tạm');
+      setData(MOCK_TICKETS);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTickets();
+  }, [fetchTickets]);
 
   const handleOpenCreate = () => {
     setModalMode('create');
@@ -102,37 +136,46 @@ export function SupportTicketsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveTicket = (e: React.FormEvent) => {
+  const handleSaveTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTicket.subject || !editingTicket.customerName) return;
 
-    if (modalMode === 'create') {
-      const newRecord: SupportTicketRecord = {
-        id: Date.now().toString(),
-        ticketNumber: editingTicket.ticketNumber || `TCK-${Math.floor(1000 + Math.random() * 9000)}`,
-        customerName: editingTicket.customerName || 'Khách hàng',
-        customerEmail: editingTicket.customerEmail || 'email@example.com',
-        subject: editingTicket.subject || '',
-        category: editingTicket.category || 'GENERAL_INQUIRY',
-        priority: editingTicket.priority || 'LOW',
-        status: editingTicket.status || 'OPEN',
-        assignedAgent: editingTicket.assignedAgent || 'Unassigned',
-        createdAt: editingTicket.createdAt || new Date().toISOString().replace('T', ' ').substring(0, 16),
-        updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-        lastMessage: editingTicket.lastMessage || 'Đã tạo phiếu yêu cầu hỗ trợ.',
-        internalNotes: editingTicket.internalNotes
-      };
-      setData([newRecord, ...data]);
-    } else {
-      setData(data.map(item => item.id === editingTicket.id ? { ...item, ...editingTicket, updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16) } as SupportTicketRecord : item));
+    const payload = {
+      ticketNumber: editingTicket.ticketNumber,
+      title: editingTicket.subject,
+      description: editingTicket.lastMessage,
+      priority: editingTicket.priority,
+      status: editingTicket.status,
+    };
+
+    try {
+      if (modalMode === 'create') {
+        await axiosClient.post('/crm/tickets', payload);
+        toast.success(`Tạo phiếu hỗ trợ ${editingTicket.ticketNumber} thành công!`);
+      } else if (editingTicket.id) {
+        await axiosClient.put(`/crm/tickets/${editingTicket.id}`, payload);
+        toast.success(`Cập nhật phiếu hỗ trợ ${editingTicket.ticketNumber} thành công!`);
+      }
+      setIsModalOpen(false);
+      fetchTickets();
+    } catch (err) {
+      console.error('Error saving ticket:', err);
+      toast.error('Lỗi khi lưu phiếu hỗ trợ');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingTicket) return;
-    setData(data.filter(item => item.id !== deletingTicket.id));
-    setDeletingTicket(null);
+    try {
+      await axiosClient.delete(`/crm/tickets/${deletingTicket.id}`);
+      toast.success(`Đã xóa phiếu hỗ trợ ${deletingTicket.ticketNumber}`);
+      setData((prev) => prev.filter((item) => item.id !== deletingTicket.id));
+    } catch (err) {
+      console.error('Error deleting ticket:', err);
+      toast.error('Lỗi khi xóa phiếu hỗ trợ');
+    } finally {
+      setDeletingTicket(null);
+    }
   };
 
   const columns = useMemo<ColumnDef<SupportTicketRecord>[]>(
@@ -241,7 +284,7 @@ export function SupportTicketsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hỗ Trợ Khách Hàng (Support Helpdesk)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hỗ trợ khách hàng (support helpdesk)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý các yêu cầu hỗ trợ từ nhiều kênh, xử lý bảo hành thiết bị và khiếu nại dịch vụ. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
@@ -275,13 +318,13 @@ export function SupportTicketsPage() {
           </button>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedTicket(row)} />
+        <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row) => setSelectedTicket(row)} />
       </div>
 
       <Drawer
         isOpen={!!selectedTicket}
         onClose={() => setSelectedTicket(null)}
-        title={selectedTicket ? `Phiếu Hỗ Trợ: ${selectedTicket.ticketNumber}` : 'Chi Tiết Phiếu'}
+        title={selectedTicket ? `Phiếu Hỗ Trợ: ${selectedTicket.ticketNumber}` : 'Chi tiết phiếu'}
         width="max-w-lg"
       >
         {selectedTicket && (
@@ -384,7 +427,7 @@ export function SupportTicketsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo Phiếu Hỗ Trợ Mới' : 'Chỉnh Sửa Phiếu Hỗ Trợ'}
+        title={modalMode === 'create' ? 'Tạo phiếu hỗ trợ mới' : 'Chỉnh sửa phiếu hỗ trợ'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveTicket} className="space-y-4">
@@ -461,7 +504,7 @@ export function SupportTicketsPage() {
                 onChange={(e) => setEditingTicket({ ...editingTicket, priority: e.target.value as any })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
               >
-                <option value="LOW">Thấp (Low)</option>
+                <option value="LOW">Thấp (low)</option>
                 <option value="MEDIUM">Trung bình (Med)</option>
                 <option value="HIGH">Cao (High)</option>
                 <option value="URGENT">Khẩn cấp (Urgent)</option>

@@ -33,7 +33,9 @@ interface DataTableProps<TData, TValue> {
   bulkActions?: (selectedRows: TData[], clearSelection: () => void) => React.ReactNode;
 }
 
-export function ReusableDataTable<TData, TValue>({
+import { memo } from 'react';
+
+const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
   columns,
   data,
   pageCount,
@@ -308,4 +310,8 @@ export function ReusableDataTable<TData, TValue>({
       </div>
     </div>
   );
-}
+});
+
+export const ReusableDataTable = ReusableDataTableImpl as <TData, TValue = any>(
+  props: DataTableProps<TData, TValue>
+) => React.ReactElement;

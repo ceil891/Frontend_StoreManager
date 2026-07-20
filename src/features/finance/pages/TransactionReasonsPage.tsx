@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, Tag, DollarSign, Calendar, CheckCircle2, ShieldCheck, Copy, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
@@ -41,6 +41,12 @@ export function TransactionReasonsPage() {
   const addTransactionReason = useFinanceStore((s) => s.addTransactionReason);
   const updateTransactionReason = useFinanceStore((s) => s.updateTransactionReason);
   const deleteTransactionReason = useFinanceStore((s) => s.deleteTransactionReason);
+  const fetchTransactionReasons = useFinanceStore((s) => s.fetchTransactionReasons);
+
+  useEffect(() => {
+    fetchTransactionReasons();
+  }, [fetchTransactionReasons]);
+
   const [search, setSearch] = useState('');
   const [selectedReason, setSelectedReason] = useState<TransactionReasonRecord | null>(null);
 
@@ -226,7 +232,7 @@ export function TransactionReasonsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mã Lý Do Hạch Toán Kế Toán (GL Reason Codes)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mã lý do hạch toán kế toán (GL reason codes)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Thiết lập danh mục lý do giao dịch, liên kết mã tài khoản tổng hợp (General Ledger), và quản lý quy định kiểm duyệt chứng từ.</p>
           </div>
           <div className="flex items-center gap-3">
@@ -266,7 +272,7 @@ export function TransactionReasonsPage() {
       <Drawer
         isOpen={!!selectedReason}
         onClose={() => setSelectedReason(null)}
-        title={selectedReason ? `Quy Cài Đặt Lý Do: ${selectedReason.reasonCode}` : 'Chi Tiết Lý Do Giao Dịch'}
+        title={selectedReason ? `Quy Cài Đặt Lý Do: ${selectedReason.reasonCode}` : 'Chi tiết lý do giao dịch'}
         width="max-w-lg"
       >
         {selectedReason && (
@@ -385,7 +391,7 @@ export function TransactionReasonsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo Mã Lý Do Kế Toán Mới' : 'Chỉnh Sửa Mã Lý Do Hạch Toán'}
+        title={modalMode === 'create' ? 'Tạo mã lý do kế toán mới' : 'Chỉnh sửa mã lý do hạch toán'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveReason} className="space-y-4">

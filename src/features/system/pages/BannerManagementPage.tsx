@@ -174,7 +174,7 @@ export default function BannerManagementPage() {
           className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm whitespace-nowrap shrink-0"
         >
           <Plus className="w-4 h-4" />
-          Thêm Banner
+          Thêm banner
         </button>
       </div>
 
@@ -186,7 +186,7 @@ export default function BannerManagementPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Banner Mới' : 'Cập Nhật Banner'}
+        title={modalMode === 'create' ? 'Thêm banner mới' : 'Cập nhật banner'}
         width="max-w-2xl"
       >
         <form onSubmit={handleSaveBanner} className="space-y-5">
@@ -289,7 +289,7 @@ export default function BannerManagementPage() {
               type="submit"
               className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors shadow-sm"
             >
-              {modalMode === 'create' ? 'Tạo Banner' : 'Lưu Thay Đổi'}
+              {modalMode === 'create' ? 'Tạo banner' : 'Lưu thay đổi'}
             </button>
           </div>
         </form>

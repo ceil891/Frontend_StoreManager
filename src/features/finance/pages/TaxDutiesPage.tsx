@@ -37,12 +37,12 @@ export function TaxDutiesPage() {
   const handleSave = (e:React.FormEvent)=>{ e.preventDefault(); setData([...data,{...form as TaxDutyItem, id:String(data.length+1)}]); setIsModal(false); };
 
   const columns = useMemo<ColumnDef<TaxDutyItem>[]>(()=>[
-    { accessorKey:'type', header:'Loại Thuế' },
+    { accessorKey:'type', header:'Loại thuế' },
     { accessorKey:'period', header:'Kỳ kê khai' },
     { accessorKey:'amountDue', header:'Số thuế phải nộp', cell:info=> <span className="text-sm font-medium text-gray-900 dark:text-white">{fmt(info.getValue() as number)}</span> },
     { accessorKey:'amountPaid', header:'Số thuế đã nộp', cell:info=> <span className="text-sm text-gray-700 dark:text-gray-300">{fmt(info.getValue() as number)}</span> },
-    { accessorKey:'status', header:'Trạng Thái', cell:info=>{ const s=statusCfg[info.getValue() as string]; return <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${s?.cls}`}>{s?.label}</span>; }},
-    { id:'actions', header:'Thao Tác', cell:({row})=>(
+    { accessorKey:'status', header:'Trạng thái', cell:info=>{ const s=statusCfg[info.getValue() as string]; return <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${s?.cls}`}>{s?.label}</span>; }},
+    { id:'actions', header:'Thao tác', cell:({row})=>(
       <div className="flex gap-1" onClick={e=>e.stopPropagation()}>
         <button onClick={()=>setSelected(row.original)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"><Eye className="w-4 h-4"/></button>
         <button onClick={()=>{setForm(row.original); setIsModal(true);}} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"><Edit className="w-4 h-4"/></button>
@@ -56,12 +56,12 @@ export function TaxDutiesPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Nghĩa Vụ Thuế</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Nghĩa vụ thuế</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý và theo dõi các nghĩa vụ thuế của công ty.</p>
           </div>
           <div className="flex gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium shadow-sm"><Download className="w-4 h-4"/>Xuất báo cáo</button>
-            <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm"><Plus className="w-4 h-4"/>Thêm Nghĩa Vụ</button>
+            <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm"><Plus className="w-4 h-4"/>Thêm nghĩa vụ</button>
           </div>
         </div>
         <div className="flex flex-wrap gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -88,7 +88,7 @@ export function TaxDutiesPage() {
       <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title={form.id?`Cập nhật Nghĩa Vụ Thuế`:`Thêm Nghĩa Vụ Thuế`} width="max-w-lg">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại Thuế *</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại thuế *</label>
               <select required value={form.type||'Thuế GTGT'} onChange={e=>setForm({...form,type:e.target.value as any})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500">
                 <option>Thuế GTGT</option><option>Thuế TNDN</option><option>Thuế TNCN</option>
               </select></div>

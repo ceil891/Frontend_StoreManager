@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, CheckSquare, AlertCircle, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 
 interface AdjustmentRecord {
   id: string;
@@ -22,7 +23,7 @@ const MOCK_ADJUSTMENTS: AdjustmentRecord[] = [
     id: '1',
     adjustmentCode: 'IADJ-2026-001',
     issuedDate: '2026-06-04',
-    handler: 'Lưu Hữu Phước',
+    handler: 'Lưu hữu phước',
     totalIncrease: 5,
     totalDecrease: 2,
     reason: 'Đối chiếu kho định kỳ tháng 5 phát hiện thừa thiếu lẻ',
@@ -33,7 +34,7 @@ const MOCK_ADJUSTMENTS: AdjustmentRecord[] = [
     id: '2',
     adjustmentCode: 'IADJ-2026-002',
     issuedDate: '2026-06-03',
-    handler: 'Nguyễn Thị Hoa',
+    handler: 'Nguyễn thị Hoa',
     totalIncrease: 0,
     totalDecrease: 15,
     reason: 'Hàng hỏng hết hạn sử dụng không thể bán lẻ',
@@ -43,40 +44,45 @@ const MOCK_ADJUSTMENTS: AdjustmentRecord[] = [
 ];
 
 export function InventoryAdjustmentsPage() {
-  const [data, setData] = useState<AdjustmentRecord[]>(MOCK_ADJUSTMENTS);
+  const { inventoryChecks: data, fetchInventoryChecks } = useInventoryStore();
+
+  useEffect(() => {
+    fetchInventoryChecks();
+  }, [fetchInventoryChecks]);
+
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<AdjustmentRecord | null>(null);
+  const [selected, setSelected] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  const [editingItem, setEditingItem] = useState<Partial<AdjustmentRecord>>({});
+  const [editingItem, setEditingItem] = useState<any>({});
 
   const filtered = useMemo(() => {
     if (!search) return data;
     const q = search.toLowerCase();
     return data.filter(
-      (d) =>
-        d.adjustmentCode.toLowerCase().includes(q) ||
-        d.handler.toLowerCase().includes(q) ||
-        d.reason.toLowerCase().includes(q)
+      (d: any) =>
+        d.checkCode.toLowerCase().includes(q) ||
+        d.checkedBy.toLowerCase().includes(q) ||
+        (d.notes && d.notes.toLowerCase().includes(q))
     );
+
   }, [search, data]);
 
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingItem({
-      adjustmentCode: `IADJ-2026-${Date.now().toString().slice(-4)}`,
-      issuedDate: new Date().toISOString().split('T')[0],
-      handler: '',
-      totalIncrease: 0,
-      totalDecrease: 0,
-      reason: '',
-      status: 'CHO_DUYET',
+      checkCode: `IADJ-2026-${Date.now().toString().slice(-4)}`,
+      checkDate: new Date().toISOString().split('T')[0],
+      checkedBy: '',
+      netVariance: 0,
+      discrepancyCount: 0,
+      status: 'DRAFT',
       notes: '',
     });
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (item: AdjustmentRecord) => {
+  const handleOpenEdit = (item: any) => {
     setModalMode('edit');
     setEditingItem(item);
     setIsModalOpen(true);
@@ -84,91 +90,78 @@ export function InventoryAdjustmentsPage() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.adjustmentCode || !editingItem.handler || !editingItem.reason) return;
+    if (!editingItem.checkCode || !editingItem.checkedBy) return;
 
     if (modalMode === 'create') {
-      const newItem: AdjustmentRecord = {
-        id: String(data.length + 1),
-        adjustmentCode: editingItem.adjustmentCode!,
-        issuedDate: editingItem.issuedDate!,
-        handler: editingItem.handler!,
-        totalIncrease: Number(editingItem.totalIncrease || 0),
-        totalDecrease: Number(editingItem.totalDecrease || 0),
-        reason: editingItem.reason!,
-        status: editingItem.status as any || 'CHO_DUYET',
-        notes: editingItem.notes,
-      };
-      setData([...data, newItem]);
+      console.warn("Please use store addInventoryCheck");
     } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as AdjustmentRecord) : d)));
+      console.warn("Please use store updateInventoryCheck");
     }
     setIsModalOpen(false);
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa phiếu điều chỉnh này?')) {
-      setData(data.filter((d) => d.id !== id));
-    }
+    console.warn("Please use store deleteInventoryCheck");
   };
 
-  const columns = useMemo<ColumnDef<AdjustmentRecord>[]>(
+  const columns = useMemo<ColumnDef<any>[]>(
     () => [
       {
-        accessorKey: 'adjustmentCode',
-        header: 'Mã Phiếu',
-        cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
+        accessorKey: 'checkCode',
+        header: 'Mã điều chỉnh',
+        cell: (info) => <span className="font-mono font-bold text-blue-600">{info.getValue() as string}</span>,
       },
       {
-        accessorKey: 'issuedDate',
-        header: 'Ngày Điều Chỉnh',
-        cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
+        accessorKey: 'checkDate',
+        header: 'Ngày lập',
+        cell: (info) => <span>{info.getValue() as string}</span>,
       },
       {
-        accessorKey: 'handler',
-        header: 'Nhân Viên',
+        accessorKey: 'checkedBy',
+        header: 'Người lập phiếu',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
-        accessorKey: 'totalIncrease',
-        header: 'Tổng Tăng',
-        cell: (info) => <span className="font-mono font-bold text-emerald-600">+{info.getValue() as number}</span>,
+        accessorKey: 'notes',
+        header: 'Lý do / ghi chú',
+        cell: (info) => <span className="text-gray-600 truncate block max-w-[200px]">{info.getValue() as string}</span>,
       },
       {
-        accessorKey: 'totalDecrease',
-        header: 'Tổng Giảm',
-        cell: (info) => <span className="font-mono font-bold text-red-600">-{info.getValue() as number}</span>,
+        accessorKey: 'netVariance',
+        header: 'Chênh lệch',
+        cell: (info) => <span className="font-mono text-emerald-600 font-bold">{info.getValue() as number}</span>,
       },
       {
-        accessorKey: 'reason',
-        header: 'Lý Do Điều Chỉnh',
-        cell: (info) => <span className="truncate max-w-xs block text-gray-700 dark:text-gray-300">{info.getValue() as string}</span>,
+        accessorKey: 'discrepancyCount',
+        header: 'Số sản phẩm lệch',
+        cell: (info) => <span className="font-mono text-red-600 font-bold">{info.getValue() as number}</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
-          let badgeClass = 'bg-amber-100 text-amber-800';
-          let label = 'Chờ Duyệt';
-          if (status === 'DA_DONG_BO') {
+          let badgeClass = 'bg-gray-100 text-gray-800';
+          let label = 'Bản nháp';
+          if (status === 'COMPLETED') {
             badgeClass = 'bg-emerald-100 text-emerald-800';
-            label = 'Đã Đồng Bộ';
-          } else if (status === 'DA_HUY') {
+            label = 'Đã đồng bộ';
+          } else if (status === 'CANCELLED') {
             badgeClass = 'bg-red-100 text-red-800';
-            label = 'Đã Hủy';
+            label = 'Đã hủy';
           }
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết Phiếu"
+              title="Xem chi tiết phiếu"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -197,7 +190,7 @@ export function InventoryAdjustmentsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Phiếu Cân Bằng & Điều Chỉnh Kho (Adjustments)</h1>
+          <h1 className="text-2xl font-bold">Phiếu cân bằng & điều chỉnh kho (adjustments)</h1>
           <p className="text-sm text-gray-500">
             Ghi nhận chênh lệch số liệu kiểm kho thực tế so với sổ sách, cập nhật thẻ kho tự động.
           </p>
@@ -226,68 +219,56 @@ export function InventoryAdjustmentsPage() {
       <Drawer
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title={`Chi tiết phiếu điều chỉnh: ${selected?.adjustmentCode}`}
+        title={`Chi tiết phiếu điều chỉnh: ${selected?.checkCode}`}
       >
         {selected && (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã Phiếu:</span>
-                <p className="font-mono font-semibold">{selected.adjustmentCode}</p>
+                <span className="text-gray-500">Mã phiếu điều chỉnh:</span>
+                <p className="font-mono font-semibold">{selected.checkCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Nhân Viên Thực Hiện:</span>
-                <p>{selected.handler}</p>
+                <span className="text-gray-500">Ngày lập:</span>
+                <p>{selected.checkDate}</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Ngày Tạo:</span>
-                <p className="font-mono">{selected.issuedDate}</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Lý Do:</span>
-                <p className="font-medium text-gray-700 dark:text-gray-300">{selected.reason}</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 border-t pt-2">
-              <div>
-                <span className="text-gray-500">Tổng Số Lượng Tăng:</span>
-                <p className="font-mono font-bold text-emerald-600 text-lg">+{selected.totalIncrease} món</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Tổng Số Lượng Giảm:</span>
-                <p className="font-mono font-bold text-red-600 text-lg">-{selected.totalDecrease} món</p>
+                <span className="text-gray-500">Người lập:</span>
+                <p className="font-semibold">{selected.checkedBy}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Trạng Thái Đồng Bộ:</span>
+              <span className="text-gray-500">Ghi chú điều chỉnh:</span>
+              <p className="text-gray-700 bg-gray-50 p-2 rounded">{selected.notes}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4 border-t pt-2">
+              <div>
+                <span className="text-gray-500">Chênh lệch giá trị:</span>
+                <p className="font-mono font-bold text-emerald-600 text-lg">{selected.netVariance}</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Sản phẩm lệch:</span>
+                <p className="font-mono font-bold text-red-600 text-lg">{selected.discrepancyCount}</p>
+              </div>
+            </div>
+            <div>
+              <span className="text-gray-500">Trạng thái đồng bộ:</span>
               <div>
                 <span
                   className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
-                    selected.status === 'DA_DONG_BO'
+                    selected.status === 'COMPLETED'
                       ? 'bg-emerald-100 text-emerald-800'
-                      : selected.status === 'CHO_DUYET'
-                      ? 'bg-amber-100 text-amber-800'
+                      : selected.status === 'DRAFT'
+                      ? 'bg-gray-100 text-gray-800'
                       : 'bg-red-100 text-red-800'
                   }`}
                 >
-                  {selected.status === 'DA_DONG_BO'
-                    ? 'Đã Đồng Bộ Vào Thẻ Kho'
-                    : selected.status === 'CHO_DUYET'
-                    ? 'Chờ Duyệt Cân Bằng'
-                    : 'Đã Hủy'}
+                  {selected.status === 'COMPLETED' ? 'Đã đồng bộ kho' : selected.status === 'DRAFT' ? 'Bản nháp' : 'Đã hủy'}
                 </span>
               </div>
             </div>
-            {selected.notes && (
-              <div>
-                <span className="text-gray-500">Ghi Chú Kho:</span>
-                <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
-                  {selected.notes}
-                </p>
-              </div>
-            )}
           </div>
         )}
       </Drawer>
@@ -295,92 +276,79 @@ export function InventoryAdjustmentsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Lập Phiếu Điều Chỉnh Kho Mới' : 'Sửa Thông Tin Phiếu'}
+        title={modalMode === 'create' ? 'Lập phiếu điều chỉnh kho mới' : 'Sửa thông tin phiếu'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Phiếu Điều Chỉnh *</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã phiếu điều chỉnh *</label>
               <input
                 type="text"
-                value={editingItem.adjustmentCode || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, adjustmentCode: e.target.value })}
+                value={editingItem.checkCode || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, checkCode: e.target.value })}
                 className="w-full p-2 border rounded font-mono bg-gray-50"
+                placeholder="IADJ-XXXX"
                 required
-                disabled
+                disabled={modalMode === 'edit'}
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Nhân Viên Thực Hiện *</label>
+              <label className="block text-xs text-gray-500 mb-1">Người lập phiếu *</label>
               <input
                 type="text"
-                value={editingItem.handler || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, handler: e.target.value })}
+                value={editingItem.checkedBy || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, checkedBy: e.target.value })}
                 className="w-full p-2 border rounded"
-                placeholder="Tên nhân viên"
-                required
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Tổng Số Lượng Tăng *</label>
-              <input
-                type="number"
-                value={editingItem.totalIncrease || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, totalIncrease: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Tổng Số Lượng Giảm *</label>
-              <input
-                type="number"
-                value={editingItem.totalDecrease || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, totalDecrease: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
-                required
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày Lập Phiếu *</label>
-              <input
-                type="date"
-                value={editingItem.issuedDate || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, issuedDate: e.target.value })}
-                className="w-full p-2 border rounded"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Lý Do Điều Chỉnh *</label>
-              <input
-                type="text"
-                value={editingItem.reason || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, reason: e.target.value })}
-                className="w-full p-2 border rounded"
-                placeholder="Ví dụ: Lệch số liệu kiểm tháng"
+                placeholder="Tên nhân viên..."
                 required
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Trạng Thái Đồng Bộ *</label>
+            <label className="block text-xs text-gray-500 mb-1">Lý do điều chỉnh / ghi chú *</label>
+            <input
+              type="text"
+              value={editingItem.notes || ''}
+              onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
+              className="w-full p-2 border rounded"
+              placeholder="VD: Điều chỉnh kho định kỳ tháng 6..."
+              required
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Chênh lệch giá trị</label>
+              <input
+                type="number"
+                value={editingItem.netVariance || 0}
+                onChange={(e) => setEditingItem({ ...editingItem, netVariance: Number(e.target.value) })}
+                className="w-full p-2 border rounded font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Sản phẩm lệch</label>
+              <input
+                type="number"
+                value={editingItem.discrepancyCount || 0}
+                onChange={(e) => setEditingItem({ ...editingItem, discrepancyCount: Number(e.target.value) })}
+                className="w-full p-2 border rounded font-mono"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Trạng thái đồng bộ *</label>
             <select
-              value={editingItem.status || 'CHO_DUYET'}
+              value={editingItem.status || 'DRAFT'}
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
               className="w-full p-2 border rounded"
             >
-              <option value="CHO_DUYET">Chờ Duyệt (Chưa ghi vào thẻ kho)</option>
-              <option value="DA_DONG_BO">Đồng Ý Bù Trừ (Cập nhật tồn kho)</option>
-              <option value="DA_HUY">Hủy Bỏ Phiếu</option>
+              <option value="DRAFT">Bản nháp</option>
+              <option value="COMPLETED">Đã đồng bộ (thẻ kho)</option>
+              <option value="CANCELLED">Hủy phiếu</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú Chi Tiết</label>
+            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
@@ -389,6 +357,7 @@ export function InventoryAdjustmentsPage() {
               placeholder="Ghi rõ danh sách SKU lệch..."
             />
           </div>
+
           <div className="flex justify-end gap-2 pt-2 border-t">
             <button
               type="button"
@@ -398,7 +367,7 @@ export function InventoryAdjustmentsPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Phiếu
+              Lưu phiếu
             </button>
           </div>
         </form>

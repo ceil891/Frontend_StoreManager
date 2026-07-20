@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { axiosClient } from '@/shared/lib/axiosClient';
 
 export interface SecurityRoleRecord {
   id: string;
@@ -193,9 +194,12 @@ export const DEFAULT_MOCK_ROLES: SecurityRoleRecord[] = [
 
 interface RoleStore {
   roles: SecurityRoleRecord[];
-  addRole: (role: Omit<SecurityRoleRecord, 'id' | 'createdDate' | 'assignedUsersCount'>) => void;
-  updateRole: (role: SecurityRoleRecord) => void;
-  deleteRole: (id: string) => void;
+  isLoading: boolean;
+  error: string | null;
+  fetchRoles: () => Promise<void>;
+  addRole: (role: Omit<SecurityRoleRecord, 'id' | 'createdDate' | 'assignedUsersCount'>) => Promise<void>;
+  updateRole: (role: SecurityRoleRecord) => Promise<void>;
+  deleteRole: (id: string) => Promise<void>;
   getRolePermissions: (roleCode: string) => string[];
   checkPermission: (roleCode: string, permissionKey: string) => boolean;
 }
@@ -203,25 +207,116 @@ interface RoleStore {
 export const useRoleStore = create<RoleStore>()(
   persist(
     (set, get) => ({
-      roles: DEFAULT_MOCK_ROLES,
-      addRole: (newRole) => set((state) => ({
-        roles: [...state.roles, {
-          ...newRole,
-          id: `role_${Date.now()}`,
-          assignedUsersCount: 0,
-          createdDate: new Date().toISOString().split('T')[0]
-        }]
-      })),
-      updateRole: (updatedRole) => set((state) => ({
-        roles: state.roles.map((r) => r.id === updatedRole.id ? updatedRole : r)
-      })),
-      deleteRole: (id) => set((state) => ({
-        roles: state.roles.filter((r) => r.id !== id)
-      })),
+      roles: [],
+      isLoading: false,
+      error: null,
+
+      fetchRoles: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await axiosClient.get<any, any[]>('/roles?includeDeleted=false');
+          const mapped = response.map((r: any) => ({
+            id: String(r.id),
+            roleCode: r.roleName || '', // e.g. "SUPER_ADMIN"
+            roleTitle: r.roleName === 'SUPER_ADMIN' ? 'Quản trị viên toàn hệ thống' : r.roleName,
+            description: r.description || '',
+            assignedUsersCount: 1, // Fallback
+            permissionScope: (r.roleName === 'SUPER_ADMIN' ? 'GLOBAL_SUPERADMIN' : 'BRANCH_OPERATIONS') as any,
+            mfaEnforced: r.roleName === 'SUPER_ADMIN',
+            sessionTimeoutMinutes: r.roleName === 'SUPER_ADMIN' ? 15 : 60,
+            status: (r.isActive ? 'ACTIVE' : 'DEPRECATED') as 'ACTIVE' | 'DEPRECATED' | 'AUDIT_HOLD',
+            createdDate: r.createdAt ? r.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
+            grantedPermissions: r.permissions || [],
+          }));
+          set({ roles: mapped, isLoading: false });
+        } catch (err: any) {
+          console.error('Failed to fetch roles:', err);
+          set({ isLoading: false, error: err.message || 'Lỗi khi tải danh sách vai trò' });
+        }
+      },
+
+      addRole: async (newRole) => {
+        set({ isLoading: true, error: null });
+        try {
+          // 1. Tạo vai trò mới
+          const payload = {
+            roleName: newRole.roleCode,
+            description: newRole.description,
+            isActive: newRole.status === 'ACTIVE',
+          };
+          const created: any = await axiosClient.post('/roles', payload);
+          const roleId = created.id;
+
+          // 2. Gán quyền
+          if (newRole.grantedPermissions?.length) {
+            // Lấy tất cả permissions trong DB để map code -> ID
+            const allPerms = await axiosClient.get<any, any[]>('/permissions');
+            const permIds = allPerms
+              .filter((p: any) => newRole.grantedPermissions.includes(p.permissionCode))
+              .map((p: any) => p.id);
+
+            if (permIds.length) {
+              await axiosClient.post(`/roles/${roleId}/permissions`, { permissionIds: permIds });
+            }
+          }
+
+          await get().fetchRoles();
+        } catch (err: any) {
+          console.error('Failed to add role:', err);
+          set({ isLoading: false, error: err.message || 'Lỗi khi thêm vai trò mới' });
+          throw err;
+        }
+      },
+
+      updateRole: async (updatedRole) => {
+        set({ isLoading: true, error: null });
+        try {
+          const roleId = updatedRole.id;
+          // 1. Cập nhật thông tin vai trò
+          const payload = {
+            roleName: updatedRole.roleCode,
+            description: updatedRole.description,
+          };
+          await axiosClient.put(`/roles/${roleId}`, payload);
+          await axiosClient.put(`/roles/${roleId}/status?isActive=${updatedRole.status === 'ACTIVE'}`);
+
+          // 2. Cập nhật quyền (xóa hết quyền cũ, gán lại quyền mới)
+          const allPerms = await axiosClient.get<any, any[]>('/permissions');
+          const permIds = allPerms
+            .filter((p: any) => updatedRole.grantedPermissions.includes(p.permissionCode))
+            .map((p: any) => p.id);
+
+          // Gọi API assignPermissions để lưu danh sách quyền mới (API assign của backend xóa toàn bộ rồi gán lại, rất phù hợp!)
+          await axiosClient.post(`/roles/${roleId}/permissions`, { permissionIds: permIds });
+
+          await get().fetchRoles();
+        } catch (err: any) {
+          console.error('Failed to update role:', err);
+          set({ isLoading: false, error: err.message || 'Lỗi khi cập nhật vai trò' });
+          throw err;
+        }
+      },
+
+      deleteRole: async (id) => {
+        set({ isLoading: true, error: null });
+        try {
+          // Trước tiên cần tắt hoạt động
+          await axiosClient.put(`/roles/${id}/status?isActive=false`);
+          await axiosClient.delete(`/roles/${id}`);
+          await get().fetchRoles();
+        } catch (err: any) {
+          console.error('Failed to delete role:', err);
+          const msg = err.response?.data?.message || err.message || 'Lỗi khi xóa vai trò';
+          set({ isLoading: false, error: msg });
+          throw err;
+        }
+      },
+
       getRolePermissions: (roleCode) => {
         const role = get().roles.find(r => r.roleCode === roleCode);
         return role ? role.grantedPermissions : [];
       },
+
       checkPermission: (roleCode, permissionKey) => {
         const permissions = get().getRolePermissions(roleCode);
         if (permissions.includes('*')) return true; // Super admin overrides everything

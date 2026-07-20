@@ -44,7 +44,7 @@ export function FixedAssetsPage() {
       }[s];
       return <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${cfg}`}>{s.replace('_',' ')}</span>;
     }},
-    { id:'actions', header:'Thao Tác', cell:({row})=>(
+    { id:'actions', header:'Thao tác', cell:({row})=>(
       <div className="flex gap-1" onClick={e=>e.stopPropagation()}>
         <button onClick={()=>setSelected(row.original)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg"><Eye className="w-4 h-4"/></button>
         <button onClick={()=>{setForm(row.original); setIsModal(true);}} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit className="w-4 h-4"/></button>
@@ -58,7 +58,7 @@ export function FixedAssetsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tài Sản Cố Định</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tài sản cố định</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý thông tin và khấu hao tài sản của công ty.</p>
           </div>
           <div className="flex gap-3">

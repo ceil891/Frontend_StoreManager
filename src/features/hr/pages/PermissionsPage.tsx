@@ -1,30 +1,23 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, ShieldAlert, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-
-interface PermissionItem {
-  id: string;
-  permissionCode: string;
-  module: string;
-  description: string;
-  createdAt: string;
-  status: 'KÍCH_HOẠT' | 'KHOÁ';
-  tenantId: string;
-  version: number;
-}
-
-const MOCK_DATA: PermissionItem[] = [
-  { id: '1', permissionCode: 'pos:access', module: 'Bán hàng (POS)', description: 'Cho phép truy cập màn hình POS bán hàng lẻ', createdAt: '2026-01-10', status: 'KÍCH_HOẠT', tenantId: 'tenant-1', version: 1 },
-  { id: '2', permissionCode: 'inventory:products:view', module: 'Quản lý Kho', description: 'Xem danh sách sản phẩm và số dư tồn kho', createdAt: '2026-01-12', status: 'KÍCH_HOẠT', tenantId: 'tenant-1', version: 1 },
-  { id: '3', permissionCode: 'admin:users:manage', module: 'Hệ thống & Nhân sự', description: 'Toàn quyền thêm, sửa, xoá tài khoản nhân sự', createdAt: '2026-01-15', status: 'KÍCH_HOẠT', tenantId: 'tenant-1', version: 2 },
-  { id: '4', permissionCode: 'finance:costs:manage', module: 'Tài chính', description: 'Ghi nhận và phê duyệt chi phí vận hành doanh nghiệp', createdAt: '2026-02-01', status: 'KHOÁ', tenantId: 'tenant-1', version: 1 },
-];
+import { usePermissionStore, type Permission as PermissionItem } from '../store/permissionStore';
 
 export function PermissionsPage() {
-  const [data, setData] = useState<PermissionItem[]>(MOCK_DATA);
+  const { permissions, fetchPermissions } = usePermissionStore();
+  const [data, setData] = useState<PermissionItem[]>([]);
+
+  useEffect(() => {
+    fetchPermissions();
+  }, [fetchPermissions]);
+
+  useEffect(() => {
+    setData(permissions as PermissionItem[]);
+  }, [permissions]);
+
   const [search, setSearch] = useState('');
   const [moduleFilter, setModuleFilter] = useState('Tất cả');
   const [selectedItem, setSelectedItem] = useState<PermissionItem | null>(null);
@@ -94,7 +87,7 @@ export function PermissionsPage() {
     () => [
       {
         accessorKey: 'permissionCode',
-        header: 'Mã Quyền',
+        header: 'Mã quyền',
         cell: (info) => (
           <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
             {info.getValue() as string}
@@ -103,17 +96,17 @@ export function PermissionsPage() {
       },
       {
         accessorKey: 'module',
-        header: 'Phân Hệ',
+        header: 'Phân hệ',
         cell: (info) => <span className="font-medium text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'description',
-        header: 'Mô Tả Quyền',
+        header: 'Mô tả quyền',
         cell: (info) => <span className="text-gray-500 text-sm whitespace-normal max-w-xs block">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           return (
@@ -132,7 +125,7 @@ export function PermissionsPage() {
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <button
@@ -280,7 +273,7 @@ export function PermissionsPage() {
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã Quyền *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã quyền *</label>
             <input
               type="text"
               value={editingItem.permissionCode || ''}

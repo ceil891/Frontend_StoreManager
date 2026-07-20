@@ -11,6 +11,7 @@ import { usePosConfigStore, type PaymentMethodRecord } from '../store/posConfigS
 import { useSalesStore, BRANCH_NAME_BY_ID, deriveShiftId, WALK_IN_CUSTOMER_ID } from '@/features/sales/store/salesStore';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { Link } from 'react-router';
+import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 
 // ─── Products (Sản phẩm Việt Nam) ─────────────────────────────────────────────
 const ALL_PRODUCTS: (PosProduct & { category: string; unit: string; stock: number })[] = [
@@ -69,6 +70,24 @@ export function PosTerminalPage() {
   const { items, addItem, removeItem, updateQuantity, getTotal, clearCart } = usePosCartStore();
   const paymentMethodsFromConfig = usePosConfigStore((s) => s.paymentMethods);
   const addSaleOrder = useSalesStore((s) => s.addSaleOrder);
+  const { products, fetchProducts } = useInventoryStore();
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  const productsList = useMemo(() => {
+    return (products || []).map((p) => ({
+      id: String(p.id),
+      name: p.name || '',
+      price: Number(p.price || 0),
+      image: p.mainImage || 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=200&q=80',
+      sku: p.sku || '',
+      category: p.category || 'Tất cả',
+      unit: p.unit || 'Cái',
+      stock: Number(p.onHand || 0),
+    }));
+  }, [products]);
 
   const displayPayments = useMemo<DisplayPayment[]>(() => {
     const active = paymentMethodsFromConfig.filter((m) => m.status === 'ACTIVE');
@@ -119,9 +138,9 @@ export function PosTerminalPage() {
   }, []);
   const getShift = (date: Date) => {
     const hour = date.getHours();
-    if (hour >= 6 && hour < 14) return 'Ca Sáng (06:00 - 14:00)';
-    if (hour >= 14 && hour < 22) return 'Ca Chiều (14:00 - 22:00)';
-    return 'Ca Đêm (22:00 - 06:00)';
+    if (hour >= 6 && hour < 14) return 'Ca sáng (06:00 - 14:00)';
+    if (hour >= 14 && hour < 22) return 'Ca chiều (14:00 - 22:00)';
+    return 'Ca đêm (22:00 - 06:00)';
   };
 
   useEffect(() => {
@@ -134,9 +153,9 @@ export function PosTerminalPage() {
 
   const stockById = useMemo(() => {
     const map = new Map<string, number>();
-    ALL_PRODUCTS.forEach((p) => map.set(p.id, p.stock));
+    productsList.forEach((p) => map.set(p.id, p.stock));
     return map;
-  }, []);
+  }, [productsList]);
 
   const getStock = (id: string) => stockById.get(id) ?? 0;
 
@@ -163,13 +182,15 @@ export function PosTerminalPage() {
   };
 
   // ── Filtered products ───────────────────────────────────────────────────────
-  const filteredProducts = ALL_PRODUCTS.filter(p => {
-    const matchCat = activeCategory === 'Tất cả' || p.category === activeCategory;
-    const matchQ =
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchCat && matchQ;
-  });
+  const filteredProducts = useMemo(() => {
+    return productsList.filter(p => {
+      const matchCat = activeCategory === 'Tất cả' || p.category === activeCategory;
+      const matchQ =
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.sku.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchCat && matchQ;
+    });
+  }, [productsList, activeCategory, searchQuery]);
 
   // ── Customer ────────────────────────────────────────────────────────────────
   const handleSearchCustomer = (e: React.FormEvent) => {

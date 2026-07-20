@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, RefreshCw } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useSalesStore } from '@/features/sales/store/salesStore';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface ReturnBillRecord {
   id: string;
@@ -18,40 +21,44 @@ interface ReturnBillRecord {
   notes?: string;
 }
 
-const MOCK_RETURNS: ReturnBillRecord[] = [
-  {
-    id: '1',
-    returnCode: 'RT-2026-001',
-    invoiceCode: 'INV-2026-101',
-    customerName: 'Nguyễn Văn A',
-    returnDate: '2026-06-04',
-    returnAmount: 300000,
-    refundedAmount: 300000,
-    receiver: 'Lưu Hữu Phước',
-    status: 'DA_NHAN_LAI',
-    notes: 'Khách trả lại 2 hộp sữa bị móp méo vỏ bọc khi vận chuyển',
-  },
-  {
-    id: '2',
-    returnCode: 'RT-2026-002',
-    invoiceCode: 'INV-2026-102',
-    customerName: 'Công Ty Đại Phát',
-    returnDate: '2026-06-03',
-    returnAmount: 4500000,
-    refundedAmount: 0,
-    receiver: 'Nguyễn Thị Hoa Kho',
-    status: 'CHO_KIEM_TRA',
-    notes: 'Trả hàng do lỗi sản phẩm sấy khô, đang chờ kiểm định lỗi chất lượng',
-  },
-];
-
 export function ReturnsListsPage() {
-  const [data, setData] = useState<ReturnBillRecord[]>(MOCK_RETURNS);
+  const { customerReturns, fetchCustomerReturns, addCustomerReturn, updateCustomerReturn, deleteCustomerReturn } = useSalesStore();
+  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ReturnBillRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<ReturnBillRecord>>({});
+
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        await fetchCustomerReturns();
+      } catch (err) {
+        console.error(err);
+        toast.error('Không thể tải danh sách trả hàng');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+  }, [fetchCustomerReturns]);
+
+  const data = useMemo<ReturnBillRecord[]>(() => {
+    return customerReturns.map((ret) => ({
+      id: ret.id,
+      returnCode: ret.returnCode,
+      invoiceCode: ret.orderCode,
+      customerName: ret.customerId || 'Khách lẻ',
+      returnDate: ret.returnDate ? ret.returnDate.substring(0, 10) : '',
+      returnAmount: ret.refundAmount,
+      refundedAmount: ret.status === 'APPROVED_REFUNDED' ? ret.refundAmount : 0,
+      receiver: ret.inspector || 'Nhân viên nhận',
+      status: ret.status === 'APPROVED_REFUNDED' ? 'DA_NHAN_LAI' : ret.status === 'REJECTED' ? 'DA_HUY' : 'CHO_KIEM_TRA',
+      notes: ret.reason || ret.notes || '',
+    }));
+  }, [customerReturns]);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -87,33 +94,55 @@ export function ReturnsListsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.returnCode || !editingItem.invoiceCode || !editingItem.customerName) return;
 
-    if (modalMode === 'create') {
-      const newItem: ReturnBillRecord = {
-        id: String(data.length + 1),
-        returnCode: editingItem.returnCode!,
-        invoiceCode: editingItem.invoiceCode!,
-        customerName: editingItem.customerName!,
-        returnDate: editingItem.returnDate!,
-        returnAmount: Number(editingItem.returnAmount || 0),
-        refundedAmount: Number(editingItem.refundedAmount || 0),
-        receiver: editingItem.receiver || '',
-        status: editingItem.status as any || 'CHO_KIEM_TRA',
-        notes: editingItem.notes,
+    try {
+      const amt = Number(editingItem.returnAmount || 0);
+      const apiStatus = editingItem.status === 'DA_NHAN_LAI' ? 'APPROVED_REFUNDED' : editingItem.status === 'DA_HUY' ? 'REJECTED' : 'PENDING_INSPECTION';
+
+      const payload = {
+        returnCode: editingItem.returnCode,
+        orderCode: editingItem.invoiceCode,
+        customerId: editingItem.customerName,
+        refundAmount: amt,
+        refundMethod: 'CASH' as any,
+        isRestocked: true,
+        returnBranchId: 'branch_001',
+        returnDate: editingItem.returnDate || new Date().toISOString().split('T')[0],
+        reason: editingItem.notes || '',
+        condition: 'UNOPENED' as any,
+        status: apiStatus as any,
+        inspector: editingItem.receiver || 'Nhân viên kiểm tra',
+        notes: editingItem.notes || '',
       };
-      setData([...data, newItem]);
-    } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as ReturnBillRecord) : d)));
+
+      if (modalMode === 'create') {
+        await addCustomerReturn(payload);
+        toast.success('Thêm phiếu trả hàng thành công!');
+      } else {
+        await updateCustomerReturn(editingItem.id!, payload);
+        toast.success('Cập nhật phiếu trả hàng thành công!');
+      }
+      setIsModalOpen(false);
+      fetchCustomerReturns();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi lưu phiếu trả hàng.');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa phiếu trả hàng này?')) {
-      setData(data.filter((d) => d.id !== id));
+  const handleDelete = async (id: string) => {
+    if (confirm('Bạn có chắc chắn muốn xóa biên bản trả hàng này?')) {
+      try {
+        await deleteCustomerReturn(id);
+        toast.success('Đã xóa phiếu trả hàng thành công!');
+        fetchCustomerReturns();
+      } catch (err) {
+        console.error(err);
+        toast.error('Lỗi khi xóa phiếu trả hàng.');
+      }
     }
   };
 
@@ -125,55 +154,55 @@ export function ReturnsListsPage() {
     () => [
       {
         accessorKey: 'returnCode',
-        header: 'Mã Phiếu Trả',
+        header: 'Mã phiếu trả',
         cell: (info) => <span className="font-mono font-bold text-red-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'invoiceCode',
-        header: 'Hóa Đơn Gốc',
+        header: 'Hóa đơn gốc',
         cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'customerName',
-        header: 'Khách Hàng',
+        header: 'Khách hàng',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'returnAmount',
-        header: 'Giá Trị Hàng Trả',
+        header: 'Giá trị hàng trả',
         cell: (info) => <span className="font-mono font-bold text-red-600">{formatCurrency(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'refundedAmount',
-        header: 'Đã Hoàn Khách',
+        header: 'Đã hoàn khách',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{formatCurrency(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           let badgeClass = 'bg-amber-100 text-amber-800';
-          let label = 'Chờ Kiểm Kho';
+          let label = 'Chờ kiểm kho';
           if (status === 'DA_NHAN_LAI') {
             badgeClass = 'bg-emerald-100 text-emerald-800';
-            label = 'Đã Nhận Lại';
+            label = 'Đã nhận lại';
           } else if (status === 'DA_HUY') {
             badgeClass = 'bg-red-100 text-red-800';
-            label = 'Đã Hủy';
+            label = 'Đã hủy';
           }
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết"
+              title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -202,7 +231,7 @@ export function ReturnsListsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Lịch Sử Nhận Hàng Hoàn Trả (Khách Hàng)</h1>
+          <h1 className="text-2xl font-bold">Lịch sử nhận hàng hoàn trả (khách hàng)</h1>
           <p className="text-sm text-gray-500">
             Xem và xử lý các yêu cầu trả lại hàng hóa của khách hàng, ghi nhận nhập kho lại và hoàn lại tiền.
           </p>
@@ -226,7 +255,14 @@ export function ReturnsListsPage() {
         />
       </div>
 
-      <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-sm font-bold text-gray-500">Đang tải danh sách trả hàng...</span>
+        </div>
+      ) : (
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      )}
 
       <Drawer
         isOpen={!!selected}
@@ -237,40 +273,40 @@ export function ReturnsListsPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã Phiếu Trả:</span>
+                <span className="text-gray-500">Mã phiếu trả:</span>
                 <p className="font-mono font-semibold text-red-600">{selected.returnCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Hóa Đơn Mua Gốc:</span>
+                <span className="text-gray-500">Hóa đơn mua gốc:</span>
                 <p className="font-mono font-semibold">{selected.invoiceCode}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Khách Hàng:</span>
+              <span className="text-gray-500">Khách hàng:</span>
               <p className="font-semibold">{selected.customerName}</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Ngày Trả Hàng:</span>
+                <span className="text-gray-500">Ngày trả hàng:</span>
                 <p className="font-mono">{selected.returnDate}</p>
               </div>
               <div>
-                <span className="text-gray-500">Thủ Kho Nhận Hàng:</span>
+                <span className="text-gray-500">Thủ kho nhận hàng:</span>
                 <p>{selected.receiver || 'Chưa nhận'}</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4 border-t pt-2">
               <div>
-                <span className="text-gray-500">Giá Trị Trả Lại:</span>
+                <span className="text-gray-500">Giá trị trả lại:</span>
                 <p className="font-mono font-bold text-red-600">{formatCurrency(selected.returnAmount)}</p>
               </div>
               <div>
-                <span className="text-gray-500">Đã Hoàn Trả Khách:</span>
+                <span className="text-gray-500">Đã hoàn trả khách:</span>
                 <p className="font-mono font-bold text-emerald-600">{formatCurrency(selected.refundedAmount)}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Trạng Thái Xử Lý:</span>
+              <span className="text-gray-500">Trạng thái xử lý:</span>
               <div>
                 <span
                   className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
@@ -282,16 +318,16 @@ export function ReturnsListsPage() {
                   }`}
                 >
                   {selected.status === 'DA_NHAN_LAI'
-                    ? 'Đã Nhận Lại Kho'
+                    ? 'Đã nhận lại kho'
                     : selected.status === 'CHO_KIEM_TRA'
-                    ? 'Chờ Kiểm Kho'
-                    : 'Đã Hủy'}
+                    ? 'Chờ kiểm kho'
+                    : 'Đã hủy'}
                 </span>
               </div>
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Chi Tiết Lý Do Trả:</span>
+                <span className="text-gray-500">Chi tiết lý do trả:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                   {selected.notes}
                 </p>
@@ -304,12 +340,12 @@ export function ReturnsListsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo Phiếu Trả Hàng Mới' : 'Sửa Thông Tin Phiếu Trả'}
+        title={modalMode === 'create' ? 'Tạo phiếu trả hàng mới' : 'Sửa thông tin phiếu trả'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Phiếu Trả *</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã phiếu trả *</label>
               <input
                 type="text"
                 value={editingItem.returnCode || ''}
@@ -320,7 +356,7 @@ export function ReturnsListsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Hóa Đơn Mua Gốc *</label>
+              <label className="block text-xs text-gray-500 mb-1">Hóa đơn mua gốc *</label>
               <input
                 type="text"
                 value={editingItem.invoiceCode || ''}
@@ -332,7 +368,7 @@ export function ReturnsListsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Tên Khách Hàng *</label>
+            <label className="block text-xs text-gray-500 mb-1">Tên khách hàng *</label>
             <input
               type="text"
               value={editingItem.customerName || ''}
@@ -344,7 +380,7 @@ export function ReturnsListsPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Giá Trị Hàng Trả (VND) *</label>
+              <label className="block text-xs text-gray-500 mb-1">Giá trị hàng trả (VND) *</label>
               <input
                 type="number"
                 value={editingItem.returnAmount || 0}
@@ -354,7 +390,7 @@ export function ReturnsListsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Đã Hoàn Khách (VND) *</label>
+              <label className="block text-xs text-gray-500 mb-1">Đã hoàn khách (VND) *</label>
               <input
                 type="number"
                 value={editingItem.refundedAmount || 0}
@@ -366,7 +402,7 @@ export function ReturnsListsPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày Trả Hàng *</label>
+              <label className="block text-xs text-gray-500 mb-1">Ngày trả hàng *</label>
               <input
                 type="date"
                 value={editingItem.returnDate || ''}
@@ -376,7 +412,7 @@ export function ReturnsListsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Thủ Kho Nhận Hàng</label>
+              <label className="block text-xs text-gray-500 mb-1">Thủ kho nhận hàng</label>
               <input
                 type="text"
                 value={editingItem.receiver || ''}
@@ -387,19 +423,19 @@ export function ReturnsListsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Tình Trạng Xử Lý *</label>
+            <label className="block text-xs text-gray-500 mb-1">Tình trạng xử lý *</label>
             <select
               value={editingItem.status || 'CHO_KIEM_TRA'}
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
               className="w-full p-2 border rounded"
             >
               <option value="CHO_KIEM_TRA">Chờ Kiểm Kho (Chưa nhập kho)</option>
-              <option value="DA_NHAN_LAI">Đã Nhập Lại Kho & Duyệt Trả</option>
-              <option value="DA_HUY">Đã Hủy Phiếu</option>
+              <option value="DA_NHAN_LAI">Đã nhập lại kho & Duyệt trả</option>
+              <option value="DA_HUY">Đã hủy phiếu</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Chi Tiết Lý Do Trả</label>
+            <label className="block text-xs text-gray-500 mb-1">Chi tiết lý do trả</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
@@ -417,7 +453,7 @@ export function ReturnsListsPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Phiếu
+              Lưu phiếu
             </button>
           </div>
         </form>

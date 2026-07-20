@@ -18,15 +18,26 @@ const resolveProductIdBySku = (sku?: string): number => {
   return p ? Number(p.id) : 1;
 };
 
+const resolveProductUnitIdBySku = (sku?: string): number | undefined => {
+  if (!sku) return undefined;
+  const products = useInventoryStore.getState().products;
+  const p = products.find(prod => prod.sku === sku);
+  if (!p || !p.units?.length) return undefined;
+  const base = p.units.find(u => u.isBaseUnit) ?? p.units.find(u => u.conversionRate === 1) ?? p.units[0];
+  return base ? Number(base.id) : undefined;
+};
+
 // ---------------------------
 // TYPES: PRICE LISTS
 // ---------------------------
 export interface PriceListDetail {
   id: string;
-  sku: string;           // Target Product SKU
+  sku: string;
   productName: string;
-  basePrice: number;     // Reference retail base price
-  overridePrice: number; // The new target price in this matrix
+  basePrice: number;
+  overridePrice: number;
+  productUnitId?: string;
+  unitName?: string;
 }
 
 export interface PriceListSchedule {
@@ -64,7 +75,7 @@ export const useLogisticsStore = create<LogisticsState>()(
 
       fetchPriceLists: async () => {
         try {
-          const res = await axiosClient.get<any, any[]>('/pricelists');
+           const res = await axiosClient.get<any, any[]>('/catalog/price-lists');
           const mapped = res.map((p: any) => ({
             id: String(p.id),
             listCode: p.listCode || '',
@@ -83,6 +94,8 @@ export const useLogisticsStore = create<LogisticsState>()(
               productName: d.productName || '',
               basePrice: Number(d.price || 0),
               overridePrice: Number(d.price || 0),
+              productUnitId: d.productUnitId ? String(d.productUnitId) : undefined,
+              unitName: d.unitName || '',
             })) : [],
           }));
           set({ priceLists: mapped });
@@ -101,10 +114,11 @@ export const useLogisticsStore = create<LogisticsState>()(
             isActive: list.status === 'ACTIVE',
             details: list.details?.map(d => ({
               productId: resolveProductIdBySku(d.sku),
+              productUnitId: d.productUnitId ? Number(d.productUnitId) : resolveProductUnitIdBySku(d.sku),
               price: d.overridePrice,
             })) || [],
           };
-          await axiosClient.post('/pricelists', payload);
+          await axiosClient.post('/catalog/price-lists', payload);
           await get().fetchPriceLists();
         } catch (error) {
           console.error('Failed to add price list:', error);
@@ -121,10 +135,11 @@ export const useLogisticsStore = create<LogisticsState>()(
             isActive: data.status === undefined ? undefined : data.status === 'ACTIVE',
             details: data.details?.map(d => ({
               productId: resolveProductIdBySku(d.sku),
+              productUnitId: d.productUnitId ? Number(d.productUnitId) : resolveProductUnitIdBySku(d.sku),
               price: d.overridePrice,
             })) || [],
           };
-          await axiosClient.put(`/pricelists/${id}`, payload);
+          await axiosClient.put(`/catalog/price-lists/${id}`, payload);
           await get().fetchPriceLists();
         } catch (error) {
           console.error('Failed to update price list:', error);
@@ -132,7 +147,7 @@ export const useLogisticsStore = create<LogisticsState>()(
       },
       deletePriceList: async (id) => {
         try {
-          await axiosClient.delete(`/pricelists/${id}`);
+          await axiosClient.delete(`/catalog/price-lists/${id}`);
           await get().fetchPriceLists();
         } catch (error) {
           console.error('Failed to delete price list:', error);

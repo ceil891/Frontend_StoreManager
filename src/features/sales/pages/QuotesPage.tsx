@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -10,9 +10,28 @@ import { usePermission } from '@/shared/hooks/usePermission';
 import { OrderLinesEditor, sumOrderLines } from '@/shared/components/sales/OrderLinesEditor';
 import { CustomerSelect } from '@/shared/components/sales/CustomerSelect';
 import { OrderPricingFields } from '@/shared/components/sales/OrderPricingFields';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 export function QuotesPage() {
-  const { quotes: data, addQuote, updateQuote, deleteQuote } = useSalesStore();
+  const { quotes: data, addQuote, updateQuote, deleteQuote, fetchQuotes } = useSalesStore();
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        await fetchQuotes();
+      } catch (err) {
+        console.error(err);
+        toast.error('Không thể tải danh sách báo giá');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+  }, [fetchQuotes]);
+
   const customers = useCrmStore((s) => s.customers);
   const canManage = usePermission('sales:quotes:manage');
   const [search, setSearch] = useState('');
@@ -73,7 +92,7 @@ export function QuotesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveQuote = (e: React.FormEvent) => {
+  const handleSaveQuote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingQuote.customerId || !editingQuote.code) return;
 
@@ -92,29 +111,44 @@ export function QuotesPage() {
       itemsCount: lines.filter((l) => l.productName.trim()).length || Number(editingQuote.itemsCount) || 0,
     };
 
-    if (modalMode === 'create') {
-      const newQuote: Omit<QuoteItem, 'id'> = {
-        code: editingQuote.code,
-        customerId: editingQuote.customerId,
-        issueDate: editingQuote.issueDate || new Date().toISOString().split('T')[0],
-        revision: Number(editingQuote.revision) || 1,
-        validUntil: editingQuote.validUntil || new Date().toISOString().split('T')[0],
-        status: editingQuote.status as any || 'DRAFT',
-        salesRep: editingQuote.salesRep || 'System User',
-        notes: editingQuote.notes || '',
-        ...linePayload,
-      };
-      addQuote(newQuote);
-    } else if (editingQuote.id) {
-      updateQuote(editingQuote.id, { ...editingQuote, ...linePayload });
+    try {
+      if (modalMode === 'create') {
+        const newQuote: Omit<QuoteItem, 'id'> = {
+          code: editingQuote.code,
+          customerId: editingQuote.customerId,
+          issueDate: editingQuote.issueDate || new Date().toISOString().split('T')[0],
+          revision: Number(editingQuote.revision) || 1,
+          validUntil: editingQuote.validUntil || new Date().toISOString().split('T')[0],
+          status: editingQuote.status as any || 'DRAFT',
+          salesRep: editingQuote.salesRep || 'System User',
+          notes: editingQuote.notes || '',
+          ...linePayload,
+        };
+        await addQuote(newQuote);
+        toast.success('Tạo báo giá thành công!');
+      } else if (editingQuote.id) {
+        await updateQuote(editingQuote.id, { ...editingQuote, ...linePayload });
+        toast.success('Cập nhật báo giá thành công!');
+      }
+      setIsModalOpen(false);
+      fetchQuotes();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi lưu báo giá.');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingQuote) return;
-    deleteQuote(deletingQuote.id);
-    setDeletingQuote(null);
+    try {
+      await deleteQuote(deletingQuote.id);
+      toast.success('Đã xóa báo giá!');
+      setDeletingQuote(null);
+      fetchQuotes();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi xóa báo giá.');
+    }
   };
 
   const columns = useMemo<ColumnDef<QuoteItem>[]>(
@@ -243,7 +277,14 @@ export function QuotesPage() {
         </div>
 
         {/* Table */}
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedQuote(row)} />
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-sm font-bold text-gray-500">Đang tải danh sách báo giá...</span>
+          </div>
+        ) : (
+          <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedQuote(row)} />
+        )}
       </div>
 
       {/* Drawer Details */}
@@ -330,7 +371,7 @@ export function QuotesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo Báo Giá Mới' : 'Cập Nhật Báo Giá'}
+        title={modalMode === 'create' ? 'Tạo báo giá mới' : 'Cập nhật báo giá'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveQuote} className="space-y-4">
@@ -422,7 +463,7 @@ export function QuotesPage() {
                 onChange={(e) => setEditingQuote({ ...editingQuote, status: e.target.value as any })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
               >
-                <option value="DRAFT">Nháp (Draft)</option>
+                <option value="DRAFT">Nháp (draft)</option>
                 <option value="SENT">Đã gửi (Sent)</option>
                 <option value="ACCEPTED">Đã chấp nhận (Accepted)</option>
                 <option value="EXPIRED">Hết hạn (Expired)</option>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { 
   Plus, Download, Search, Eye, Clock, Wallet, Receipt, 
   AlertCircle, CheckCircle2, ShieldCheck, Printer, Edit, Trash2, 
@@ -8,6 +8,7 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
+import { axiosClient } from '@/shared/lib/axiosClient';
 
 interface PosSessionRecord {
   id: string;
@@ -29,10 +30,10 @@ interface PosSessionRecord {
 const fmtVnd = (n: number) => n.toLocaleString('vi-VN') + '₫';
 
 const MOCK_POS_SESSIONS: PosSessionRecord[] = [
-  { id: '1', sessionCode: 'SESS-20240518-01', terminalId: 'TERM-01-MAIN', cashierName: 'Nguyễn Văn An', openedTimestamp: '2024-05-18 07:00:00', openingCashFloatVnd: 2000000, expectedClosingCashVnd: 18500000, totalTransactionsCount: 42, totalGrossRevenueVnd: 16500000, status: 'IN_PROGRESS' },
-  { id: '2', sessionCode: 'SESS-20240517-04', terminalId: 'TERM-04-EXPRESS', cashierName: 'Trần Thị Bích', openedTimestamp: '2024-05-17 14:30:00', closedTimestamp: '2024-05-17 22:30:00', openingCashFloatVnd: 2000000, expectedClosingCashVnd: 21500000, actualClosingCashVnd: 21500000, cashDiscrepancyVnd: 0, totalTransactionsCount: 85, totalGrossRevenueVnd: 19500000, status: 'CLOSED_VERIFIED', supervisorSignoff: 'Lê Quản Lý' },
-  { id: '3', sessionCode: 'SESS-20240517-02', terminalId: 'TERM-02-KIOSK', cashierName: 'Phạm Minh Châu', openedTimestamp: '2024-05-17 08:00:00', closedTimestamp: '2024-05-17 16:00:00', openingCashFloatVnd: 2000000, expectedClosingCashVnd: 13500000, actualClosingCashVnd: 13200000, cashDiscrepancyVnd: -300000, totalTransactionsCount: 31, totalGrossRevenueVnd: 11500000, status: 'DISCREPANCY_FLAGGED', supervisorSignoff: 'PENDING_INVESTIGATION' },
-  { id: '4', sessionCode: 'SESS-20240516-01', terminalId: 'TERM-01-MAIN', cashierName: 'Nguyễn Văn An', openedTimestamp: '2024-05-16 07:00:00', closedTimestamp: '2024-05-16 15:30:00', openingCashFloatVnd: 2000000, expectedClosingCashVnd: 35000000, actualClosingCashVnd: 35000000, cashDiscrepancyVnd: 0, totalTransactionsCount: 112, totalGrossRevenueVnd: 33000000, status: 'CLOSED_VERIFIED', supervisorSignoff: 'Lê Quản Lý' },
+  { id: '1', sessionCode: 'SESS-20240518-01', terminalId: 'TERM-01-MAIN', cashierName: 'Nguyễn Văn an', openedTimestamp: '2024-05-18 07:00:00', openingCashFloatVnd: 2000000, expectedClosingCashVnd: 18500000, totalTransactionsCount: 42, totalGrossRevenueVnd: 16500000, status: 'IN_PROGRESS' },
+  { id: '2', sessionCode: 'SESS-20240517-04', terminalId: 'TERM-04-EXPRESS', cashierName: 'Trần thị Bích', openedTimestamp: '2024-05-17 14:30:00', closedTimestamp: '2024-05-17 22:30:00', openingCashFloatVnd: 2000000, expectedClosingCashVnd: 21500000, actualClosingCashVnd: 21500000, cashDiscrepancyVnd: 0, totalTransactionsCount: 85, totalGrossRevenueVnd: 19500000, status: 'CLOSED_VERIFIED', supervisorSignoff: 'Lê quản lý' },
+  { id: '3', sessionCode: 'SESS-20240517-02', terminalId: 'TERM-02-KIOSK', cashierName: 'Phạm minh châu', openedTimestamp: '2024-05-17 08:00:00', closedTimestamp: '2024-05-17 16:00:00', openingCashFloatVnd: 2000000, expectedClosingCashVnd: 13500000, actualClosingCashVnd: 13200000, cashDiscrepancyVnd: -300000, totalTransactionsCount: 31, totalGrossRevenueVnd: 11500000, status: 'DISCREPANCY_FLAGGED', supervisorSignoff: 'PENDING_INVESTIGATION' },
+  { id: '4', sessionCode: 'SESS-20240516-01', terminalId: 'TERM-01-MAIN', cashierName: 'Nguyễn Văn an', openedTimestamp: '2024-05-16 07:00:00', closedTimestamp: '2024-05-16 15:30:00', openingCashFloatVnd: 2000000, expectedClosingCashVnd: 35000000, actualClosingCashVnd: 35000000, cashDiscrepancyVnd: 0, totalTransactionsCount: 112, totalGrossRevenueVnd: 33000000, status: 'CLOSED_VERIFIED', supervisorSignoff: 'Lê quản lý' },
 ];
 
 const statusBadgeStyles = {
@@ -53,6 +54,36 @@ export function PosSessionsPage() {
   const [data, setData] = useState<PosSessionRecord[]>(MOCK_POS_SESSIONS);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+
+  useEffect(() => {
+    const fetchSessions = async () => {
+      try {
+        const res = await axiosClient.get<any, any>('/pos/sessions');
+        const list = res.content || res || [];
+        if (Array.isArray(list) && list.length > 0) {
+          setData(list.map((s: any) => ({
+            id: String(s.id),
+            sessionCode: s.sessionCode || `SESS-${s.id}`,
+            terminalId: s.terminalCode || 'TERM-01-MAIN',
+            cashierName: s.cashierName || 'Nguyễn Văn An',
+            openedTimestamp: s.startTime ? s.startTime.replace('T', ' ').slice(0, 19) : '',
+            closedTimestamp: s.endTime ? s.endTime.replace('T', ' ').slice(0, 19) : undefined,
+            openingCashFloatVnd: Number(s.openingCash || 2000000),
+            expectedClosingCashVnd: Number(s.expectedClosingCash || 18500000),
+            actualClosingCashVnd: s.actualClosingCash ? Number(s.actualClosingCash) : undefined,
+            cashDiscrepancyVnd: s.actualClosingCash ? (Number(s.actualClosingCash) - Number(s.expectedClosingCash || 0)) : undefined,
+            totalTransactionsCount: Number(s.totalTxCount || 0),
+            totalGrossRevenueVnd: Number(s.totalRevenue || 0),
+            status: (s.status === 'OPEN' ? 'IN_PROGRESS' : 'CLOSED_VERIFIED') as any,
+            supervisorSignoff: s.closedBy || undefined,
+          })));
+        }
+      } catch (err) {
+        console.error('Failed to fetch POS sessions:', err);
+      }
+    };
+    fetchSessions();
+  }, []);
   
   // Selected Session dynamic tracking
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -63,7 +94,7 @@ export function PosSessionsPage() {
   // Biometric Sign-off Modal state (TC-07)
   const [isBiometricModalOpen, setIsBiometricModalOpen] = useState(false);
   const [biometricStep, setBiometricStep] = useState<'IDLE' | 'SCANNING' | 'SUCCESS'>('IDLE');
-  const [supervisorName, setSupervisorName] = useState('Lê Quản Lý');
+  const [supervisorName, setSupervisorName] = useState('Lê quản lý');
 
   // Close Shift Modal state
   const [isCloseShiftModalOpen, setIsCloseShiftModalOpen] = useState(false);
@@ -145,13 +176,21 @@ export function PosSessionsPage() {
     setIsCloseShiftModalOpen(true);
   };
 
-  const handleConfirmCloseShift = () => {
+  const handleConfirmCloseShift = async () => {
     if (!selectedSession) return;
     
     const parsedActualCash = parseInt(actualClosingCashInput.replace(/\D/g, ''), 10) || 0;
     const discrepancy = parsedActualCash - selectedSession.expectedClosingCashVnd;
     const newStatus = discrepancy === 0 ? 'CLOSED_VERIFIED' : 'DISCREPANCY_FLAGGED';
     
+    try {
+      await axiosClient.put(`/pos/sessions/${selectedSession.id}/close`, null, {
+        params: { actualClosingCash: parsedActualCash }
+      });
+    } catch (e) {
+      console.error('Failed to close POS session:', e);
+    }
+
     setData(prev => 
       prev.map(item => {
         if (item.id === selectedSession.id) {
@@ -178,16 +217,31 @@ export function PosSessionsPage() {
   };
 
   // 3. New Session opening handler
-  const handleCreateSession = (e: React.FormEvent) => {
+  const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
     const openingCash = parseInt(newOpeningCash.replace(/\D/g, ''), 10) || 0;
     const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const currentDaySessions = data.filter(s => s.sessionCode.includes(todayStr));
     const nextSessionNum = String(currentDaySessions.length + 1).padStart(2, '0');
+    const sessionCode = `SESS-${todayStr}-${nextSessionNum}`;
     
+    try {
+      await axiosClient.post('/pos/sessions', {
+        sessionCode,
+        terminalCode: newTerminalId,
+        cashierName: newCashierName,
+        openingCash: openingCash,
+        expectedClosingCash: openingCash,
+        totalTxCount: 0,
+        totalRevenue: 0,
+      });
+    } catch (err) {
+      console.error('Failed to create POS session:', err);
+    }
+
     const newRecord: PosSessionRecord = {
       id: String(data.length + 100),
-      sessionCode: `SESS-${todayStr}-${nextSessionNum}`,
+      sessionCode,
       terminalId: newTerminalId,
       cashierName: newCashierName,
       openedTimestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
@@ -781,9 +835,9 @@ export function PosSessionsPage() {
               className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm"
             >
               <option value="Trần Văn Hùng">Trần Văn Hùng (Quản trị viên)</option>
-              <option value="Nguyễn Văn An">Nguyễn Văn An (Nhân viên ca sáng)</option>
-              <option value="Trần Thị Bích">Trần Thị Bích (Nhân viên ca tối)</option>
-              <option value="Phạm Minh Châu">Phạm Minh Châu (Nhân viên bán thời gian)</option>
+              <option value="Nguyễn Văn an">Nguyễn Văn An (Nhân viên ca sáng)</option>
+              <option value="Trần thị Bích">Trần Thị Bích (Nhân viên ca tối)</option>
+              <option value="Phạm minh châu">Phạm Minh Châu (Nhân viên bán thời gian)</option>
             </select>
           </div>
 
@@ -886,7 +940,7 @@ export function PosSessionsPage() {
                 type="submit"
                 className="flex-1 py-2 bg-primary hover:bg-primary/95 text-white font-bold rounded-xl transition-all text-sm shadow-md"
               >
-                Lưu Thay Đổi
+                Lưu thay đổi
               </button>
             </div>
           </form>

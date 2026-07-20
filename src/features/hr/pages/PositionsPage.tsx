@@ -340,13 +340,13 @@ export function PositionsPage() {
             <div className={`flex items-center justify-between p-4 rounded-xl border ${
               selectedPos.status === 'OPEN_HIRING'
                 ? 'bg-emerald-50 border-emerald-200'
-                : selectedPos.status === 'FROZEN'
+                : selectedPos.status === 'FROZEN_BUDGET'
                 ? 'bg-amber-50 border-amber-200'
                 : 'bg-blue-50 border-blue-200'
             }`}>
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold ${
-                  selectedPos.status === 'OPEN_HIRING' ? 'bg-emerald-600' : selectedPos.status === 'FROZEN' ? 'bg-amber-600' : 'bg-blue-600'
+                  selectedPos.status === 'OPEN_HIRING' ? 'bg-emerald-600' : selectedPos.status === 'FROZEN_BUDGET' ? 'bg-amber-600' : 'bg-blue-600'
                 }`}>
                   <Briefcase className="w-5 h-5" />
                 </div>
@@ -359,7 +359,7 @@ export function PositionsPage() {
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
                 selectedPos.status === 'OPEN_HIRING' ? 'bg-emerald-200 text-emerald-900' :
-                selectedPos.status === 'FROZEN' ? 'bg-amber-200 text-amber-900' :
+                selectedPos.status === 'FROZEN_BUDGET' ? 'bg-amber-200 text-amber-900' :
                 'bg-blue-200 text-blue-900'
               }`}>
                 {selectedPos.status.replace('_', ' ')}
@@ -418,13 +418,13 @@ export function PositionsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Định Nghĩa Chức Vụ Mới' : 'Cập Nhật Chức Vụ'}
+        title={modalMode === 'create' ? 'Định nghĩa chức vụ mới' : 'Cập nhật chức vụ'}
         width="max-w-2xl"
       >
         <form onSubmit={handleSavePos} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Mã Chức vụ (Position Code) *</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Mã chức vụ (position code) *</label>
               <input
                 type="text" required
                 value={editingPos.positionCode || ''}
@@ -474,7 +474,7 @@ export function PositionsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="flex gap-2">
               <div className="w-1/2">
-                <label className="block text-[10px] font-medium text-gray-700 mb-1">Lương Min ($)</label>
+                <label className="block text-[10px] font-medium text-gray-700 mb-1">Lương min ($)</label>
                 <input
                   type="number"
                   value={editingPos.salaryRangeMin || 0}
@@ -483,7 +483,7 @@ export function PositionsPage() {
                 />
               </div>
               <div className="w-1/2">
-                <label className="block text-[10px] font-medium text-gray-700 mb-1">Lương Max ($)</label>
+                <label className="block text-[10px] font-medium text-gray-700 mb-1">Lương max ($)</label>
                 <input
                   type="number"
                   value={editingPos.salaryRangeMax || 0}
@@ -552,7 +552,7 @@ export function PositionsPage() {
               type="submit"
               className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold"
             >
-              Lưu Thông Tin
+              Lưu thông tin
             </button>
           </div>
         </form>
@@ -561,7 +561,7 @@ export function PositionsPage() {
       <Modal
         isOpen={!!deletingPos}
         onClose={() => setDeletingPos(null)}
-        title="Xóa Chức Vụ"
+        title="Xóa chức vụ"
         isDestructive
         width="max-w-md"
       >
