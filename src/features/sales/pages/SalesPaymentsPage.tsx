@@ -38,11 +38,11 @@ export function SalesPaymentsPage() {
         paymentCode: p.transactionRef || `PAY-${p.id}`,
         invoiceCode: p.invoice?.invoiceNumber || '',
         customerName: p.invoice?.customerId || 'Khách lẻ',
-        paymentMethod: p.paymentMethod?.methodCode === 'CASH' ? 'TIEN_MAT' : 'CHUYEN_KHOAN',
+        paymentMethod: (p.paymentMethod?.methodCode === 'CASH' ? 'TIEN_MAT' : 'CHUYEN_KHOAN') as SalesPaymentRecord['paymentMethod'],
         paymentDate: p.paymentDate ? p.paymentDate.substring(0, 10) : new Date().toISOString().substring(0, 10),
         amount: p.amountPaid || 0,
         receiver: 'Nhân viên thanh toán',
-        status: 'DA_THU',
+        status: 'DA_THU' as SalesPaymentRecord['status'],
         notes: p.transactionRef || '',
       }));
       setData(mapped);

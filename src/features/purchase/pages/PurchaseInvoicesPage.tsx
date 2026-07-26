@@ -34,7 +34,7 @@ export function PurchaseInvoicesPage() {
     setIsLoading(true);
     try {
       const res = await axiosClient.get('/purchase/orders');
-      const list = Array.isArray(res) ? res : res?.content || [];
+      const list = Array.isArray(res) ? res : (res as any)?.content || [];
       const mapped: PurchaseInvoiceRecord[] = list.map((item: any) => {
         const status: PurchaseInvoiceRecord['status'] =
           item.status === 'DELIVERED' || item.status === 'COMPLETED'

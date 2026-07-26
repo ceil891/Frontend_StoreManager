@@ -9,9 +9,18 @@ interface ModalProps {
   children: React.ReactNode;
   width?: string;
   isDestructive?: boolean;
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'erp';
 }
 
-export function Modal({ isOpen, onClose, title, children, width = 'max-w-md', isDestructive = false }: ModalProps) {
+const SIZE_CLASSES: Record<string, string> = {
+  sm: 'max-w-sm',
+  md: 'max-w-md',
+  lg: 'max-w-lg',
+  xl: 'max-w-xl',
+  erp: 'erp-form',
+};
+
+export function Modal({ isOpen, onClose, title, children, width = 'max-w-md', isDestructive = false, size }: ModalProps) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -30,6 +39,8 @@ export function Modal({ isOpen, onClose, title, children, width = 'max-w-md', is
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose]);
+
+  const sizeClass = size ? SIZE_CLASSES[size] : width;
 
   return (
     <AnimatePresence>
@@ -50,7 +61,7 @@ export function Modal({ isOpen, onClose, title, children, width = 'max-w-md', is
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
-            className={`relative w-full ${width} bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col z-50`}
+            className={`relative w-full ${sizeClass} bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col z-50 my-auto max-h-[85vh]`}
           >
             {/* Header */}
             <div className={`flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 ${
@@ -69,7 +80,7 @@ export function Modal({ isOpen, onClose, title, children, width = 'max-w-md', is
             </div>
 
             {/* Content */}
-            <div className="p-6 overflow-y-auto max-h-[80vh]">
+            <div className={`p-6 overflow-y-auto ${size === 'erp' ? 'erp-form-content' : 'max-h-[80vh]'}`}>
               {children}
             </div>
           </motion.div>

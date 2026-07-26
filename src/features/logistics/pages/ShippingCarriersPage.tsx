@@ -38,7 +38,7 @@ export function ShippingCarriersPage() {
           carrierName: item.carrierName || 'Hãng vận chuyển',
           phone: '1900 1234',
           address: 'Hà Nội, Việt Nam',
-          apiStatus: item.isActive ? 'CONNECTED' : 'DISCONNECTED',
+          apiStatus: (item.isActive ? 'CONNECTED' : 'DISCONNECTED') as CarrierRecord['apiStatus'],
           serviceTypes: 'Standard, Fast',
           notes: item.note || ''
         }));

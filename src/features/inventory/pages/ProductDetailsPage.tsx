@@ -1,9 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, Tag, Layers, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
+import { TreeSelect } from '@/shared/components/ui/TreeSelect';
+import { FileDropzone } from '@/shared/components/ui/FileDropzone';
+import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useInventoryStore } from '../store/inventoryStore';
 
 interface ProductDetailRecord {
   id: string;
@@ -17,43 +22,27 @@ interface ProductDetailRecord {
   notes?: string;
 }
 
-const MOCK_PRODUCTS: ProductDetailRecord[] = [
-  {
-    id: '1',
-    barcode: '8934563123456',
-    productName: 'Sữa tươi tiệt trùng Vinamilk ít đường 1L',
-    categoryName: 'Sữa & Sản phẩm từ sữa',
-    brand: 'Vinamilk',
-    sellingPrice: 32000,
-    costPrice: 26000,
-    status: 'DANG_KINH_DOANH',
-    notes: 'Sản phẩm tiêu dùng thiết yếu bán chạy nhất quý 1/2026',
-  },
-  {
-    id: '2',
-    barcode: '8934563123457',
-    productName: 'Nước ngọt Coca Cola chai 1.5L',
-    categoryName: 'Nước giải khát',
-    brand: 'Coca-Cola',
-    sellingPrice: 20000,
-    costPrice: 15500,
-    status: 'DANG_KINH_DOANH',
-  },
-  {
-    id: '3',
-    barcode: '8934563123458',
-    productName: 'Bánh quy kem Oreo hộp giấy 248g',
-    categoryName: 'Bánh kẹo',
-    brand: 'Oreo',
-    sellingPrice: 45000,
-    costPrice: 38000,
-    status: 'NGUNG_KINH_DOANH',
-    notes: 'Ngừng kinh doanh mẫu hộp giấy để chuyển sang bao bì nhựa mới',
-  },
-];
-
 export function ProductDetailsPage() {
-  const [data, setData] = useState<ProductDetailRecord[]>(MOCK_PRODUCTS);
+  const { products: storeProducts, fetchProducts, addProduct, updateProduct, deleteProduct } = useInventoryStore();
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  const data: ProductDetailRecord[] = useMemo(() => {
+    return storeProducts.map((p) => ({
+      id: p.id,
+      barcode: (p.barcodes && p.barcodes[0]) || p.sku,
+      productName: p.name,
+      categoryName: p.category || 'Mặc định',
+      brand: p.brand || 'Chính hãng',
+      sellingPrice: p.price || 0,
+      costPrice: p.costPrice || 0,
+      status: p.status === 'INACTIVE' ? 'NGUNG_KINH_DOANH' : 'DANG_KINH_DOANH',
+      notes: (p as any).notes || '',
+    }));
+  }, [storeProducts]);
+
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ProductDetailRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -65,7 +54,7 @@ export function ProductDetailsPage() {
     const q = search.toLowerCase();
     return data.filter(
       (d) =>
-        d.barcode.includes(q) ||
+        d.barcode.toLowerCase().includes(q) ||
         d.productName.toLowerCase().includes(q) ||
         d.brand.toLowerCase().includes(q) ||
         d.categoryName.toLowerCase().includes(q)
@@ -75,10 +64,10 @@ export function ProductDetailsPage() {
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingItem({
-      barcode: '',
+      barcode: `893${Math.floor(1000000000 + Math.random() * 9000000000)}`,
       productName: '',
-      categoryName: '',
-      brand: '',
+      categoryName: 'Chung',
+      brand: 'Chính hãng',
       sellingPrice: 0,
       costPrice: 0,
       status: 'DANG_KINH_DOANH',
@@ -93,32 +82,33 @@ export function ProductDetailsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.barcode || !editingItem.productName) return;
 
+    const payload: any = {
+      sku: editingItem.barcode,
+      name: editingItem.productName,
+      category: editingItem.categoryName || 'Mặc định',
+      brand: editingItem.brand || 'Chính hãng',
+      price: Number(editingItem.sellingPrice || 0),
+      costPrice: Number(editingItem.costPrice || 0),
+      status: editingItem.status === 'NGUNG_KINH_DOANH' ? 'INACTIVE' : 'ACTIVE',
+      notes: editingItem.notes || '',
+    };
+
     if (modalMode === 'create') {
-      const newItem: ProductDetailRecord = {
-        id: String(data.length + 1),
-        barcode: editingItem.barcode!,
-        productName: editingItem.productName!,
-        categoryName: editingItem.categoryName || 'Mặc định',
-        brand: editingItem.brand || 'Không có',
-        sellingPrice: Number(editingItem.sellingPrice || 0),
-        costPrice: Number(editingItem.costPrice || 0),
-        status: editingItem.status as any || 'DANG_KINH_DOANH',
-        notes: editingItem.notes,
-      };
-      setData([...data, newItem]);
-    } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as ProductDetailRecord) : d)));
+      await addProduct(payload);
+    } else if (editingItem.id) {
+      await updateProduct(editingItem.id, payload);
     }
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa sản phẩm này khỏi hệ thống?')) {
-      setData(data.filter((d) => d.id !== id));
+      await deleteProduct(id);
+      if (selected?.id === id) setSelected(null);
     }
   };
 
@@ -207,9 +197,9 @@ export function ProductDetailsPage() {
         </div>
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition"
+          className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap"
         >
-          <Plus className="w-4 h-4" /> Thêm Sản Phẩm
+          <Plus className="w-4 h-4" /> Thêm Sản Phẩm Mới
         </button>
       </div>
 
@@ -293,91 +283,240 @@ export function ProductDetailsPage() {
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã vạch / barcode *</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã vạch / Barcode *</label>
+                {modalMode === 'create' && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingItem(prev => ({
+                        ...prev,
+                        barcode: `893${Math.floor(1000000000 + Math.random() * 9000000000)}`
+                      }))
+                    }
+                    className="text-[10px] text-primary hover:underline font-medium"
+                  >
+                    Tự sinh EAN-13
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingItem.barcode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, barcode: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
                 placeholder="Mã vạch sản phẩm"
                 required
                 disabled={modalMode === 'edit'}
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Thương hiệu</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thương hiệu / Hãng SX</label>
               <input
                 type="text"
                 value={editingItem.brand || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, brand: e.target.value })}
-                className="w-full p-2 border rounded"
-                placeholder="Ví dụ: Vinamilk"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                placeholder="Ví dụ: Vinamilk, Samsung..."
               />
             </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Tên sản phẩm *</label>
-            <input
-              type="text"
-              value={editingItem.productName || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, productName: e.target.value })}
-              className="w-full p-2 border rounded"
-              placeholder="Tên đầy đủ của mặt hàng"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Danh mục phân loại</label>
-            <input
-              type="text"
-              value={editingItem.categoryName || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, categoryName: e.target.value })}
-              className="w-full p-2 border rounded"
-              placeholder="Ví dụ: Đồ uống"
-            />
-          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Giá nhập (VND) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên sản phẩm đầy đủ *</label>
               <input
-                type="number"
-                value={editingItem.costPrice || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, costPrice: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                type="text"
+                value={editingItem.productName || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, productName: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                placeholder="Tên đầy đủ của mặt hàng kinh doanh..."
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Giá bán lẻ (VND) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên ngắn / Viết tắt (Short Name - In HĐ/POS)</label>
               <input
-                type="number"
-                value={editingItem.sellingPrice || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, sellingPrice: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
-                required
+                type="text"
+                value={(editingItem as any).shortName || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, shortName: e.target.value } as any)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                placeholder="Tên rút gọn in phiếu..."
               />
             </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Trạng thái kinh doanh *</label>
-            <select
-              value={editingItem.status || 'DANG_KINH_DOANH'}
-              onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-              className="w-full p-2 border rounded"
-            >
-              <option value="DANG_KINH_DOANH">Đang kinh doanh (bán hàng)</option>
-              <option value="NGUNG_KINH_DOANH">Ngừng Kinh Doanh (Ẩn danh mục)</option>
-            </select>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhà cung cấp cung ứng chính (Supplier)</label>
+              <SearchLookupModal
+                title="Chọn Nhà Cung Cấp Mặc Định"
+                iconType="building"
+                placeholder="Chọn nhà cung cấp chính..."
+                value={(editingItem as any).supplierId}
+                options={[
+                  { id: 'SUP-VINAMILK', code: 'SUP-01', name: 'Vinamilk Corporation', subtitle: 'Hàng tiêu dùng' },
+                  { id: 'SUP-UNILEVER', code: 'SUP-02', name: 'Unilever Việt Nam', subtitle: 'Hóa mỹ phẩm' },
+                  { id: 'SUP-SAMSUNG', code: 'SUP-03', name: 'Samsung Electronics', subtitle: 'Thiết bị điện tử' },
+                ]}
+                onChange={(val) => setEditingItem(prev => ({ ...prev, supplierId: val } as any))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thẻ phân loại (Tags)</label>
+              <input
+                type="text"
+                value={(editingItem as any).tags || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, tags: e.target.value } as any)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                placeholder="VD: Best-Seller, Hang-Khuyen-Mai, Hot..."
+              />
+            </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục phân cấp (Parent Category) *</label>
+              <TreeSelect
+                value={editingItem.categoryName}
+                onChange={(val) => setEditingItem({ ...editingItem, categoryName: val })}
+                placeholder="-- Chọn danh mục sản phẩm --"
+                options={[
+                  {
+                    id: 'Điện tử / Công nghệ',
+                    name: 'Điện tử & Công nghệ',
+                    children: [
+                      { id: 'Điện thoại & Máy tính bảng', name: 'Điện thoại & Máy tính bảng' },
+                      { id: 'Phụ kiện máy tính', name: 'Phụ kiện máy tính' },
+                    ],
+                  },
+                  {
+                    id: 'Thực phẩm & Đồ uống',
+                    name: 'Thực phẩm & Đồ uống',
+                    children: [
+                      { id: 'Nước giải khát', name: 'Nước giải khát' },
+                      { id: 'Thực phẩm đóng hộp', name: 'Thực phẩm đóng hộp' },
+                    ],
+                  },
+                  { id: 'Thời trang & Phụ kiện', name: 'Thời trang & Phụ kiện' },
+                  { id: 'Gia dụng & Đời sống', name: 'Gia dụng & Đời sống' },
+                ]}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn vị tính Master (UOM) *</label>
+              <select
+                value={editingItem.unit || 'Cái'}
+                onChange={(e) => setEditingItem({ ...editingItem, unit: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              >
+                <option value="Cái">Cái / Chiếc (Unit)</option>
+                <option value="Hộp">Hộp (Box)</option>
+                <option value="Thùng">Thùng (Carton)</option>
+                <option value="Chai">Chai / Lọ (Bottle)</option>
+                <option value="Kg">Kilogram (Kg)</option>
+                <option value="Gói">Gói (Pack)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá nhập chi phí (Cost Price) *</label>
+              <CurrencyInput
+                value={editingItem.costPrice || 0}
+                onChange={(val) => setEditingItem({ ...editingItem, costPrice: val })}
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá bán lẻ đề xuất (Selling Price) *</label>
+              <CurrencyInput
+                value={editingItem.sellingPrice || 0}
+                onChange={(val) => setEditingItem({ ...editingItem, sellingPrice: val })}
+                placeholder="0"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Định mức tồn tối thiểu (Reorder Level)</label>
+              <input
+                type="number"
+                value={editingItem.reorderPoint ?? 10}
+                onChange={(e) => setEditingItem({ ...editingItem, reorderPoint: parseInt(e.target.value) || 0 })}
+                placeholder="10"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tồn kho an toàn (Safety Stock)</label>
+              <input
+                type="number"
+                value={editingItem.safetyStock ?? 5}
+                onChange={(e) => setEditingItem({ ...editingItem, safetyStock: parseInt(e.target.value) || 0 })}
+                placeholder="5"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thuế suất VAT (%)</label>
+              <select
+                value={editingItem.vatRate ?? 10}
+                onChange={(e) => setEditingItem({ ...editingItem, vatRate: parseInt(e.target.value) || 0 })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              >
+                <option value={0}>0% (Miễn thuế / Không chịu thuế)</option>
+                <option value={5}>5% (Thuế suất ưu đãi)</option>
+                <option value={8}>8% (Nghị định giảm thuế VAT)</option>
+                <option value={10}>10% (Thuế suất chuẩn GTGT)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái kinh doanh *</label>
+              <select
+                value={editingItem.status || 'DANG_KINH_DOANH'}
+                onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+              >
+                <option value="DANG_KINH_DOANH">Đang kinh doanh (Active)</option>
+                <option value="NGUNG_KINH_DOANH">Ngừng Kinh Doanh (Inactive)</option>
+              </select>
+            </div>
+          </div>
+
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi chú chi tiết</label>
-            <textarea
-              value={editingItem.notes || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border rounded"
-              rows={3}
-              placeholder="Mô tả đặc điểm sản phẩm..."
+            <FileDropzone
+              accept=".png,.jpg,.jpeg,.pdf"
+              label="Bộ sưu tập ảnh sản phẩm & Tài liệu kỹ thuật"
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú in hóa đơn (External Note)</label>
+              <textarea
+                value={editingItem.notes || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary resize-none"
+                rows={2}
+                placeholder="Mô tả in trên phiếu xuất..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú nội bộ (Internal Note - Chỉ nhân viên thấy)</label>
+              <textarea
+                value={(editingItem as any).internalNote || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, internalNote: e.target.value } as any)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500 resize-none"
+                rows={2}
+                placeholder="Lưu ý bảo quản, thông số kỹ thuật nội bộ..."
+              />
+            </div>
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t">
             <button

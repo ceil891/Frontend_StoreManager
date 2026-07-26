@@ -23,21 +23,29 @@ interface CommandItem {
   icon: React.ElementType;
 }
 
+function collectNavItems(itemList: any[], groupName: string, role: RoleType | null, result: CommandItem[]) {
+  for (const item of itemList) {
+    if (item.children && item.children.length > 0) {
+      collectNavItems(item.children, `${groupName} › ${item.name}`, role, result);
+    } else if (item.href) {
+      if (!item.roles || (role && item.roles.includes(role))) {
+        result.push({
+          id: item.href,
+          name: item.name,
+          href: item.href,
+          group: groupName,
+          icon: item.icon,
+        });
+      }
+    }
+  }
+}
+
 function useCommandItems(role: RoleType | null): CommandItem[] {
   return useMemo(() => {
     const items: CommandItem[] = [];
     for (const group of NAV_GROUPS) {
-      for (const item of group.items) {
-        if (!item.roles || (role && item.roles.includes(role))) {
-          items.push({
-            id: item.href,
-            name: item.name,
-            href: item.href,
-            group: group.group,
-            icon: item.icon,
-          });
-        }
-      }
+      collectNavItems(group.items, group.group, role, items);
     }
     return items;
   }, [role]);

@@ -1,21 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Download, Wallet, CreditCard, Activity, ArrowUpRight, ArrowDownRight, FileText } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import type { ColumnDef } from '@tanstack/react-table';
-
-// --- MOCK DATA ---
-const FINANCE_DATA = [
-  { month: 'T1', income: 400, expense: 240, profit: 160 },
-  { month: 'T2', income: 300, expense: 139, profit: 161 },
-  { month: 'T3', income: 200, expense: 980, profit: -780 },
-  { month: 'T4', income: 278, expense: 390, profit: -112 },
-  { month: 'T5', income: 189, expense: 480, profit: -291 },
-  { month: 'T6', income: 239, expense: 380, profit: -141 },
-  { month: 'T7', income: 349, expense: 430, profit: -81 },
-];
+import { axiosClient } from '@/shared/lib/axiosClient';
 
 interface ExpenseTransaction {
   id: string;
@@ -33,14 +23,44 @@ const RECENT_EXPENSES: ExpenseTransaction[] = [
   { id: 'EXP-004', category: 'Marketing', description: 'Quảng cáo Facebook', amount: 15000000, date: '12/05/2024', status: 'PAID' },
 ];
 
-const KPI_CARDS = [
-  { title: 'Tổng thu', value: '850.000.000đ', trend: '+15%', isUp: true, icon: Wallet, color: 'text-indigo-600 bg-indigo-50 border-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/30 dark:border-indigo-900/50' },
-  { title: 'Tổng chi', value: '420.000.000đ', trend: '+5%', isUp: false, icon: CreditCard, color: 'text-rose-600 bg-rose-50 border-rose-100 dark:text-rose-400 dark:bg-rose-900/30 dark:border-rose-900/50' },
-  { title: 'Lợi nhuận gộp', value: '430.000.000đ', trend: '+25%', isUp: true, icon: Activity, color: 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-900/50' },
-];
-
 export function FinanceReportPage() {
   const [period, setPeriod] = useState('2024');
+  const [financeData, setFinanceData] = useState([
+    { month: 'T1', income: 400, expense: 240, profit: 160 },
+    { month: 'T2', income: 300, expense: 174, profit: 126 },
+    { month: 'T3', income: 500, expense: 300, profit: 200 },
+    { month: 'T4', income: 600, expense: 360, profit: 240 },
+    { month: 'T5', income: 480, expense: 290, profit: 190 },
+    { month: 'T6', income: 550, expense: 325, profit: 225 },
+    { month: 'T7', income: 620, expense: 372, profit: 248 },
+  ]);
+
+  useEffect(() => {
+    const fetchProfitLoss = async () => {
+      try {
+        const res = await axiosClient.get<any, any>('/reports/profit-loss');
+        const data = res?.data || res;
+        if (Array.isArray(data) && data.length > 0) {
+          setFinanceData(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch profit loss report:', error);
+      }
+    };
+    fetchProfitLoss();
+  }, []);
+
+  const kpis = useMemo(() => {
+    const totalIncome = financeData.reduce((acc, curr) => acc + Number(curr.income), 0) * 1000000;
+    const totalExpense = financeData.reduce((acc, curr) => acc + Number(curr.expense), 0) * 1000000;
+    const totalProfit = totalIncome - totalExpense;
+
+    return [
+      { title: 'Tổng thu', value: totalIncome.toLocaleString('vi-VN') + 'đ', trend: '+15%', isUp: true, icon: Wallet, color: 'text-indigo-600 bg-indigo-50 border-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/30 dark:border-indigo-900/50' },
+      { title: 'Tổng chi (Giá vốn COGS)', value: totalExpense.toLocaleString('vi-VN') + 'đ', trend: '+5%', isUp: false, icon: CreditCard, color: 'text-rose-600 bg-rose-50 border-rose-100 dark:text-rose-400 dark:bg-rose-900/30 dark:border-rose-900/50' },
+      { title: 'Lợi nhuận gộp', value: totalProfit.toLocaleString('vi-VN') + 'đ', trend: '+25%', isUp: true, icon: Activity, color: 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-900/50' },
+    ];
+  }, [financeData]);
 
   const columns = useMemo<ColumnDef<ExpenseTransaction>[]>(
     () => [
@@ -116,7 +136,7 @@ export function FinanceReportPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {KPI_CARDS.map((kpi, idx) => (
+        {kpis.map((kpi, idx) => (
           <div key={idx} className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${kpi.color}`}>
@@ -140,7 +160,7 @@ export function FinanceReportPage() {
         <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Biểu đồ thu chi & Lợi nhuận (triệu VNĐ)</h3>
         <div className="h-[400px]">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={FINANCE_DATA} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+            <BarChart data={financeData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" dark-stroke="#374151" opacity={0.5} />
               <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 12}} dy={10} />
               <YAxis axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 12}} />

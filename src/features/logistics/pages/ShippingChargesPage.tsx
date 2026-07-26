@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, Scale, MapPin, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useLogisticsStore } from '../store/logisticsStore';
 
 interface ShippingChargeRecord {
   id: string;
@@ -17,33 +18,33 @@ interface ShippingChargeRecord {
   notes?: string;
 }
 
-const MOCK_CHARGES: ShippingChargeRecord[] = [
-  {
-    id: '1',
-    chargeCode: 'SC-URBAN-STANDARD',
-    maxDistanceKm: 15,
-    maxWeightKg: 5,
-    pricePerUnit: 25000,
-    shippingMethod: 'Giao hàng tiêu chuẩn',
-    oversizeSurcharge: 10000,
-    status: 'ACTIVE',
-    notes: 'Biểu phí chuẩn nội thành cho đơn hàng gọn nhẹ dưới 5kg',
-  },
-  {
-    id: '2',
-    chargeCode: 'SC-INTERPROVINCIAL',
-    maxDistanceKm: 300,
-    maxWeightKg: 20,
-    pricePerUnit: 80000,
-    shippingMethod: 'Giao hàng đường bộ',
-    oversizeSurcharge: 30000,
-    status: 'ACTIVE',
-    notes: 'Phí giao hàng liên tỉnh bưu cục đường bộ',
-  },
-];
-
 export function ShippingChargesPage() {
-  const [data, setData] = useState<ShippingChargeRecord[]>(MOCK_CHARGES);
+  const {
+    shippingCharges: storeCharges,
+    fetchShippingCharges,
+    addShippingCharge,
+    updateShippingCharge,
+    deleteShippingCharge,
+  } = useLogisticsStore();
+
+  useEffect(() => {
+    fetchShippingCharges();
+  }, [fetchShippingCharges]);
+
+  const data: ShippingChargeRecord[] = useMemo(() => {
+    return storeCharges.map((s) => ({
+      id: s.id,
+      chargeCode: s.zoneCode,
+      maxDistanceKm: 50,
+      maxWeightKg: 10,
+      pricePerUnit: s.baseFee,
+      shippingMethod: `${s.carrierName} - ${s.zoneName}`,
+      oversizeSurcharge: s.perKgFee,
+      status: s.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
+      notes: `Thời gian dự kiến: ${s.estimatedHours}h`,
+    }));
+  }, [storeCharges]);
+
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ShippingChargeRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -81,32 +82,30 @@ export function ShippingChargesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.chargeCode || !editingItem.shippingMethod) return;
-
     if (modalMode === 'create') {
-      const newItem: ShippingChargeRecord = {
-        id: String(data.length + 1),
-        chargeCode: editingItem.chargeCode!.toUpperCase(),
-        maxDistanceKm: Number(editingItem.maxDistanceKm || 0),
-        maxWeightKg: Number(editingItem.maxWeightKg || 0),
-        pricePerUnit: Number(editingItem.pricePerUnit || 0),
-        shippingMethod: editingItem.shippingMethod!,
-        oversizeSurcharge: Number(editingItem.oversizeSurcharge || 0),
-        status: editingItem.status as any || 'ACTIVE',
-        notes: editingItem.notes,
-      };
-      setData([...data, newItem]);
-    } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as ShippingChargeRecord) : d)));
+      await addShippingCharge({
+        zoneCode: editingItem.chargeCode || 'ZONE-01',
+        zoneName: editingItem.shippingMethod || 'Khu vực mới',
+        carrierName: 'Đối tác giao hàng',
+        baseFee: Number(editingItem.pricePerUnit || 0),
+        perKgFee: Number(editingItem.oversizeSurcharge || 0),
+        estimatedHours: 24,
+        status: 'ACTIVE',
+      });
+    } else if (editingItem.id) {
+      await updateShippingCharge(editingItem.id, {
+        baseFee: Number(editingItem.pricePerUnit || 0),
+        perKgFee: Number(editingItem.oversizeSurcharge || 0),
+      });
     }
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa cấu hình phí vận chuyển này?')) {
-      setData(data.filter((d) => d.id !== id));
+      await deleteShippingCharge(id);
     }
   };
 

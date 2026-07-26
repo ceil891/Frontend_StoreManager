@@ -1,28 +1,54 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Download, Eye, Edit, DollarSign, CheckCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useHrStore } from '../store/hrStore';
 
-interface PayrollItem {
-  id: string; userId: string; userName: string; department: string;
-  periodMonth: number; periodYear: number;
-  baseSalary: number; allowance: number; deduction: number; netSalary: number;
-  status: 'CHƯA_CHI_TRẢ' | 'ĐÃ_CHI_TRẢ';
+export interface PayrollItem {
+  id: string;
+  userId: string;
+  userName: string;
+  department: string;
+  periodMonth: number;
+  periodYear: number;
+  baseSalary: number;
+  allowance: number;
+  deduction: number;
+  netSalary: number;
+  status: string;
 }
 
-const fmt = (n: number) => n.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' });
-
-const MOCK: PayrollItem[] = [
-  { id:'1', userId:'U001', userName:'Nguyễn Văn an', department:'Kinh doanh', periodMonth:5, periodYear:2026, baseSalary:15000000, allowance:2000000, deduction:500000, netSalary:16500000, status:'ĐÃ_CHI_TRẢ' },
-  { id:'2', userId:'U002', userName:'Trần thị Bích', department:'Kho vận', periodMonth:5, periodYear:2026, baseSalary:10000000, allowance:1000000, deduction:300000, netSalary:10700000, status:'CHƯA_CHI_TRẢ' },
-  { id:'3', userId:'U003', userName:'Lê Hoàng Nam', department:'Kế toán', periodMonth:5, periodYear:2026, baseSalary:12000000, allowance:1500000, deduction:400000, netSalary:13100000, status:'CHƯA_CHI_TRẢ' },
-  { id:'4', userId:'U004', userName:'Phạm thị Lan', department:'Lễ tân', periodMonth:5, periodYear:2026, baseSalary:8000000, allowance:500000, deduction:200000, netSalary:8300000, status:'ĐÃ_CHI_TRẢ' },
-];
-
 export function PayrollPage() {
-  const [data, setData] = useState<PayrollItem[]>(MOCK);
+  const setData = (_fn: any) => {};
+  const {
+    payrolls: storePayrolls,
+    fetchPayrolls,
+    addPayroll,
+    updatePayroll,
+    deletePayroll,
+  } = useHrStore();
+
+  useEffect(() => {
+    fetchPayrolls();
+  }, [fetchPayrolls]);
+
+  const data: PayrollItem[] = useMemo(() => {
+    return storePayrolls.map((p) => ({
+      id: p.id,
+      userId: 'U001',
+      userName: p.employeeName,
+      department: 'Phòng ban',
+      periodMonth: Number(p.payrollMonth.split('-')[1] || 6),
+      periodYear: Number(p.payrollMonth.split('-')[0] || 2026),
+      baseSalary: p.baseSalary,
+      allowance: p.allowances + p.kpiBonus,
+      deduction: p.deductions,
+      netSalary: p.netSalary,
+      status: p.status === 'PAID' ? 'ĐÃ_CHI_TRẢ' : 'CHƯA_CHI_TRẢ',
+    }));
+  }, [storePayrolls]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Tất cả');
   const [selected, setSelected] = useState<PayrollItem|null>(null);
@@ -89,15 +115,15 @@ export function PayrollPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
             <p className="text-xs text-gray-500 mb-1">Tổng quỹ lương kỳ này</p>
-            <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(MOCK.reduce((s,d)=>s+d.netSalary,0))}</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(data.reduce((s,d)=>s+d.netSalary,0))}</p>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
             <p className="text-xs text-gray-500 mb-1">Đã chi trả</p>
-            <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{fmt(MOCK.filter(d=>d.status==='ĐÃ_CHI_TRẢ').reduce((s,d)=>s+d.netSalary,0))}</p>
+            <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{fmt(data.filter(d=>d.status==='ĐÃ_CHI_TRẢ').reduce((s,d)=>s+d.netSalary,0))}</p>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
             <p className="text-xs text-gray-500 mb-1">Còn phải chi</p>
-            <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{fmt(MOCK.filter(d=>d.status==='CHƯA_CHI_TRẢ').reduce((s,d)=>s+d.netSalary,0))}</p>
+            <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{fmt(data.filter(d=>d.status==='CHƯA_CHI_TRẢ').reduce((s,d)=>s+d.netSalary,0))}</p>
           </div>
         </div>
 
@@ -112,7 +138,7 @@ export function PayrollPage() {
             <option value="ĐÃ_CHI_TRẢ">Đã chi trả</option>
           </select>
         </div>
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected}/>
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)}/>
       </div>
 
       <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Phiếu lương: ${selected.userName}`:''} width="max-w-lg">

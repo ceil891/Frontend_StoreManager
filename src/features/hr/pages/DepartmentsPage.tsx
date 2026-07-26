@@ -3,9 +3,15 @@ import { Plus, Download, Search, Eye, Building2, Users, UserCheck, Briefcase, Do
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { TreeSelect } from '@/shared/components/ui/TreeSelect';
+import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
+import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
+import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useHrStore, type DepartmentRecord } from '../store/hrStore';
 import { useUserStore, BRANCH_OPTIONS } from '../store/userStore';
+import { toast } from 'sonner';
+import { exportToCsv } from '@/shared/utils/exportCsv';
 
 const statusStyles = {
   ACTIVE: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200',
@@ -229,11 +235,25 @@ export function DepartmentsPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý cơ cấu phòng ban, theo dõi phân bổ nhân sự, kiểm toán ngân sách bộ phận và theo dõi chi phí trung tâm.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
+            <button
+              onClick={() => {
+                exportToCsv('danh_sach_phong_ban', filtered, [
+                  { header: 'Mã phòng ban', accessor: r => r.departmentCode },
+                  { header: 'Tên phòng ban', accessor: r => r.departmentName },
+                  { header: 'Mã trung tâm chi phí', accessor: r => r.costCenterCode || '' },
+                  { header: 'Số lượng nhân sự', accessor: r => r.totalEmployees || 0 },
+                  { header: 'Ngân sách năm ($)', accessor: r => r.allocatedAnnualBudgetUsd || 0 },
+                  { header: 'Trạng thái', accessor: r => r.status },
+                  { header: 'Mô tả', accessor: r => r.description || '' },
+                ]);
+                toast.success('Đã xuất danh sách phòng ban dạng CSV!');
+              }}
+              className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap"
+            >
               <Download className="w-4 h-4" /> Xuất sơ đồ tổ chức
             </button>
-            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
-              <Plus className="w-4 h-4" /> Tạo Phòng ban
+            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap">
+              <Plus className="w-4 h-4" /> Tạo Phòng Ban Mới
             </button>
           </div>
         </div>
@@ -426,49 +446,53 @@ export function DepartmentsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Parent division (khối)</label>
-              <select
-                value={editingDept.parentId || ''}
-                onChange={(e) => setEditingDept({ ...editingDept, parentId: e.target.value || undefined })}
-                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
-              >
-                <option value="">-- Trực thuộc Ban giám đốc --</option>
-                {data.filter(d => d.id !== editingDept.id).map(dept => (
-                  <option key={dept.id} value={dept.id}>{dept.departmentName}</option>
-                ))}
-              </select>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khối / Phòng ban cấp trên (Tree Hierarchy)</label>
+              <TreeSelect
+                value={editingDept.parentId}
+                onChange={(val) => setEditingDept({ ...editingDept, parentId: val || undefined })}
+                placeholder="-- Trực thuộc Ban Giám Đốc --"
+                options={data
+                  .filter(d => d.id !== editingDept.id)
+                  .map(dept => ({
+                    id: dept.id,
+                    name: `${dept.departmentName} (${dept.departmentCode})`,
+                  }))}
+              />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Trưởng phòng (Head)</label>
-              <select
-                value={editingDept.headUserId || ''}
-                onChange={(e) => setEditingDept({ ...editingDept, headUserId: e.target.value || undefined })}
-                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
-              >
-                <option value="">-- Không có --</option>
-                {users.map(u => (
-                  <option key={u.id} value={u.id}>{u.fullName}</option>
-                ))}
-              </select>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trưởng phòng / Trưởng bộ phận (Head User)</label>
+              <SearchLookupModal
+                title="Chọn Trưởng Phòng / Quản Lý"
+                iconType="user"
+                placeholder="Chọn nhân sự quản lý..."
+                value={editingDept.headUserId}
+                options={users.map(u => ({
+                  id: u.id,
+                  code: u.username,
+                  name: u.fullName,
+                  subtitle: `Email: ${u.email || 'N/A'} - Chức vụ: ${u.role}`
+                }))}
+                onChange={(val) => setEditingDept(prev => ({ ...prev, headUserId: val || undefined }))}
+              />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Ngân sách năm ($)</label>
-              <input
-                type="number"
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngân sách hoạt động hàng năm</label>
+              <CurrencyInput
                 value={editingDept.allocatedAnnualBudgetUsd || 0}
-                onChange={(e) => setEditingDept({ ...editingDept, allocatedAnnualBudgetUsd: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary"
+                onChange={(val) => setEditingDept(prev => ({ ...prev, allocatedAnnualBudgetUsd: val }))}
+                currencySymbol="$"
+                placeholder="0"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Trạng thái</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái hoạt động</label>
               <select
                 value={editingDept.status || 'ACTIVE'}
                 onChange={(e) => setEditingDept({ ...editingDept, status: e.target.value as any })}
-                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
               >
                 <option value="ACTIVE">Hoạt động (Active)</option>
                 <option value="RESTRUCTURING">Tái cấu trúc (Restructuring)</option>
@@ -479,13 +503,13 @@ export function DepartmentsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Chi nhánh vật lý</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chi nhánh / Trụ sở phụ trách</label>
             <select
               value={editingDept.locationId || ''}
               onChange={(e) => setEditingDept({ ...editingDept, locationId: e.target.value || undefined })}
-              className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
             >
-              <option value="">-- Trụ sở --</option>
+              <option value="">-- Trụ sở chính --</option>
               {BRANCH_OPTIONS.map(b => (
                 <option key={b.id} value={b.id}>{b.label}</option>
               ))}
@@ -493,12 +517,19 @@ export function DepartmentsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Sứ mệnh / Mô tả chung (Mission Statement)</label>
+            <FileDropzone
+              label="Quyết định thành lập & Quy chế vận hành phòng ban (PDF/Doc)"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Sứ mệnh & Nhiệm vụ chính (Mission Statement)</label>
             <textarea
               rows={2}
               value={editingDept.missionStatement || ''}
               onChange={(e) => setEditingDept({ ...editingDept, missionStatement: e.target.value })}
-              className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
+              placeholder="Mô tả chức năng, nhiệm vụ chính của phòng ban..."
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary resize-none"
             />
           </div>
 

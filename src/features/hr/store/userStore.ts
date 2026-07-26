@@ -83,111 +83,7 @@ export function normalizeSystemUser(
   };
 }
 
-const DEFAULT_MOCK_USERS: SystemUserRecord[] = [
-  normalizeSystemUser({
-    id: '1',
-    authUserId: 'usr_001',
-    userCode: 'USR-9901',
-    fullName: 'Nguyễn minh quân',
-    emailAddress: 'admin@system.com',
-    contactPhone: '0901234567',
-    avatarUrl: buildUserAvatarUrl('admin@system.com'),
-    assignedRole: 'SUPER_ADMIN',
-    departmentId: '1',
-    branchId: 'HQ',
-    branchLocation: 'Trụ sở chính - TP.HCM',
-    positionId: '1',
-    timezone: 'Asia/Ho_Chi_Minh',
-    locale: 'vi-VN',
-    hireDate: '2019-01-15',
-    employmentType: 'FULL_TIME',
-    status: 'ACTIVE',
-    lastLoginTimestamp: '2024-05-18 06:15:00',
-    mfaEnabled: true,
-    notes: 'Quản trị viên tối cao hệ thống RetailHub.',
-  }),
-  normalizeSystemUser({
-    id: '2',
-    authUserId: 'usr_002',
-    userCode: 'USR-8821',
-    fullName: 'Trần thị Lan',
-    emailAddress: 'manager@store.com',
-    contactPhone: '0912345678',
-    avatarUrl: buildUserAvatarUrl('manager@store.com'),
-    assignedRole: 'STORE_MANAGER',
-    departmentId: '1',
-    branchId: 'BR-001',
-    branchLocation: 'CH Quận 1',
-    positionId: '1',
-    managerId: '1',
-    hireDate: '2021-03-01',
-    employmentType: 'FULL_TIME',
-    status: 'ACTIVE',
-    lastLoginTimestamp: '2024-05-18 06:22:15',
-    mfaEnabled: true,
-    notes: 'Phê duyệt nhập xuất kho và điều phối ca POS.',
-  }),
-  normalizeSystemUser({
-    id: '3',
-    authUserId: 'usr_003',
-    userCode: 'USR-4412',
-    fullName: 'Lê Hoàng Nam',
-    emailAddress: 'staff@store.com',
-    contactPhone: '0923456789',
-    avatarUrl: buildUserAvatarUrl('staff@store.com'),
-    assignedRole: 'STAFF',
-    departmentId: '1',
-    branchId: 'BR-001',
-    branchLocation: 'CH Quận 1',
-    positionId: '1',
-    managerId: '2',
-    hireDate: '2022-08-10',
-    employmentType: 'FULL_TIME',
-    status: 'ACTIVE',
-    lastLoginTimestamp: '2024-05-18 05:40:10',
-    mfaEnabled: true,
-    notes: 'Vận hành quầy POS và chốt ca cuối ngày.',
-  }),
-  normalizeSystemUser({
-    id: '4',
-    authUserId: 'usr_004',
-    userCode: 'USR-1109',
-    fullName: 'Phạm thu Hà',
-    emailAddress: 'inventory@retailhub.vn',
-    contactPhone: '0934567890',
-    avatarUrl: buildUserAvatarUrl('inventory@retailhub.vn'),
-    assignedRole: 'INVENTORY_STAFF',
-    departmentId: '2',
-    branchId: 'BR-002',
-    branchLocation: 'CH Tân Bình',
-    positionId: '2',
-    managerId: '2',
-    hireDate: '2023-02-20',
-    employmentType: 'FULL_TIME',
-    status: 'ON_LEAVE',
-    lastLoginTimestamp: '2024-04-30 18:00:00',
-    mfaEnabled: true,
-    notes: 'Đang nghỉ phép dưỡng thai, dự kiến quay lại quý 3.',
-  }),
-];
 
-function mergeUsersWithDefaults(users: SystemUserRecord[]): SystemUserRecord[] {
-  const defaultByEmail = new Map(
-    DEFAULT_MOCK_USERS.map((u) => [u.emailAddress.toLowerCase(), u])
-  );
-  const seen = new Set<string>();
-  const merged = users.map((raw) => {
-    const def = defaultByEmail.get(raw.emailAddress.toLowerCase());
-    seen.add(raw.emailAddress.toLowerCase());
-    return normalizeSystemUser({ ...def, ...raw, id: raw.id });
-  });
-  for (const def of DEFAULT_MOCK_USERS) {
-    if (!seen.has(def.emailAddress.toLowerCase())) {
-      merged.push(def);
-    }
-  }
-  return merged;
-}
 
 interface UserStore {
   users: SystemUserRecord[];
@@ -209,11 +105,11 @@ export const useUserStore = create<UserStore>()(
       fetchUsers: async () => {
         set({ isLoading: true, error: null });
         try {
-          const response = await axiosClient.get<any, any[]>('/users?includeDeleted=false');
+          const response = await axiosClient.get<any, any[]>('/system/users');
           // Lấy danh sách roles trong DB để map roleId -> roleName
           let roles: any[] = [];
           try {
-            roles = await axiosClient.get<any, any[]>('/roles');
+            roles = await axiosClient.get<any, any[]>('/system/roles');
           } catch (roleErr) {
             console.warn('Failed to fetch roles, using fallback mapping:', roleErr);
           }

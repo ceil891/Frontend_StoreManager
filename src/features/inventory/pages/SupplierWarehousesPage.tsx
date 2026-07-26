@@ -1,8 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
+import { useInventoryStore } from '../store/inventoryStore';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, MapPin, Building2, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
+import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
+import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
 
 interface SupplierWarehouseRecord {
@@ -17,33 +21,13 @@ interface SupplierWarehouseRecord {
   notes?: string;
 }
 
-const MOCK_WAREHOUSES: SupplierWarehouseRecord[] = [
-  {
-    id: '1',
-    warehouseCode: 'SWH-GBL-01',
-    warehouseName: 'Kho đông Anh - toàn cầu',
-    supplierName: 'Nhà cung cấp toàn cầu',
-    address: 'Khu công nghiệp Đông Anh, Hà Nội',
-    contactPerson: 'Nguyễn Văn kho',
-    phone: '0912111222',
-    status: 'HOAT_DONG',
-    notes: 'Kho lớn hỗ trợ xe tải trên 10 tấn ra vào bốc dỡ hàng',
-  },
-  {
-    id: '2',
-    warehouseCode: 'SWH-ASI-02',
-    warehouseName: 'Kho cát lái - Á châu',
-    supplierName: 'Công ty nhập khẩu Á châu',
-    address: 'Cảng Cát Lái, Quận 2, TP. HCM',
-    contactPerson: 'Lê Văn cảng',
-    phone: '0988333444',
-    status: 'HOAT_DONG',
-    notes: 'Kho trung chuyển hàng nhập khẩu cảng biển',
-  },
-];
-
 export function SupplierWarehousesPage() {
-  const [data, setData] = useState<SupplierWarehouseRecord[]>(MOCK_WAREHOUSES);
+  const { supplierWarehouses: data, fetchSupplierWarehouses, addSupplierWarehouse, updateSupplierWarehouse, deleteSupplierWarehouse } = useInventoryStore();
+
+  useEffect(() => {
+    fetchSupplierWarehouses();
+  }, [fetchSupplierWarehouses]);
+
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<SupplierWarehouseRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -64,7 +48,7 @@ export function SupplierWarehousesPage() {
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingItem({
-      warehouseCode: '',
+      warehouseCode: `SWH-${Date.now().toString().slice(-4)}`,
       warehouseName: '',
       supplierName: '',
       address: '',
@@ -82,32 +66,33 @@ export function SupplierWarehousesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.warehouseCode || !editingItem.warehouseName || !editingItem.supplierName) return;
 
+    const payload: Omit<SupplierWarehouseRecord, 'id'> = {
+      warehouseCode: editingItem.warehouseCode.toUpperCase(),
+      warehouseName: editingItem.warehouseName,
+      supplierName: editingItem.supplierName,
+      address: editingItem.address || '',
+      contactPerson: editingItem.contactPerson || '',
+      phone: editingItem.phone || '',
+      status: editingItem.status || 'HOAT_DONG',
+      notes: editingItem.notes || '',
+    };
+
     if (modalMode === 'create') {
-      const newItem: SupplierWarehouseRecord = {
-        id: String(data.length + 1),
-        warehouseCode: editingItem.warehouseCode.toUpperCase(),
-        warehouseName: editingItem.warehouseName!,
-        supplierName: editingItem.supplierName!,
-        address: editingItem.address || '',
-        contactPerson: editingItem.contactPerson || '',
-        phone: editingItem.phone || '',
-        status: editingItem.status as any || 'HOAT_DONG',
-        notes: editingItem.notes,
-      };
-      setData([...data, newItem]);
-    } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as SupplierWarehouseRecord) : d)));
+      await addSupplierWarehouse(payload);
+    } else if (editingItem.id) {
+      await updateSupplierWarehouse(editingItem.id, payload);
     }
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa thông tin kho nhà cung cấp này?')) {
-      setData(data.filter((d) => d.id !== id));
+      await deleteSupplierWarehouse(id);
+      if (selected?.id === id) setSelected(null);
     }
   };
 
@@ -280,95 +265,124 @@ export function SupplierWarehousesPage() {
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã kho *</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã kho *</label>
+                {modalMode === 'create' && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingItem(prev => ({
+                        ...prev,
+                        warehouseCode: `SWH-${Math.floor(1000 + Math.random() * 9000)}`
+                      }))
+                    }
+                    className="text-[10px] text-emerald-600 hover:underline font-medium"
+                  >
+                    Tự sinh mã
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingItem.warehouseCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, warehouseCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
                 placeholder="SWH-XXXX"
                 required
                 disabled={modalMode === 'edit'}
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Số điện thoại kho *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại kho *</label>
               <input
                 type="text"
                 value={editingItem.phone || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, phone: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
                 placeholder="Số điện thoại kho"
                 required
               />
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tên kho hàng NCC *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên kho hàng NCC *</label>
               <input
                 type="text"
                 value={editingItem.warehouseName || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, warehouseName: e.target.value })}
-                className="w-full p-2 border rounded"
-                placeholder="Tên kho hàng đối tác"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                placeholder="Tên kho hàng đối tác..."
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Nhà cung cấp sở hữu *</label>
-              <input
-                type="text"
-                value={editingItem.supplierName || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, supplierName: e.target.value })}
-                className="w-full p-2 border rounded"
-                placeholder="Tên nhà cung cấp"
-                required
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhà cung cấp sở hữu *</label>
+              <SearchLookupModal
+                title="Chọn Nhà Cung Cấp Sở Hữu"
+                iconType="building"
+                placeholder="Chọn nhà cung cấp..."
+                value={editingItem.supplierName}
+                options={[
+                  { id: 'Vinamilk Corporation', code: 'SUP-VINAMILK', name: 'Công ty Cổ phần Sữa Việt Nam (Vinamilk)', subtitle: 'MST: 0300588569' },
+                  { id: 'Unilever Việt Nam', code: 'SUP-UNILEVER', name: 'Unilever Việt Nam Co., Ltd', subtitle: 'MST: 0302035542' },
+                  { id: 'Samsung Electronics VN', code: 'SUP-SAMSUNG', name: 'Samsung Electronics Vietnam', subtitle: 'MST: 2300329584' },
+                  { id: 'Công ty CP Masan Group', code: 'SUP-MASAN', name: 'Tập đoàn Masan Group', subtitle: 'MST: 0303576603' },
+                ]}
+                onChange={(val, opt) => setEditingItem(prev => ({ ...prev, supplierName: opt ? opt.name : val }))}
               />
             </div>
           </div>
+
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Địa chỉ kho *</label>
-            <input
-              type="text"
-              value={editingItem.address || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, address: e.target.value })}
-              className="w-full p-2 border rounded"
-              placeholder="Địa chỉ bốc xếp hàng"
-              required
+            <AddressCascadeSelect
+              addressDetail={editingItem.address || ''}
+              onChange={({ province, district, ward, addressDetail }) => {
+                const fullAddr = [addressDetail, ward, district, province].filter(Boolean).join(', ');
+                setEditingItem(prev => ({ ...prev, address: fullAddr }));
+              }}
             />
           </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Người liên hệ bốc xếp</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người liên hệ bốc xếp (Thủ kho)</label>
               <input
                 type="text"
                 value={editingItem.contactPerson || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, contactPerson: e.target.value })}
-                className="w-full p-2 border rounded"
-                placeholder="Tên thủ kho đối tác"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                placeholder="Tên thủ kho đối tác..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Trạng thái</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái hoạt động</label>
               <select
                 value={editingItem.status || 'HOAT_DONG'}
                 onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-                className="w-full p-2 border rounded"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
               >
                 <option value="HOAT_DONG">Hoạt Động (Cho phép bốc xếp)</option>
                 <option value="TAM_NGUNG">Tạm Ngưng (Đóng cửa bảo trì/sửa chữa)</option>
               </select>
             </div>
           </div>
+
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
+            <FileDropzone
+              label="Sơ đồ kho & Giấy tờ bàn giao bãi bốc xếp (PDF/Image)"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú & Phương thức lấy hàng</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border rounded"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"
               rows={3}
-              placeholder="Ghi chú thời gian bốc xếp, phương thức lấy hàng..."
+              placeholder="Ghi chú thời gian bốc xếp, phương thức lấy hàng, lịch hoạt động..."
             />
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t">

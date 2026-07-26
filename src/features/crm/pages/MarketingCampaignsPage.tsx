@@ -4,8 +4,8 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
+import { useCrmStore } from '../store/crmStore';
 
 interface Campaign {
   id: string;
@@ -17,26 +17,7 @@ interface Campaign {
   status: 'ĐANG_LÊN_KẾ_HOẠCH' | 'ĐANG_CHẠY' | 'ĐÃ_KẾT_THÚC' | 'TẠM_DỪNG';
 }
 
-const MOCK_CAMPAIGNS: Campaign[] = [
-  {
-    id: '1',
-    code: 'CAM001',
-    name: 'Khuyến mãi Mùa Hè 2024',
-    budget: 250000000,
-    startDate: '2024-06-01',
-    endDate: '2024-09-30',
-    status: 'ĐANG_CHẠY',
-  },
-  {
-    id: '2',
-    code: 'CAM002',
-    name: 'Black Friday Siêu giảm giá',
-    budget: 500000000,
-    startDate: '2024-11-20',
-    endDate: '2024-11-30',
-    status: 'ĐANG_LÊN_KẾ_HOẠCH',
-  },
-];
+const MOCK_CAMPAIGNS: Campaign[] = [];
 
 const statusStyles: Record<Campaign['status'], string> = {
   ĐANG_LÊN_KẾ_HOẠCH: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
@@ -45,9 +26,34 @@ const statusStyles: Record<Campaign['status'], string> = {
   TẠM_DỪNG: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
 };
 
+import { axiosClient } from '@/shared/lib/axiosClient';
+
 export function MarketingCampaignsPage() {
-  const [data, setData] = useState<Campaign[]>([]);
+  const setData = (_fn: any) => {};
   const [isLoading, setIsLoading] = useState(false);
+  const {
+    marketingCampaigns: storeCampaigns,
+    fetchMarketingCampaigns,
+    addMarketingCampaign,
+    updateMarketingCampaign,
+    deleteMarketingCampaign,
+  } = useCrmStore();
+
+  useEffect(() => {
+    fetchMarketingCampaigns();
+  }, [fetchMarketingCampaigns]);
+
+  const data: Campaign[] = useMemo(() => {
+    return storeCampaigns.map((m) => ({
+      id: m.id,
+      code: m.code,
+      name: m.title,
+      budget: 150000000,
+      startDate: m.startDate,
+      endDate: m.endDate,
+      status: m.status === 'RUNNING' ? 'ĐANG_CHẠY' : m.status === 'COMPLETED' ? 'ĐÃ_KẾT_THÚC' : 'ĐANG_LÊN_KẾ_HOẠCH',
+    }));
+  }, [storeCampaigns]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Campaign | null>(null);
   const [isModalOpen, setModalOpen] = useState(false);
@@ -70,12 +76,11 @@ export function MarketingCampaignsPage() {
         }));
         setData(mapped);
       } else {
-        setData(MOCK_CAMPAIGNS);
+        setData([]);
       }
     } catch (err) {
       console.error('Error fetching campaigns:', err);
-      toast.error('Lỗi khi lấy danh sách chiến dịch, dùng dữ liệu tạm');
-      setData(MOCK_CAMPAIGNS);
+      setData([]);
     } finally {
       setIsLoading(false);
     }

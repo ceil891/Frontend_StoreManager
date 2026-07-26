@@ -4,6 +4,7 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { exportToCsv } from '@/shared/utils/exportCsv';
 import { useInventoryStore, type CancelIssueRecord } from '../store/inventoryStore';
 
 export function CancelIssuePage() {
@@ -263,7 +264,21 @@ export function CancelIssuePage() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => { setIsLoading(true); fetchCancelIssues().finally(() => setIsLoading(false)); }}
+              onClick={() => {
+                exportToCsv('danh-sach-huy-hang', filtered, [
+                  { header: 'Mã phiếu', accessor: r => r.issueCode },
+                  { header: 'Mã SKU', accessor: r => r.sku },
+                  { header: 'Tên sản phẩm', accessor: r => r.productName },
+                  { header: 'Số lượng', accessor: r => r.quantity },
+                  { header: 'Tổng trị giá', accessor: r => r.totalValuation },
+                  { header: 'Lý do', accessor: r => r.reason },
+                  { header: 'Vị trí kho', accessor: r => r.locationHub },
+                  { header: 'Người báo cáo', accessor: r => r.reportedBy },
+                  { header: 'Người duyệt', accessor: r => r.authorizedBy || '' },
+                  { header: 'Trạng thái', accessor: r => r.status },
+                  { header: 'Ngày lập', accessor: r => r.loggedDate },
+                ]);
+              }}
               className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
             >
               <Download className="w-4 h-4" /> Xuất dữ liệu
@@ -554,6 +569,17 @@ export function CancelIssuePage() {
                 value={editingIssue.reportedBy || ''}
                 onChange={(e) => setEditingIssue({ ...editingIssue, reportedBy: e.target.value })}
                 className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                placeholder="Tên nhân viên báo cáo..."
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Người duyệt (Quản lý)</label>
+              <input
+                type="text"
+                value={editingIssue.authorizedBy || ''}
+                onChange={(e) => setEditingIssue({ ...editingIssue, authorizedBy: e.target.value })}
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                placeholder="Tên quản lý duyệt..."
               />
             </div>
             <div>
@@ -569,6 +595,17 @@ export function CancelIssuePage() {
                 <option value="PROCESSED">Đã hạch toán</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hình ảnh đính kèm (URL ảnh minh chứng, phân cách bởi dấu phẩy)</label>
+            <input
+              type="text"
+              value={(editingIssue.proofImages || []).join(', ')}
+              onChange={(e) => setEditingIssue({ ...editingIssue, proofImages: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono"
+              placeholder="https://images.unsplash.com/... , https://..."
+            />
           </div>
 
           <div>

@@ -4,8 +4,8 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
+import { useCrmStore } from '../store/crmStore';
 
 interface CustomerFeedbackRecord {
   id: string;
@@ -24,12 +24,7 @@ interface CustomerFeedbackRecord {
   resolutionNotes?: string;
 }
 
-const MOCK_FEEDBACK: CustomerFeedbackRecord[] = [
-  { id: '1', feedbackRef: 'FB-2024-819', customerName: 'Johnathan Vance', customerEmail: 'j.vance@enterprise-group.org', storeLocation: 'Main Flagship / HQ', rating: 5, category: 'STAFF_SERVICE', title: 'Exceptional POS setup assistance', comments: 'The technical account manager was incredibly thorough when walking our cashiers through the dual-screen POS interface.', sentiment: 'POSITIVE', status: 'CLOSED', submittedAt: '2024-05-17 14:20', assignedManager: 'Michael Chang', resolutionNotes: 'Sent personalized thank you note with a 10% accessory voucher.' },
-  { id: '2', feedbackRef: 'FB-2024-820', customerName: 'Alice Smith-Bauer', customerEmail: 'alice@smithbauer-design.com', storeLocation: 'Downtown Branch', rating: 2, category: 'CHECKOUT_SPEED', title: 'Long queues during lunchtime rush', comments: 'Only two registers were open during peak hours. Had to wait over 15 minutes just to purchase commercial display samples.', sentiment: 'NEGATIVE', status: 'NEW', submittedAt: '2024-05-17 12:45' },
-  { id: '3', feedbackRef: 'FB-2024-821', customerName: 'Anonymous Retail Buyer', customerEmail: 'noreply@retailhub.local', storeLocation: 'Central Distribution Warehouse', rating: 4, category: 'PRODUCT_QUALITY', title: 'Sturdy packaging but delayed intake confirmation', comments: 'Pallet wrappers were flawless, though the warehouse intake receipt took a while to sync to my customer dashboard.', sentiment: 'NEUTRAL', status: 'REVIEWED', submittedAt: '2024-05-16 16:10', assignedManager: 'David Ross' },
-  { id: '4', feedbackRef: 'FB-2024-822', customerName: 'Robert Jenkins Junior', customerEmail: 'rob.jenkins@outlook.com', storeLocation: 'Northside Store', rating: 1, category: 'PRICING', title: 'Price discrepancy on shelf tag vs POS barcode', comments: 'The shelf tag listed the item at $12.50 but scanned as $14.50 at checkout. Cashier refused to honor the shelf tag.', sentiment: 'NEGATIVE', status: 'ESCALATED', submittedAt: '2024-05-15 09:30', assignedManager: 'Super Admin', resolutionNotes: 'Escalated to regional manager for immediate pricing tag audit across all aisles.' },
-];
+const MOCK_FEEDBACK: CustomerFeedbackRecord[] = [];
 
 const catMapFull: Record<string, string> = {
   PRODUCT_QUALITY: 'Chất lượng sản phẩm',
@@ -55,7 +50,36 @@ const statusMapFull: Record<string, string> = {
 };
 
 export function FeedbackPage() {
-  const [data, setData] = useState<CustomerFeedbackRecord[]>([]);
+  const {
+    feedbacks: storeFeedbacks,
+    fetchFeedbacks,
+    addFeedback,
+    updateFeedback,
+    deleteFeedback,
+  } = useCrmStore();
+
+  useEffect(() => {
+    fetchFeedbacks();
+  }, [fetchFeedbacks]);
+
+  const data: CustomerFeedbackRecord[] = useMemo(() => {
+    return storeFeedbacks.map((f) => ({
+      id: f.id,
+      feedbackRef: `FB-${f.id}`,
+      customerName: f.customerName,
+      customerEmail: `${f.customerPhone}@email.com`,
+      storeLocation: 'Chi nhánh chính',
+      rating: f.rating || 5,
+      category: f.category || 'GENERAL',
+      title: `Đánh giá ${f.category}`,
+      comments: f.content,
+      sentiment: f.rating >= 4 ? 'POSITIVE' : f.rating <= 2 ? 'NEGATIVE' : 'NEUTRAL',
+      status: (f.status === 'RESOLVED' ? 'CLOSED' : f.status === 'REJECTED' ? 'CLOSED' : 'NEW') as any,
+      submittedAt: f.createdAt,
+      resolutionNotes: f.resolutionNote || '',
+    }));
+  }, [storeFeedbacks]);
+
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedFeedback, setSelectedFeedback] = useState<CustomerFeedbackRecord | null>(null);
@@ -70,58 +94,20 @@ export function FeedbackPage() {
   const [editingFeedback, setEditingFeedback] = useState<Partial<CustomerFeedbackRecord>>({});
   const [deletingFeedback, setDeletingFeedback] = useState<CustomerFeedbackRecord | null>(null);
 
-  const fetchFeedback = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const res: any = await axiosClient.get('/crm/feedback');
-      const list = Array.isArray(res) ? res : res?.content || res?.data || [];
-      if (list.length > 0) {
-        const mapped: CustomerFeedbackRecord[] = list.map((item: any) => ({
-          id: String(item.id),
-          feedbackRef: `FB-${item.id}`,
-          customerName: item.customer?.name || 'Khách hàng',
-          customerEmail: item.customer?.email || 'email@khach.com',
-          storeLocation: 'Chi nhánh chính',
-          rating: item.rating || 5,
-          category: 'GENERAL',
-          title: item.title || 'Đánh giá sản phẩm',
-          comments: item.comment || item.comments || '',
-          sentiment: (item.rating || 5) >= 4 ? 'POSITIVE' : (item.rating || 5) <= 2 ? 'NEGATIVE' : 'NEUTRAL',
-          status: item.status || 'NEW',
-          submittedAt: item.createdDate ? String(item.createdDate).split('T')[0] : '2024-05-17',
-          resolutionNotes: item.reply || '',
-        }));
-        setData(mapped);
-      } else {
-        setData(MOCK_FEEDBACK);
-      }
-    } catch (err) {
-      console.error('Error fetching feedback:', err);
-      toast.error('Lỗi khi tải ý kiến phản hồi, dùng dữ liệu tạm');
-      setData(MOCK_FEEDBACK);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchFeedback();
-  }, [fetchFeedback]);
-
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingFeedback({
-      feedbackRef: `FB-${Math.floor(2024000 + Math.random() * 9000)}`,
+      feedbackRef: `FB-${Math.floor(2026000 + Math.random() * 9000)}`,
       customerName: '',
       customerEmail: '',
-      storeLocation: 'Main Flagship / HQ',
+      storeLocation: 'Chi nhánh chính',
       rating: 5,
       category: 'GENERAL',
       title: '',
       comments: '',
       sentiment: 'POSITIVE',
       status: 'NEW',
-      submittedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      submittedAt: new Date().toISOString().split('T')[0],
       assignedManager: '',
       resolutionNotes: ''
     });
@@ -295,6 +281,23 @@ export function FeedbackPage() {
     ],
     [data]
   );
+
+  const filtered = data.filter((item) => {
+    const matchesSearch = !search || item.customerName.toLowerCase().includes(search.toLowerCase()) || item.title.toLowerCase().includes(search.toLowerCase()) || item.feedbackRef.toLowerCase().includes(search.toLowerCase());
+    const matchesSentiment = sentimentFilter === 'ALL' || item.sentiment === sentimentFilter;
+    let matchesRating = true;
+    if (ratingFilter === 'LOW') matchesRating = item.rating <= 2;
+    if (ratingFilter === 'MEDIUM') matchesRating = item.rating === 3;
+    if (ratingFilter === 'HIGH') matchesRating = item.rating >= 4;
+    const matchesStatus = statusFilter === 'ALL' || item.status === statusFilter;
+    return matchesSearch && matchesSentiment && matchesRating && matchesStatus;
+  });
+
+  const totalCount = filtered.length;
+  const avgRating = totalCount > 0 ? (filtered.reduce((sum, item) => sum + item.rating, 0) / totalCount).toFixed(1) : '0.0';
+  const positiveCount = filtered.filter(item => item.sentiment === 'POSITIVE').length;
+  const negativeCount = filtered.filter(item => item.sentiment === 'NEGATIVE').length;
+  const newNegativeCount = filtered.filter(item => item.sentiment === 'NEGATIVE' && (item.status === 'NEW' || item.status === 'ESCALATED')).length;
 
   return (
     <>

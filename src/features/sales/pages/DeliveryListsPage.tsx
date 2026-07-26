@@ -42,7 +42,7 @@ export function DeliveryListsPage() {
         carrierName: t.shipper?.name || 'Vận chuyển nội bộ',
         createdDate: t.startTime ? t.startTime.substring(0, 10) : new Date().toISOString().substring(0, 10),
         expectedDeliveryDate: t.endTime ? t.endTime.substring(0, 10) : new Date().toISOString().substring(0, 10),
-        status: t.status === 'PENDING' ? 'CHO_GIAO' : t.status === 'DELIVERING' ? 'DANG_GIAO' : t.status === 'SUCCESS' ? 'DA_GIAO' : 'THAT_BAI',
+        status: (t.status === 'PENDING' ? 'CHO_GIAO' : t.status === 'DELIVERING' ? 'DANG_GIAO' : t.status === 'SUCCESS' ? 'DA_GIAO' : 'THAT_BAI') as DeliveryRecord['status'],
         notes: t.deliveryNote || '',
       }));
       setData(mapped);

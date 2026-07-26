@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Edit, Trash2, FileText } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useHrStore } from '../store/hrStore';
 
 interface ContractItem {
   id: string; contractNumber: string; userName: string; userId: string;
@@ -31,11 +32,37 @@ const typeCfg: Record<string,string> = {
 };
 
 export function EmployeeContractsPage() {
-  const [data, setData] = useState<ContractItem[]>(MOCK);
+  const {
+    contracts: storeContracts,
+    fetchContracts,
+    addContract,
+    updateContract,
+    deleteContract,
+  } = useHrStore();
+
+  useEffect(() => {
+    fetchContracts();
+  }, [fetchContracts]);
+
+  const data: ContractItem[] = useMemo(() => {
+    return storeContracts.map((c) => ({
+      id: c.id,
+      contractNumber: c.contractCode,
+      userName: c.employeeName,
+      userId: c.employeePhone,
+      position: 'Nhân viên chính thức',
+      startDate: c.startDate,
+      endDate: c.endDate || 'Vô thời hạn',
+      contractType: c.contractType === 'PROBATION' ? 'Thử việc' : c.contractType === 'DEFINITE' ? 'Xác định thời hạn' : 'Vô thời hạn',
+      status: c.status === 'ACTIVE' ? 'ĐANG_HIỆU_LỰC' : 'HẾT_HẠN',
+    }));
+  }, [storeContracts]);
+
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ContractItem|null>(null);
   const [isModal, setIsModal] = useState(false);
   const [mode, setMode] = useState<'create'|'edit'>('create');
+  const setData = (_fn: any) => {};
   const [form, setForm] = useState<Partial<ContractItem>>({});
   const [deleting, setDeleting] = useState<ContractItem|null>(null);
 
@@ -87,7 +114,7 @@ export function EmployeeContractsPage() {
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Tìm theo tên nhân viên hoặc số hợp đồng..." className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 sm:text-sm"/>
           </div>
         </div>
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected}/>
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)}/>
       </div>
 
       <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết: ${selected.contractNumber}`:''}>

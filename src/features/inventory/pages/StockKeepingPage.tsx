@@ -20,50 +20,8 @@ interface StockKeepingRecord {
   notes?: string;
 }
 
-const MOCK_STOCK: StockKeepingRecord[] = [
-  {
-    id: '1',
-    sku: 'SKU-MILK-01',
-    productName: 'Sữa tươi tiệt trùng Vinamilk 1L',
-    unit: 'Hộp',
-    categoryName: 'Sữa & Sản phẩm từ sữa',
-    currentStock: 120,
-    minStock: 20,
-    maxStock: 200,
-    stockValue: 3600000,
-    status: 'DAY_DU',
-    notes: 'Hàng bán chạy, hạn sử dụng dài hạn',
-  },
-  {
-    id: '2',
-    sku: 'SKU-COKE-02',
-    productName: 'Nước ngọt Coca Cola lon 320ml',
-    unit: 'Lon',
-    categoryName: 'Nước giải khát',
-    currentStock: 8,
-    minStock: 50,
-    maxStock: 500,
-    stockValue: 80000,
-    status: 'SAP_HET',
-    notes: 'Cần gửi yêu cầu mua hàng bổ sung gấp',
-  },
-  {
-    id: '3',
-    sku: 'SKU-RICE-03',
-    productName: 'Gạo tám thơm điện biên 5kg',
-    unit: 'Túi',
-    categoryName: 'Lương thực',
-    currentStock: 450,
-    minStock: 50,
-    maxStock: 300,
-    stockValue: 67500000,
-    status: 'VUOT_DINH_MUC',
-    notes: 'Hàng tồn kho vượt định mức tối đa, dừng nhập thêm đợt mới',
-  },
-];
-
 export function StockKeepingPage() {
-  const { products: data, fetchProducts } = useInventoryStore();
+  const { products: data, fetchProducts, addProduct, updateProduct, deleteProduct } = useInventoryStore();
 
   useEffect(() => {
     fetchProducts();
@@ -82,7 +40,7 @@ export function StockKeepingPage() {
       (d: any) =>
         d.sku.toLowerCase().includes(q) ||
         d.name.toLowerCase().includes(q) ||
-        d.category.toLowerCase().includes(q)
+        (d.category && d.category.toLowerCase().includes(q))
     );
 
   }, [search, data]);
@@ -90,13 +48,13 @@ export function StockKeepingPage() {
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingItem({
-      sku: '',
+      sku: `SKU-${Date.now().toString().slice(-4)}`,
       name: '',
-      unit: '',
-      category: '',
+      unitName: 'Cái',
+      category: 'Chung',
       onHand: 0,
-      minStock: 0,
-      maxStock: 0,
+      minStock: 5,
+      maxStock: 100,
       price: 0,
       status: 'ACTIVE',
       notes: '',
@@ -104,28 +62,41 @@ export function StockKeepingPage() {
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (item: StockKeepingRecord) => {
+  const handleOpenEdit = (item: any) => {
     setModalMode('edit');
     setEditingItem(item);
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.sku || !editingItem.name) return;
 
+    const payload = {
+      sku: editingItem.sku,
+      name: editingItem.name,
+      category: editingItem.category || 'Chung',
+      unitName: editingItem.unitName || 'Cái',
+      onHand: Number(editingItem.onHand || 0),
+      minStock: Number(editingItem.minStock || 5),
+      maxStock: Number(editingItem.maxStock || 100),
+      price: Number(editingItem.price || 0),
+      costPrice: Number(editingItem.costPrice || 0),
+      status: editingItem.status || 'ACTIVE',
+      notes: editingItem.notes || '',
+    };
+
     if (modalMode === 'create') {
-      // Typically you would call addProduct from useInventoryStore here
-      console.warn("Please use Inventory store addProduct");
-    } else {
-      // Typically you would call updateProduct
-      console.warn("Please use Inventory store updateProduct");
+      await addProduct(payload as any);
+    } else if (editingItem.id) {
+      await updateProduct(editingItem.id, payload as any);
     }
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    // Typically you would call deleteProduct
+  const handleDelete = async (id: string) => {
+    await deleteProduct(id);
+    if (selected?.id === id) setSelected(null);
   };
 
   const formatCurrency = (val: number) => {

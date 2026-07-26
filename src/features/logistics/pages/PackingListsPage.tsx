@@ -48,7 +48,7 @@ export function PackingListsPage() {
           dimensions: item.dimensions || '20 x 15 x 10',
           packerName: item.packerName || 'Nhân viên kho',
           packingDate: item.packingDate || '2026-06-04',
-          status: item.status === 'COMPLETED' ? 'ĐÃ_ĐÓNG_GÓI' : 'CHỜ_ĐÓNG_GÓI',
+          status: (item.status === 'COMPLETED' ? 'ĐÃ_ĐÓNG_GÓI' : 'CHỜ_ĐÓNG_GÓI') as PackingListRecord['status'],
           notes: item.notes || '',
           items: Array.isArray(item.items) ? item.items.map((it: any) => ({
             productName: it.productName || 'Sản phẩm',
@@ -240,6 +240,12 @@ export function PackingListsPage() {
       },
     ],
     [data]
+  );
+
+  const filtered = data.filter(item =>
+    item.packingCode.toLowerCase().includes(search.toLowerCase()) ||
+    item.sourceOrder.toLowerCase().includes(search.toLowerCase()) ||
+    item.packerName.toLowerCase().includes(search.toLowerCase())
   );
 
   return (

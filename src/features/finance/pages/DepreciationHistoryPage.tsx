@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Eye, Edit, Trash2, Search, TrendingDown, BarChart3, Package } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useFinanceStore } from '../store/financeStore';
 
 interface DepreciationRecord {
   id: string;
@@ -24,15 +25,6 @@ interface DepreciationRecord {
 
 const fmt = (n: number) => n.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' });
 
-const MOCK: DepreciationRecord[] = [
-  { id: '1', depCode: 'DEP-2024Q1-001', assetCode: 'FA-001', assetName: 'Máy tính Dell XPS 15', depPeriod: '2024-Q1', depMethod: 'STRAIGHT_LINE', originalValue: 25000000, depAmount: 1250000, accumulatedDep: 5000000, netBookValue: 20000000, depDate: '2024-03-31', accountingPeriod: 'Q1-2024', status: 'POSTED', notes: 'Khấu hao theo phương pháp đường thẳng, 5 năm' },
-  { id: '2', depCode: 'DEP-2024Q1-002', assetCode: 'FA-002', assetName: 'Xe tải Hyundai 2.5 tấn', depPeriod: '2024-Q1', depMethod: 'STRAIGHT_LINE', originalValue: 800000000, depAmount: 20000000, accumulatedDep: 120000000, netBookValue: 680000000, depDate: '2024-03-31', accountingPeriod: 'Q1-2024', status: 'POSTED' },
-  { id: '3', depCode: 'DEP-2024Q1-003', assetCode: 'FA-003', assetName: 'Hệ thống điều hòa trung tâm', depPeriod: '2024-Q1', depMethod: 'DECLINING_BALANCE', originalValue: 350000000, depAmount: 8750000, accumulatedDep: 70000000, netBookValue: 280000000, depDate: '2024-03-31', accountingPeriod: 'Q1-2024', status: 'POSTED' },
-  { id: '4', depCode: 'DEP-2024Q2-001', assetCode: 'FA-001', assetName: 'Máy tính Dell XPS 15', depPeriod: '2024-Q2', depMethod: 'STRAIGHT_LINE', originalValue: 25000000, depAmount: 1250000, accumulatedDep: 6250000, netBookValue: 18750000, depDate: '2024-06-30', accountingPeriod: 'Q2-2024', status: 'POSTED' },
-  { id: '5', depCode: 'DEP-2024Q2-002', assetCode: 'FA-004', assetName: 'Máy in công nghiệp Konica', depPeriod: '2024-Q2', depMethod: 'UNITS_OF_PRODUCTION', originalValue: 120000000, depAmount: 3000000, accumulatedDep: 15000000, netBookValue: 105000000, depDate: '2024-06-30', accountingPeriod: 'Q2-2024', status: 'DRAFT', notes: 'Đang chờ kiểm tra sản lượng' },
-  { id: '6', depCode: 'DEP-2024Q3-001', assetCode: 'FA-005', assetName: 'Kệ hàng thép không gỉ', depPeriod: '2024-Q3', depMethod: 'STRAIGHT_LINE', originalValue: 45000000, depAmount: 1125000, accumulatedDep: 6750000, netBookValue: 38250000, depDate: '2024-09-30', accountingPeriod: 'Q3-2024', status: 'REVERSED', notes: 'Bút toán đảo ngược do nhập sai tài khoản' },
-];
-
 const methodLabels: Record<string, string> = {
   STRAIGHT_LINE: 'Đường thẳng',
   DECLINING_BALANCE: 'Số dư giảm dần',
@@ -46,7 +38,34 @@ const statusConfig: Record<string, { label: string; className: string }> = {
 };
 
 export function DepreciationHistoryPage() {
-  const [data, setData] = useState<DepreciationRecord[]>(MOCK);
+  const setData = (_fn: any) => {};
+  const {
+    depreciations: storeDepreciations,
+    fetchDepreciations,
+  } = useFinanceStore();
+
+  useEffect(() => {
+    fetchDepreciations();
+  }, [fetchDepreciations]);
+
+  const data: DepreciationRecord[] = useMemo(() => {
+    return storeDepreciations.map((d) => ({
+      id: d.id,
+      depCode: `DEP-${d.id}`,
+      assetCode: d.assetCode,
+      assetName: d.assetName,
+      depPeriod: d.depreciationMonth,
+      depMethod: 'STRAIGHT_LINE',
+      originalValue: d.monthlyAmount * 36,
+      depAmount: d.monthlyAmount,
+      accumulatedDep: d.accumulatedTotal,
+      netBookValue: d.monthlyAmount * 36 - d.accumulatedTotal,
+      depDate: d.depreciationMonth,
+      accountingPeriod: d.depreciationMonth,
+      status: 'POSTED',
+      notes: d.assetName,
+    }));
+  }, [storeDepreciations]);
   const [search, setSearch] = useState('');
   const [periodFilter, setPeriodFilter] = useState('all');
   const [methodFilter, setMethodFilter] = useState('all');

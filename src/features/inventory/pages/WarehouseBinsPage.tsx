@@ -259,7 +259,7 @@ export function WarehouseBinsPage() {
       {
         accessorKey: 'maxWeightKg',
         header: 'Tải trọng tối đa',
-        cell: (info) => <span className="font-mono text-gray-650 dark:text-gray-350">{info.getValue() as number} kg</span>,
+        cell: (info) => <span className="font-mono text-gray-600 dark:text-gray-400">{info.getValue() as number} kg</span>,
       },
       {
         accessorKey: 'maxPallet',
@@ -422,7 +422,7 @@ export function WarehouseBinsPage() {
             <div className="p-4 bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-800 border-dashed flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="space-y-1">
                 <h5 className="font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
-                  <Printer className="w-4 h-4 text-emerald-650" />
+                  <Printer className="w-4 h-4 text-emerald-600" />
                   Nhãn định vị Ô Kệ (Location Label)
                 </h5>
                 <p className="text-xs text-gray-500">Mã vạch chuẩn hóa cho nhân viên dùng PDA quét kiểm kho.</p>

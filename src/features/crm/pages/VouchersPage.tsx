@@ -1,52 +1,76 @@
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Ticket, Calendar, CheckCircle2, Clock, Tag, Copy, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
+import { useCrmStore } from '../store/crmStore';
 
-interface RewardVoucherRecord {
+import { useCallback } from 'react';
+import { axiosClient } from '@/shared/lib/axiosClient';
+
+export interface RewardVoucherRecord {
   id: string;
   voucherCode: string;
   campaignName: string;
-  type: 'PERCENTAGE' | 'FIXED_AMOUNT' | 'FREE_SHIPPING' | 'FREE_ITEM';
-  discountValue: number; // e.g., 15 for 15% or 50 for $50
+  type: 'PERCENTAGE' | 'FIXED_AMOUNT' | 'FREE_SHIPPING';
+  discountValue: number;
   minOrderValue: number;
   maxDiscount?: number;
   startDate: string;
   expiryDate: string;
   totalIssued: number;
   totalRedeemed: number;
-  status: 'ACTIVE' | 'SCHEDULED' | 'EXPIRED' | 'PAUSED' | 'DEPLETED';
-  applicableScope: 'ALL_PRODUCTS' | 'SPECIFIC_CATEGORY' | 'VIP_TIER_ONLY' | 'FIRST_TIME_BUYER';
+  status: 'ACTIVE' | 'EXPIRED' | 'PAUSED';
+  applicableScope: 'ALL_PRODUCTS' | 'SPECIFIC_CATEGORY' | 'SPECIFIC_PRODUCTS';
   notes?: string;
 }
 
-const MOCK_VOUCHERS: RewardVoucherRecord[] = [
-  { id: '1', voucherCode: 'SUMMERPROMO15', campaignName: 'Omnichannel Q2 Summer Blowout', type: 'PERCENTAGE', discountValue: 15, minOrderValue: 100.00, maxDiscount: 75.00, startDate: '2024-05-01', expiryDate: '2024-08-31', totalIssued: 5000, totalRedeemed: 1420, status: 'ACTIVE', applicableScope: 'ALL_PRODUCTS', notes: 'Blanket omnichannel summer promotion promoted across POS terminals and B2B eCommerce portal.' },
-  { id: '2', voucherCode: 'VIPGOLD50', campaignName: 'Gold Member Quarterly Reward', type: 'FIXED_AMOUNT', discountValue: 50, minOrderValue: 250.00, startDate: '2024-05-15', expiryDate: '2024-06-15', totalIssued: 1200, totalRedeemed: 310, status: 'ACTIVE', applicableScope: 'VIP_TIER_ONLY', notes: 'Exclusive $50 credit issued to Gold and Diamond loyalty accounts.' },
-  { id: '3', voucherCode: 'FREESHIPB2B', campaignName: 'Wholesale Pallet Ground Dispatch', type: 'FREE_SHIPPING', discountValue: 0, minOrderValue: 1000.00, startDate: '2024-04-01', expiryDate: '2024-05-15', totalIssued: 800, totalRedeemed: 795, status: 'EXPIRED', applicableScope: 'SPECIFIC_CATEGORY', notes: 'Promotional waiver of freight carrier fees for wholesale beverage pallets.' },
-  { id: '4', voucherCode: 'NEWRETAIL10', campaignName: 'First Time Store Activation', type: 'PERCENTAGE', discountValue: 10, minOrderValue: 50.00, maxDiscount: 25.00, startDate: '2024-05-20', expiryDate: '2024-12-31', totalIssued: 10000, totalRedeemed: 0, status: 'SCHEDULED', applicableScope: 'FIRST_TIME_BUYER', notes: 'Automated welcome voucher printed on receipt during first customer loyalty registration.' },
-];
-
-const scopeBadgeStyles = {
+const scopeBadgeStyles: Record<string, string> = {
   ALL_PRODUCTS: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
   SPECIFIC_CATEGORY: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
-  VIP_TIER_ONLY: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
-  FIRST_TIME_BUYER: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  SPECIFIC_PRODUCTS: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
 };
 
 const scopeMap: Record<string, string> = {
   ALL_PRODUCTS: 'Tất cả sản phẩm',
-  SPECIFIC_CATEGORY: 'Danh mục cụ thể',
-  VIP_TIER_ONLY: 'Chỉ dành cho VIP',
-  FIRST_TIME_BUYER: 'Khách hàng mới',
+  SPECIFIC_CATEGORY: 'Theo danh mục',
+  SPECIFIC_PRODUCTS: 'Sản phẩm chỉ định',
 };
 
 export function VouchersPage() {
-  const [data, setData] = useState<RewardVoucherRecord[]>([]);
+  const setData = (_fn: any) => {};
+  const {
+    vouchers: storeVouchers,
+    fetchVouchers,
+    addVoucher,
+    updateVoucher,
+    deleteVoucher,
+  } = useCrmStore();
+
+  useEffect(() => {
+    fetchVouchers();
+  }, [fetchVouchers]);
+
+  const data: RewardVoucherRecord[] = useMemo(() => {
+    return storeVouchers.map((v) => ({
+      id: v.id,
+      voucherCode: v.code,
+      campaignName: v.name,
+      type: v.discountType === 'PERCENT' ? 'PERCENTAGE' : 'FIXED_AMOUNT',
+      discountValue: v.value,
+      minOrderValue: v.minOrderValue,
+      maxDiscount: v.maxDiscount,
+      startDate: v.startDate,
+      expiryDate: v.endDate,
+      totalIssued: v.quantity,
+      totalRedeemed: v.usedCount,
+      status: v.status === 'ACTIVE' ? 'ACTIVE' : 'EXPIRED',
+      applicableScope: 'ALL_PRODUCTS',
+      notes: v.name,
+    }));
+  }, [storeVouchers]);
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedVoucher, setSelectedVoucher] = useState<RewardVoucherRecord | null>(null);
@@ -72,45 +96,6 @@ export function VouchersPage() {
   // Filter states
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
-
-  const fetchVouchers = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const res: any = await axiosClient.get('/crm/vouchers');
-      const list = Array.isArray(res) ? res : res?.content || res?.data || [];
-      if (list.length > 0) {
-        const mapped: RewardVoucherRecord[] = list.map((item: any) => ({
-          id: String(item.id),
-          voucherCode: item.voucherCode || `VOUCHER-${item.id}`,
-          campaignName: item.voucherName || item.campaign?.name || 'Chiến dịch khuyến mãi',
-          type: item.type === 'FREE_SHIP' ? 'FREE_SHIPPING' : (item.type || 'PERCENTAGE'),
-          discountValue: Number(item.value || 0),
-          minOrderValue: Number(item.minOrderAmount || 0),
-          maxDiscount: item.maxDiscountAmount ? Number(item.maxDiscountAmount) : undefined,
-          startDate: item.startDate ? String(item.startDate).split('T')[0] : '2024-01-01',
-          expiryDate: item.endDate ? String(item.endDate).split('T')[0] : '2024-12-31',
-          totalIssued: item.maxUsage || 1000,
-          totalRedeemed: item.currentUsage || 0,
-          status: item.status || (item.isActive ? 'ACTIVE' : 'EXPIRED'),
-          applicableScope: 'ALL_PRODUCTS',
-          notes: item.description || '',
-        }));
-        setData(mapped);
-      } else {
-        setData(MOCK_VOUCHERS);
-      }
-    } catch (err) {
-      console.error('Error fetching vouchers:', err);
-      toast.error('Không thể lấy danh sách voucher từ máy chủ, sử dụng dữ liệu tạm.');
-      setData(MOCK_VOUCHERS);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchVouchers();
-  }, [fetchVouchers]);
 
   const handleDelete = async (voucher: RewardVoucherRecord) => {
     if (!confirm(`Bạn có chắc muốn xóa voucher ${voucher.voucherCode}?`)) return;

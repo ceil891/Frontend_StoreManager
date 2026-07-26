@@ -33,7 +33,7 @@ export function SupplierEvaluationsPage() {
     try {
       setIsLoading(true);
       const res = await axiosClient.get('/purchase/evaluations?size=500');
-      const list = res.content || res || [];
+      const list = (res as any).content || res || [];
       const mapped: SupplierEvaluationItem[] = (Array.isArray(list) ? list : []).map((item: any) => {
         const delivery = item.deliveryScore || 0;
         const quality = item.qualityScore || 0;
@@ -274,7 +274,7 @@ export function SupplierEvaluationsPage() {
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-500" />
           </div>
         ) : (
-          <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} />
+          <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedItem(row)} />
         )}
       </div>
 

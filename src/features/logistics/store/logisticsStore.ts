@@ -55,17 +55,47 @@ export interface PriceListSchedule {
   details: PriceListDetail[]; // Specifically overridden SKUs for this list
 }
 
-// ---------------------------
-// STATE INTERFACE
-// ---------------------------
 interface LogisticsState {
   priceLists: PriceListSchedule[];
-  
   fetchPriceLists: () => Promise<void>;
-  // PriceList Actions
   addPriceList: (list: Omit<PriceListSchedule, 'id'>) => Promise<void>;
   updatePriceList: (id: string, data: Partial<PriceListSchedule>) => Promise<void>;
   deletePriceList: (id: string) => Promise<void>;
+
+  promotions: PromotionRecord[];
+  shippingCharges: ShippingChargeRecord[];
+
+  fetchPromotions: () => Promise<void>;
+  addPromotion: (item: Omit<PromotionRecord, 'id'>) => Promise<void>;
+  updatePromotion: (id: string, data: Partial<PromotionRecord>) => Promise<void>;
+  deletePromotion: (id: string) => Promise<void>;
+
+  fetchShippingCharges: () => Promise<void>;
+  addShippingCharge: (item: Omit<ShippingChargeRecord, 'id'>) => Promise<void>;
+  updateShippingCharge: (id: string, data: Partial<ShippingChargeRecord>) => Promise<void>;
+  deleteShippingCharge: (id: string) => Promise<void>;
+}
+
+export interface PromotionRecord {
+  id: string;
+  promoCode: string;
+  promoName: string;
+  discountType: 'PERCENT' | 'AMOUNT';
+  discountValue: number;
+  startDate: string;
+  endDate: string;
+  status: 'ACTIVE' | 'EXPIRED' | 'PAUSED';
+}
+
+export interface ShippingChargeRecord {
+  id: string;
+  zoneCode: string;
+  zoneName: string;
+  carrierName: string;
+  baseFee: number;
+  perKgFee: number;
+  estimatedHours: number;
+  status: 'ACTIVE' | 'INACTIVE';
 }
 
 export const useLogisticsStore = create<LogisticsState>()(
@@ -151,6 +181,77 @@ export const useLogisticsStore = create<LogisticsState>()(
           await get().fetchPriceLists();
         } catch (error) {
           console.error('Failed to delete price list:', error);
+        }
+      },
+
+      promotions: [],
+      shippingCharges: [],
+
+      fetchPromotions: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/logistics/promotions');
+          const data = res.content || res || [];
+          set({ promotions: Array.isArray(data) ? data : [] });
+        } catch (error) {
+          console.error('Failed to fetch promotions:', error);
+        }
+      },
+      addPromotion: async (item) => {
+        try {
+          await axiosClient.post('/logistics/promotions', item);
+          await get().fetchPromotions();
+        } catch (error) {
+          console.error('Failed to add promotion:', error);
+        }
+      },
+      updatePromotion: async (id, data) => {
+        try {
+          await axiosClient.put(`/logistics/promotions/${id}`, data);
+          await get().fetchPromotions();
+        } catch (error) {
+          console.error('Failed to update promotion:', error);
+        }
+      },
+      deletePromotion: async (id) => {
+        try {
+          await axiosClient.delete(`/logistics/promotions/${id}`);
+          await get().fetchPromotions();
+        } catch (error) {
+          console.error('Failed to delete promotion:', error);
+        }
+      },
+
+      fetchShippingCharges: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/logistics/shipping-charges');
+          const data = res.content || res || [];
+          set({ shippingCharges: Array.isArray(data) ? data : [] });
+        } catch (error) {
+          console.error('Failed to fetch shipping charges:', error);
+        }
+      },
+      addShippingCharge: async (item) => {
+        try {
+          await axiosClient.post('/logistics/shipping-charges', item);
+          await get().fetchShippingCharges();
+        } catch (error) {
+          console.error('Failed to add shipping charge:', error);
+        }
+      },
+      updateShippingCharge: async (id, data) => {
+        try {
+          await axiosClient.put(`/logistics/shipping-charges/${id}`, data);
+          await get().fetchShippingCharges();
+        } catch (error) {
+          console.error('Failed to update shipping charge:', error);
+        }
+      },
+      deleteShippingCharge: async (id) => {
+        try {
+          await axiosClient.delete(`/logistics/shipping-charges/${id}`);
+          await get().fetchShippingCharges();
+        } catch (error) {
+          console.error('Failed to delete shipping charge:', error);
         }
       },
     }),

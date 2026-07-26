@@ -3,32 +3,34 @@ import { Download, Search, Eye, Award, AlertCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import type { ColumnDef } from '@tanstack/react-table';
-import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
-
-interface LoyaltyPointHistoryItem {
-  id: string;
-  customerName: string;
-  customerPhone: string;
-  pointChange: number;
-  transactionType: 'TÍCH_ĐIỂM_ĐƠN_HÀNG' | 'ĐỔI_QUÀ' | 'ĐIỀU_CHỈNH_HỆ_THỐNG';
-  referenceCode: string;
-  transactionDate: string;
-  operatorName: string;
-  pointBalanceAfter: number;
-  notes?: string;
-}
-
-const MOCK_DATA: LoyaltyPointHistoryItem[] = [
-  { id: 'GD-10021', customerName: 'Nguyễn Văn A', customerPhone: '0901234567', pointChange: 150, transactionType: 'TÍCH_ĐIỂM_ĐƠN_HÀNG', referenceCode: 'HD0001042', transactionDate: '2026-06-04 10:15:30', operatorName: 'Trần thị thuỷ (thu ngân)', pointBalanceAfter: 1250, notes: 'Tích điểm tự động từ hoá đơn mua sắm hàng tiêu dùng nhanh.' },
-  { id: 'GD-10022', customerName: 'Lê Hoàng long', customerPhone: '0987654321', pointChange: -500, transactionType: 'ĐỔI_QUÀ', referenceCode: 'QC00084', transactionDate: '2026-06-04 11:20:00', operatorName: 'Trần thị thuỷ (thu ngân)', pointBalanceAfter: 350, notes: 'Khách hàng đổi 500 điểm lấy Voucher giảm giá 50k.' },
-  { id: 'GD-10023', customerName: 'Phạm Thanh Bình', customerPhone: '0912345678', pointChange: 50, transactionType: 'ĐIỀU_CHỈNH_HỆ_THỐNG', referenceCode: 'ADJ-9921', transactionDate: '2026-06-03 14:05:12', operatorName: 'Nguyễn Văn B (Quản trị viên)', pointBalanceAfter: 420, notes: 'Điều chỉnh điểm bù lỗi hệ thống tính toán sai lệch ngày 02-06.' },
-  { id: 'GD-10024', customerName: 'Trần minh quân', customerPhone: '0933445566', pointChange: 220, transactionType: 'TÍCH_ĐIỂM_ĐƠN_HÀNG', referenceCode: 'HD0001048', transactionDate: '2026-06-03 16:42:01', operatorName: 'Lê Văn C (Bán hàng)', pointBalanceAfter: 880, notes: 'Tích điểm đơn hàng mua Tủ lạnh Panasonic.' },
-  { id: 'GD-10025', customerName: 'Vũ thị hương', customerPhone: '0944556677', pointChange: -100, transactionType: 'ĐỔI_QUÀ', referenceCode: 'QC00089', transactionDate: '2026-06-02 09:12:45', operatorName: 'Trần thị thuỷ (thu ngân)', pointBalanceAfter: 150, notes: 'Đổi 100 điểm lấy 01 Ly sứ RetailHub.' }
-];
+import { useCrmStore } from '../store/crmStore';
 
 export function LoyaltyPointHistoryPage() {
-  const [data, setData] = useState<LoyaltyPointHistoryItem[]>([]);
+  const {
+    loyaltyHistories: storeHistories,
+    fetchLoyaltyHistories,
+  } = useCrmStore();
+
+  useEffect(() => {
+    fetchLoyaltyHistories();
+  }, [fetchLoyaltyHistories]);
+
+  const data: any[] = useMemo(() => {
+    return storeHistories.map((h: any) => ({
+      id: h.id,
+      customerName: h.customerName,
+      customerPhone: h.customerPhone,
+      pointChange: h.pointsChange,
+      transactionType: h.actionType === 'EARN' ? 'TÍCH_ĐIỂM_ĐƠN_HÀNG' : h.actionType === 'REDEEM' ? 'ĐỔI_QUÀ' : 'ĐIỀU_CHỈNH_HỆ_THỐNG',
+      referenceCode: h.referenceOrder || `REF-${h.id}`,
+      transactionDate: h.createdAt,
+      operatorName: 'Nhân viên thu ngân',
+      pointBalanceAfter: h.balanceAfter,
+      notes: h.notes,
+    }));
+  }, [storeHistories]);
+
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('Tất cả');
@@ -55,12 +57,11 @@ export function LoyaltyPointHistoryPage() {
         }));
         setData(mapped);
       } else {
-        setData(MOCK_DATA);
+        setData([]);
       }
     } catch (err) {
       console.error('Error fetching loyalty history:', err);
-      toast.error('Lỗi khi tải lịch sử tích điểm, dùng dữ liệu tạm');
-      setData(MOCK_DATA);
+      setData([]);
     } finally {
       setIsLoading(false);
     }
@@ -222,7 +223,7 @@ export function LoyaltyPointHistoryPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={setSelectedItem} />
+        <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row) => setSelectedItem(row)} />
       </div>
 
       {/* Drawer Chi tiết */}

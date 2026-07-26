@@ -39,7 +39,7 @@ export default function ChartOfAccountsPage() {
     try {
       setIsLoading(true);
       const res = await axiosClient.get('/accounting/chart-of-accounts');
-      const list = res.content || res || [];
+      const list = (res as any).content || res || [];
       const mapped: ChartOfAccountItem[] = (Array.isArray(list) ? list : []).map((item: any) => {
         const typeMap: Record<string, ChartOfAccountItem['accountType']> = {
           ASSET: 'TÀI_SẢN',
@@ -265,7 +265,7 @@ export default function ChartOfAccountsPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
           </div>
         ) : (
-          <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected} />
+          <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
         )}
       </div>
 

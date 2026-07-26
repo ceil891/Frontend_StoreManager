@@ -55,7 +55,7 @@ export function OrderPaymentsPage() {
     try {
       setIsLoading(true);
       const res = await axiosClient.get('/finance/order-payments');
-      const list = res.content || res || [];
+      const list = (res as any).content || res || [];
       const mapped: OrderPaymentRecord[] = (Array.isArray(list) ? list : []).map((item: any) => {
         // Map backend PaymentMethod (Object) -> code
         const methodCodeMap: Record<string, OrderPaymentRecord['paymentMethod']> = {

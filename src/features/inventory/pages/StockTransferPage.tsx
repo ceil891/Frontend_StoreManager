@@ -17,7 +17,10 @@ export function StockTransferPage() {
     addStockTransfer, 
     updateStockTransfer, 
     deleteStockTransfer, 
-    fetchStockTransfers 
+    fetchStockTransfers,
+    approveStockTransfer,
+    shipStockTransfer,
+    completeStockTransfer
   } = useInventoryStore();
 
   useEffect(() => {
@@ -170,7 +173,7 @@ export function StockTransferPage() {
       {
         accessorKey: 'totalValuation',
         header: 'Tổng giá trị',
-        cell: (info) => <span className="font-bold text-emerald-600 dark:text-emerald-400">${(info.getValue() as number).toFixed(2)}</span>,
+        cell: (info) => <span className="font-bold text-emerald-600 dark:text-emerald-400">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'status',
@@ -288,7 +291,7 @@ export function StockTransferPage() {
       <Drawer
         isOpen={!!selectedTransfer}
         onClose={() => setSelectedTransfer(null)}
-        title={selectedTransfer ? `Lệnh điều chuyển: ${selectedTransfer.transferNumber}` : 'Transfer Details'}
+        title={selectedTransfer ? `Lệnh điều chuyển: ${selectedTransfer.transferNumber}` : 'Chi tiết lệnh chuyển kho'}
         width="max-w-lg"
       >
         {selectedTransfer && (
@@ -300,16 +303,20 @@ export function StockTransferPage() {
                 </div>
                 <div>
                   <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">Trị giá luân chuyển</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">${selectedTransfer.totalValuation.toFixed(2)}</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(selectedTransfer.totalValuation)}</p>
                 </div>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                selectedTransfer.status === 'COMPLETED' ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
-                selectedTransfer.status === 'IN_TRANSIT' ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100' :
-                selectedTransfer.status === 'PENDING_APPROVAL' ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
+                selectedTransfer.status === 'COMPLETED' || selectedTransfer.status === 'RECEIVED' ? 'bg-emerald-250 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
+                selectedTransfer.status === 'IN_TRANSIT' || selectedTransfer.status === 'SHIPPED' ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100' :
+                selectedTransfer.status === 'PENDING_APPROVAL' ? 'bg-amber-250 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
+                selectedTransfer.status === 'APPROVED' ? 'bg-indigo-200 text-indigo-900 dark:bg-indigo-850 dark:text-indigo-100' :
                 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
               }`}>
-                {selectedTransfer.status.replace('_', ' ')}
+                {selectedTransfer.status === 'COMPLETED' || selectedTransfer.status === 'RECEIVED' ? 'ĐÃ HOÀN THÀNH' :
+                 selectedTransfer.status === 'IN_TRANSIT' || selectedTransfer.status === 'SHIPPED' ? 'ĐANG VẬN CHUYỂN' :
+                 selectedTransfer.status === 'PENDING_APPROVAL' ? 'CHỜ DUYỆT' :
+                 selectedTransfer.status === 'APPROVED' ? 'ĐÃ DUYỆT' : selectedTransfer.status}
               </span>
             </div>
 
@@ -383,13 +390,51 @@ export function StockTransferPage() {
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
               {selectedTransfer.status === 'PENDING_APPROVAL' && (
-                <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
+                <button
+                  onClick={async () => {
+                    try {
+                      await approveStockTransfer(selectedTransfer.id);
+                      setSelectedTransfer(prev => prev ? { ...prev, status: 'APPROVED' } : null);
+                      toast.success('Đã duyệt lệnh điều chuyển!');
+                    } catch (err) {
+                      toast.error('Lỗi khi duyệt lệnh điều chuyển');
+                    }
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                >
                   <CheckCircle2 className="w-4 h-4" /> Phê duyệt lệnh xuất
                 </button>
               )}
-              {selectedTransfer.status === 'IN_TRANSIT' && (
-                <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                  <Truck className="w-4 h-4" /> Xác nhận đã nhận hàng
+              {selectedTransfer.status === 'APPROVED' && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await shipStockTransfer(selectedTransfer.id);
+                      setSelectedTransfer(prev => prev ? { ...prev, status: 'SHIPPED' } : null);
+                      toast.success('Đã xuất kho và bắt đầu vận chuyển!');
+                    } catch (err) {
+                      toast.error('Lỗi khi xuất kho vận chuyển');
+                    }
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                >
+                  <Truck className="w-4 h-4" /> Bắt đầu xuất kho vận chuyển
+                </button>
+              )}
+              {(selectedTransfer.status === 'IN_TRANSIT' || selectedTransfer.status === 'SHIPPED') && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await completeStockTransfer(selectedTransfer.id);
+                      setSelectedTransfer(prev => prev ? { ...prev, status: 'RECEIVED' } : null);
+                      toast.success('Đã xác nhận nhận hàng và nhập kho đích thành công!');
+                    } catch (err) {
+                      toast.error('Lỗi khi nhận hàng nhập kho');
+                    }
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                >
+                  <CheckCircle2 className="w-4 h-4" /> Xác nhận đã nhận hàng
                 </button>
               )}
               <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
@@ -560,7 +605,7 @@ export function StockTransferPage() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Tổng trị giá ($)</label>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Tổng trị giá (VNĐ)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -624,7 +669,7 @@ export function StockTransferPage() {
         width="max-w-md"
       >
         <div className="space-y-4">
-          <p className="text-sm text-gray-650 dark:text-gray-300">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
             Bạn có chắc chắn muốn hủy / xóa lệnh chuyển kho <strong className="text-gray-900 dark:text-white">{deletingTransfer?.transferNumber}</strong> không? Cảnh báo: Các mặt hàng sẽ được trả lại kho xuất.
           </p>
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">

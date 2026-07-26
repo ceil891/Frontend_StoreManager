@@ -18,33 +18,8 @@ interface AdjustmentRecord {
   notes?: string;
 }
 
-const MOCK_ADJUSTMENTS: AdjustmentRecord[] = [
-  {
-    id: '1',
-    adjustmentCode: 'IADJ-2026-001',
-    issuedDate: '2026-06-04',
-    handler: 'Lưu hữu phước',
-    totalIncrease: 5,
-    totalDecrease: 2,
-    reason: 'Đối chiếu kho định kỳ tháng 5 phát hiện thừa thiếu lẻ',
-    status: 'DA_DONG_BO',
-    notes: 'Đã hoàn tất cộng trừ trực tiếp vào thẻ kho',
-  },
-  {
-    id: '2',
-    adjustmentCode: 'IADJ-2026-002',
-    issuedDate: '2026-06-03',
-    handler: 'Nguyễn thị Hoa',
-    totalIncrease: 0,
-    totalDecrease: 15,
-    reason: 'Hàng hỏng hết hạn sử dụng không thể bán lẻ',
-    status: 'CHO_DUYET',
-    notes: 'Đang trình ban giám đốc duyệt khấu trừ giá trị hao hụt',
-  },
-];
-
 export function InventoryAdjustmentsPage() {
-  const { inventoryChecks: data, fetchInventoryChecks } = useInventoryStore();
+  const { inventoryChecks: data, fetchInventoryChecks, addInventoryCheck, updateInventoryCheck, deleteInventoryCheck } = useInventoryStore();
 
   useEffect(() => {
     fetchInventoryChecks();
@@ -88,20 +63,28 @@ export function InventoryAdjustmentsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.checkCode || !editingItem.checkedBy) return;
 
+    const payload = {
+      checkCode: editingItem.checkCode,
+      branchId: 1,
+      checkDate: editingItem.checkDate || new Date().toISOString().split('T')[0],
+      notes: editingItem.notes || '',
+    };
+
     if (modalMode === 'create') {
-      console.warn("Please use store addInventoryCheck");
-    } else {
-      console.warn("Please use store updateInventoryCheck");
+      await addInventoryCheck(payload);
+    } else if (editingItem.id) {
+      await updateInventoryCheck(editingItem.id, { notes: editingItem.notes });
     }
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    console.warn("Please use store deleteInventoryCheck");
+  const handleDelete = async (id: string) => {
+    await deleteInventoryCheck(id);
+    if (selected?.id === id) setSelected(null);
   };
 
   const columns = useMemo<ColumnDef<any>[]>(

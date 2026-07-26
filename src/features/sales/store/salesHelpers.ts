@@ -5,11 +5,32 @@ export const WALK_IN_CUSTOMER_ID = 'walk-in';
 export type RefundMethod = 'CASH' | 'BANK_TRANSFER' | 'STORE_CREDIT' | 'ORIGINAL_CARD';
 
 export function resolveCustomerName(
-  customerId: string,
-  customers: CustomerProfile[]
+  customerId?: any,
+  customers?: CustomerProfile[]
 ): string {
-  if (customerId === WALK_IN_CUSTOMER_ID) return 'Khách lẻ';
-  return customers.find((c) => c.id === customerId)?.name ?? customerId;
+  if (!customerId) return 'Khách lẻ';
+
+  if (typeof customerId === 'object' && customerId !== null) {
+    if (customerId.name && typeof customerId.name === 'string') {
+      return customerId.name;
+    }
+    if (customerId.fullName && typeof customerId.fullName === 'string') {
+      return customerId.fullName;
+    }
+    if (customerId.id) customerId = String(customerId.id);
+    else if (customerId._id) customerId = String(customerId._id);
+    else return 'Khách lẻ';
+  }
+
+  const idStr = String(customerId);
+  if (idStr === WALK_IN_CUSTOMER_ID) return 'Khách lẻ';
+
+  if (Array.isArray(customers)) {
+    const found = customers.find((c) => c && String(c.id) === idStr);
+    if (found?.name) return String(found.name);
+  }
+
+  return idStr;
 }
 
 export function calcTotalAmount(parts: {

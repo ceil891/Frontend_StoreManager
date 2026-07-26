@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, Link2, Share2, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useOmnichannelStore } from '../store/omnichannelStore';
 
 interface SalesChannelRecord {
   id: string;
@@ -15,38 +16,31 @@ interface SalesChannelRecord {
   notes?: string;
 }
 
-const MOCK_CHANNELS: SalesChannelRecord[] = [
-  {
-    id: '1',
-    channelCode: 'CH-SHOPEE-01',
-    channelName: 'Shopee - gian hàng thời Trang RetailHub',
-    channelType: 'SHOPEE',
-    apiStatus: 'CONNECTED',
-    connectedDate: '2026-05-10',
-    notes: 'Kênh đồng bộ sản phẩm, đơn hàng và kho tự động mỗi 5 phút',
-  },
-  {
-    id: '2',
-    channelCode: 'CH-LAZADA-02',
-    channelName: 'Lazada - RetailHub Official Store',
-    channelType: 'LAZADA',
-    apiStatus: 'CONNECTED',
-    connectedDate: '2026-05-12',
-    notes: 'Kênh phụ trợ đồng bộ sản phẩm',
-  },
-  {
-    id: '3',
-    channelCode: 'CH-TIKTOK-03',
-    channelName: 'TikTok Shop - RetailHub Vietnam',
-    channelType: 'TIKTOK',
-    apiStatus: 'ERROR',
-    connectedDate: '2026-05-20',
-    notes: 'Lỗi token kết nối kết hạn từ TikTok, cần bấm làm mới kết nối lại API',
-  },
-];
-
 export function SalesChannelsPage() {
-  const [data, setData] = useState<SalesChannelRecord[]>(MOCK_CHANNELS);
+  const {
+    salesChannels: storeChannels,
+    fetchSalesChannels,
+    addSalesChannel,
+    updateSalesChannel,
+    deleteSalesChannel,
+  } = useOmnichannelStore();
+
+  useEffect(() => {
+    fetchSalesChannels();
+  }, [fetchSalesChannels]);
+
+  const data: SalesChannelRecord[] = useMemo(() => {
+    return storeChannels.map((c) => ({
+      id: c.id,
+      channelCode: c.channelCode,
+      channelName: c.channelName,
+      channelType: (c.platform === 'TIKTOK_SHOP' ? 'TIKTOK' : c.platform) as any,
+      apiStatus: (c.status === 'CONNECTED' ? 'CONNECTED' : 'DISCONNECTED') as any,
+      connectedDate: c.lastSyncedAt,
+      notes: `Shop ID: ${c.shopId} - Tồn kho đồng bộ ${c.productCount} sản phẩm`,
+    }));
+  }, [storeChannels]);
+
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<SalesChannelRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -83,30 +77,29 @@ export function SalesChannelsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.channelCode || !editingItem.channelName) return;
-
     if (modalMode === 'create') {
-      const newItem: SalesChannelRecord = {
-        id: String(data.length + 1),
-        channelCode: editingItem.channelCode.toUpperCase(),
-        channelName: editingItem.channelName!,
-        channelType: editingItem.channelType as any || 'SHOPEE',
-        apiStatus: editingItem.apiStatus as any || 'DISCONNECTED',
-        connectedDate: editingItem.connectedDate!,
-        notes: editingItem.notes,
-      };
-      setData([...data, newItem]);
-    } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as SalesChannelRecord) : d)));
+      await addSalesChannel({
+        channelCode: editingItem.channelCode || 'SC-01',
+        channelName: editingItem.channelName || 'Kênh mới',
+        platform: 'SHOPEE',
+        shopId: 'SHOP-01',
+        status: 'CONNECTED',
+        lastSyncedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        productCount: 0,
+      });
+    } else if (editingItem.id) {
+      await updateSalesChannel(editingItem.id, {
+        channelName: editingItem.channelName,
+      });
     }
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn ngắt kết nối và xóa kênh bán hàng này?')) {
-      setData(data.filter((d) => d.id !== id));
+      await deleteSalesChannel(id);
     }
   };
 

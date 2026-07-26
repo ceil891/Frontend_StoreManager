@@ -208,7 +208,7 @@ export function PermissionsPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} />
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedItem(row)} />
       </div>
 
       {/* Drawer Chi tiết */}

@@ -32,7 +32,7 @@ export function PurchaseReturnsListsPage() {
     setIsLoading(true);
     try {
       const res = await axiosClient.get('/purchase/orders');
-      const list = Array.isArray(res) ? res : res?.content || [];
+      const list = Array.isArray(res) ? res : (res as any)?.content || [];
       const mapped: PurchaseReturnRecord[] = list.map((item: any) => {
         const status: PurchaseReturnRecord['status'] =
           item.status === 'DELIVERED' || item.status === 'COMPLETED'

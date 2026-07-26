@@ -32,7 +32,7 @@ export function SupplierRequestsPage() {
     try {
       setIsLoading(true);
       const res = await axiosClient.get('/purchase/orders?size=500');
-      const list = res.content || res || [];
+      const list = (res as any).content || res || [];
       const mapped: RFQRecord[] = (Array.isArray(list) ? list : []).map((item: any) => {
         let status: RFQRecord['status'] = 'CHO_BAO_GIA';
         if (item.status === 'CONFIRMED' || item.status === 'COMPLETED') status = 'DA_BAO_GIA';

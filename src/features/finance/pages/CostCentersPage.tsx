@@ -67,7 +67,7 @@ const CostCentersPage: React.FC = () => {
     try {
       setIsLoading(true);
       const res = await axiosClient.get('/accounting/cost-centers');
-      const list = res.content || res || [];
+      const list = (res as any).content || res || [];
       const mapped = (Array.isArray(list) ? list : []).map((item: any) => ({
         dbId: item.id, // Lưu ID thực tế của database để gọi PUT/DELETE
         id: item.centerCode || `CC-${item.id}`,

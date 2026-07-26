@@ -156,347 +156,6 @@ interface SalesState {
   deleteCustomerReturn: (id: string) => Promise<void>;
 }
 
-const SAMPLE_LINES = {
-  onl1: [
-    { id: 'l1', sku: 'SS-S24', productName: 'Samsung Galaxy S24', quantity: 1, unitPrice: 19900000, lineTotal: 19900000 },
-    { id: 'l2', sku: 'CASE-01', productName: 'Ốp lưng Silicon', quantity: 2, unitPrice: 300000, lineTotal: 600000 },
-  ] as OrderLineItem[],
-  pos: [
-    { id: 'l3', sku: 'SV-001', productName: 'Sữa Vinamilk 1L', quantity: 1, unitPrice: 29000, lineTotal: 29000 },
-    { id: 'l4', sku: 'MG-005', productName: 'Mì gói Hảo Hảo', quantity: 3, unitPrice: 5500, lineTotal: 16500 },
-  ] as OrderLineItem[],
-};
-
-const MOCK_ORDERS: SaleOrder[] = [
-  {
-    id: '1',
-    code: 'ONL-2024-001',
-    customerId: '1',
-    date: '2024-05-17 10:30',
-    subTotal: 20500000,
-    taxAmount: 0,
-    discountAmount: 0,
-    shippingFee: 30000,
-    totalAmount: 20530000,
-    orderLines: SAMPLE_LINES.onl1,
-    itemsSummary: 'Samsung Galaxy S24×1, ốp lưng Silicon×2',
-    status: 'COMPLETED',
-    paymentStatus: 'PAID',
-    paymentMethod: 'Online Card',
-    cashier: 'Sarah Jenkins',
-    createdByName: 'Sarah Jenkins',
-    createdByEmail: 's.jenkins@retailhub.local',
-    origin: 'ONLINE',
-    onlineChannel: 'WEB',
-    currency: 'VND',
-    branchId: 'BR-001',
-    branchName: 'CH Quận 1',
-    recipientName: 'Nguyễn Văn an',
-    recipientPhone: '0909111222',
-    shippingAddress: '12 Lê Lợi, P. Bến Nghé',
-    province: 'TP.HCM',
-    district: 'Quận 1',
-    deliveryStatus: 'DELIVERED',
-    shippingProvider: 'GHTK',
-    trackingCode: 'GHTK-9812001',
-    isCod: false,
-    paymentGatewayRef: 'VNPAY-TXN-88291001',
-    promoCodeApplied: 'WELCOME10',
-  },
-  {
-    id: '2',
-    code: 'ONL-2024-002',
-    customerId: '2',
-    date: '2024-05-17 11:15',
-    subTotal: 3400000,
-    taxAmount: 0,
-    discountAmount: 0,
-    shippingFee: 35000,
-    totalAmount: 3435000,
-    status: 'PENDING',
-    paymentStatus: 'UNPAID',
-    paymentMethod: 'COD',
-    cashier: 'Michael Chang',
-    createdByName: 'Michael Chang',
-    createdByEmail: 'm.chang@retailhub.local',
-    origin: 'ONLINE',
-    onlineChannel: 'APP',
-    currency: 'VND',
-    branchId: 'BR-002',
-    branchName: 'CH Tân Bình',
-    recipientName: 'Trần Thị Bình',
-    recipientPhone: '0918222333',
-    shippingAddress: '45 Cộng Hòa',
-    province: 'TP.HCM',
-    district: 'Tân Bình',
-    deliveryStatus: 'CONFIRMED',
-    shippingProvider: 'Ahamove',
-    trackingCode: 'AHM-229991',
-    isCod: true,
-    codAmount: 3435000,
-    promoCodeApplied: 'FREESHIP',
-  },
-  {
-    id: '3',
-    code: 'ORD-2024-003',
-    customerId: WALK_IN_CUSTOMER_ID,
-    date: '2024-05-17 12:00',
-    subTotal: 455000,
-    taxAmount: 36400,
-    discountAmount: 0,
-    totalAmount: 491400,
-    status: 'COMPLETED',
-    paymentStatus: 'PAID',
-    paymentMethod: 'Tiền mặt',
-    cashier: 'Sarah Jenkins',
-    createdByName: 'Sarah Jenkins',
-    origin: 'POS',
-    currency: 'VND',
-    branchId: 'BR-001',
-    branchName: 'CH Quận 1',
-    orderLines: SAMPLE_LINES.pos,
-    amountTendered: 500000,
-    changeAmount: 8600,
-    shiftId: 'SHIFT-2024-05-17-AM',
-  },
-  {
-    id: '4',
-    code: 'ORD-2024-004',
-    customerId: '3',
-    date: '2024-05-17 14:20',
-    subTotal: 8990000,
-    taxAmount: 0,
-    discountAmount: 500000,
-    totalAmount: 8490000,
-    status: 'CANCELLED',
-    paymentStatus: 'UNPAID',
-    paymentMethod: 'Bank Transfer',
-    cashier: 'David Ross',
-    createdByName: 'David Ross',
-    origin: 'MANUAL',
-    currency: 'VND',
-    branchId: 'BR-003',
-    branchName: 'CH Gò Vấp',
-  },
-  {
-    id: '5',
-    code: 'ONL-2024-003',
-    customerId: '4',
-    date: '2024-05-17 15:45',
-    subTotal: 15000000,
-    taxAmount: 1200000,
-    discountAmount: 0,
-    shippingFee: 250000,
-    totalAmount: 16450000,
-    status: 'PENDING',
-    paymentStatus: 'PAID',
-    paymentMethod: 'Bank Transfer',
-    cashier: 'Michael Chang',
-    createdByName: 'Michael Chang',
-    origin: 'ONLINE',
-    onlineChannel: 'MARKETPLACE',
-    currency: 'VND',
-    branchId: 'BR-004',
-    branchName: 'CH Quận 7',
-    recipientName: 'Phạm thị dung',
-    recipientPhone: '0938444555',
-    shippingAddress: '10 Nguyễn Văn Linh',
-    province: 'TP.HCM',
-    district: 'Quận 7',
-    deliveryStatus: 'SHIPPED',
-    shippingProvider: 'VNPost',
-    trackingCode: 'VNPOST-771920',
-    isCod: false,
-    paymentGatewayRef: 'MOMO-TRANS-77192088',
-  },
-];
-
-const MOCK_QUOTES: QuoteItem[] = [
-  {
-    id: '1',
-    code: 'QT-2024-001',
-    customerId: '5',
-    issueDate: '2024-05-01',
-    revision: 2,
-    subTotal: 112500000,
-    taxAmount: 11250000,
-    discountAmount: 11250000,
-    totalAmount: 112500000,
-    validUntil: '2024-06-01',
-    status: 'ACCEPTED',
-    salesRep: 'Sarah Jenkins',
-    notes: 'Includes 15% VIP enterprise discount.',
-    itemsCount: 2,
-    orderLines: [{ id: 'q1', sku: 'NK-AM24', productName: 'Nike Air Max 2024', quantity: 50, unitPrice: 2250000, lineTotal: 112500000 }],
-  },
-  {
-    id: '2',
-    code: 'QT-2024-002',
-    customerId: '1',
-    issueDate: '2024-05-05',
-    revision: 1,
-    subTotal: 312512500,
-    taxAmount: 31250000,
-    discountAmount: 0,
-    totalAmount: 343762500,
-    validUntil: '2024-05-30',
-    status: 'SENT',
-    salesRep: 'David Ross',
-    notes: 'Annual hardware upgrade package.',
-    itemsCount: 45,
-  },
-  {
-    id: '3',
-    code: 'QT-2024-003',
-    customerId: '2',
-    issueDate: '2024-05-10',
-    revision: 1,
-    subTotal: 21250000,
-    taxAmount: 2125000,
-    discountAmount: 0,
-    totalAmount: 23375000,
-    validUntil: '2024-05-25',
-    status: 'DRAFT',
-    salesRep: 'Michael Chang',
-    notes: 'Initial server rack consultation.',
-    itemsCount: 3,
-  },
-  {
-    id: '4',
-    code: 'QT-2024-004',
-    customerId: '3',
-    issueDate: '2024-04-20',
-    revision: 3,
-    subTotal: 80000000,
-    taxAmount: 8000000,
-    discountAmount: 0,
-    totalAmount: 88000000,
-    validUntil: '2024-05-10',
-    status: 'EXPIRED',
-    salesRep: 'Sarah Jenkins',
-    itemsCount: 8,
-  },
-];
-
-const MOCK_INVOICES: ExportInvoiceItem[] = [
-  {
-    id: '1',
-    invoiceNumber: 'INV-2024-901',
-    customerId: '1',
-    taxId: 'TAX-8921029',
-    billingAddress: '12 Lê Lợi, Q.1, TP.HCM — ĐKKD Apex Hypermarkets',
-    orderIds: ['1'],
-    issueDate: '2024-05-15',
-    dueDate: paymentTermsToDueDate('2024-05-15', 'Net 30'),
-    subtotal: 250000000,
-    vatAmount: 25000000,
-    totalAmount: 275000000,
-    status: 'PAID',
-    paymentTerms: 'Net 30',
-    notes: 'Payment cleared via Wire Transfer #WT-89102.',
-  },
-  {
-    id: '2',
-    invoiceNumber: 'INV-2024-902',
-    customerId: '2',
-    taxId: 'TAX-1029381',
-    billingAddress: '45 Cộng Hòa, Tân Bình — Metro Department Stores',
-    orderIds: ['2'],
-    issueDate: '2024-05-10',
-    dueDate: paymentTermsToDueDate('2024-05-10', 'Net 60'),
-    subtotal: 1125000000,
-    vatAmount: 112500000,
-    totalAmount: 1237500000,
-    status: 'ISSUED',
-    paymentTerms: 'Net 60',
-    notes: 'Dispatched to central distribution warehouse.',
-  },
-  {
-    id: '3',
-    invoiceNumber: 'INV-2024-903',
-    customerId: '3',
-    taxId: 'TAX-5521908',
-    billingAddress: '89 Quang Trung, Gò Vấp — Zenith Retails JSC',
-    orderIds: ['4'],
-    issueDate: '2024-04-01',
-    dueDate: paymentTermsToDueDate('2024-04-01', 'Net 15'),
-    subtotal: 125000000,
-    vatAmount: 12500000,
-    totalAmount: 137500000,
-    status: 'OVERDUE',
-    paymentTerms: 'Net 15',
-    notes: 'Automated overdue reminder sent to finance email.',
-  },
-  {
-    id: '4',
-    invoiceNumber: 'INV-2024-904',
-    customerId: '4',
-    taxId: 'TAX-0019283',
-    billingAddress: '10 Nguyễn Văn Linh, Q.7 — Boutique Alpha',
-    orderIds: ['5'],
-    issueDate: '2024-05-02',
-    dueDate: paymentTermsToDueDate('2024-05-02', 'Due on Receipt'),
-    subtotal: 30000000,
-    vatAmount: 3000000,
-    totalAmount: 33000000,
-    status: 'CANCELLED',
-    paymentTerms: 'Due on Receipt',
-    notes: 'Cancelled due to duplicate order submission.',
-  },
-];
-
-const MOCK_RETURNS: CustomerReturnItem[] = [
-  {
-    id: '1',
-    returnCode: 'RET-2024-001',
-    orderCode: 'ORD-2024-189',
-    customerId: '1',
-    refundAmount: 3249750,
-    refundMethod: 'BANK_TRANSFER',
-    isRestocked: true,
-    returnBranchId: 'BR-001',
-    returnDate: '2024-05-17',
-    reason: 'Wrong shoe size provided.',
-    condition: 'UNOPENED',
-    status: 'APPROVED_REFUNDED',
-    inspector: 'David Ross',
-    notes: 'Restocked to inventory shelf B4.',
-    returnLines: [{ id: 'r1', sku: 'SHOE-42', productName: 'Giày thể thao size 42', quantity: 1, unitPrice: 3249750, lineTotal: 3249750 }],
-  },
-  {
-    id: '2',
-    returnCode: 'RET-2024-002',
-    orderCode: 'ORD-2024-142',
-    customerId: '2',
-    refundAmount: 22475000,
-    refundMethod: 'ORIGINAL_CARD',
-    isRestocked: false,
-    returnBranchId: 'BR-002',
-    returnDate: '2024-05-16',
-    reason: 'Screen glitch on power up.',
-    condition: 'DEFECTIVE',
-    status: 'PENDING_INSPECTION',
-    inspector: 'Michael Chang',
-    notes: 'Sent to technical verification bench.',
-  },
-  {
-    id: '3',
-    returnCode: 'RET-2024-003',
-    orderCode: 'ORD-2024-099',
-    customerId: '3',
-    refundAmount: 1125000,
-    refundMethod: 'STORE_CREDIT',
-    isRestocked: false,
-    returnBranchId: 'BR-003',
-    returnDate: '2024-05-14',
-    reason: 'Customer changed mind after 3 weeks.',
-    condition: 'USED_DAMAGED',
-    status: 'REJECTED',
-    inspector: 'Sarah Jenkins',
-    notes: 'Return period expired & heavy scratch marks.',
-  },
-];
-
 const defaultData = {
   saleOrders: [],
   quotes: [],
@@ -568,16 +227,14 @@ function migrateLegacyReturn(raw: any): CustomerReturnItem {
 
 export const useSalesStore = create<SalesState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...defaultData,
 
       fetchSaleOrders: async () => {
         try {
           const res = await axiosClient.get<any, any>('/sales/orders');
           const data = res.content || res || [];
-          if (Array.isArray(data) && data.length > 0) {
-            set({ saleOrders: data.map(migrateLegacyOrder) });
-          }
+          set({ saleOrders: Array.isArray(data) ? data.map(migrateLegacyOrder) : [] });
         } catch (e) {
           console.error('Failed to fetch sale orders:', e);
         }
@@ -587,9 +244,7 @@ export const useSalesStore = create<SalesState>()(
         try {
           const res = await axiosClient.get<any, any>('/sales/quotes');
           const data = res.content || res || [];
-          if (Array.isArray(data) && data.length > 0) {
-            set({ quotes: data.map(migrateLegacyQuote) });
-          }
+          set({ quotes: Array.isArray(data) ? data.map(migrateLegacyQuote) : [] });
         } catch (e) {
           console.error('Failed to fetch quotes:', e);
         }
@@ -599,9 +254,7 @@ export const useSalesStore = create<SalesState>()(
         try {
           const res = await axiosClient.get<any, any>('/sales/invoices');
           const data = res.content || res || [];
-          if (Array.isArray(data) && data.length > 0) {
-            set({ exportInvoices: data.map(migrateLegacyInvoice) });
-          }
+          set({ exportInvoices: Array.isArray(data) ? data.map(migrateLegacyInvoice) : [] });
         } catch (e) {
           console.error('Failed to fetch invoices:', e);
         }
@@ -611,9 +264,7 @@ export const useSalesStore = create<SalesState>()(
         try {
           const res = await axiosClient.get<any, any>('/sales/returns');
           const data = res.content || res || [];
-          if (Array.isArray(data) && data.length > 0) {
-            set({ customerReturns: data.map(migrateLegacyReturn) });
-          }
+          set({ customerReturns: Array.isArray(data) ? data.map(migrateLegacyReturn) : [] });
         } catch (e) {
           console.error('Failed to fetch customer returns:', e);
         }
@@ -621,134 +272,123 @@ export const useSalesStore = create<SalesState>()(
 
       addSaleOrder: async (order) => {
         try {
-          await axiosClient.post('/sales/orders', order);
+          const payload = {
+            orderCode: order.code,
+            orderDate: new Date().toISOString(),
+            customerId: Number(order.customerId || 1),
+            branchId: Number(order.branchId || 1),
+            status: order.status || 'COMPLETED',
+            note: (order as any).note || '',
+            details: order.orderLines?.map((line: any) => ({
+              productVariantId: line.productVariantId || Number(line.id) || 1,
+              quantity: line.quantity,
+              unitPriceSnapshot: line.unitPrice,
+            })) || [],
+          };
+          await axiosClient.post('/sales/orders', payload);
+          await get().fetchSaleOrders();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          saleOrders: [{ id: Date.now().toString(), ...order }, ...state.saleOrders],
-        }));
       },
 
       updateSaleOrder: async (id, data) => {
         try {
           await axiosClient.put(`/sales/orders/${id}`, data);
+          await get().fetchSaleOrders();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          saleOrders: state.saleOrders.map((o) => (o.id === id ? { ...o, ...data } : o)),
-        }));
       },
 
       deleteSaleOrder: async (id) => {
         try {
           await axiosClient.delete(`/sales/orders/${id}`);
+          await get().fetchSaleOrders();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          saleOrders: state.saleOrders.filter((o) => o.id !== id),
-        }));
       },
 
       addQuote: async (quote) => {
         try {
           await axiosClient.post('/sales/quotes', quote);
+          await get().fetchQuotes();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          quotes: [{ id: Date.now().toString(), ...quote }, ...state.quotes],
-        }));
       },
 
       updateQuote: async (id, data) => {
         try {
           await axiosClient.put(`/sales/quotes/${id}`, data);
+          await get().fetchQuotes();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          quotes: state.quotes.map((q) => (q.id === id ? { ...q, ...data } : q)),
-        }));
       },
 
       deleteQuote: async (id) => {
         try {
           await axiosClient.delete(`/sales/quotes/${id}`);
+          await get().fetchQuotes();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          quotes: state.quotes.filter((q) => q.id !== id),
-        }));
       },
 
       addExportInvoice: async (row) => {
         try {
           await axiosClient.post('/sales/invoices', row);
+          await get().fetchExportInvoices();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          exportInvoices: [{ id: Date.now().toString(), ...row }, ...state.exportInvoices],
-        }));
       },
 
       updateExportInvoice: async (id, data) => {
         try {
           await axiosClient.put(`/sales/invoices/${id}`, data);
+          await get().fetchExportInvoices();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          exportInvoices: state.exportInvoices.map((inv) => (inv.id === id ? { ...inv, ...data } : inv)),
-        }));
       },
 
       deleteExportInvoice: async (id) => {
         try {
           await axiosClient.delete(`/sales/invoices/${id}`);
+          await get().fetchExportInvoices();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          exportInvoices: state.exportInvoices.filter((inv) => inv.id !== id),
-        }));
       },
 
       addCustomerReturn: async (row) => {
         try {
           await axiosClient.post('/sales/returns', row);
+          await get().fetchCustomerReturns();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          customerReturns: [{ id: Date.now().toString(), ...row }, ...state.customerReturns],
-        }));
       },
 
       updateCustomerReturn: async (id, data) => {
         try {
           await axiosClient.put(`/sales/returns/${id}`, data);
+          await get().fetchCustomerReturns();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          customerReturns: state.customerReturns.map((r) => (r.id === id ? { ...r, ...data } : r)),
-        }));
       },
 
       deleteCustomerReturn: async (id) => {
         try {
           await axiosClient.delete(`/sales/returns/${id}`);
+          await get().fetchCustomerReturns();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          customerReturns: state.customerReturns.filter((r) => r.id !== id),
-        }));
       },
     }),
     {

@@ -85,112 +85,7 @@ export const ALL_SYSTEM_PERMISSIONS: PermissionItem[] = [
   { key: 'system:errors:view', name: 'Xem báo cáo lỗi & Diagnostic Logs', group: 'Quản trị hệ thống' },
 ];
 
-export const DEFAULT_MOCK_ROLES: SecurityRoleRecord[] = [
-  {
-    id: '1',
-    roleCode: 'SUPER_ADMIN',
-    roleTitle: 'Quản trị viên toàn hệ thống',
-    description: 'Quyền root toàn năng. Cho phép cấu hình hệ thống, quản lý tài chính doanh nghiệp và chính sách an ninh mạng.',
-    assignedUsersCount: 1,
-    permissionScope: 'GLOBAL_SUPERADMIN',
-    dataScopeBranchIds: ['*'],
-    isSystemRole: true,
-    mfaEnforced: true,
-    sessionTimeoutMinutes: 15,
-    status: 'ACTIVE',
-    createdDate: '2020-01-01',
-    grantedPermissions: ['*'] // Represents all system permissions
-  },
-  {
-    id: '2',
-    roleCode: 'STORE_MANAGER',
-    roleTitle: 'Quản lý chi nhánh cửa hàng',
-    description: 'Giám sát bán hàng tại quầy POS, phê duyệt nhập xuất kho, quản lý danh sách sản phẩm và khách hàng chi nhánh.',
-    assignedUsersCount: 1,
-    permissionScope: 'BRANCH_OPERATIONS',
-    dataScopeBranchIds: ['BR-001'],
-    isSystemRole: false,
-    mfaEnforced: true,
-    sessionTimeoutMinutes: 60,
-    status: 'ACTIVE',
-    createdDate: '2022-02-15',
-    grantedPermissions: [
-      // Allow store manager to manage employee accounts (HR users page)
-      'admin:users:manage',
-      'pos:access',
-      'pos:sessions:view',
-      'pos:sessions:manage',
-      'sales:orders:view',
-      'sales:orders:create',
-      'sales:quotes:manage',
-      'sales:invoices:manage',
-      'sales:returns:manage',
-      'finance:receipts:manage',
-      'finance:payments:manage',
-      'finance:debts:view',
-      'finance:costs:manage',
-      'finance:banks:manage',
-      'finance:journal:manage',
-      'finance:reasons:manage',
-      'admin:positions:manage',
-      'inventory:products:view',
-      'inventory:transfers:manage',
-      'inventory:checks:manage',
-      'inventory:imports:manage',
-      'inventory:returns:manage',
-      'inventory:ledger:view',
-      'purchase:suppliers:manage',
-      'purchase:orders:manage',
-      'crm:customers:manage',
-      'crm:vouchers:manage',
-      'crm:feedback:manage',
-      'logistics:shippers:manage',
-      'logistics:trips:manage',
-      'logistics:prices:manage',
-    ]
-  },
-  {
-    id: '3',
-    roleCode: 'INVENTORY_STAFF',
-    roleTitle: 'Nhân viên quản lý kho',
-    description: 'Thực hiện kiểm kê kho hàng vật lý, tạo phiếu nhập/xuất kho và kiểm tra hạn sử dụng lô hàng.',
-    assignedUsersCount: 1,
-    permissionScope: 'BRANCH_OPERATIONS',
-    dataScopeBranchIds: ['BR-002'],
-    isSystemRole: false,
-    mfaEnforced: false,
-    sessionTimeoutMinutes: 120,
-    status: 'ACTIVE',
-    createdDate: '2023-01-10',
-    grantedPermissions: [
-      'inventory:products:view',
-      'inventory:products:write',
-      'inventory:checks:manage',
-      'inventory:imports:manage',
-      'inventory:ledger:view',
-    ]
-  },
-  {
-    id: '4',
-    roleCode: 'STAFF',
-    roleTitle: 'Nhân viên thu ngân bán hàng',
-    description: 'Mở ca bán hàng, tạo hóa đơn bán lẻ tại quầy POS. Không có quyền sửa đổi cài đặt hệ thống hoặc phê duyệt kho.',
-    assignedUsersCount: 1,
-    permissionScope: 'RESTRICTED_CASHIER',
-    dataScopeBranchIds: ['BR-001'],
-    isSystemRole: false,
-    mfaEnforced: false,
-    sessionTimeoutMinutes: 240,
-    status: 'ACTIVE',
-    createdDate: '2022-02-15',
-    grantedPermissions: [
-      'pos:access',
-      'sales:orders:view',
-      'sales:orders:create',
-      'crm:customers:manage',
-    ]
-  }
-];
+
 
 interface RoleStore {
   roles: SecurityRoleRecord[];
@@ -214,7 +109,7 @@ export const useRoleStore = create<RoleStore>()(
       fetchRoles: async () => {
         set({ isLoading: true, error: null });
         try {
-          const response = await axiosClient.get<any, any[]>('/roles?includeDeleted=false');
+          const response = await axiosClient.get<any, any[]>('/system/roles');
           const mapped = response.map((r: any) => ({
             id: String(r.id),
             roleCode: r.roleName || '', // e.g. "SUPER_ADMIN"

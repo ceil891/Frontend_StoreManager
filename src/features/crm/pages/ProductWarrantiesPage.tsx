@@ -1,57 +1,42 @@
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
+import { useCrmStore } from '../store/crmStore';
 
-interface WarrantyRecord {
+import { useCallback } from 'react';
+import { axiosClient } from '@/shared/lib/axiosClient';
+
+export interface WarrantyRecord {
   id: string;
   warrantyCode: string;
+  serialNumber: string;
+  productName: string;
   customerName: string;
-  serialOrIMEI: string;
+  customerPhone: string;
   startDate: string;
+  durationMonths: number;
   expiryDate: string;
-  terms: string;
-  status: 'HOẠT_ĐỘNG' | 'HẾT_HẠN' | 'HỦY';
+  status: 'ACTIVE' | 'EXPIRED' | 'VOID';
+  notes?: string;
 }
 
-const MOCK_DATA: WarrantyRecord[] = [
-  {
-    id: '1',
-    warrantyCode: 'WRT-2023-001',
-    customerName: 'Nguyễn Văn A',
-    serialOrIMEI: 'SN1234567890',
-    startDate: '2023-01-15',
-    expiryDate: '2025-01-14',
-    terms: 'Bảo hành 2 năm, thay thế linh kiện',
-    status: 'HOẠT_ĐỘNG',
-  },
-  {
-    id: '2',
-    warrantyCode: 'WRT-2022-045',
-    customerName: 'Công ty ABC',
-    serialOrIMEI: 'IMEI9876543210',
-    startDate: '2022-06-01',
-    expiryDate: '2024-05-31',
-    terms: 'Bảo hành 24 tháng, hỗ trợ onsite',
-    status: 'HOẠT_ĐỘNG',
-  },
-  {
-    id: '3',
-    warrantyCode: 'WRT-2021-112',
-    customerName: 'Trần thị B',
-    serialOrIMEI: 'SN1122334455',
-    startDate: '2021-09-20',
-    expiryDate: '2023-09-19',
-    terms: 'Bảo hành 1 năm, chi phí vật tư',
-    status: 'HẾT_HẠN',
-  },
-];
-
 export function ProductWarrantiesPage() {
+  const {
+    productWarranties: storeWarranties,
+    fetchProductWarranties,
+    addProductWarranty,
+    updateProductWarranty,
+    deleteProductWarranty,
+  } = useCrmStore();
+
+  useEffect(() => {
+    fetchProductWarranties();
+  }, [fetchProductWarranties]);
+
   const [data, setData] = useState<WarrantyRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -79,12 +64,11 @@ export function ProductWarrantiesPage() {
         }));
         setData(mapped);
       } else {
-        setData(MOCK_DATA);
+        setData([]);
       }
     } catch (err) {
       console.error('Error fetching warranties:', err);
-      toast.error('Lỗi khi tải sổ bảo hành, dùng dữ liệu tạm');
-      setData(MOCK_DATA);
+      setData([]);
     } finally {
       setIsLoading(false);
     }
@@ -275,7 +259,7 @@ export function ProductWarrantiesPage() {
             <option value="HỦY">HỦY</option>
           </select>
         </div>
-        <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={setSelectedItem} />
+        <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row) => setSelectedItem(row)} />
       </div>
 
       {/* Drawer chi tiết */}

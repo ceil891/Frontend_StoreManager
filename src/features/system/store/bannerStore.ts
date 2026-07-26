@@ -23,28 +23,7 @@ interface BannerState {
   reorderBanners: (startIndex: number, endIndex: number) => void;
 }
 
-const MOCK_BANNERS: Banner[] = [
-  {
-    id: '1',
-    title: 'Khuyến mãi Hè 2026',
-    imageUrl: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800&q=80',
-    linkUrl: '/promotions/summer-2026',
-    isActive: true,
-    validFrom: '2026-06-01',
-    validUntil: '2026-08-31',
-    order: 1
-  },
-  {
-    id: '2',
-    title: 'Xả kho hàng điện tử',
-    imageUrl: 'https://images.unsplash.com/photo-1550009158-9c16dba5af0f?w=800&q=80',
-    linkUrl: '/inventory?category=electronics',
-    isActive: false,
-    validFrom: '2026-05-01',
-    validUntil: '2026-05-31',
-    order: 2
-  }
-];
+
 
 export const useBannerStore = create<BannerState>()(
   persist(
@@ -56,7 +35,7 @@ export const useBannerStore = create<BannerState>()(
           const res = await axiosClient.get<any, any>('/system/banners');
           const data = res.content || res || [];
           if (Array.isArray(data) && data.length > 0) {
-            set({ Banners: data.map((item: any) => ({
+            set({ banners: data.map((item: any) => ({
               id: String(item.id),
               title: item.title || '',
               imageUrl: item.imageUrl || '',

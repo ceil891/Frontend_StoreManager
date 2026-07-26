@@ -336,7 +336,7 @@ export function MobileInventoryPage() {
                       
                       {/* Pricing and Stock */}
                       <div className="flex items-baseline justify-between mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-700/50">
-                        <span className="text-xs font-black text-slate-900 dark:text-white">${prod.price.toFixed(2)}</span>
+                        <span className="text-xs font-black text-slate-900 dark:text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(prod.price)}</span>
                         <span className={`text-[10px] font-extrabold flex items-center gap-0.5 ${
                           isLowStock(prod) ? 'text-red-500' :
                           prod.onHand > 10 ? 'text-emerald-600 dark:text-emerald-400' :
@@ -437,7 +437,7 @@ export function MobileInventoryPage() {
                     <div className="flex-1 grid grid-cols-2 gap-2.5">
                       <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
                         <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Giá bán</span>
-                        <p className="text-base font-black text-slate-800 dark:text-white mt-0.5">${selectedProduct.price.toFixed(2)}</p>
+                        <p className="text-base font-black text-slate-800 dark:text-white mt-0.5">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(selectedProduct.price)}</p>
                       </div>
                       <div className={`p-2.5 rounded-xl border ${isLowStock(selectedProduct) ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800'}`}>
                         <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Tồn kho</span>
@@ -468,7 +468,7 @@ export function MobileInventoryPage() {
                         </div>
                         <div>
                           <p className="text-[9px] text-slate-400 font-bold">Giá vốn</p>
-                          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">${selectedProduct.costPrice.toFixed(2)}</p>
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(selectedProduct.costPrice)}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -682,7 +682,7 @@ export function MobileInventoryPage() {
                             <button
                               type="button"
                               onClick={() => setFormData(p => ({ ...p, imageUrl: '' }))}
-                              className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-650 transition-colors"
+                              className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition-colors"
                             >
                               <X className="w-2 h-2" />
                             </button>
@@ -719,7 +719,7 @@ export function MobileInventoryPage() {
                           <button
                             type="button"
                             onClick={() => setFormData(p => ({ ...p, imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&q=80' }))}
-                            className="text-[10px] text-indigo-650 dark:text-indigo-400 font-bold hover:underline"
+                            className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline"
                           >
                             Mẫu
                           </button>

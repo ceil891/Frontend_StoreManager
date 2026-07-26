@@ -25,6 +25,10 @@ interface Branch {
   currentRevenue: number;
   openedDate: string;
   branchCode: string;
+  taxCode?: string;
+  openingHours?: string;
+  isHeadquarters?: boolean;
+  email?: string;
 }
 
 // --- INITIAL DATA ---
@@ -425,78 +429,101 @@ export function BranchManagementPage() {
       </div>
 
       {/* === Modal: Thêm / Sửa === */}
-      {/* === Modal: Thêm / Sửa === */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? '🏢 Khai báo Chi nhánh mới' : `⚙️ Cấu hình chi nhánh: ${editingBranch.name}`}
-        width="max-w-2xl"
+        title={modalMode === 'create' ? 'Khai báo Chi nhánh mới' : `Cấu hình chi nhánh: ${editingBranch.name}`}
+        size="erp"
       >
-        <form onSubmit={handleSave} className="space-y-4 text-xs">
-          
-          {/* Card 1: Vị trí & Liên hệ */}
-          <div className="p-3.5 bg-gray-50/70 dark:bg-gray-900/30 rounded-xl border border-gray-200 dark:border-gray-800 space-y-3 animate-fade-in">
-            <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-              <MapPin className="w-4 h-4 text-indigo-650" /> 1. Vị trí địa lý & Liên hệ
-            </h4>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tên chi nhánh *</label>
-                <input
-                  required
-                  type="text"
-                  value={editingBranch.name || ''}
-                  onChange={e => setEditingBranch({ ...editingBranch, name: e.target.value })}
-                  placeholder="Ví dụ: Chi nhánh Quận 3, CH Tân Bình..."
-                  className="w-full p-2 border rounded text-xs dark:bg-gray-950 dark:border-gray-700 bg-white dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Số điện thoại liên hệ</label>
-                <div className="relative">
-                  <Phone className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-gray-400" />
+        <form onSubmit={handleSave}>
+          <div className="erp-form-body">
+            {/* Section 1: Định danh & Địa lý */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Vị trí & Liên hệ</h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã chi nhánh *</label>
                   <input
+                    required
                     type="text"
-                    value={editingBranch.phone || ''}
-                    onChange={e => setEditingBranch({ ...editingBranch, phone: e.target.value })}
-                    placeholder="Ví dụ: 028-3822-xxxx"
-                    className="w-full pl-8 pr-2 py-2 border rounded text-xs dark:bg-gray-955 dark:border-gray-700 bg-white dark:text-white font-mono"
+                    value={editingBranch.branchCode || ''}
+                    onChange={e => setEditingBranch({ ...editingBranch, branchCode: e.target.value })}
+                    placeholder="VD: CN-Q3, STORE-01"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên chi nhánh *</label>
+                  <input
+                    required
+                    type="text"
+                    value={editingBranch.name || ''}
+                    onChange={e => setEditingBranch({ ...editingBranch, name: e.target.value })}
+                    placeholder="Chi nhánh Quận 3..."
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Địa chỉ chi nhánh *</label>
-              <div className="relative">
-                <MapPin className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-gray-400" />
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ chi nhánh *</label>
                 <input
                   required
                   type="text"
                   value={editingBranch.location || ''}
                   onChange={e => setEditingBranch({ ...editingBranch, location: e.target.value })}
-                  placeholder="Ví dụ: 123 Lê Lợi, Phường Bến Thành, Quận 1, TP.HCM"
-                  className="w-full pl-8 pr-2 py-2 border rounded text-xs dark:bg-gray-955 dark:border-gray-700 bg-white dark:text-white"
+                  placeholder="123 Lê Lợi, Phường Bến Thành, Quận 1, TP.HCM"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại</label>
+                  <input
+                    type="text"
+                    value={editingBranch.phone || ''}
+                    onChange={e => setEditingBranch({ ...editingBranch, phone: e.target.value })}
+                    placeholder="028-3822-xxxx"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Email chi nhánh</label>
+                  <input
+                    type="email"
+                    value={editingBranch.email || ''}
+                    onChange={e => setEditingBranch({ ...editingBranch, email: e.target.value })}
+                    placeholder="chinhanh@retailhub.vn"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={!!editingBranch.isHeadquarters}
+                    onChange={e => setEditingBranch({ ...editingBranch, isHeadquarters: e.target.checked })}
+                    className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                  />
+                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Đây là Trụ sở chính / Kho tổng của công ty</span>
+                </label>
+              </div>
             </div>
-          </div>
 
-          {/* Card 2: Quản lý & Nhân sự */}
-          <div className="p-3.5 bg-gray-50/70 dark:bg-gray-900/30 rounded-xl border border-gray-200 dark:border-gray-800 space-y-3">
-            <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Users className="w-4 h-4 text-emerald-600" /> 2. Phân nhiệm Quản lý & Nhân sự
-            </h4>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Section 2: Nhân sự & Vận hành */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Quản lý & Nhân sự</h3>
+              
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Cửa hàng trưởng (Branch Manager)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Cửa hàng trưởng (Branch Manager)</label>
                 <select
                   value={editingBranch.managerId || ''}
                   onChange={e => setEditingBranch({ ...editingBranch, managerId: e.target.value })}
-                  className="w-full p-2 border rounded text-xs dark:bg-gray-955 dark:border-gray-700 bg-white dark:text-white font-medium"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">-- Chọn Cửa hàng trưởng --</option>
                   {(users && users.length > 0 ? users : [
@@ -509,80 +536,96 @@ export function BranchManagementPage() {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Quy mô Nhân sự (Nhân viên)</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={editingBranch.employeesCount === 0 ? '' : (editingBranch.employeesCount || '')}
-                  onChange={e => setEditingBranch({ ...editingBranch, employeesCount: parseInt(e.target.value) || 0 })}
-                  placeholder="Ví dụ: 10"
-                  className="w-full p-2 border rounded text-xs dark:bg-gray-955 dark:border-gray-700 bg-white dark:text-white font-mono"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Card 3: Tài chính & Vận hành */}
-          <div className="p-3.5 bg-gray-50/70 dark:bg-gray-900/30 rounded-xl border border-gray-200 dark:border-gray-800 space-y-3">
-            <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Activity className="w-4 h-4 text-orange-500" /> 3. Chỉ tiêu Tài chính & Vận hành
-            </h4>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Trạng thái hoạt động</label>
-                <select
-                  value={editingBranch.status || 'ACTIVE'}
-                  onChange={e => setEditingBranch({ ...editingBranch, status: e.target.value as Branch['status'] })}
-                  className="w-full p-2 border rounded text-xs dark:bg-gray-955 dark:border-gray-700 bg-white dark:text-white font-semibold"
-                >
-                  <option value="ACTIVE">🟢 Hoạt động</option>
-                  <option value="MAINTENANCE">🟡 Đang bảo trì</option>
-                  <option value="INACTIVE">🔴 Đóng cửa tạm thời</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chỉ tiêu Doanh thu (₫)</label>
-                <div className="relative">
-                  <Target className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-gray-400" />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số nhân viên</label>
                   <input
                     type="number"
                     min={0}
-                    value={editingBranch.revenueTarget || ''}
-                    onChange={e => setEditingBranch({ ...editingBranch, revenueTarget: parseInt(e.target.value) || 0 })}
-                    placeholder="Ví dụ: 300,000,000"
-                    className="w-full pl-8 pr-2 py-2 border rounded text-xs dark:bg-gray-955 dark:border-gray-700 bg-white dark:text-white font-mono"
+                    value={editingBranch.employeesCount === 0 ? '' : (editingBranch.employeesCount || '')}
+                    onChange={e => setEditingBranch({ ...editingBranch, employeesCount: parseInt(e.target.value) || 0 })}
+                    placeholder="VD: 10"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giờ mở cửa</label>
+                  <input
+                    type="text"
+                    value={editingBranch.openingHours || '08:00 - 22:00'}
+                    onChange={e => setEditingBranch({ ...editingBranch, openingHours: e.target.value })}
+                    placeholder="VD: 08:00 - 22:00"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày khai trương</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái hoạt động</label>
+                <select
+                  value={editingBranch.status || 'ACTIVE'}
+                  onChange={e => setEditingBranch({ ...editingBranch, status: e.target.value as Branch['status'] })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 font-semibold"
+                >
+                  <option value="ACTIVE">Hoạt động (ACTIVE)</option>
+                  <option value="MAINTENANCE">Đang bảo trì (MAINTENANCE)</option>
+                  <option value="INACTIVE">Đóng cửa (INACTIVE)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Section 3: Chỉ tiêu & Pháp lý */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Tài chính & Pháp lý</h3>
+              
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã số thuế chi nhánh</label>
+                <input
+                  type="text"
+                  value={editingBranch.taxCode || ''}
+                  onChange={e => setEditingBranch({ ...editingBranch, taxCode: e.target.value })}
+                  placeholder="MST địa điểm kinh doanh"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chỉ tiêu Doanh thu (₫)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={editingBranch.revenueTarget || ''}
+                  onChange={e => setEditingBranch({ ...editingBranch, revenueTarget: parseInt(e.target.value) || 0 })}
+                  placeholder="Ví dụ: 300,000,000"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày khai trương</label>
                 <input
                   type="date"
                   value={editingBranch.openedDate || ''}
                   onChange={e => setEditingBranch({ ...editingBranch, openedDate: e.target.value })}
-                  className="w-full p-2 border rounded text-xs dark:bg-gray-955 dark:border-gray-700 bg-white dark:text-white"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="erp-form-footer border-t border-gray-200 dark:border-gray-700 pt-4">
             <button 
               type="button" 
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded hover:bg-gray-50 dark:hover:bg-gray-900 transition text-gray-700 dark:text-gray-300 text-xs font-semibold"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg text-sm"
             >
               Hủy bỏ
             </button>
             <button 
-              type="submit"
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm transition-all hover:scale-[1.01] text-xs"
+              type="submit" 
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow text-sm"
             >
-              {modalMode === 'create' ? 'Tạo chi nhánh' : 'Lưu cập nhật'}
+              {modalMode === 'create' ? 'Khai báo chi nhánh' : 'Lưu cập nhật'}
             </button>
           </div>
         </form>

@@ -1,46 +1,44 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, FileCode, Play, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useOmnichannelStore } from '../store/omnichannelStore';
 
-interface WebhookLogRecord {
+export interface WebhookLogRecord {
   id: string;
   logId: string;
   channelName: string;
-  eventType: 'ORDER_CREATED' | 'ORDER_CANCELLED' | 'STOCK_CHANGED';
+  eventType: string;
   receivedTime: string;
   httpStatus: number;
   payloadSummary: string;
-  notes?: string;
+  notes: string;
 }
 
-const MOCK_LOGS: WebhookLogRecord[] = [
-  {
-    id: '1',
-    logId: 'WH-LOG-100231',
-    channelName: 'Shopee - gian hàng thời Trang',
-    eventType: 'ORDER_CREATED',
-    receivedTime: '2026-06-04 16:30:12',
-    httpStatus: 200,
-    payloadSummary: '{ "order_id": "SHP-9812", "total": 1450000, "items_count": 2 }',
-    notes: 'Webhook xử lý thành công, đã tạo đơn SO tương ứng trên POS',
-  },
-  {
-    id: '2',
-    logId: 'WH-LOG-100232',
-    channelName: 'TikTok Shop - RetailHub',
-    eventType: 'STOCK_CHANGED',
-    receivedTime: '2026-06-04 16:32:00',
-    httpStatus: 500,
-    payloadSummary: '{ "product_id": "TT-12001", "stock": 0 }',
-    notes: 'Lỗi kết nối cơ sở dữ liệu nội bộ khi lưu trữ nhật ký đồng bộ tồn kho',
-  },
-];
-
 export function WebhookLogsPage() {
-  const [data, setData] = useState<WebhookLogRecord[]>(MOCK_LOGS);
+  const {
+    webhookLogs: storeLogs,
+    fetchWebhookLogs,
+  } = useOmnichannelStore();
+
+  useEffect(() => {
+    fetchWebhookLogs();
+  }, [fetchWebhookLogs]);
+
+  const data: WebhookLogRecord[] = useMemo(() => {
+    return storeLogs.map((w) => ({
+      id: w.id,
+      logId: w.logCode,
+      channelName: w.channelName,
+      eventType: (w.eventType === 'PRICE_CHANGED' ? 'STOCK_CHANGED' : w.eventType) as any,
+      receivedTime: w.createdAt,
+      httpStatus: w.responseCode,
+      payloadSummary: w.payloadSummary,
+      notes: w.status === 'SUCCESS' ? 'Xử lý thành công' : 'Thất bại',
+    }));
+  }, [storeLogs]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<WebhookLogRecord | null>(null);
 
@@ -57,18 +55,6 @@ export function WebhookLogsPage() {
 
   const handleRetryWebhook = (item: WebhookLogRecord) => {
     alert(`Đang gửi lại yêu cầu xử lý Webhook ID: ${item.logId}...`);
-    setData(
-      data.map((d) => {
-        if (d.id === item.id) {
-          return {
-            ...d,
-            httpStatus: 200,
-            notes: 'Đã gửi lại thủ công và xử lý thành công (200 OK)',
-          };
-        }
-        return d;
-      })
-    );
   };
 
   const columns = useMemo<ColumnDef<WebhookLogRecord>[]>(

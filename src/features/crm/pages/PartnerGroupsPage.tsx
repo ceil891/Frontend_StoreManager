@@ -4,8 +4,8 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
+import { useCrmStore } from '../store/crmStore';
 
 interface PartnerGroupItem {
   id: string;
@@ -18,17 +18,38 @@ interface PartnerGroupItem {
   createdAt: string;
 }
 
-const MOCK_DATA: PartnerGroupItem[] = [
-  { id: '1', groupCode: 'VIP_GOLD', name: 'Khách hàng thân thiết gold', type: 'KHÁCH_HÀNG', description: 'Nhóm khách hàng có tích lũy từ 50 triệu trở lên, hưởng ưu đãi chiết khấu 5% khi mua hàng', memberCount: 154, status: 'KÍCH_HOẠT', createdAt: '2026-01-15' },
-  { id: '2', groupCode: 'SUP_FMCG', name: 'Nhà cung cấp hàng tiêu dùng', type: 'NHÀ_CUNG_CẤP', description: 'Các đối tác cung ứng nhóm sản phẩm tiêu dùng nhanh (FMCG), chu kỳ thanh toán công nợ 30 ngày', memberCount: 18, status: 'KÍCH_HOẠT', createdAt: '2026-02-10' },
-  { id: '3', groupCode: 'VIP_DIAMOND', name: 'Khách hàng kim Cương', type: 'KHÁCH_HÀNG', description: 'Khách hàng đặc biệt VIP có tích lũy từ 150 triệu trở lên, chiết khấu 10%', memberCount: 42, status: 'KÍCH_HOẠT', createdAt: '2026-01-20' },
-  { id: '4', groupCode: 'SUP_FRESH', name: 'Nhà cung cấp thực phẩm tươi sống', type: 'NHÀ_CUNG_CẤP', description: 'Các hộ nông trại và hợp tác xã cung cấp thực phẩm rau củ quả tươi sống, giao hàng hàng ngày', memberCount: 12, status: 'KHOÁ', createdAt: '2026-03-01' },
-  { id: '5', groupCode: 'WHOLESALE_CUST', name: 'Khách hàng mua sỉ', type: 'KHÁCH_HÀNG', description: 'Nhóm khách hàng mua buôn với số lượng lớn, bảng giá chiết khấu riêng theo hợp đồng đại lý', memberCount: 88, status: 'KÍCH_HOẠT', createdAt: '2026-02-18' }
-];
+const MOCK_DATA: PartnerGroupItem[] = [];
+
+import { axiosClient } from '@/shared/lib/axiosClient';
 
 export function PartnerGroupsPage() {
-  const [data, setData] = useState<PartnerGroupItem[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const setData = (_fn: any) => {};
+  const {
+    partnerGroups: storeGroups,
+    fetchPartnerGroups,
+    addPartnerGroup,
+    updatePartnerGroup,
+    deletePartnerGroup,
+  } = useCrmStore();
+
+  useEffect(() => {
+    fetchPartnerGroups();
+  }, [fetchPartnerGroups]);
+
+  const data: PartnerGroupItem[] = useMemo(() => {
+    return storeGroups.map((g) => ({
+      id: g.id,
+      groupCode: g.groupCode,
+      name: g.groupName,
+      type: 'KHÁCH_HÀNG',
+      description: g.description,
+      memberCount: g.memberCount,
+      status: g.status === 'ACTIVE' ? 'KÍCH_HOẠT' : 'KHOÁ',
+      createdAt: '2026-01-15',
+    }));
+  }, [storeGroups]);
+
+  const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('Tất cả');
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
@@ -39,33 +60,6 @@ export function PartnerGroupsPage() {
   const [editingItem, setEditingItem] = useState<Partial<PartnerGroupItem>>({});
   const [deletingItem, setDeletingItem] = useState<PartnerGroupItem | null>(null);
 
-  const fetchPartnerGroups = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const res: any = await axiosClient.get('/crm/partner-groups');
-      const list = Array.isArray(res) ? res : res?.content || res?.data || [];
-      if (list.length > 0) {
-        const mapped: PartnerGroupItem[] = list.map((item: any) => ({
-          id: String(item.id),
-          groupCode: item.code || `PG-${item.id}`,
-          name: item.name || 'Nhóm đối tác',
-          type: item.type === 'SUPPLIER' ? 'NHÀ_CUNG_CẤP' : 'KHÁCH_HÀNG',
-          description: item.description || '',
-          memberCount: item.memberCount || 0,
-          status: item.isActive !== false ? 'KÍCH_HOẠT' : 'KHOÁ',
-          createdAt: item.createdAt ? String(item.createdAt).split('T')[0] : '2026-01-15',
-        }));
-        setData(mapped);
-      } else {
-        setData(MOCK_DATA);
-      }
-    } catch (err) {
-      console.error('Error fetching partner groups:', err);
-      setData(MOCK_DATA);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     fetchPartnerGroups();
@@ -106,7 +100,13 @@ export function PartnerGroupsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.groupCode || !editingItem.name || !editingItem.type) return;
-
+    const payload = {
+      groupCode: editingItem.groupCode,
+      name: editingItem.name,
+      type: editingItem.type,
+      description: editingItem.description,
+      status: editingItem.status,
+    };
 
     try {
       if (modalMode === 'create') {
@@ -306,7 +306,7 @@ export function PartnerGroupsPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={setSelectedItem} />
+        <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row) => setSelectedItem(row)} />
       </div>
 
       {/* Drawer Chi tiết */}

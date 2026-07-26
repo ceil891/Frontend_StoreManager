@@ -43,8 +43,8 @@ export function ExportInvoicesPage() {
   const filtered = exportInvoices.filter(
     (item) =>
       resolveCustomerName(item.customerId, customers).toLowerCase().includes(search.toLowerCase()) ||
-      item.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
-      item.taxId.toLowerCase().includes(search.toLowerCase())
+      (item.invoiceNumber || '').toLowerCase().includes(search.toLowerCase()) ||
+      (item.taxId || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const handleOpenCreate = () => {

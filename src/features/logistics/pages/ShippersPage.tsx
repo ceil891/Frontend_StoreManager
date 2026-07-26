@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Filter, Eye, Truck, Star, Phone, Mail, MapPin, ShieldCheck, FileText, CheckCircle2, Trash2 } from 'lucide-react';
+import { Plus, Download, Search, Filter, Eye, Truck, Star, Phone, Mail, MapPin, ShieldCheck, FileText, CheckCircle2, Trash2, Edit } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -66,7 +66,7 @@ export function ShippersPage() {
           activeFleetSize: 50,
           averageDeliveryHours: 24,
           slaComplianceRate: 98.8,
-          status: item.isActive ? 'ACTIVE' : 'TERMINATED',
+          status: (item.isActive ? 'ACTIVE' : 'TERMINATED') as ShipperPartnerRecord['status'],
           headquarters: item.address || 'Hà Nội, Việt Nam',
           notes: item.note || ''
         }));

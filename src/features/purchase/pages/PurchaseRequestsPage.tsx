@@ -33,7 +33,7 @@ export function PurchaseRequestsPage() {
     try {
       setIsLoading(true);
       const res = await axiosClient.get('/purchase/requests?size=500');
-      const list = res.content || res || [];
+      const list = (res as any).content || res || [];
       const mapped: PurchaseRequestItem[] = (Array.isArray(list) ? list : []).map((item: any) => {
         const statusMap: Record<string, PurchaseRequestItem['status']> = {
           DRAFT: 'CHỜ_DUYỆT',
@@ -271,7 +271,7 @@ export function PurchaseRequestsPage() {
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-500" />
           </div>
         ) : (
-          <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} />
+          <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedItem(row)} />
         )}
       </div>
 

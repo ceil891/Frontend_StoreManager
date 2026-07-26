@@ -32,7 +32,7 @@ export function SupplierDeliveriesPage() {
     setIsLoading(true);
     try {
       const res = await axiosClient.get('/purchase/orders');
-      const list = Array.isArray(res) ? res : res?.content || [];
+      const list = Array.isArray(res) ? res : (res as any)?.content || [];
       const mapped: SupplierDeliveryRecord[] = list.map((item: any) => {
         const status: SupplierDeliveryRecord['status'] =
           item.status === 'DELIVERED'

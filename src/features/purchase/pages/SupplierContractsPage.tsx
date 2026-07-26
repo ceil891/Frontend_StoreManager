@@ -34,7 +34,7 @@ export function SupplierContractsPage() {
     try {
       setIsLoading(true);
       const res = await axiosClient.get('/purchase/contracts?size=500');
-      const list = res.content || res || [];
+      const list = (res as any).content || res || [];
       const mapped: SupplierContractItem[] = (Array.isArray(list) ? list : []).map((item: any) => {
         let status: SupplierContractItem['status'] = 'CHỜ_KÝ';
         if (item.status === 'ACTIVE') status = 'ĐANG_HIỆU_LỰC';
@@ -268,7 +268,7 @@ export function SupplierContractsPage() {
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-500" />
           </div>
         ) : (
-          <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} />
+          <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedItem(row)} />
         )}
       </div>
 

@@ -1,8 +1,10 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router';
 import { 
   Plus, Download, Eye, Tag,
   MapPin, Image as ImageIcon, Edit, Trash2, AlertCircle, X,
-  CircleDot, Package, Barcode, AlertTriangle, Package2, UploadCloud, Loader2
+  CircleDot, Package, Barcode, AlertTriangle, Package2, UploadCloud, Loader2,
+  CheckCircle2, ArrowRight
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -16,6 +18,12 @@ import { useColorStore } from '../store/colorStore';
 import { useSizeStore } from '../store/sizeStore';
 
 export function InventoryPage() {
+  const navigate = useNavigate();
+  const [isWizardModalOpen, setIsWizardModalOpen] = useState(false);
+  const [createdProductInfo, setCreatedProductInfo] = useState<{ id?: string; sku: string; name: string; costPrice?: number } | null>(null);
+  const [wizardChoice, setWizardChoice] = useState<'NONE' | 'INITIAL_STOCK' | 'IMPORT_RECEIPT'>('NONE');
+  const [wizardInitialStock, setWizardInitialStock] = useState<number>(100);
+  const [isSavingWizard, setIsSavingWizard] = useState(false);
   const {
     products: data, addProduct, updateProduct, deleteProduct, categories, fetchProducts, fetchCategories,
     unitsList, fetchUnits, fetchProductUnits, createProductUnit, updateProductUnit, deleteProductUnit,
@@ -205,7 +213,10 @@ export function InventoryPage() {
     try {
       if (modalMode === 'create') {
         await addProduct({ ...payload, units: editingUnits, variants: editingProduct.variants || [] });
-        toast.success(`Đã thêm sản phẩm ${payload.name} thành công!`);
+        setIsModalOpen(false);
+        setCreatedProductInfo({ sku: payload.sku, name: payload.name, costPrice: payload.costPrice });
+        setIsWizardModalOpen(true);
+        toast.success(`Product created: ${payload.name}`);
       } else if (editingProduct.id) {
         await updateProduct(editingProduct.id, payload);
         
@@ -242,11 +253,37 @@ export function InventoryPage() {
         }
 
         toast.success(`Đã cập nhật sản phẩm ${payload.name} thành công!`);
+        setIsModalOpen(false);
       }
-      setIsModalOpen(false);
     } catch (error: any) {
       toast.error(error?.message || 'Có lỗi xảy ra khi lưu sản phẩm');
     }
+  };
+
+  const handleConfirmInitialStock = async () => {
+    if (!createdProductInfo) return;
+    setIsSavingWizard(true);
+    try {
+      const prod = data.find(p => p.sku === createdProductInfo.sku);
+      if (prod) {
+        await updateProduct(prod.id, { ...prod, onHand: Number(wizardInitialStock) || 0 });
+        toast.success(`Đã cập nhật tồn kho đầu kỳ (${wizardInitialStock}) cho sản phẩm ${createdProductInfo.name}!`);
+      } else {
+        toast.success(`Đã ghi nhận tồn đầu kỳ (${wizardInitialStock})!`);
+      }
+      setIsWizardModalOpen(false);
+      setWizardChoice('NONE');
+    } catch (err) {
+      console.error(err);
+      toast.error('Cập nhật tồn kho thất bại');
+    } finally {
+      setIsSavingWizard(false);
+    }
+  };
+
+  const handleGoToImportReceipt = () => {
+    setIsWizardModalOpen(false);
+    navigate('/purchase/orders');
   };
 
   const handleDeleteConfirm = () => {
@@ -527,7 +564,7 @@ export function InventoryPage() {
         meta: { align: 'center' }
       },
     ],
-    []
+    [getLowStockThreshold]
   );
 
   const handleBulkActions = useCallback((selectedRows: ProductInventory[], clearSelection: () => void) => (
@@ -650,7 +687,7 @@ export function InventoryPage() {
             data={filtered} 
             isLoading={isLoading}
             globalFilterPlaceholder="Tìm kiếm sản phẩm (Tên, SKU, Thương hiệu)..."
-            onRowClick={setSelectedProduct} 
+            onRowClick={(row) => setSelectedProduct(row)} 
             bulkActions={handleBulkActions}
           />
         )}
@@ -825,7 +862,7 @@ export function InventoryPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={modalMode === 'create' ? 'Thêm sản phẩm mới' : 'Cập nhật sản phẩm'}
-        width="max-w-3xl"
+        size="erp"
       >
         {/* Premium segmented tabs */}
         <div className="bg-gray-100/80 dark:bg-gray-900/50 p-1 rounded-xl flex items-center mb-8 border border-gray-200/50 dark:border-gray-800/50 shadow-inner">
@@ -877,101 +914,159 @@ export function InventoryPage() {
 
         <form onSubmit={handleSaveProduct} className="space-y-6">
           {activeModalTab === 'basic' && (
-            <div className="space-y-5 animate-fade-in">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Mã SKU <span className="text-red-500">*</span></label>
-                  <input
-                    type="text"
-                    value={editingProduct.sku || ''}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
-                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl font-mono text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
-                    placeholder="VD: SP-001"
-                    required
-                  />
+            <div className="erp-form-body animate-fade-in">
+              {/* Section: Định danh sản phẩm */}
+              <div className="erp-form-section space-y-4" style={{gridColumn: 'span 2'}}>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Định danh sản phẩm</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Mã SKU <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={editingProduct.sku || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl font-mono text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                      placeholder="VD: SP-001"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Barcode (Mã vạch)</label>
+                    <input
+                      type="text"
+                      value={editingProduct.barcodes?.[0] || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, barcodes: [e.target.value] })}
+                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl font-mono text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                      placeholder="VD: 89352..."
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Tên Sản Phẩm <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={editingProduct.name || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                      placeholder="Nhập tên sản phẩm..."
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Danh mục</label>
+                    <select
+                      value={editingProduct.category || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                    >
+                      {categories.map(c => <option key={c.id} value={c.categoryName}>{c.categoryName}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Thương hiệu</label>
+                    <input
+                      type="text"
+                      value={editingProduct.brand || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, brand: e.target.value })}
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                      placeholder="VD: Samsung, Nike..."
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Trạng thái</label>
+                    <select
+                      value={editingProduct.status || 'ACTIVE'}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, status: e.target.value as any })}
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                    >
+                      <option value="ACTIVE">Đang bán</option>
+                      <option value="INACTIVE">Ngừng KD (tắt HĐ)</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Tên Sản Phẩm <span className="text-red-500">*</span></label>
-                  <input
-                    type="text"
-                    value={editingProduct.name || ''}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
-                    placeholder="Nhập tên sản phẩm..."
-                    required
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Mô tả chi tiết</label>
+                  <textarea
+                    value={editingProduct.description || ''}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
+                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm h-28 resize-none"
+                    placeholder="Nhập thông tin mô tả sản phẩm..."
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Danh mục</label>
-                  <select
-                    value={editingProduct.category || ''}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
-                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
-                  >
-                    {categories.map(c => <option key={c.id} value={c.categoryName}>{c.categoryName}</option>)}
-                  </select>
+              {/* Section: Giá cả & Kho */}
+              <div className="erp-form-section space-y-4">
+                <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Giá cả & Kho</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Giá bán lẻ (₫)</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₫</span>
+                      <input
+                        type="number"
+                        value={editingProduct.price || 0}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) })}
+                        className="w-full pl-8 pr-4 py-3 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/50 rounded-xl text-sm font-black text-emerald-700 dark:text-emerald-400 focus:ring-2 focus:ring-emerald-500/50 transition-all shadow-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Giá vốn (₫)</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₫</span>
+                      <input
+                        type="number"
+                        value={editingProduct.costPrice || 0}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, costPrice: parseFloat(e.target.value) })}
+                        className="w-full pl-8 pr-4 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-gray-500/50 transition-all shadow-sm"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Thương hiệu</label>
-                  <input
-                    type="text"
-                    value={editingProduct.brand || ''}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, brand: e.target.value })}
-                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
-                    placeholder="VD: Samsung, Nike..."
-                  />
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Trọng lượng (kg/g)</label>
+                    <input
+                      type="text"
+                      value={editingProduct.weight || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, weight: e.target.value })}
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Điểm đặt hàng lại (Reorder Point)</label>
+                    <input
+                      type="number"
+                      value={editingProduct.reorderPoint || 0}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, reorderPoint: parseFloat(e.target.value) })}
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Trạng thái</label>
-                  <select
-                    value={editingProduct.status || 'ACTIVE'}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, status: e.target.value as any })}
-                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
-                  >
-                    <option value="ACTIVE">Đang bán</option>
-                    <option value="INACTIVE">Ngừng KD (tắt HĐ)</option>
-                  </select>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Giá bán lẻ (₫)</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₫</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Tồn kho tối thiểu</label>
                     <input
                       type="number"
-                      value={editingProduct.price || 0}
-                      onChange={(e) => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) })}
-                      className="w-full pl-8 pr-4 py-3 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/50 rounded-xl text-sm font-black text-emerald-700 dark:text-emerald-400 focus:ring-2 focus:ring-emerald-500/50 transition-all shadow-sm"
+                      value={editingProduct.minStock || 0}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, minStock: parseFloat(e.target.value) })}
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Tồn kho tối đa</label>
+                    <input
+                      type="number"
+                      value={editingProduct.maxStock || 0}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, maxStock: parseFloat(e.target.value) })}
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm"
                     />
                   </div>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Giá vốn (₫)</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₫</span>
-                    <input
-                      type="number"
-                      value={editingProduct.costPrice || 0}
-                      onChange={(e) => setEditingProduct({ ...editingProduct, costPrice: parseFloat(e.target.value) })}
-                      className="w-full pl-8 pr-4 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-gray-500/50 transition-all shadow-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Mô tả chi tiết</label>
-                <textarea
-                  value={editingProduct.description || ''}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
-                  className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm h-28 resize-none"
-                  placeholder="Nhập thông tin mô tả sản phẩm..."
-                />
               </div>
             </div>
           )}
@@ -1247,7 +1342,7 @@ export function InventoryPage() {
                   <button
                     type="button"
                     onClick={handleAddVariant}
-                    className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-650 hover:bg-indigo-750 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
                   >
                     <Plus className="w-3.5 h-3.5" /> Thêm biến thể
                   </button>
@@ -1333,7 +1428,7 @@ export function InventoryPage() {
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 dark:border-gray-800 mt-8">
+          <div className="erp-form-footer">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
@@ -1393,6 +1488,116 @@ export function InventoryPage() {
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
               Xóa {deletingBulkProducts?.rows.length} sản phẩm
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Post-Creation Wizard Modal */}
+      <Modal
+        isOpen={isWizardModalOpen}
+        onClose={() => { setIsWizardModalOpen(false); setWizardChoice('NONE'); }}
+        title="🎉 Tạo sản phẩm thành công!"
+        width="max-w-lg"
+      >
+        <div className="space-y-5">
+          <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="text-base font-bold text-emerald-900 dark:text-emerald-200">Product created.</h4>
+              <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1 leading-relaxed">
+                Sản phẩm <strong className="font-bold text-emerald-950 dark:text-white">{createdProductInfo?.name}</strong> ({createdProductInfo?.sku}) đã được thêm vào hệ thống.
+              </p>
+            </div>
+          </div>
+
+          <p className="text-sm font-bold text-gray-800 dark:text-gray-200">Bạn có muốn thực hiện bước tiếp theo nào cho sản phẩm này?</p>
+
+          <div className="space-y-3">
+            {/* Option 1: Nhập tồn đầu kỳ */}
+            <div 
+              onClick={() => setWizardChoice('INITIAL_STOCK')}
+              className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                wizardChoice === 'INITIAL_STOCK' 
+                  ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30 dark:border-indigo-500 shadow-sm' 
+                  : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-indigo-300 dark:hover:border-indigo-700'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <input type="radio" checked={wizardChoice === 'INITIAL_STOCK'} onChange={() => setWizardChoice('INITIAL_STOCK')} className="w-4 h-4 text-indigo-600" />
+                  <div>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">☐ Nhập tồn đầu kỳ</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Khai báo ngay số lượng tồn khả dụng trong kho</p>
+                  </div>
+                </div>
+              </div>
+
+              {wizardChoice === 'INITIAL_STOCK' && (
+                <div className="mt-3 pt-3 border-t border-indigo-100 dark:border-indigo-900/50 flex items-center gap-3" onClick={e => e.stopPropagation()}>
+                  <label className="text-xs font-bold text-gray-700 dark:text-gray-300 whitespace-nowrap">Số lượng tồn kho:</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={wizardInitialStock} 
+                    onChange={e => setWizardInitialStock(parseInt(e.target.value) || 0)} 
+                    className="w-32 px-3 py-1.5 border border-indigo-300 dark:border-indigo-700 rounded-lg bg-white dark:bg-gray-900 text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <button 
+                    type="button" 
+                    disabled={isSavingWizard}
+                    onClick={handleConfirmInitialStock}
+                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow transition-colors active:scale-95 flex items-center gap-1.5"
+                  >
+                    {isSavingWizard && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Xác nhận nhập
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Option 2: Tạo phiếu nhập */}
+            <div 
+              onClick={() => setWizardChoice('IMPORT_RECEIPT')}
+              className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                wizardChoice === 'IMPORT_RECEIPT' 
+                  ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30 dark:border-indigo-500 shadow-sm' 
+                  : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-indigo-300 dark:hover:border-indigo-700'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <input type="radio" checked={wizardChoice === 'IMPORT_RECEIPT'} onChange={() => setWizardChoice('IMPORT_RECEIPT')} className="w-4 h-4 text-indigo-600" />
+                  <div>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">☐ Tạo phiếu nhập (Purchase Order)</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Tạo đơn đặt mua sỉ từ nhà cung cấp cho sản phẩm này</p>
+                  </div>
+                </div>
+              </div>
+
+              {wizardChoice === 'IMPORT_RECEIPT' && (
+                <div className="mt-3 pt-3 border-t border-indigo-100 dark:border-indigo-900/50 flex justify-end" onClick={e => e.stopPropagation()}>
+                  <button 
+                    type="button" 
+                    onClick={handleGoToImportReceipt}
+                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow transition-colors active:scale-95 flex items-center gap-1.5"
+                  >
+                    Tới Đơn Mua Hàng <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => { setIsWizardModalOpen(false); setWizardChoice('NONE'); }}
+              className="px-5 py-2 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl font-bold text-xs transition-colors"
+            >
+              ☐ Bỏ qua
             </button>
           </div>
         </div>

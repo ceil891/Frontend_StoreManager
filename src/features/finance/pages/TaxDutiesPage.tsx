@@ -1,31 +1,48 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Search, Download, Eye, Plus, Edit, Trash2, DollarSign } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useFinanceStore } from '../store/financeStore';
 
-interface TaxDutyItem {
-  id: string; type: 'Thuế GTGT' | 'Thuế TNDN' | 'Thuế TNCN';
-  period: string; // ví dụ "Tháng 05/2026" hoặc "Quý 2/2026"
-  amountDue: number; amountPaid: number; status: 'ĐÃ_HOÀN_THÀNH' | 'CHƯA_HOÀN_THÀNH';
+export interface TaxDutyItem {
+  id: string;
+  type: string;
+  period: string;
+  amountDue: number;
+  amountPaid: number;
+  status: string;
 }
 
-const fmt = (n:number)=> n.toLocaleString('vi-VN', { style:'currency', currency:'VND' });
+const fmt = (n: number) => (n || 0).toLocaleString('vi-VN') + ' ₫';
 
-const MOCK: TaxDutyItem[] = [
-  { id:'1', type:'Thuế GTGT', period:'Tháng 05/2026', amountDue:20000000, amountPaid:20000000, status:'ĐÃ_HOÀN_THÀNH' },
-  { id:'2', type:'Thuế TNDN', period:'Quý 2/2026', amountDue:15000000, amountPaid:0, status:'CHƯA_HOÀN_THÀNH' },
-  { id:'3', type:'Thuế TNCN', period:'Tháng 04/2026', amountDue:8000000, amountPaid:8000000, status:'ĐÃ_HOÀN_THÀNH' },
-];
-
-const statusCfg: Record<string,{cls:string;label:string}> = {
-  ĐÃ_HOÀN_THÀNH:{cls:'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',label:'Đã hoàn thành'},
-  CHƯA_HOÀN_THÀNH:{cls:'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',label:'Chưa hoàn thành'},
+const statusCfg: Record<string, { label: string; cls: string }> = {
+  ĐÃ_HOÀN_THÀNH: { label: 'Đã hoàn thành', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
+  CHƯA_HOÀN_THÀNH: { label: 'Chưa hoàn thành', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
 };
 
 export function TaxDutiesPage() {
-  const [data, setData] = useState<TaxDutyItem[]>(MOCK);
+  const setData = (_fn: any) => {};
+  const {
+    taxDuties: storeTaxes,
+    fetchTaxDuties,
+  } = useFinanceStore();
+
+  useEffect(() => {
+    fetchTaxDuties();
+  }, [fetchTaxDuties]);
+
+  const data: TaxDutyItem[] = useMemo(() => {
+    return storeTaxes.map((t) => ({
+      id: t.id,
+      type: t.taxName.includes('VAT') ? 'Thuế GTGT' : 'Thuế TNDN',
+      period: t.taxPeriod,
+      amountDue: t.payableAmount,
+      amountPaid: t.paidAmount,
+      status: t.status === 'PAID' ? 'ĐÃ_HOÀN_THÀNH' : 'CHƯA_HOÀN_THÀNH',
+    }));
+  }, [storeTaxes]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<TaxDutyItem|null>(null);
   const [isModal, setIsModal] = useState(false);
@@ -70,7 +87,7 @@ export function TaxDutiesPage() {
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Tìm theo loại thuế hoặc kỳ..." className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 sm:text-sm"/>
           </div>
         </div>
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected}/>
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)}/>
       </div>
 
       <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết: ${selected.type}`:''}>

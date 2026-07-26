@@ -3,6 +3,9 @@ import { Plus, Search, Eye, Edit, Trash2, Check, Star } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
+import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
+import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type SupplierProductRecord } from '@/features/inventory/store/inventoryStore';
 import { usePurchaseStore } from '@/features/purchase/store/purchaseStore';
@@ -308,59 +311,57 @@ export function SupplierProductsPage() {
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Nhà cung cấp *</label>
-              <select
-                value={editingItem.supplierId || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, supplierId: e.target.value })}
-                className="w-full p-2 border rounded"
-                required
-                disabled={modalMode === 'edit'}
-              >
-                <option value="">-- Chọn nhà cung cấp --</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.code} - {s.supplierName}
-                  </option>
-                ))}
-              </select>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhà cung cấp đối tác *</label>
+              <SearchLookupModal
+                title="Chọn Nhà Cung Cấp"
+                iconType="building"
+                placeholder="Chọn nhà cung cấp..."
+                value={editingItem.supplierId}
+                options={suppliers.map(s => ({
+                  id: s.id,
+                  code: s.code,
+                  name: s.supplierName,
+                  subtitle: `SĐT: ${s.phone || 'N/A'}`
+                }))}
+                onChange={(val) => setEditingItem(prev => ({ ...prev, supplierId: val }))}
+              />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Sản phẩm hệ thống *</label>
-              <select
-                value={editingItem.productId || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, productId: e.target.value })}
-                className="w-full p-2 border rounded"
-                required
-                disabled={modalMode === 'edit'}
-              >
-                <option value="">-- Chọn sản phẩm --</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.sku} - {p.name}
-                  </option>
-                ))}
-              </select>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Sản phẩm hệ thống *</label>
+              <SearchLookupModal
+                title="Chọn Sản Phẩm Hệ Thống"
+                iconType="package"
+                placeholder="Chọn sản phẩm..."
+                value={editingItem.productId}
+                options={products.map(p => ({
+                  id: p.id,
+                  code: p.sku,
+                  name: p.name,
+                  subtitle: `Đơn giá: ${p.costPrice ? p.costPrice.toLocaleString('vi-VN') + ' ₫' : '0 ₫'}`
+                }))}
+                onChange={(val) => setEditingItem(prev => ({ ...prev, productId: val }))}
+              />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã SKU nhà cung cấp</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã SKU định nghĩa bởi NCC</label>
               <input
                 type="text"
                 value={editingItem.supplierSku || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, supplierSku: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
-                placeholder="SKU đối tác định nghĩa"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                placeholder="SKU đối tác định nghĩa..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Thời gian giao hàng (ngày) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thời gian giao hàng chuẩn (Lead Time - Ngày) *</label>
               <input
                 type="number"
                 value={editingItem.leadTimeDays || 3}
                 onChange={(e) => setEditingItem({ ...editingItem, leadTimeDays: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
                 required
               />
             </div>
@@ -368,19 +369,18 @@ export function SupplierProductsPage() {
 
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2">
-              <label className="block text-xs text-gray-500 mb-1">Giá nhập thỏa thuận *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá nhập thỏa thuận hợp đồng *</label>
               <div className="flex gap-2">
-                <input
-                  type="number"
+                <CurrencyInput
                   value={editingItem.unitPrice || 0}
-                  onChange={(e) => setEditingItem({ ...editingItem, unitPrice: Number(e.target.value) })}
-                  className="w-full p-2 border rounded font-mono"
-                  required
+                  onChange={(val) => setEditingItem(prev => ({ ...prev, unitPrice: val }))}
+                  currencySymbol={editingItem.currency === 'USD' ? '$' : '₫'}
+                  placeholder="0"
                 />
                 <select
                   value={editingItem.currency || 'VND'}
                   onChange={(e) => setEditingItem({ ...editingItem, currency: e.target.value })}
-                  className="p-2 border rounded"
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
                 >
                   <option value="VND">VND</option>
                   <option value="USD">USD</option>
@@ -388,40 +388,46 @@ export function SupplierProductsPage() {
               </div>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Đặt tối thiểu (MOQ) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lượng đặt tối thiểu (MOQ) *</label>
               <input
                 type="number"
                 value={editingItem.moq || 1}
                 onChange={(e) => setEditingItem({ ...editingItem, moq: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
                 required
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center pt-6">
-              <label className="flex items-center gap-2 cursor-pointer">
+            <div className="flex items-center pt-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={!!editingItem.isPreferred}
                   onChange={(e) => setEditingItem({ ...editingItem, isPreferred: e.target.checked })}
                   className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
                 />
-                <span className="text-sm font-semibold text-gray-700">Nhà cung cấp ưu tiên</span>
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Nhà cung cấp ưu tiên chính</span>
               </label>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Trạng thái hoạt động *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái hoạt động *</label>
               <select
                 value={editingItem.isActive === false ? 'false' : 'true'}
                 onChange={(e) => setEditingItem({ ...editingItem, isActive: e.target.value === 'true' })}
-                className="w-full p-2 border rounded"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
               >
-                <option value="true">Đang cung cấp</option>
-                <option value="false">Tạm ngưng</option>
+                <option value="true">Đang cung cấp hàng</option>
+                <option value="false">Tạm ngưng cung cấp</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <FileDropzone
+              label="Bản báo giá & Hợp đồng cung ứng đính kèm (PDF/Image)"
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-2 border-t">

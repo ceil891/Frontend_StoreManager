@@ -198,11 +198,6 @@ const ShippingOrderBatchesPage  = lz(() => import('@/features/logistics/pages/Sh
 const PackingListsPage          = lz(() => import('@/features/logistics/pages/PackingListsPage'), 'PackingListsPage');
 const DeliveryNotesPageLogistics = lz(() => import('@/features/logistics/pages/DeliveryNotesPage'), 'default');
 
-// Omnichannel
-const SalesChannelsPage          = lz(() => import('@/features/omnichannel/pages/SalesChannelsPage'), 'SalesChannelsPage');
-const ChannelProductMappingPage = lz(() => import('@/features/omnichannel/pages/ChannelProductMappingPage'), 'ChannelProductMappingPage');
-const WebhookLogsPage            = lz(() => import('@/features/omnichannel/pages/WebhookLogsPage'), 'WebhookLogsPage');
-
 // Reports
 const SalesReportPage     = lz(() => import('@/features/reports/pages/SalesReportPage'), 'SalesReportPage');
 const InventoryReportPage = lz(() => import('@/features/reports/pages/InventoryReportPage'), 'InventoryReportPage');
@@ -396,11 +391,6 @@ const router = createBrowserRouter([
           { path: 'logistics/batches', ...protect(<ShippingOrderBatchesPage />, 'catalog:inventory:view') },
           { path: 'logistics/packing-lists', ...protect(<PackingListsPage />, 'catalog:inventory:view') },
           { path: 'logistics/delivery-notes', ...protect(<DeliveryNotesPageLogistics />, 'catalog:inventory:view') },
-
-          // Omnichannel
-          { path: 'omnichannel/channels', ...protect(<SalesChannelsPage />, 'system:branch:view') },
-          { path: 'omnichannel/mappings', ...protect(<ChannelProductMappingPage />, 'system:branch:view') },
-          { path: 'omnichannel/webhook-logs', ...protect(<WebhookLogsPage />, 'system:branch:view') },
 
           // Reports
           { path: 'reports/sales', ...protect(<SalesReportPage />, 'catalog:inventory:view') },

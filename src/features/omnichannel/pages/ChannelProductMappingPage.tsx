@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, Link, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useOmnichannelStore } from '../store/omnichannelStore';
 
 interface MappingRecord {
   id: string;
@@ -17,33 +18,33 @@ interface MappingRecord {
   notes?: string;
 }
 
-const MOCK_MAPPINGS: MappingRecord[] = [
-  {
-    id: '1',
-    channelItemId: 'SP-10023412',
-    sku: 'SKU-MILK-01',
-    systemProductName: 'Sữa tươi tiệt trùng Vinamilk 1L',
-    channelProductName: '[Hỏa Tốc] Sữa tươi nguyên chất tiệt trùng Vinamilk 1 Lít',
-    channelName: 'Shopee - gian hàng thời Trang',
-    channelStock: 120,
-    syncStatus: 'SYNCED',
-    notes: 'Đã khớp tồn kho tự động lúc 16:30',
-  },
-  {
-    id: '2',
-    channelItemId: 'TT-98124512',
-    sku: 'SKU-COKE-02',
-    systemProductName: 'Nước ngọt Coca Cola lon 320ml',
-    channelProductName: 'Nước giải khát lon Coca-Cola 320ml (Combo 6 lon)',
-    channelName: 'TikTok Shop - RetailHub',
-    channelStock: 50,
-    syncStatus: 'OUT_OF_SYNC',
-    notes: 'Sai lệch số lượng tồn kho do TikTok có đơn hàng chưa đồng bộ về POS',
-  },
-];
-
 export function ChannelProductMappingPage() {
-  const [data, setData] = useState<MappingRecord[]>(MOCK_MAPPINGS);
+  const {
+    productMappings: storeMappings,
+    fetchProductMappings,
+    addProductMapping,
+    updateProductMapping,
+    deleteProductMapping,
+  } = useOmnichannelStore();
+
+  useEffect(() => {
+    fetchProductMappings();
+  }, [fetchProductMappings]);
+
+  const data: MappingRecord[] = useMemo(() => {
+    return storeMappings.map((m) => ({
+      id: m.id,
+      channelItemId: m.channelSku,
+      sku: m.internalSku,
+      systemProductName: m.productName,
+      channelProductName: m.productName,
+      channelName: m.channelName,
+      channelStock: 100,
+      syncStatus: (m.syncStatus === 'SYNCED' ? 'SYNCED' : 'OUT_OF_SYNC') as any,
+      notes: `Đồng bộ lúc ${m.lastSyncedAt}`,
+    }));
+  }, [storeMappings]);
+
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<MappingRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -83,32 +84,29 @@ export function ChannelProductMappingPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.channelItemId || !editingItem.sku || !editingItem.channelName) return;
-
     if (modalMode === 'create') {
-      const newItem: MappingRecord = {
-        id: String(data.length + 1),
-        channelItemId: editingItem.channelItemId!.toUpperCase(),
-        sku: editingItem.sku!.toUpperCase(),
-        systemProductName: editingItem.systemProductName || 'Mặt hàng hệ thống',
-        channelProductName: editingItem.channelProductName || 'Tên trên sàn',
-        channelName: editingItem.channelName!,
-        channelStock: Number(editingItem.channelStock || 0),
-        syncStatus: editingItem.syncStatus as any || 'SYNCED',
-        notes: editingItem.notes,
-      };
-      setData([...data, newItem]);
-    } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as MappingRecord) : d)));
+      await addProductMapping({
+        channelName: editingItem.channelName || 'Shopee',
+        channelSku: editingItem.channelItemId || 'CH-001',
+        internalSku: editingItem.sku || 'SKU-001',
+        productName: editingItem.systemProductName || 'Sản phẩm mới',
+        channelPrice: 0,
+        syncStatus: 'SYNCED',
+        lastSyncedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      });
+    } else if (editingItem.id) {
+      await updateProductMapping(editingItem.id, {
+        productName: editingItem.systemProductName,
+      });
     }
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa liên kết sản phẩm này?')) {
-      setData(data.filter((d) => d.id !== id));
+      await deleteProductMapping(id);
     }
   };
 

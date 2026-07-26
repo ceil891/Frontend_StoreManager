@@ -18,6 +18,12 @@ export interface CustomerProfile {
   registeredDate: string;
   lastActive: string;
   status: 'ACTIVE' | 'DORMANT' | 'CHURNED';
+  taxCode?: string;
+  gender?: 'MALE' | 'FEMALE' | 'OTHER';
+  dateOfBirth?: string;
+  creditLimit?: number;
+  groupId?: string;
+  areaId?: string;
   notes?: string;
 }
 
@@ -33,6 +39,123 @@ export interface LoyaltyTierConfig {
   prioritySupport: boolean;
   status: 'ACTIVE' | 'ARCHIVED' | 'DRAFT';
   description?: string;
+}
+
+export interface VoucherRecord {
+  id: string;
+  code: string;
+  name: string;
+  discountType: 'PERCENT' | 'FIXED_AMOUNT';
+  value: number;
+  minOrderValue: number;
+  maxDiscount: number;
+  quantity: number;
+  usedCount: number;
+  startDate: string;
+  endDate: string;
+  status: 'ACTIVE' | 'EXPIRED' | 'DISABLED';
+}
+
+export interface CustomerVoucherRecord {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  voucherCode: string;
+  voucherName: string;
+  discountValue: number;
+  issueDate: string;
+  usedDate?: string;
+  status: 'UNUSED' | 'USED' | 'EXPIRED';
+}
+
+export interface FeedbackRecord {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  rating: number;
+  content: string;
+  category: 'PRODUCT' | 'SERVICE' | 'DELIVERY' | 'OTHER';
+  status: 'PENDING' | 'RESOLVED' | 'REJECTED';
+  createdAt: string;
+  resolutionNote?: string;
+}
+
+export interface LoyaltyPointHistoryRecord {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  actionType: 'EARN' | 'REDEEM' | 'EXPIRE' | 'ADJUST';
+  pointsChange: number;
+  balanceAfter: number;
+  referenceOrder?: string;
+  notes: string;
+  createdAt: string;
+}
+
+export interface MarketingCampaignRecord {
+  id: string;
+  code: string;
+  title: string;
+  channel: 'SMS' | 'EMAIL' | 'PUSH';
+  targetAudience: string;
+  sentCount: number;
+  openRate: number;
+  startDate: string;
+  endDate: string;
+  status: 'DRAFT' | 'RUNNING' | 'COMPLETED' | 'CANCELLED';
+}
+
+export interface PartnerGroupRecord {
+  id: string;
+  groupCode: string;
+  groupName: string;
+  memberCount: number;
+  discountRate: number;
+  description: string;
+  status: 'ACTIVE' | 'INACTIVE';
+}
+
+export interface ProductWarrantyRecord {
+  id: string;
+  serialNumber: string;
+  productName: string;
+  customerName: string;
+  phone: string;
+  purchaseDate: string;
+  expiryDate: string;
+  status: 'VALID' | 'EXPIRED' | 'CLAIMED';
+}
+
+export interface WarrantyClaimRecord {
+  id: string;
+  claimCode: string;
+  serialNumber: string;
+  customerName: string;
+  issueDescription: string;
+  receivedDate: string;
+  status: 'RECEIVED' | 'IN_REPAIR' | 'COMPLETED' | 'REJECTED';
+  repairedBy?: string;
+  notes?: string;
+}
+
+export interface SupportTicketRecord {
+  id: string;
+  ticketCode: string;
+  customerName: string;
+  subject: string;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  status: 'OPEN' | 'IN_PROGRESS' | 'CLOSED';
+  createdAt: string;
+  assignee?: string;
+}
+
+export interface TicketMessageRecord {
+  id: string;
+  ticketId: string;
+  senderName: string;
+  isStaff: boolean;
+  message: string;
+  createdAt: string;
 }
 
 export type CustomerInput = Omit<CustomerProfile, 'id'>;
@@ -70,51 +193,71 @@ function mapCustomer(item: any): CustomerProfile {
   });
 }
 
-const DEFAULT_CUSTOMERS: CustomerProfile[] = [
-  normalizeCustomer({ id: '1', customerCode: 'CUST-88102', name: 'Nguyễn Văn an', phone: '0909111222', email: 'nguyen.van.an@email.com', address: '12 Lê Lợi, Q.1, TP.HCM', avatarUrl: buildUserAvatarUrl('nguyen.van.an@email.com'), loyaltyTier: 'DIAMOND', loyaltyPoints: 12500, lifetimeSpent: 14500.5, registeredDate: '2023-01-15', lastActive: '2024-05-17', status: 'ACTIVE', notes: 'Khách hàng doanh nghiệp VIP.' }),
-  normalizeCustomer({ id: '2', customerCode: 'CUST-88105', name: 'Trần Thị Bình', phone: '0918222333', email: 'tran.thi.binh@email.com', address: '45 Cộng Hòa, Tân Bình', avatarUrl: buildUserAvatarUrl('tran.thi.binh@email.com'), loyaltyTier: 'GOLD', loyaltyPoints: 4500, lifetimeSpent: 4200, registeredDate: '2023-06-10', lastActive: '2024-05-14', status: 'ACTIVE' }),
-  normalizeCustomer({ id: '3', customerCode: 'CUST-88112', name: 'Lê Hoàng Cường', phone: '0929333444', email: 'le.hoang.cuong@email.com', address: '89 Quang Trung, Gò Vấp', avatarUrl: buildUserAvatarUrl('le.hoang.cuong@email.com'), loyaltyTier: 'SILVER', loyaltyPoints: 850, lifetimeSpent: 950, registeredDate: '2023-11-01', lastActive: '2024-04-20', status: 'ACTIVE' }),
-  normalizeCustomer({ id: '4', customerCode: 'CUST-88119', name: 'Phạm thị dung', phone: '0938444555', email: 'pham.thi.dung@email.com', address: '10 Nguyễn Văn Linh, Q.7', avatarUrl: buildUserAvatarUrl('pham.thi.dung@email.com'), loyaltyTier: 'BRONZE', loyaltyPoints: 120, lifetimeSpent: 185, registeredDate: '2024-02-14', lastActive: '2024-02-14', status: 'DORMANT', notes: 'Chưa mua lại 90 ngày.' }),
-  normalizeCustomer({ id: '5', customerCode: 'CUST-88125', name: 'Hoàng Văn em', phone: '0947555666', email: 'hoang.van.em@email.com', address: '56 Lê Lợi, Thủ Dầu Một', avatarUrl: buildUserAvatarUrl('hoang.van.em@email.com'), loyaltyTier: 'GOLD', loyaltyPoints: 5200, lifetimeSpent: 5800.75, registeredDate: '2023-03-25', lastActive: '2024-05-16', status: 'ACTIVE' }),
-];
-
-const MOCK_TIERS: LoyaltyTierConfig[] = [
-  { id: '1', tierCode: 'TR-BRONZE', tierName: 'BRONZE', minSpendThreshold: 0, pointsMultiplier: 1.0, discountPercentage: 0, activeMembersCount: 8412, freeShippingEligible: false, prioritySupport: false, status: 'ACTIVE', description: 'Hạng mặc định khi đăng ký.' },
-  { id: '2', tierCode: 'TR-SILVER', tierName: 'SILVER', minSpendThreshold: 500, pointsMultiplier: 1.25, discountPercentage: 5, activeMembersCount: 3120, freeShippingEligible: true, prioritySupport: false, status: 'ACTIVE', description: 'Giảm 5% và miễn phí ship chuẩn.' },
-  { id: '3', tierCode: 'TR-GOLD', tierName: 'GOLD', minSpendThreshold: 2000, pointsMultiplier: 1.5, discountPercentage: 10, activeMembersCount: 1205, freeShippingEligible: true, prioritySupport: true, status: 'ACTIVE', description: 'VIP 10% và hỗ trợ ưu tiên.' },
-  { id: '4', tierCode: 'TR-DIAMOND', tierName: 'DIAMOND', minSpendThreshold: 5000, pointsMultiplier: 2.0, discountPercentage: 15, activeMembersCount: 420, freeShippingEligible: true, prioritySupport: true, status: 'ACTIVE', description: 'Hạng kim cương — điểm x2.' },
-  { id: '5', tierCode: 'TR-ELITE', tierName: 'ELITE_CLUB', minSpendThreshold: 15000, pointsMultiplier: 3.0, discountPercentage: 25, activeMembersCount: 15, freeShippingEligible: true, prioritySupport: true, status: 'DRAFT', description: 'Hạng mời — đang pilot.' },
-];
-
-function mergeCustomers(users: CustomerProfile[]): CustomerProfile[] {
-  const byCode = new Map(DEFAULT_CUSTOMERS.map((c) => [c.customerCode, c]));
-  const seen = new Set<string>();
-  const merged = users.map((raw) => {
-    const def = byCode.get(raw.customerCode);
-    seen.add(raw.customerCode);
-    return normalizeCustomer({ ...def, ...raw, id: raw.id, name: raw.name || def?.name || 'Khách' });
-  });
-  for (const def of DEFAULT_CUSTOMERS) {
-    if (!seen.has(def.customerCode)) merged.push(def);
-  }
-  return merged;
-}
-
 interface CRMState {
   customers: CustomerProfile[];
   loyaltyTiers: LoyaltyTierConfig[];
+  vouchers: VoucherRecord[];
+  customerVouchers: CustomerVoucherRecord[];
+  feedbacks: FeedbackRecord[];
+  loyaltyHistories: LoyaltyPointHistoryRecord[];
+  marketingCampaigns: MarketingCampaignRecord[];
+  partnerGroups: PartnerGroupRecord[];
+  productWarranties: ProductWarrantyRecord[];
+  warrantyClaims: WarrantyClaimRecord[];
+  supportTickets: SupportTicketRecord[];
+  ticketMessages: TicketMessageRecord[];
   isLoadingCustomers: boolean;
 
   fetchCustomers: () => Promise<void>;
   addCustomer: (customer: CustomerInput) => Promise<void>;
   updateCustomer: (id: string, data: Partial<CustomerProfile>) => Promise<void>;
   deleteCustomer: (id: string) => Promise<void>;
-  toggleCustomerStatus: (id: string, isActive: boolean) => Promise<void>;
 
-  fetchTiers: () => Promise<void>;
-  addTier: (tier: Omit<LoyaltyTierConfig, 'id'>) => Promise<void>;
-  updateTier: (id: string, data: Partial<LoyaltyTierConfig>) => Promise<void>;
-  deleteTier: (id: string) => Promise<void>;
+  fetchVouchers: () => Promise<void>;
+  addVoucher: (item: Omit<VoucherRecord, 'id'>) => Promise<void>;
+  updateVoucher: (id: string, data: Partial<VoucherRecord>) => Promise<void>;
+  deleteVoucher: (id: string) => Promise<void>;
+
+  fetchCustomerVouchers: () => Promise<void>;
+  addCustomerVoucher: (item: Omit<CustomerVoucherRecord, 'id'>) => Promise<void>;
+  updateCustomerVoucher: (id: string, data: Partial<CustomerVoucherRecord>) => Promise<void>;
+  deleteCustomerVoucher: (id: string) => Promise<void>;
+
+  fetchFeedbacks: () => Promise<void>;
+  addFeedback: (item: Omit<FeedbackRecord, 'id'>) => Promise<void>;
+  updateFeedback: (id: string, data: Partial<FeedbackRecord>) => Promise<void>;
+  deleteFeedback: (id: string) => Promise<void>;
+
+  fetchLoyaltyHistories: () => Promise<void>;
+  addLoyaltyHistory: (item: Omit<LoyaltyPointHistoryRecord, 'id'>) => Promise<void>;
+
+  fetchMarketingCampaigns: () => Promise<void>;
+  addMarketingCampaign: (item: Omit<MarketingCampaignRecord, 'id'>) => Promise<void>;
+  updateMarketingCampaign: (id: string, data: Partial<MarketingCampaignRecord>) => Promise<void>;
+  deleteMarketingCampaign: (id: string) => Promise<void>;
+
+  fetchPartnerGroups: () => Promise<void>;
+  addPartnerGroup: (item: Omit<PartnerGroupRecord, 'id'>) => Promise<void>;
+  updatePartnerGroup: (id: string, data: Partial<PartnerGroupRecord>) => Promise<void>;
+  deletePartnerGroup: (id: string) => Promise<void>;
+
+  fetchProductWarranties: () => Promise<void>;
+  addProductWarranty: (item: Omit<ProductWarrantyRecord, 'id'>) => Promise<void>;
+  updateProductWarranty: (id: string, data: Partial<ProductWarrantyRecord>) => Promise<void>;
+  deleteProductWarranty: (id: string) => Promise<void>;
+
+  fetchWarrantyClaims: () => Promise<void>;
+  addWarrantyClaim: (item: Omit<WarrantyClaimRecord, 'id'>) => Promise<void>;
+  updateWarrantyClaim: (id: string, data: Partial<WarrantyClaimRecord>) => Promise<void>;
+  deleteWarrantyClaim: (id: string) => Promise<void>;
+
+  fetchSupportTickets: () => Promise<void>;
+  addSupportTicket: (item: Omit<SupportTicketRecord, 'id'>) => Promise<void>;
+  updateSupportTicket: (id: string, data: Partial<SupportTicketRecord>) => Promise<void>;
+  deleteSupportTicket: (id: string) => Promise<void>;
+
+  fetchTicketMessages: (ticketId?: string) => Promise<void>;
+  addTicketMessage: (item: Omit<TicketMessageRecord, 'id'>) => Promise<void>;
 }
 
 export const useCrmStore = create<CRMState>()(
@@ -122,6 +265,16 @@ export const useCrmStore = create<CRMState>()(
     (set, get) => ({
       customers: [],
       loyaltyTiers: [],
+      vouchers: [],
+      customerVouchers: [],
+      feedbacks: [],
+      loyaltyHistories: [],
+      marketingCampaigns: [],
+      partnerGroups: [],
+      productWarranties: [],
+      warrantyClaims: [],
+      supportTickets: [],
+      ticketMessages: [],
       isLoadingCustomers: false,
 
       fetchCustomers: async () => {
@@ -129,138 +282,345 @@ export const useCrmStore = create<CRMState>()(
         try {
           const data = await axiosClient.get<any, unknown>('/partnerarea/customers?size=500');
           const list = extractPageContent<any>(data);
-          set({ customers: list.map(mapCustomer), isLoadingCustomers: false });
-        } catch (err) {
-          console.error('Failed to fetch customers:', err);
+          if (list && list.length > 0) {
+            set({ customers: list.map(mapCustomer), isLoadingCustomers: false });
+          } else {
+            set({ isLoadingCustomers: false });
+          }
+        } catch {
           set({ isLoadingCustomers: false });
         }
       },
 
       addCustomer: async (customer) => {
         try {
-          const form = toFormData({
-            name: customer.name,
-            phone: customer.phone,
-            email: customer.email,
-            address: customer.address,
-            notes: customer.notes,
-            isActive: customer.status === 'ACTIVE'
-          });
-          await axiosClient.post('/partnerarea/customers', form, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
+          await axiosClient.post('/partnerarea/customers', customer);
           await get().fetchCustomers();
-        } catch (err) {
-          console.error('Failed to add customer:', err);
+        } catch (e) {
+          console.error(e);
         }
       },
 
       updateCustomer: async (id, data) => {
         try {
-          const form = toFormData({
-            name: data.name,
-            phone: data.phone,
-            email: data.email,
-            address: data.address,
-            notes: data.notes,
-          });
-          await axiosClient.put(`/partnerarea/customers/${id}`, form, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
+          await axiosClient.put(`/partnerarea/customers/${id}`, data);
           await get().fetchCustomers();
-        } catch (err) {
-          console.error('Failed to update customer:', err);
+        } catch (e) {
+          console.error(e);
         }
       },
 
       deleteCustomer: async (id) => {
         try {
           await axiosClient.delete(`/partnerarea/customers/${id}`);
-          set((state) => ({ customers: state.customers.filter((c) => c.id !== id) }));
-        } catch (err) {
-          console.error('Failed to delete customer:', err);
-        }
-      },
-      
-      toggleCustomerStatus: async (id, isActive) => {
-        try {
-          await axiosClient.patch(`/partnerarea/customers/${id}/status`, null, { params: { isActive } });
           await get().fetchCustomers();
-        } catch (err) {
-          console.error('Failed to toggle customer status:', err);
-        }
-      },
-
-      fetchTiers: async () => {
-        try {
-          const res = await axiosClient.get<any, any>('/crm/tiers');
-          const data = res.content || res || [];
-          if (Array.isArray(data) && data.length > 0) {
-            set({ loyaltyTiers: data.map((item: any) => ({
-              id: String(item.id),
-              tierCode: item.tierCode || `TR-${item.id}`,
-              tierName: item.tierName || 'BRONZE',
-              minSpendThreshold: Number(item.minSpendThreshold || 0),
-              pointsMultiplier: Number(item.pointsMultiplier || 1.0),
-              discountPercentage: Number(item.discountPercentage || 0),
-              activeMembersCount: Number(item.activeMembersCount || 0),
-              freeShippingEligible: Boolean(item.freeShippingEligible),
-              prioritySupport: Boolean(item.prioritySupport),
-              status: item.status || 'ACTIVE',
-              description: item.description || '',
-            })) });
-          }
-        } catch (e) {
-          console.error('Failed to fetch tiers:', e);
-        }
-      },
-
-      addTier: async (tier) => {
-        try {
-          await axiosClient.post('/crm/tiers', tier);
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          loyaltyTiers: [{ id: `tier_${Date.now()}`, ...tier }, ...state.loyaltyTiers],
-        }));
       },
 
-      updateTier: async (id, data) => {
+      fetchVouchers: async () => {
         try {
-          await axiosClient.put(`/crm/tiers/${id}`, data);
+          const res = await axiosClient.get<any, any[]>('/crm/vouchers');
+          set({ vouchers: res });
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          loyaltyTiers: state.loyaltyTiers.map((t) => (t.id === id ? { ...t, ...data } : t)),
-        }));
       },
-
-      deleteTier: async (id) => {
+      addVoucher: async (item) => {
         try {
-          await axiosClient.delete(`/crm/tiers/${id}`);
+          await axiosClient.post('/crm/vouchers', item);
+          await get().fetchVouchers();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          loyaltyTiers: state.loyaltyTiers.filter((t) => t.id !== id),
-        }));
+      },
+      updateVoucher: async (id, data) => {
+        try {
+          await axiosClient.put(`/crm/vouchers/${id}`, data);
+          await get().fetchVouchers();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      deleteVoucher: async (id) => {
+        try {
+          await axiosClient.delete(`/crm/vouchers/${id}`);
+          await get().fetchVouchers();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      fetchCustomerVouchers: async () => {
+        try {
+          const res = await axiosClient.get<any, any[]>('/crm/customer-vouchers');
+          set({ customerVouchers: res });
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      addCustomerVoucher: async (item) => {
+        try {
+          await axiosClient.post('/crm/customer-vouchers', item);
+          await get().fetchCustomerVouchers();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      updateCustomerVoucher: async (id, data) => {
+        try {
+          await axiosClient.put(`/crm/customer-vouchers/${id}`, data);
+          await get().fetchCustomerVouchers();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      deleteCustomerVoucher: async (id) => {
+        try {
+          await axiosClient.delete(`/crm/customer-vouchers/${id}`);
+          await get().fetchCustomerVouchers();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      fetchFeedbacks: async () => {
+        try {
+          const res = await axiosClient.get<any, any[]>('/crm/feedback');
+          set({ feedbacks: res });
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      addFeedback: async (item) => {
+        try {
+          await axiosClient.post('/crm/feedback', item);
+          await get().fetchFeedbacks();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      updateFeedback: async (id, data) => {
+        try {
+          await axiosClient.put(`/crm/feedback/${id}`, data);
+          await get().fetchFeedbacks();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      deleteFeedback: async (id) => {
+        try {
+          await axiosClient.delete(`/crm/feedback/${id}`);
+          await get().fetchFeedbacks();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      fetchLoyaltyHistories: async () => {
+        try {
+          const res = await axiosClient.get<any, any[]>('/crm/loyalty-history');
+          set({ loyaltyHistories: res });
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      addLoyaltyHistory: async (item) => {
+        try {
+          await axiosClient.post('/crm/loyalty-history', item);
+          await get().fetchLoyaltyHistories();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      fetchMarketingCampaigns: async () => {
+        try {
+          const res = await axiosClient.get<any, any[]>('/crm/campaigns');
+          set({ marketingCampaigns: res });
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      addMarketingCampaign: async (item) => {
+        try {
+          await axiosClient.post('/crm/campaigns', item);
+          await get().fetchMarketingCampaigns();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      updateMarketingCampaign: async (id, data) => {
+        try {
+          await axiosClient.put(`/crm/campaigns/${id}`, data);
+          await get().fetchMarketingCampaigns();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      deleteMarketingCampaign: async (id) => {
+        try {
+          await axiosClient.delete(`/crm/campaigns/${id}`);
+          await get().fetchMarketingCampaigns();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      fetchPartnerGroups: async () => {
+        try {
+          const res = await axiosClient.get<any, any[]>('/crm/partner-groups');
+          set({ partnerGroups: res });
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      addPartnerGroup: async (item) => {
+        try {
+          await axiosClient.post('/crm/partner-groups', item);
+          await get().fetchPartnerGroups();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      updatePartnerGroup: async (id, data) => {
+        try {
+          await axiosClient.put(`/crm/partner-groups/${id}`, data);
+          await get().fetchPartnerGroups();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      deletePartnerGroup: async (id) => {
+        try {
+          await axiosClient.delete(`/crm/partner-groups/${id}`);
+          await get().fetchPartnerGroups();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      fetchProductWarranties: async () => {
+        try {
+          const res = await axiosClient.get<any, any[]>('/crm/warranties');
+          set({ productWarranties: res });
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      addProductWarranty: async (item) => {
+        try {
+          await axiosClient.post('/crm/warranties', item);
+          await get().fetchProductWarranties();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      updateProductWarranty: async (id, data) => {
+        try {
+          await axiosClient.put(`/crm/warranties/${id}`, data);
+          await get().fetchProductWarranties();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      deleteProductWarranty: async (id) => {
+        try {
+          await axiosClient.delete(`/crm/warranties/${id}`);
+          await get().fetchProductWarranties();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      fetchWarrantyClaims: async () => {
+        try {
+          const res = await axiosClient.get<any, any[]>('/crm/warranty-claims');
+          set({ warrantyClaims: res });
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      addWarrantyClaim: async (item) => {
+        try {
+          await axiosClient.post('/crm/warranty-claims', item);
+          await get().fetchWarrantyClaims();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      updateWarrantyClaim: async (id, data) => {
+        try {
+          await axiosClient.put(`/crm/warranty-claims/${id}`, data);
+          await get().fetchWarrantyClaims();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      deleteWarrantyClaim: async (id) => {
+        try {
+          await axiosClient.delete(`/crm/warranty-claims/${id}`);
+          await get().fetchWarrantyClaims();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      fetchSupportTickets: async () => {
+        try {
+          const res = await axiosClient.get<any, any[]>('/crm/tickets');
+          set({ supportTickets: res });
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      addSupportTicket: async (item) => {
+        try {
+          await axiosClient.post('/crm/tickets', item);
+          await get().fetchSupportTickets();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      updateSupportTicket: async (id, data) => {
+        try {
+          await axiosClient.put(`/crm/tickets/${id}`, data);
+          await get().fetchSupportTickets();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      deleteSupportTicket: async (id) => {
+        try {
+          await axiosClient.delete(`/crm/tickets/${id}`);
+          await get().fetchSupportTickets();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      fetchTicketMessages: async (ticketId) => {
+        try {
+          const url = ticketId ? `/crm/ticket-messages?ticketId=${ticketId}` : '/crm/ticket-messages';
+          const res = await axiosClient.get<any, any[]>(url);
+          set({ ticketMessages: res });
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      addTicketMessage: async (item) => {
+        try {
+          await axiosClient.post('/crm/ticket-messages', item);
+          await get().fetchTicketMessages(item.ticketId);
+        } catch (e) {
+          console.error(e);
+        }
       },
     }),
     {
       name: 'retailhub-crm-storage',
       storage: createJSONStorage(() => localStorage),
-      merge: (persisted, current) => {
-        const p = persisted as Partial<CRMState> | undefined;
-        const customers = mergeCustomers(p?.customers ?? (current as CRMState).customers);
-        return {
-          ...(current as CRMState),
-          ...p,
-          customers,
-          loyaltyTiers: p?.loyaltyTiers ?? (current as CRMState).loyaltyTiers,
-        };
-      },
     }
   )
 );

@@ -5,6 +5,7 @@ import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type ReceiptVoucher } from '../store/financeStore';
 import { toast } from 'sonner';
+import { exportToCsv } from '@/shared/utils/exportCsv';
 
 const categoryMap: Record<string, string> = {
   SALES_REVENUE: 'Doanh thu bán hàng',
@@ -181,7 +182,18 @@ export function ReceiptVouchersPage() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => toast.success('Xuất sổ quỹ thu thành công!')}
+              onClick={() => {
+                exportToCsv('danh_sach_phieu_thu', filtered, [
+                  { header: 'Số phiếu thu', accessor: r => r.voucherNumber },
+                  { header: 'Người nộp', accessor: r => r.payerName },
+                  { header: 'Nhóm doanh thu', accessor: r => categoryMap[r.category] || r.category },
+                  { header: 'Số tiền (VND)', accessor: r => r.amount },
+                  { header: 'Hình thức', accessor: r => methodMap[r.paymentMethod] || r.paymentMethod },
+                  { header: 'Ngày thu', accessor: r => r.receivedDate },
+                  { header: 'Chứng từ gốc', accessor: r => r.referenceDoc || '' },
+                ]);
+                toast.success('Đã xuất sổ quỹ thu dạng CSV!');
+              }}
               className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
             >
               <Download className="w-4 h-4" /> Xuất sổ quỹ thu

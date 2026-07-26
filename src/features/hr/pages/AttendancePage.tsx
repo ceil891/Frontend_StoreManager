@@ -89,7 +89,7 @@ export function AttendancePage() {
           </select>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected} isLoading={isLoading}/>
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} isLoading={isLoading}/>
       </div>
 
       <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết chấm công: ${selected.userName}`:''}>

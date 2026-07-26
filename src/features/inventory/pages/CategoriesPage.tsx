@@ -3,6 +3,9 @@ import { Plus, Download, Search, Eye, Tag, Layers, CheckCircle2, FileText, Edit,
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { TreeSelect } from '@/shared/components/ui/TreeSelect';
+import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
+import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type ProductCategory } from '../store/inventoryStore';
 
@@ -150,7 +153,7 @@ export function CategoriesPage() {
       {
         accessorKey: 'totalValuation',
         header: 'Tổng giá trị',
-        cell: (info) => <span className="font-bold text-emerald-600 dark:text-emerald-400">${(info.getValue() as number).toFixed(2)}</span>,
+        cell: (info) => <span className="font-bold text-emerald-600 dark:text-emerald-400">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'status',
@@ -266,7 +269,7 @@ export function CategoriesPage() {
       <Drawer
         isOpen={!!selectedCategory}
         onClose={() => setSelectedCategory(null)}
-        title={selectedCategory ? `Category Card: ${selectedCategory.code}` : 'Category Details'}
+        title={selectedCategory ? `Thẻ danh mục: ${selectedCategory.code}` : 'Chi tiết danh mục'}
         width="max-w-lg"
       >
         {selectedCategory && (
@@ -287,28 +290,28 @@ export function CategoriesPage() {
                 selectedCategory.status === 'ACTIVE' ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
                 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
               }`}>
-                {selectedCategory.status}
+                {selectedCategory.status === 'ACTIVE' ? 'ĐANG HOẠT ĐỘNG' : 'ĐÃ LƯU TRỮ'}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Layers className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Active Products
+                  <Layers className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Sản phẩm đang bán
                 </div>
                 <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedCategory.itemsCount} SKUs</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  Valuation Pool
+                  Tổng giá trị kho
                 </div>
-                <p className="text-base font-bold text-emerald-600 dark:text-emerald-400 truncate">${selectedCategory.totalValuation.toFixed(2)}</p>
+                <p className="text-base font-bold text-emerald-600 dark:text-emerald-400 truncate">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(selectedCategory.totalValuation)}</p>
               </div>
             </div>
 
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Assigned Department:</span>
+                <span className="text-gray-500 dark:text-gray-400">Phòng ban quản lý:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">
                   {typeof selectedCategory.department === 'string' ? selectedCategory.department : (selectedCategory.department as any)?.deptName}
                 </span>
@@ -332,19 +335,19 @@ export function CategoriesPage() {
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Category Lead Manager:</span>
+                <span className="text-gray-500 dark:text-gray-400">Người quản lý:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedCategory.manager}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Average Valuation / Item:</span>
+                <span className="text-gray-500 dark:text-gray-400">Giá trị trung bình / SP:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">
-                  ${selectedCategory.itemsCount > 0 ? (selectedCategory.totalValuation / selectedCategory.itemsCount).toFixed(2) : '0.00'}
+                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(selectedCategory.itemsCount > 0 ? (selectedCategory.totalValuation / selectedCategory.itemsCount) : 0)}
                 </span>
               </div>
 
               {selectedCategory.description && (
                 <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Category Classification Rules</span>
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Mô tả & Quy tắc phân loại</span>
                   <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedCategory.description}</p>
                 </div>
               )}
@@ -369,150 +372,159 @@ export function CategoriesPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={modalMode === 'create' ? 'Thêm danh mục sản phẩm' : 'Cập nhật danh mục'}
-        width="max-w-xl"
+        size="erp"
       >
-        <form onSubmit={handleSaveCategory} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã danh mục *</label>
-              <input
-                type="text"
-                value={editingCategory.code || ''}
-                onChange={(e) => setEditingCategory({ ...editingCategory, code: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-                required
-              />
+        <form onSubmit={handleSaveCategory}>
+          <div className="erp-form-body">
+            {/* Section 1: Định danh danh mục */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Định danh danh mục</h3>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã danh mục *</label>
+                <input
+                  type="text"
+                  value={editingCategory.code || ''}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, code: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên danh mục *</label>
+                <input
+                  type="text"
+                  value={editingCategory.categoryName || ''}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, categoryName: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục cấp trên (Tree Hierarchy)</label>
+                <TreeSelect
+                  value={editingCategory.parentId}
+                  onChange={(val) => setEditingCategory({ ...editingCategory, parentId: val || undefined })}
+                  placeholder="-- Không có (Danh mục gốc) --"
+                  options={data
+                    .filter((c) => c.id !== editingCategory.id)
+                    .map((c) => ({
+                      id: c.id,
+                      name: `${c.categoryName} (${c.code})`,
+                    }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái hoạt động</label>
+                <select
+                  value={editingCategory.status || 'ACTIVE'}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, status: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="ACTIVE">Đang hoạt động (ACTIVE)</option>
+                  <option value="ARCHIVED">Lưu trữ (Vô hiệu hóa)</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên danh mục *</label>
-              <input
-                type="text"
-                value={editingCategory.categoryName || ''}
-                onChange={(e) => setEditingCategory({ ...editingCategory, categoryName: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                required
-              />
+
+            {/* Section 2: Kế toán & Thuế */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Kế toán & Định giá tồn kho</h3>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thuế suất VAT mặc định</label>
+                <select
+                  value={editingCategory.taxClass || 'VAT_10'}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, taxClass: e.target.value as ProductCategory['taxClass'] })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="VAT_8">VAT 8% (Ưu đãi)</option>
+                  <option value="VAT_10">VAT 10% (Chuẩn)</option>
+                  <option value="EXEMPT">Miễn thuế VAT</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã TK Hàng tồn kho (GL Code)</label>
+                  <input
+                    type="text"
+                    value={editingCategory.inventoryGlCode || ''}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, inventoryGlCode: e.target.value })}
+                    placeholder="VD: 1561"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã TK Giá vốn (COGS Code)</label>
+                  <input
+                    type="text"
+                    value={editingCategory.cogsGlCode || ''}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, cogsGlCode: e.target.value })}
+                    placeholder="VD: 6321"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số lượng SKU đăng ký</label>
+                  <input
+                    type="number"
+                    value={editingCategory.itemsCount || 0}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, itemsCount: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng định giá kho (₫)</label>
+                  <CurrencyInput
+                    value={editingCategory.totalValuation || 0}
+                    onChange={(val) => setEditingCategory(prev => ({ ...prev, totalValuation: val }))}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+              <div>
+                <FileDropzone
+                  accept=".png,.jpg,.jpeg,.svg"
+                  label="Biểu tượng Icon danh mục & Tài liệu định mức"
+                />
+              </div>
+            </div>
+
+            {/* Section 3: Phân loại & Mô tả */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Phân loại & Mô tả</h3>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Bộ phận / Ngành hàng</label>
+                <input
+                  type="text"
+                  value={editingCategory.department || ''}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, department: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  placeholder="Ví dụ: Fashion, Electronics..."
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người quản lý (Lead Manager)</label>
+                <input
+                  type="text"
+                  value={editingCategory.manager || ''}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, manager: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mô tả quy tắc phân loại</label>
+                <textarea
+                  rows={4}
+                  value={editingCategory.description || ''}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, description: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"
+                />
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục cha (Parent)</label>
-              <select
-                value={editingCategory.parentId || ''}
-                onChange={(e) => setEditingCategory({ ...editingCategory, parentId: e.target.value || undefined })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="">— Không có (cấp gốc) —</option>
-                {data.filter((c) => c.id !== editingCategory.id).map((c) => (
-                  <option key={c.id} value={c.id}>{c.categoryName} ({c.code})</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thuế suất mặc định</label>
-              <select
-                value={editingCategory.taxClass || 'VAT_10'}
-                onChange={(e) => setEditingCategory({ ...editingCategory, taxClass: e.target.value as ProductCategory['taxClass'] })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="VAT_8">VAT 8%</option>
-                <option value="VAT_10">VAT 10%</option>
-                <option value="EXEMPT">Miễn thuế</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">TK Kho (inventoryGlCode)</label>
-              <input
-                type="text"
-                value={editingCategory.inventoryGlCode || ''}
-                onChange={(e) => setEditingCategory({ ...editingCategory, inventoryGlCode: e.target.value })}
-                placeholder="VD: 1561"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">TK Giá vốn (cogsGlCode)</label>
-              <input
-                type="text"
-                value={editingCategory.cogsGlCode || ''}
-                onChange={(e) => setEditingCategory({ ...editingCategory, cogsGlCode: e.target.value })}
-                placeholder="VD: 6321"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Bộ phận / Ngành hàng</label>
-              <input
-                type="text"
-                value={editingCategory.department || ''}
-                onChange={(e) => setEditingCategory({ ...editingCategory, department: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                placeholder="Ví dụ: Fashion, Electronics..."
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người quản lý (Lead Manager)</label>
-              <input
-                type="text"
-                value={editingCategory.manager || ''}
-                onChange={(e) => setEditingCategory({ ...editingCategory, manager: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số lượng sản phẩm</label>
-              <input
-                type="number"
-                value={editingCategory.itemsCount || 0}
-                onChange={(e) => setEditingCategory({ ...editingCategory, itemsCount: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng giá trị lưu kho ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={editingCategory.totalValuation || 0}
-                onChange={(e) => setEditingCategory({ ...editingCategory, totalValuation: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
-            <select
-              value={editingCategory.status || 'ACTIVE'}
-              onChange={(e) => setEditingCategory({ ...editingCategory, status: e.target.value as any })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-            >
-              <option value="ACTIVE">Đang hoạt động</option>
-              <option value="ARCHIVED">Lưu trữ (Vô hiệu hóa)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mô tả quy tắc phân loại</label>
-            <textarea
-              rows={2}
-              value={editingCategory.description || ''}
-              onChange={(e) => setEditingCategory({ ...editingCategory, description: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="erp-form-footer border-t border-gray-200 dark:border-gray-700 pt-4">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
@@ -529,6 +541,7 @@ export function CategoriesPage() {
           </div>
         </form>
       </Modal>
+
 
       {/* Delete Confirmation */}
       <Modal

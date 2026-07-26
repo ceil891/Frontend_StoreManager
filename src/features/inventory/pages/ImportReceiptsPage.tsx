@@ -2,6 +2,9 @@ import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Building2, Calendar, FileText, CheckCircle2, Box, Edit, Trash2, X, Package, Clock, TrendingUp, Ban } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
+import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
+import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type ImportReceiptItem } from '../store/inventoryStore';
 import { axiosClient } from '@/shared/lib/axiosClient';
@@ -272,8 +275,10 @@ export function ImportReceiptsPage() {
 
     setEditingReceipt({
       ...receipt,
-      supplierId: resolvedSupplierId,
-      branchId: resolvedBranchId,
+      ...({
+        supplierId: resolvedSupplierId,
+        branchId: resolvedBranchId,
+      } as any),
       lines
     });
     setIsModalOpen(true);
@@ -514,9 +519,9 @@ export function ImportReceiptsPage() {
               >
                 <option value="all">Tất cả trạng thái</option>
                 <option value="PENDING_INSPECTION">Chờ kiểm định (PENDING INSPECTION)</option>
-                <option value="PARTIALLY_ACCEPTED">Nhận một phần (PARTIALLY ACCEPTED)</option>
-                <option value="FULLY_COMPLETED_STOCKED">Đã nhập kho (FULLY COMPLETED STOCKED)</option>
-                <option value="REJECTED_RETURNED">Đã từ chối/Trả lại (REJECTED RETURNED)</option>
+                <option value="PARTIAL_ACCEPTANCE">Nhận một phần (PARTIAL ACCEPTANCE)</option>
+                <option value="INSPECTED_ACCEPTED">Đã nhập kho (INSPECTED ACCEPTED)</option>
+                <option value="REJECTED">Từ chối / Hủy (REJECTED)</option>
               </select>
             </div>
 
@@ -620,7 +625,7 @@ export function ImportReceiptsPage() {
                         const prod = products.find(p => String(p.id) === String(line.productVariantId)) ||
                           products.find(p => p.sku === line.sku);
                         const bin = warehouseBins.find(b => Number(b.id) === line.targetBinId);
-                        const binLabel = line.targetBinCode || (bin ? `${bin.binCode} (${bin.warehouseZoneName || 'Kho'})` : `Ô kệ ID #${line.targetBinId}`);
+                        const binLabel = line.targetBinCode || (bin ? `${bin.binCode} (${bin.areaName || bin.zoneCode || 'Kho'})` : `Ô kệ ID #${line.targetBinId}`);
                         const prodName = line.productName || prod?.name || `Biến thể #${line.productVariantId}`;
                         return (
                           <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
@@ -743,70 +748,63 @@ export function ImportReceiptsPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhà cung cấp *</label>
-              <select
-                value={(editingReceipt as any).supplierId || ''}
-                onChange={(e) => {
-                  const id = Number(e.target.value);
-                  const found = suppliersList.find((s: any) => Number(s.id) === id);
-                  const name = found ? (found.name || found.supplierName || found.companyName || found.fullName) : '';
-                  setEditingReceipt({
-                    ...editingReceipt,
-                    supplierName: name,
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhà cung cấp đối tác *</label>
+              <SearchLookupModal
+                title="Chọn Nhà Cung Cấp"
+                iconType="building"
+                placeholder="Chọn nhà cung cấp..."
+                value={String((editingReceipt as any).supplierId || '')}
+                options={suppliersList.length > 0
+                  ? suppliersList.map((s: any) => ({
+                      id: String(s.id),
+                      code: s.code || s.supplierCode || `SUP-${s.id}`,
+                      name: s.name || s.supplierName || s.companyName || s.fullName,
+                      subtitle: `SĐT: ${s.phone || 'N/A'}`
+                    }))
+                  : defaultSuppliers.map((s, i) => ({
+                      id: String(i + 1),
+                      code: `SUP-0${i + 1}`,
+                      name: s
+                    }))
+                }
+                onChange={(val, opt) => {
+                  const id = Number(val);
+                  setEditingReceipt(prev => ({
+                    ...prev,
+                    supplierName: opt ? opt.name : '',
                     supplierId: id || undefined
-                  } as any);
+                  } as any));
                 }}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
-                required
-              >
-                <option value="">-- Chọn nhà cung cấp --</option>
-                {suppliersList.length > 0 ? (
-                  suppliersList.map((s: any) => {
-                    const name = s.name || s.supplierName || s.companyName || s.fullName;
-                    const code = s.code || s.supplierCode || `NCC-${s.id}`;
-                    return <option key={s.id} value={s.id}>{name} ({code})</option>;
-                  })
-                ) : (
-                  defaultSuppliers.map((s, i) => (
-                    <option key={i} value={i + 1}>{s}</option>
-                  ))
-                )}
-              </select>
+              />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chi nhánh / Kho nhận *</label>
-              <select
-                value={(editingReceipt as any).branchId || ''}
-                onChange={(e) => {
-                  const id = Number(e.target.value);
-                  const found = branchesList.find((b: any) => Number(b.id) === id);
-                  const name = found ? (found.branchName || found.name || `Chi nhánh ${id}`) : '';
-                  setEditingReceipt({
-                    ...editingReceipt,
-                    receivingStore: name,
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chi nhánh / Kho tiếp nhận *</label>
+              <SearchLookupModal
+                title="Chọn Kho Hàng Tiếp Nhận"
+                iconType="location"
+                placeholder="Chọn kho / chi nhánh..."
+                value={String((editingReceipt as any).branchId || '')}
+                options={branchesList.length > 0
+                  ? branchesList.map((b: any) => ({
+                      id: String(b.id),
+                      code: b.branchCode || b.code || `BRANCH-${b.id}`,
+                      name: b.branchName || b.name || `Chi nhánh ${b.id}`,
+                    }))
+                  : [
+                      { id: '1', code: 'STORE-HQ', name: 'Kho Tổng Trung Tâm (Hội Sở)' },
+                      { id: '2', code: 'STORE-HN', name: 'Kho Chi Nhánh Hà Nội' },
+                      { id: '3', code: 'STORE-HCM', name: 'Kho Chi Nhánh TP.HCM' },
+                    ]
+                }
+                onChange={(val, opt) => {
+                  const id = Number(val);
+                  setEditingReceipt(prev => ({
+                    ...prev,
+                    receivingStore: opt ? opt.name : '',
                     branchId: id || 1
-                  } as any);
+                  } as any));
                 }}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
-                required
-              >
-                <option value="">-- Chọn chi nhánh / kho nhận --</option>
-                {branchesList.length > 0 ? (
-                  branchesList.map((b: any) => {
-                    const name = b.branchName || b.name || `Chi nhánh ${b.id}`;
-                    const code = b.branchCode || b.code || `HQ-${b.id}`;
-                    return <option key={b.id} value={b.id}>{name} ({code})</option>;
-                  })
-                ) : (
-                  [
-                    { id: 1, name: 'Main Flagship / HQ' },
-                    { id: 2, name: 'Chi nhánh Hà Nội' },
-                    { id: 3, name: 'Chi nhánh TP.HCM' }
-                  ].map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))
-                )}
-              </select>
+              />
             </div>
           </div>
 

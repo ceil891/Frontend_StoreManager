@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { axiosClient } from '@/shared/lib/axiosClient';
 
 export type ActivityActionType = 'VIEW' | 'CREATE' | 'UPDATE' | 'DELETE';
 
@@ -36,6 +37,7 @@ export interface ActivityLogRecord {
 
 interface ActivityLogState {
   logs: ActivityLogRecord[];
+  fetchLogs: () => Promise<void>;
   addLog: (row: Omit<ActivityLogRecord, 'id' | 'timestamp'> & { timestamp?: string }) => void;
 }
 
@@ -45,179 +47,23 @@ function nowTimestamp() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-const DEFAULT_LOGS: ActivityLogRecord[] = [
-  {
-    id: 'log_1',
-    timestamp: '2026-05-27 09:12:08',
-    userName: 'Nguyễn minh quân',
-    userEmail: 'admin@system.com',
-    userCode: 'USR-001',
-    role: 'SUPER_ADMIN',
-    actionType: 'CREATE',
-    moduleName: 'Nhân sự',
-    pageName: 'Quản lý người dùng',
-    entityType: 'SystemUser',
-    entityId: 'usr_005',
-    entityLabel: 'Hoàng thị Mai',
-    description: 'Tạo tài khoản nhân viên mới, gán vai trò STAFF, chi nhánh CH Quận 1.',
-    branchId: 'HQ',
-    branchName: 'Trụ sở chính - TP.HCM',
-    ipAddress: '192.168.1.10',
-    status: 'SUCCESS',
-    changedFields: ['fullName', 'emailAddress', 'assignedRole', 'branchId'],
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0',
-    sessionId: 'sess_998124',
-  },
-  {
-    id: 'log_2',
-    timestamp: '2026-05-27 09:05:41',
-    userName: 'Trần thị Lan',
-    userEmail: 'manager@store.com',
-    userCode: 'USR-002',
-    role: 'STORE_MANAGER',
-    actionType: 'UPDATE',
-    moduleName: 'Bán hàng',
-    pageName: 'Đơn hàng bán',
-    entityType: 'SaleOrder',
-    entityId: 'so_2048',
-    entityLabel: 'ORD-2026-2048',
-    description: 'Cập nhật trạng thái đơn từ PENDING → COMPLETED, thanh toán PAID.',
-    branchId: 'BR-001',
-    branchName: 'CH Quận 1',
-    ipAddress: '192.168.20.15',
-    status: 'SUCCESS',
-    changedFields: ['status', 'paymentStatus'],
-    oldValues: { status: 'PENDING', paymentStatus: 'UNPAID' },
-    newValues: { status: 'COMPLETED', paymentStatus: 'PAID' },
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15',
-    sessionId: 'sess_112001',
-  },
-  {
-    id: 'log_3',
-    timestamp: '2026-05-27 08:58:22',
-    userName: 'Lê Hoàng Nam',
-    userEmail: 'staff@store.com',
-    userCode: 'USR-003',
-    role: 'STAFF',
-    actionType: 'VIEW',
-    moduleName: 'CRM',
-    pageName: 'Khách hàng',
-    entityType: 'Customer',
-    entityId: 'cust_12',
-    entityLabel: 'Nguyễn Văn an (CUST-12045)',
-    description: 'Xem hồ sơ khách hàng và tab lịch sử mua hàng.',
-    branchId: 'BR-001',
-    branchName: 'CH Quận 1',
-    ipAddress: '192.168.20.22',
-    status: 'SUCCESS',
-  },
-  {
-    id: 'log_4',
-    timestamp: '2026-05-27 08:44:10',
-    userName: 'Phạm thu Hà',
-    userEmail: 'inventory@retailhub.vn',
-    userCode: 'USR-004',
-    role: 'INVENTORY_STAFF',
-    actionType: 'DELETE',
-    moduleName: 'Kho',
-    pageName: 'Phiếu nhập kho',
-    entityType: 'ImportReceipt',
-    entityId: 'imp_88',
-    entityLabel: 'IMP-2026-0088',
-    description: 'Xóa phiếu nhập nháp do nhập trùng mã PO.',
-    branchId: 'BR-002',
-    branchName: 'CH Tân Bình',
-    ipAddress: '192.168.30.8',
-    status: 'SUCCESS',
-  },
-  {
-    id: 'log_5',
-    timestamp: '2026-05-27 08:30:55',
-    userName: 'Trần thị Lan',
-    userEmail: 'manager@store.com',
-    userCode: 'USR-002',
-    role: 'STORE_MANAGER',
-    actionType: 'CREATE',
-    moduleName: 'Hệ thống',
-    pageName: 'Quản lý chi nhánh',
-    entityType: 'Branch',
-    entityId: 'BR-006',
-    entityLabel: 'CH thủ Đức',
-    description: 'Thêm chi nhánh mới, gán quản lý và chỉ tiêu doanh thu Q2.',
-    branchId: 'BR-001',
-    branchName: 'CH Quận 1',
-    ipAddress: '192.168.20.15',
-    status: 'SUCCESS',
-    changedFields: ['name', 'location', 'manager', 'revenueTarget'],
-    newValues: { name: 'CH thủ Đức', location: 'Q. Thủ Đức', manager: 'Trần thị Lan', revenueTarget: 500000000 },
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15',
-    sessionId: 'sess_112001',
-  },
-  {
-    id: 'log_6',
-    timestamp: '2026-05-27 08:15:03',
-    userName: 'Nguyễn minh quân',
-    userEmail: 'admin@system.com',
-    userCode: 'USR-001',
-    role: 'SUPER_ADMIN',
-    actionType: 'UPDATE',
-    moduleName: 'Tài chính',
-    pageName: 'Phiếu thu',
-    entityType: 'ReceiptVoucher',
-    entityId: 'rec_12',
-    entityLabel: 'REC-2026-0012',
-    description: 'Sửa số tiền thu và ghi chú phiếu thu công nợ khách hàng.',
-    branchId: 'HQ',
-    branchName: 'Trụ sở chính - TP.HCM',
-    ipAddress: '192.168.1.10',
-    status: 'SUCCESS',
-    changedFields: ['amount', 'notes'],
-    oldValues: { amount: 1500000, notes: 'Thu tiền cọc' },
-    newValues: { amount: 2000000, notes: 'Thu tiền cọc và thanh toán nợ cũ' },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0',
-    sessionId: 'sess_998124',
-  },
-  {
-    id: 'log_7',
-    timestamp: '2026-05-27 07:55:18',
-    userName: 'Lê Hoàng Nam',
-    userEmail: 'staff@store.com',
-    userCode: 'USR-003',
-    role: 'STAFF',
-    actionType: 'CREATE',
-    moduleName: 'POS',
-    pageName: 'Quầy bán hàng',
-    entityType: 'SaleOrder',
-    entityId: 'so_pos_991',
-    entityLabel: 'ORD-POS-2026-991',
-    description: 'Thanh toán POS: 3 sản phẩm, tổng 2.450.000đ, tiền mặt.',
-    branchId: 'BR-001',
-    branchName: 'CH Quận 1',
-    ipAddress: '192.168.20.104',
-    status: 'SUCCESS',
-  },
-  {
-    id: 'log_8',
-    timestamp: '2026-05-27 07:40:00',
-    userName: 'unknown',
-    userEmail: 'guest@blocked.local',
-    role: 'ANONYMOUS',
-    actionType: 'VIEW',
-    moduleName: 'Hệ thống',
-    pageName: 'Đăng nhập',
-    entityType: 'AuthSession',
-    entityId: '—',
-    entityLabel: 'Cổng quản trị',
-    description: 'Truy cập trang đăng nhập không có phiên hợp lệ.',
-    ipAddress: '185.220.101.4',
-    status: 'DENIED',
-  },
-];
+
 
 export const useActivityLogStore = create<ActivityLogState>()(
   persist(
     (set) => ({
-      logs: DEFAULT_LOGS,
+      logs: [],
+      fetchLogs: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/system/audit-logs');
+          const data = res.content || res || [];
+          if (Array.isArray(data)) {
+            set({ logs: data });
+          }
+        } catch (e) {
+          console.error('Failed to fetch logs:', e);
+        }
+      },
       addLog: (row) =>
         set((s) => ({
           logs: [

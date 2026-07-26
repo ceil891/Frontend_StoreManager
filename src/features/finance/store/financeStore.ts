@@ -182,53 +182,64 @@ interface FinanceState {
 
   updateJournalEntry: (id: string, data: Partial<JournalEntry>) => Promise<void>;
   addJournalEntry: (row: Omit<JournalEntry, 'id'>) => Promise<void>;
+
+  fixedAssets: FixedAssetRecord[];
+  depreciations: DepreciationRecord[];
+  fundBalances: FundBalanceRecord[];
+  taxDuties: TaxDutyRecord[];
+
+  fetchFixedAssets: () => Promise<void>;
+  addFixedAsset: (item: Omit<FixedAssetRecord, 'id'>) => Promise<void>;
+  updateFixedAsset: (id: string, data: Partial<FixedAssetRecord>) => Promise<void>;
+  deleteFixedAsset: (id: string) => Promise<void>;
+
+  fetchDepreciations: () => Promise<void>;
+  fetchFundBalances: () => Promise<void>;
+  fetchTaxDuties: () => Promise<void>;
 }
 
-const DEFAULT_RECEIPTS: ReceiptVoucher[] = [
-  { id: '1', voucherNumber: 'REC-2024-001', payerName: 'Đại lý Hùng Cường', category: 'SALES_REVENUE', amount: 4500000, paymentMethod: 'BANK_TRANSFER', receivedDate: '2024-05-17', referenceDoc: 'INV-2024-901', cashier: 'Trần thị Lan', branchId: 'BR-001', notes: 'Thanh toán đơn bán buôn tháng 5.', receivingAccount: 'VCB - 001100223344', payerContact: '0901234567 - MST: 0312345678', attachments: ['/receipts/rec-1.pdf'] },
-  { id: '2', voucherNumber: 'REC-2024-002', payerName: 'Khách lẻ POS', category: 'SALES_REVENUE', amount: 150000, paymentMethod: 'CASH', receivedDate: '2024-05-17', cashier: 'Lê Hoàng Nam', branchId: 'BR-001' },
-];
+export interface FixedAssetRecord {
+  id: string;
+  assetCode: string;
+  assetName: string;
+  category: string;
+  originalValue: number;
+  accumulatedDepreciation: number;
+  netBookValue: number;
+  usefulLifeMonths: number;
+  purchasedDate: string;
+  status: 'ACTIVE' | 'DISPOSED' | 'FULLY_DEPRECIATED';
+}
 
-const DEFAULT_PAYMENTS: PaymentVoucher[] = [
-  { id: '1', voucherNumber: 'PAY-2024-001', payeeName: 'NCC Điện tử Toàn Cầu', category: 'SUPPLIER_PAYMENT', amount: 35000000, paymentMethod: 'BANK_TRANSFER', paymentDate: '2024-05-16', bankAccountRef: 'VCB •••• 2450', approver: 'Nguyễn minh quân', branchId: 'HQ', status: 'COMPLETED', notes: 'Tạm ứng PO #89102.', payeeBankAccount: 'TCB - 19033322211', creator: 'Lê kế toán', attachments: ['/invoices/inv-89102.pdf'] },
-  { id: '2', voucherNumber: 'PAY-2024-002', payeeName: 'Điện lực TP.HCM', category: 'UTILITIES', amount: 1850000, paymentMethod: 'BANK_TRANSFER', paymentDate: '2024-05-15', bankAccountRef: 'VCB •••• 2450', approver: 'Trần thị Lan', branchId: 'BR-001', status: 'COMPLETED', creator: 'Lê kế toán' },
-];
+export interface DepreciationRecord {
+  id: string;
+  assetCode: string;
+  assetName: string;
+  depreciationMonth: string;
+  monthlyAmount: number;
+  accumulatedTotal: number;
+}
 
-const DEFAULT_DEBTS: DebtRecord[] = [
-  { id: '1', debtCode: 'DBT-2024-101', entityName: 'Siêu thị Apex', entityType: 'CUSTOMER', totalDebt: 45000000, dueAmount: 15000000, dueDate: '2024-05-30', status: 'DUE_SOON', lastPaymentDate: '2024-05-01', accountManager: 'Trần thị Lan', branchId: 'BR-001', referenceDoc: 'SO-2024-88', incurredDate: '2024-04-30', paidAmount: 30000000, currency: 'VND' },
-  { id: '2', debtCode: 'DBT-2024-102', entityName: 'NCC Global Tech', entityType: 'SUPPLIER', totalDebt: -125000000, dueAmount: -25000000, dueDate: '2024-05-15', status: 'OVERDUE', lastPaymentDate: '2024-04-15', accountManager: 'Nguyễn minh quân', branchId: 'HQ', referenceDoc: 'PO-2024-41', incurredDate: '2024-03-15', paidAmount: 100000000, currency: 'VND' },
-];
+export interface FundBalanceRecord {
+  id: string;
+  fundCode: string;
+  fundName: string;
+  accountNumber: string;
+  balance: number;
+  currency: string;
+  status: 'ACTIVE' | 'LOCKED';
+}
 
-const DEFAULT_COSTS: OperatingCost[] = [
-  { id: '1', costCode: 'OPC-2024-501', costName: 'Tiền thuê mặt bằng CH Quận 1', category: 'RENTAL', amount: 12500000, incurredDate: '2024-05-01', branch: 'CH Quận 1', branchId: 'BR-001', paymentStatus: 'PAID', assignedBudget: 'Q2 Fixed', authorizedBy: 'Nguyễn minh quân' },
-  { id: '2', costCode: 'OPC-2024-502', costName: 'Quảng cáo Facebook', category: 'MARKETING', amount: 4850000, incurredDate: '2024-05-14', branch: 'Marketing', branchId: 'HQ', paymentStatus: 'PAID', assignedBudget: 'Q2 Marketing', authorizedBy: 'Trần thị Lan' },
-];
-
-const DEFAULT_BANKS: CorporateBankAccount[] = [
-  { id: '1', accountName: 'CONG TY TNHH RETAILHUB', accountNumber: '00110022334455', accountNumberMasked: '•••• •••• 8810 2450', bankName: 'Vietcombank', branchName: 'CN TP.HCM', swiftBic: 'BFTVVNVX', currency: 'VND', currentBalance: 1450800000, availableWorkingCapital: 1250000000, accountType: 'PRIMARY_OPERATING', status: 'ACTIVE', openedDate: '2021-04-15', authorizedSignatories: ['Nguyễn minh quân', 'Trần thị Lan'], lastReconciledDate: '2024-05-15', overdraftLimit: 500000000, bankCountry: 'Việt Nam', updatedBy: 'Admin' },
-  { id: '2', accountName: 'CONG TY TNHH RETAILHUB', accountNumber: '1903332221144', accountNumberMasked: '•••• •••• 4419 9210', bankName: 'Techcombank', branchName: 'CN Quận 1', swiftBic: 'VTCBVNVX', currency: 'VND', currentBalance: 420500000, availableWorkingCapital: 420500000, accountType: 'MERCHANT_SETTLEMENT', status: 'ACTIVE', openedDate: '2022-01-10', authorizedSignatories: ['Trần thị Lan'], lastReconciledDate: '2024-05-16', overdraftLimit: 0, bankCountry: 'Việt Nam', updatedBy: 'Admin' },
-];
-
-const DEFAULT_REASONS: TransactionReasonRecord[] = [
-  { id: '1', reasonCode: 'RSN-REV-POS', reasonName: 'Doanh thu POS', category: 'OPERATING_REVENUE', accountingGLCode: 'GL-40100', cashFlowImpact: 'INFLOW_DEBIT', isTaxDeductible: false, requiresReceiptUpload: false, totalLoggedVolumeUsd: 1450800, status: 'ACTIVE', applicableDepartments: 'Bán lẻ', defaultOffsetGLCode: 'GL-11110', isBudgetTracked: false },
-  { id: '2', reasonCode: 'RSN-COG-SUP', reasonName: 'Thanh toán nhập hàng', category: 'COST_OF_GOODS', accountingGLCode: 'GL-50100', cashFlowImpact: 'OUTFLOW_CREDIT', isTaxDeductible: true, requiresReceiptUpload: true, totalLoggedVolumeUsd: 840500, status: 'ACTIVE', applicableDepartments: 'Mua hàng', defaultOffsetGLCode: 'GL-11210', budgetLimit: 500000000, isBudgetTracked: true },
-];
-
-const DEFAULT_JOURNAL: JournalEntry[] = [
-  {
-    id: 'je_1',
-    code: 'JE-2026-0001',
-    date: new Date().toISOString().slice(0, 10),
-    description: 'Thu công nợ khách hàng đơn SO-2048',
-    reference: 'REC-2026-0011',
-    status: 'DRAFT',
-    branchId: 'BR-001',
-    lines: [
-      { id: 'line_1', accountCode: '1121', accountName: 'Tiền gửi VCB', description: 'Khách chuyển khoản', debit: 12500000, credit: 0, entityId: 'KH-001', currency: 'VND', exchangeRate: 1, originalAmount: 12500000 },
-      { id: 'line_2', accountCode: '131', accountName: 'Phải thu KH', description: 'Giảm công nợ', debit: 0, credit: 12500000, entityId: 'KH-001', currency: 'VND', exchangeRate: 1, originalAmount: 12500000 },
-    ],
-  },
-];
+export interface TaxDutyRecord {
+  id: string;
+  taxCode: string;
+  taxName: string;
+  taxRatePercent: number;
+  taxPeriod: string;
+  payableAmount: number;
+  paidAmount: number;
+  status: 'DUE' | 'PAID' | 'OVERDUE';
+}
 
 const defaultFinance = {
   receipts: [],
@@ -242,233 +253,307 @@ const defaultFinance = {
 
 export const useFinanceStore = create<FinanceState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...defaultFinance,
 
       fetchReceipts: async () => {
         try {
           const res = await axiosClient.get<any, any>('/finance/receipt-vouchers');
           const data = res.content || res || [];
-          if (Array.isArray(data) && data.length > 0) {
-            set({ receipts: data.map((item: any) => ({
-              id: String(item.id),
-              voucherNumber: item.voucherNumber || `REC-${item.id}`,
-              payerName: item.payerName || '',
-              category: item.category || 'SALES_REVENUE',
-              amount: Number(item.amount || 0),
-              paymentMethod: item.paymentMethod || 'CASH',
-              receivedDate: item.receivedDate ? item.receivedDate.split('T')[0] : '',
-              referenceDoc: item.referenceDoc || '',
-              cashier: item.cashier || '',
-              branchId: String(item.branchId || ''),
-              notes: item.notes || '',
-            })) });
-          }
+          set({ receipts: Array.isArray(data) ? data.map((item: any) => ({
+            id: String(item.id),
+            voucherNumber: item.voucherNumber || `REC-${item.id}`,
+            payerName: item.payerName || '',
+            category: item.category || 'SALES_REVENUE',
+            amount: Number(item.amount || 0),
+            paymentMethod: item.paymentMethod || 'CASH',
+            receivedDate: item.receivedDate ? item.receivedDate.split('T')[0] : '',
+            referenceDoc: item.referenceDoc || '',
+            cashier: item.cashier || '',
+            branchId: String(item.branchId || ''),
+            notes: item.notes || '',
+          })) : [] });
         } catch (e) {
           console.error('Failed to fetch receipts:', e);
+          set({ receipts: [] });
         }
       },
       fetchPayments: async () => {
         try {
           const res = await axiosClient.get<any, any>('/finance/payment-vouchers');
           const data = res.content || res || [];
-          if (Array.isArray(data) && data.length > 0) {
-            set({ payments: data.map((item: any) => ({
-              id: String(item.id),
-              voucherNumber: item.voucherNumber || `PAY-${item.id}`,
-              payeeName: item.payeeName || '',
-              category: item.category || 'SUPPLIER_PAYMENT',
-              amount: Number(item.amount || 0),
-              paymentMethod: item.paymentMethod || 'CASH',
-              paymentDate: item.paymentDate ? item.paymentDate.split('T')[0] : '',
-              bankAccountRef: item.bankAccountRef || '',
-              approver: item.approver || '',
-              branchId: String(item.branchId || ''),
-              notes: item.notes || '',
-              status: item.status || 'COMPLETED',
-            })) });
-          }
+          set({ payments: Array.isArray(data) ? data.map((item: any) => ({
+            id: String(item.id),
+            voucherNumber: item.voucherNumber || `PAY-${item.id}`,
+            payeeName: item.payeeName || '',
+            category: item.category || 'SUPPLIER_PAYMENT',
+            amount: Number(item.amount || 0),
+            paymentMethod: item.paymentMethod || 'CASH',
+            paymentDate: item.paymentDate ? item.paymentDate.split('T')[0] : '',
+            bankAccountRef: item.bankAccountRef || '',
+            approver: item.approver || '',
+            branchId: String(item.branchId || ''),
+            notes: item.notes || '',
+            status: item.status || 'COMPLETED',
+          })) : [] });
         } catch (e) {
           console.error('Failed to fetch payments:', e);
+          set({ payments: [] });
         }
       },
       fetchDebts: async () => {
         try {
           const res = await axiosClient.get<any, any>('/finance/debt-ledgers');
           const data = res.content || res || [];
-          if (Array.isArray(data) && data.length > 0) {
-            set({ debts: data.map((item: any) => ({
-              id: String(item.id),
-              debtCode: item.debtCode || `DBT-${item.id}`,
-              entityName: item.entityName || '',
-              entityType: item.entityType || 'CUSTOMER',
-              totalDebt: Number(item.totalDebt || 0),
-              dueAmount: Number(item.dueAmount || 0),
-              dueDate: item.dueDate ? item.dueDate.split('T')[0] : '',
-              status: item.status || 'NORMAL',
-            })) });
-          }
+          set({ debts: Array.isArray(data) ? data.map((item: any) => ({
+            id: String(item.id),
+            debtCode: item.debtCode || `DBT-${item.id}`,
+            entityName: item.entityName || '',
+            entityType: item.entityType || 'CUSTOMER',
+            totalDebt: Number(item.totalDebt || 0),
+            dueAmount: Number(item.dueAmount || 0),
+            dueDate: item.dueDate ? item.dueDate.split('T')[0] : '',
+          })) as any : [] });
         } catch (e) {
           console.error('Failed to fetch debts:', e);
+          set({ debts: [] });
         }
       },
       fetchOperatingCosts: async () => {
         try {
           const res = await axiosClient.get<any, any>('/finance/operating-costs');
           const data = res.content || res || [];
-          if (Array.isArray(data) && data.length > 0) {
-            set({ operatingCosts: data.map((item: any) => ({
-              id: String(item.id),
-              costCode: item.costCode || `OPC-${item.id}`,
-              costName: item.costName || '',
-              category: item.category || 'RENTAL',
-              amount: Number(item.amount || 0),
-              incurredDate: item.incurredDate ? item.incurredDate.split('T')[0] : '',
-              branch: item.branch || '',
-              branchId: String(item.branchId || ''),
-              paymentStatus: item.paymentStatus || 'PAID',
-            })) });
-          }
+          set({ operatingCosts: Array.isArray(data) ? data.map((item: any) => ({
+            id: String(item.id),
+            costCode: item.costCode || `OPC-${item.id}`,
+            costName: item.costName || '',
+            category: item.category || 'RENTAL',
+            amount: Number(item.amount || 0),
+            incurredDate: item.incurredDate ? item.incurredDate.split('T')[0] : '',
+            branch: item.branch || '',
+            branchId: String(item.branchId || ''),
+            paymentStatus: item.paymentStatus || 'PAID',
+          })) as any : [] });
         } catch (e) {
           console.error('Failed to fetch operating costs:', e);
+          set({ operatingCosts: [] });
         }
       },
       fetchBankAccounts: async () => {
         try {
           const res = await axiosClient.get<any, any>('/finance/bank-accounts');
           const data = res.content || res || [];
-          if (Array.isArray(data) && data.length > 0) {
-            set({ bankAccounts: data.map((item: any) => ({
-              id: String(item.id),
-              accountName: item.accountHolder || '',
-              accountNumber: item.accountNumber || '',
-              accountNumberMasked: item.accountNumber ? `•••• •••• ${item.accountNumber.slice(-4)}` : '',
-              bankName: item.bankName || '',
-              branchName: item.branchName || '',
-              currency: 'VND',
-              currentBalance: 100000000,
-              availableWorkingCapital: 100000000,
-              accountType: 'PRIMARY_OPERATING',
-              status: 'ACTIVE',
-            })) });
-          }
+          set({ bankAccounts: Array.isArray(data) ? data.map((item: any) => ({
+            id: String(item.id),
+            accountName: item.accountHolder || '',
+            accountNumber: item.accountNumber || '',
+            accountNumberMasked: item.accountNumber ? `•••• •••• ${item.accountNumber.slice(-4)}` : '',
+            bankName: item.bankName || '',
+            branchName: item.branchName || '',
+            currency: 'VND',
+            currentBalance: 100000000,
+            availableWorkingCapital: 100000000,
+            accountType: 'PRIMARY_OPERATING',
+            status: 'ACTIVE',
+          })) as any : [] });
         } catch (e) {
           console.error('Failed to fetch bank accounts:', e);
+          set({ bankAccounts: [] });
         }
       },
       fetchTransactionReasons: async () => {
         try {
           const res = await axiosClient.get<any, any>('/finance/transaction-reasons');
           const data = res.content || res || [];
-          if (Array.isArray(data) && data.length > 0) {
-            set({ transactionReasons: data.map((item: any) => ({
-              id: String(item.id),
-              reasonCode: item.reasonCode || `RSN-${item.id}`,
-              reasonName: item.reasonName || '',
-              category: item.category || 'OPERATING_REVENUE',
-              status: 'ACTIVE',
-            })) });
-          }
+          set({ transactionReasons: Array.isArray(data) ? data.map((item: any) => ({
+            id: String(item.id),
+            reasonCode: item.reasonCode || `RSN-${item.id}`,
+            reasonName: item.reasonName || '',
+            category: item.category || 'OPERATING_REVENUE',
+            status: 'ACTIVE',
+          })) as any : [] });
         } catch (e) {
           console.error('Failed to fetch transaction reasons:', e);
+          set({ transactionReasons: [] });
         }
       },
       fetchJournalEntries: async () => {
         try {
           const res = await axiosClient.get<any, any>('/accounting/journal-entries');
-          const data = res.content || res || [];
-          if (Array.isArray(data) && data.length > 0) {
-            set({ journalEntries: data.map((item: any) => ({
-              id: String(item.id),
-              code: item.code || `JE-${item.id}`,
-              date: item.date ? item.date.split('T')[0] : '',
-              description: item.description || '',
-              reference: item.reference || '',
-              status: item.status || 'DRAFT',
-              lines: [],
-            })) });
-          }
+          const data = (res as any).content || res || [];
+          set({ journalEntries: Array.isArray(data) ? data.map((item: any) => ({
+            id: String(item.id),
+            code: item.code || `JE-${item.id}`,
+            date: item.date ? item.date.split('T')[0] : '',
+            description: item.description || '',
+            reference: item.reference || '',
+            status: item.status || 'DRAFT',
+            branchId: String(item.branchId || ''),
+            lines: [],
+          })) : [] });
         } catch (e) {
           console.error('Failed to fetch journal entries:', e);
+          set({ journalEntries: [] });
         }
       },
 
       addReceipt: async (row) => {
-        try { await axiosClient.post('/finance/receipt-vouchers', row); } catch (e) { console.error(e); }
-        set((s) => ({ receipts: [{ id: `rec_${Date.now()}`, ...row }, ...s.receipts] }));
+        try { 
+          await axiosClient.post('/finance/receipt-vouchers', row);
+          await get().fetchReceipts();
+        } catch (e) { console.error(e); }
       },
       updateReceipt: async (id, data) => {
-        try { await axiosClient.put(`/finance/receipt-vouchers/${id}`, data); } catch (e) { console.error(e); }
-        set((s) => ({ receipts: s.receipts.map((r) => (r.id === id ? { ...r, ...data } : r)) }));
+        try { 
+          await axiosClient.put(`/finance/receipt-vouchers/${id}`, data);
+          await get().fetchReceipts();
+        } catch (e) { console.error(e); }
       },
       deleteReceipt: async (id) => {
-        try { await axiosClient.delete(`/finance/receipt-vouchers/${id}`); } catch (e) { console.error(e); }
-        set((s) => ({ receipts: s.receipts.filter((r) => r.id !== id) }));
+        try { 
+          await axiosClient.delete(`/finance/receipt-vouchers/${id}`);
+          await get().fetchReceipts();
+        } catch (e) { console.error(e); }
       },
 
       addPayment: async (row) => {
-        try { await axiosClient.post('/finance/payment-vouchers', row); } catch (e) { console.error(e); }
-        set((s) => ({ payments: [{ id: `pay_${Date.now()}`, ...row }, ...s.payments] }));
+        try { 
+          await axiosClient.post('/finance/payment-vouchers', row);
+          await get().fetchPayments();
+        } catch (e) { console.error(e); }
       },
       updatePayment: async (id, data) => {
-        try { await axiosClient.put(`/finance/payment-vouchers/${id}`, data); } catch (e) { console.error(e); }
-        set((s) => ({ payments: s.payments.map((p) => (p.id === id ? { ...p, ...data } : p)) }));
+        try { 
+          await axiosClient.put(`/finance/payment-vouchers/${id}`, data);
+          await get().fetchPayments();
+        } catch (e) { console.error(e); }
       },
       deletePayment: async (id) => {
-        try { await axiosClient.delete(`/finance/payment-vouchers/${id}`); } catch (e) { console.error(e); }
-        set((s) => ({ payments: s.payments.filter((p) => p.id !== id) }));
+        try { 
+          await axiosClient.delete(`/finance/payment-vouchers/${id}`);
+          await get().fetchPayments();
+        } catch (e) { console.error(e); }
       },
 
       addDebt: async (row) => {
-        set((s) => ({ debts: [{ id: `debt_${Date.now()}`, ...row }, ...s.debts] }));
+        try {
+          await axiosClient.post('/finance/debt-ledgers', row);
+          await get().fetchDebts();
+        } catch (e) { console.error(e); }
       },
       updateDebt: async (id, data) => {
-        set((s) => ({ debts: s.debts.map((d) => (d.id === id ? { ...d, ...data } : d)) }));
+        try {
+          await axiosClient.put(`/finance/debt-ledgers/${id}`, data);
+          await get().fetchDebts();
+        } catch (e) { console.error(e); }
       },
       deleteDebt: async (id) => {
-        set((s) => ({ debts: s.debts.filter((d) => d.id !== id) }));
+        try {
+          await axiosClient.delete(`/finance/debt-ledgers/${id}`);
+          await get().fetchDebts();
+        } catch (e) { console.error(e); }
       },
 
       addOperatingCost: async (row) => {
-        try { await axiosClient.post('/finance/operating-costs', row); } catch (e) { console.error(e); }
-        set((s) => ({ operatingCosts: [{ id: `opc_${Date.now()}`, ...row }, ...s.operatingCosts] }));
+        try { 
+          await axiosClient.post('/finance/operating-costs', row);
+          await get().fetchOperatingCosts();
+        } catch (e) { console.error(e); }
       },
       updateOperatingCost: async (id, data) => {
-        set((s) => ({ operatingCosts: s.operatingCosts.map((c) => (c.id === id ? { ...c, ...data } : c)) }));
+        try { 
+          await axiosClient.put(`/finance/operating-costs/${id}`, data);
+          await get().fetchOperatingCosts();
+        } catch (e) { console.error(e); }
       },
       deleteOperatingCost: async (id) => {
-        set((s) => ({ operatingCosts: s.operatingCosts.filter((c) => c.id !== id) }));
+        try { 
+          await axiosClient.delete(`/finance/operating-costs/${id}`);
+          await get().fetchOperatingCosts();
+        } catch (e) { console.error(e); }
       },
 
       addBankAccount: async (row) => {
-        try { await axiosClient.post('/finance/bank-accounts', row); } catch (e) { console.error(e); }
-        set((s) => ({ bankAccounts: [{ id: `bank_${Date.now()}`, ...row }, ...s.bankAccounts] }));
+        try { 
+          await axiosClient.post('/finance/bank-accounts', row);
+          await get().fetchBankAccounts();
+        } catch (e) { console.error(e); }
       },
       updateBankAccount: async (id, data) => {
-        try { await axiosClient.put(`/finance/bank-accounts/${id}`, data); } catch (e) { console.error(e); }
-        set((s) => ({ bankAccounts: s.bankAccounts.map((b) => (b.id === id ? { ...b, ...data } : b)) }));
+        try { 
+          await axiosClient.put(`/finance/bank-accounts/${id}`, data);
+          await get().fetchBankAccounts();
+        } catch (e) { console.error(e); }
       },
       deleteBankAccount: async (id) => {
-        try { await axiosClient.delete(`/finance/bank-accounts/${id}`); } catch (e) { console.error(e); }
-        set((s) => ({ bankAccounts: s.bankAccounts.filter((b) => b.id !== id) }));
+        try { 
+          await axiosClient.delete(`/finance/bank-accounts/${id}`);
+          await get().fetchBankAccounts();
+        } catch (e) { console.error(e); }
       },
 
       addTransactionReason: async (row) => {
-        set((s) => ({ transactionReasons: [{ id: `rsn_${Date.now()}`, ...row }, ...s.transactionReasons] }));
+        try {
+          await axiosClient.post('/finance/transaction-reasons', row);
+          await get().fetchTransactionReasons();
+        } catch (e) { console.error(e); }
       },
       updateTransactionReason: async (id, data) => {
-        set((s) => ({ transactionReasons: s.transactionReasons.map((r) => (r.id === id ? { ...r, ...data } : r)) }));
+        try {
+          await axiosClient.put(`/finance/transaction-reasons/${id}`, data);
+          await get().fetchTransactionReasons();
+        } catch (e) { console.error(e); }
       },
       deleteTransactionReason: async (id) => {
-        set((s) => ({ transactionReasons: s.transactionReasons.filter((r) => r.id !== id) }));
+        try {
+          await axiosClient.delete(`/finance/transaction-reasons/${id}`);
+          await get().fetchTransactionReasons();
+        } catch (e) { console.error(e); }
       },
 
+      fixedAssets: [
+        { id: '1', assetCode: 'TS-POS-01', assetName: 'Máy bán hàng POS 2 màn hình Touch', category: 'Thiết bị công nghệ', originalValue: 25000000, accumulatedDepreciation: 5000000, netBookValue: 20000000, usefulLifeMonths: 36, purchasedDate: '2025-01-15', status: 'ACTIVE' },
+        { id: '2', assetCode: 'TS-TRK-02', assetName: 'Xe tải giao hàng Suzuki 750kg', category: 'Phương tiện vận tải', originalValue: 320000000, accumulatedDepreciation: 80000000, netBookValue: 240000000, usefulLifeMonths: 60, purchasedDate: '2024-06-01', status: 'ACTIVE' },
+      ],
+      depreciations: [
+        { id: '1', assetCode: 'TS-POS-01', assetName: 'Máy bán hàng POS 2 màn hình Touch', depreciationMonth: '2026-06', monthlyAmount: 694444, accumulatedTotal: 5000000 },
+        { id: '2', assetCode: 'TS-TRK-02', assetName: 'Xe tải giao hàng Suzuki 750kg', depreciationMonth: '2026-06', monthlyAmount: 5333333, accumulatedTotal: 80000000 },
+      ],
+      fundBalances: [
+        { id: '1', fundCode: 'FND-VND-01', fundName: 'Quỹ tiền mặt Trung tâm HQ', accountNumber: 'CASH-HQ-01', balance: 85000000, currency: 'VND', status: 'ACTIVE' },
+        { id: '2', fundCode: 'FND-BANK-02', fundName: 'Quỹ tài khoản thanh toán Vietcombank', accountNumber: '001100223344', balance: 1450800000, currency: 'VND', status: 'ACTIVE' },
+      ],
+      taxDuties: [
+        { id: '1', taxCode: 'TAX-VAT-Q2', taxName: 'Thuế giá trị gia tăng (VAT) Q2/2026', taxRatePercent: 10, taxPeriod: 'Q2/2026', payableAmount: 45000000, paidAmount: 45000000, status: 'PAID' },
+        { id: '2', taxCode: 'TAX-CIT-2026', taxName: 'Thuế TNDN tạm tính Q2/2026', taxRatePercent: 20, taxPeriod: 'Q2/2026', payableAmount: 18000000, paidAmount: 0, status: 'DUE' },
+      ],
+
+      fetchFixedAssets: async () => {},
+      addFixedAsset: async (item) => {
+        set((s) => ({ fixedAssets: [{ id: `fa_${Date.now()}`, ...item }, ...s.fixedAssets] }));
+      },
+      updateFixedAsset: async (id, data) => {
+        set((s) => ({ fixedAssets: s.fixedAssets.map((f) => (f.id === id ? { ...f, ...data } : f)) }));
+      },
+      deleteFixedAsset: async (id) => {
+        set((s) => ({ fixedAssets: s.fixedAssets.filter((f) => f.id !== id) }));
+      },
+
+      fetchDepreciations: async () => {},
+      fetchFundBalances: async () => {},
+      fetchTaxDuties: async () => {},
+
       addJournalEntry: async (row) => {
-        try { await axiosClient.post('/accounting/journal-entries', row); } catch (e) { console.error(e); }
-        set((s) => ({ journalEntries: [{ id: `je_${Date.now()}`, ...row }, ...s.journalEntries] }));
+        try { 
+          await axiosClient.post('/accounting/journal-entries', row);
+          await get().fetchJournalEntries();
+        } catch (e) { console.error(e); }
       },
       updateJournalEntry: async (id, data) => {
-        set((s) => ({ journalEntries: s.journalEntries.map((j) => (j.id === id ? { ...j, ...data } : j)) }));
+        try {
+          await axiosClient.put(`/accounting/journal-entries/${id}`, data);
+          await get().fetchJournalEntries();
+        } catch (e) { console.error(e); }
       },
     }),
     {

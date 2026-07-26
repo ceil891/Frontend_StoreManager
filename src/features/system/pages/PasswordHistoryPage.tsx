@@ -16,13 +16,6 @@ interface PasswordHistoryItem {
   deviceInfo: string;
 }
 
-const MOCK_DATA: PasswordHistoryItem[] = [
-  { id: '1', userId: 'U001', userName: 'Nguyễn Văn an', changedAt: '2026-05-15 09:30', changeReason: 'Tự thay đổi', ipAddress: '192.168.1.105', deviceInfo: 'Chrome / Windows 11' },
-  { id: '2', userId: 'U002', userName: 'Trần thị Bích', changedAt: '2026-04-20 14:00', changeReason: 'Reset bởi Admin', ipAddress: '10.0.0.22', deviceInfo: 'Safari / iPhone 15' },
-  { id: '3', userId: 'U003', userName: 'Lê Hoàng Nam', changedAt: '2026-03-01 08:15', changeReason: 'Yêu cầu hệ thống', ipAddress: '172.16.0.8', deviceInfo: 'Firefox / Ubuntu' },
-  { id: '4', userId: 'U001', userName: 'Nguyễn Văn an', changedAt: '2026-01-10 11:00', changeReason: 'Đổi định kỳ', ipAddress: '192.168.1.100', deviceInfo: 'Edge / Windows 10' },
-  { id: '5', userId: 'U004', userName: 'Phạm thị Lan', changedAt: '2026-02-28 16:45', changeReason: 'Tự thay đổi', ipAddress: '192.168.2.50', deviceInfo: 'Chrome / macOS' },
-];
 
 const reasonConfig: Record<string, string> = {
   'Tự thay đổi': 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
@@ -31,33 +24,35 @@ const reasonConfig: Record<string, string> = {
   'Đổi định kỳ': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
 };
 
+import { useSystemStore } from '../store/systemStore';
+
 export function PasswordHistoryPage() {
-  const [data, setData] = useState<PasswordHistoryItem[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const {
+    passwordHistories: storeHistories,
+    fetchPasswordHistories,
+  } = useSystemStore();
+
+  useEffect(() => {
+    fetchPasswordHistories();
+  }, [fetchPasswordHistories]);
+
+  const data: PasswordHistoryItem[] = useMemo(() => {
+    return storeHistories.map((h) => ({
+      id: h.id,
+      userId: 'U001',
+      userName: h.userName,
+      changedAt: h.changedAt,
+      changeReason: 'Tự thay đổi',
+      ipAddress: '192.168.1.100',
+      deviceInfo: `Thực hiện bởi ${h.changedBy} - ${h.reason}`,
+    }));
+  }, [storeHistories]);
+
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<PasswordHistoryItem | null>(null);
   const [userFilter, setUserFilter] = useState('Tất cả');
 
-  useEffect(() => {
-    const fetchPasswordHistory = async () => {
-      setIsLoading(true);
-      try {
-        const res = await axiosClient.get<any, PasswordHistoryItem[]>('/system/password-history');
-        if (Array.isArray(res) && res.length > 0) {
-          setData(res);
-        } else {
-          setData(MOCK_DATA);
-        }
-      } catch (error) {
-        console.error('Failed to fetch password history:', error);
-        toast.error('Không thể tải lịch sử mật khẩu. Đang hiển thị dữ liệu mẫu.');
-        setData(MOCK_DATA);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchPasswordHistory();
-  }, []);
 
   const users = useMemo(() => ['Tất cả', ...Array.from(new Set(data.map(d => d.userName)))], [data]);
 
@@ -140,7 +135,7 @@ export function PasswordHistoryPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected} isLoading={isLoading} />
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} isLoading={isLoading} />
       </div>
 
       <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title="Chi tiết lần thay đổi mật khẩu">

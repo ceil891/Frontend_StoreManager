@@ -7,6 +7,8 @@ import {
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
+import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type RackRecord } from '@/features/inventory/store/inventoryStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
@@ -258,12 +260,12 @@ export function WarehouseAreasPage() {
       {
         accessorKey: 'areaName',
         header: 'Khu vực bãi (Area)',
-        cell: (info) => <span className="font-semibold text-blue-650 dark:text-blue-405">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-semibold text-blue-600 dark:text-blue-400">{info.getValue() as string}</span>,
       },
       {
-        accessorKey: 'zoneCode',
-        header: 'Thuộc phân khu (Zone)',
-        cell: (info) => <span className="font-mono text-xs text-gray-650 dark:text-gray-350">{info.getValue() as string || 'ZONE-A'}</span>,
+        accessorKey: 'parentZoneCode',
+        header: 'Thuộc Khu vực kho',
+        cell: (info) => <span className="font-mono text-xs text-gray-600 dark:text-gray-400">{info.getValue() as string || 'ZONE-A'}</span>,
       },
       {
         accessorKey: 'branchName',
@@ -499,44 +501,37 @@ export function WarehouseAreasPage() {
                 <select
                   value={editingItem.branchId || ''}
                   onChange={(e) => setEditingItem({ ...editingItem, branchId: e.target.value, zoneId: '', areaId: '' })}
-                  className="w-full p-2 border rounded dark:bg-gray-955 dark:border-gray-700 text-xs"
-                  required
-                >
-                  <option value="">-- Chọn chi nhánh --</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
+                              <div>
                 <label className="block text-[10px] font-bold text-gray-550 uppercase mb-1">Thuộc Phân khu (Zone) *</label>
-                <select
-                  value={editingItem.zoneId || ''}
-                  onChange={(e) => setEditingItem({ ...editingItem, zoneId: e.target.value, areaId: '' })}
-                  className="w-full p-2 border rounded dark:bg-gray-955 dark:border-gray-700 text-xs"
-                  required
-                >
-                  <option value="">-- Chọn Zone --</option>
-                  {filteredZones.map((z) => (
-                    <option key={z.id} value={z.id}>{z.zoneCode} - {z.zoneName}</option>
-                  ))}
-                </select>
+                <SearchLookupModal
+                  title="Chọn Phân Khu Kho (Zone)"
+                  iconType="location"
+                  placeholder="Chọn Zone..."
+                  value={editingItem.zoneId}
+                  options={filteredZones.map(z => ({
+                    id: z.id,
+                    code: z.zoneCode,
+                    name: z.zoneName,
+                    subtitle: `Kiểu: ${z.zoneType || 'Normal'}`
+                  }))}
+                  onChange={(val) => setEditingItem(prev => ({ ...prev, zoneId: val, areaId: '' }))}
+                />
               </div>
 
               <div>
                 <label className="block text-[10px] font-bold text-gray-550 uppercase mb-1">Bãi kho (Area) *</label>
-                <select
-                  value={editingItem.areaId || ''}
-                  onChange={(e) => setEditingItem({ ...editingItem, areaId: e.target.value })}
-                  className="w-full p-2 border rounded dark:bg-gray-955 dark:border-gray-700 text-xs"
-                  required
-                >
-                  <option value="">-- Chọn Area --</option>
-                  {filteredAreas.map((a) => (
-                    <option key={a.id} value={a.id}>{a.areaCode} - {a.areaName}</option>
-                  ))}
-                </select>
+                <SearchLookupModal
+                  title="Chọn Bãi Kho (Area)"
+                  iconType="location"
+                  placeholder="Chọn Area..."
+                  value={editingItem.areaId}
+                  options={filteredAreas.map(a => ({
+                    id: a.id,
+                    code: a.areaCode,
+                    name: a.areaName,
+                  }))}
+                  onChange={(val) => setEditingItem(prev => ({ ...prev, areaId: val }))}
+                />
               </div>
             </div>
 

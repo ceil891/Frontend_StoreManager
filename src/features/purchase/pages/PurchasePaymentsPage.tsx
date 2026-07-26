@@ -33,7 +33,7 @@ export function PurchasePaymentsPage() {
     setIsLoading(true);
     try {
       const res = await axiosClient.get('/finance/payment-vouchers');
-      const list = Array.isArray(res) ? res : res?.content || [];
+      const list = Array.isArray(res) ? res : (res as any)?.content || [];
       const mapped: PurchasePaymentRecord[] = list.map((item: any) => {
         const status: PurchasePaymentRecord['status'] =
           item.status === 'COMPLETED'

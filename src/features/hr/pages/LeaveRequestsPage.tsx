@@ -1,33 +1,58 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Download, Eye, Edit, Trash2, CalendarDays } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useHrStore } from '../store/hrStore';
 
-interface LeaveItem {
-  id: string; userId: string; userName: string;
-  startDate: string; endDate: string; days: number;
-  leaveType: 'Nghỉ phép năm' | 'Nghỉ ốm' | 'Việc riêng' | 'Nghỉ thai sản' | 'Nghỉ tang';
-  reason: string; approvedBy: string;
-  status: 'CHỜ_DUYỆT' | 'ĐÃ_DUYỆT' | 'TỪ_CHỐI';
+export interface LeaveItem {
+  id: string;
+  userId: string;
+  userName: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  leaveType: string;
+  reason: string;
+  approvedBy: string;
+  status: string;
 }
 
-const MOCK: LeaveItem[] = [
-  { id:'1', userId:'U002', userName:'Trần thị Bích', startDate:'2026-06-10', endDate:'2026-06-12', days:3, leaveType:'Nghỉ phép năm', reason:'Nghỉ hè gia đình', approvedBy:'Nguyễn Văn an', status:'ĐÃ_DUYỆT' },
-  { id:'2', userId:'U003', userName:'Lê Hoàng Nam', startDate:'2026-06-15', endDate:'2026-06-15', days:1, leaveType:'Nghỉ ốm', reason:'Sốt virus, có giấy bác sĩ', approvedBy:'', status:'CHỜ_DUYỆT' },
-  { id:'3', userId:'U004', userName:'Phạm thị Lan', startDate:'2026-05-20', endDate:'2026-05-21', days:2, leaveType:'Việc riêng', reason:'Đăng ký hôn nhân', approvedBy:'Nguyễn Văn an', status:'ĐÃ_DUYỆT' },
-  { id:'4', userId:'U001', userName:'Nguyễn Văn an', startDate:'2026-07-01', endDate:'2026-07-03', days:3, leaveType:'Nghỉ phép năm', reason:'Du lịch cá nhân', approvedBy:'', status:'CHỜ_DUYỆT' },
-];
-
-const sCfg: Record<string,{cls:string;label:string}> = {
-  CHỜ_DUYỆT:{cls:'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',label:'Chờ phê duyệt'},
-  ĐÃ_DUYỆT:{cls:'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',label:'Đã duyệt'},
-  TỪ_CHỐI:{cls:'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',label:'Từ chối'},
+const sCfg: Record<string, { label: string; cls: string }> = {
+  ĐÃ_DUYỆT: { label: 'Đã duyệt', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
+  TỪ_CHỐI: { label: 'Từ chối', cls: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' },
+  CHỜ_DUYỆT: { label: 'Chờ duyệt', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
 };
 
 export function LeaveRequestsPage() {
-  const [data, setData] = useState<LeaveItem[]>(MOCK);
+  const setData = (_fn: any) => {};
+  const {
+    leaveRequests: storeRequests,
+    fetchLeaveRequests,
+    addLeaveRequest,
+    updateLeaveRequest,
+    deleteLeaveRequest,
+  } = useHrStore();
+
+  useEffect(() => {
+    fetchLeaveRequests();
+  }, [fetchLeaveRequests]);
+
+  const data: LeaveItem[] = useMemo(() => {
+    return storeRequests.map((r) => ({
+      id: r.id,
+      userId: 'U001',
+      userName: r.employeeName,
+      startDate: r.startDate,
+      endDate: r.endDate,
+      days: r.totalDays,
+      leaveType: r.leaveType === 'ANNUAL' ? 'Nghỉ phép năm' : r.leaveType === 'SICK' ? 'Nghỉ ốm' : 'Việc riêng',
+      reason: r.reason,
+      approvedBy: r.approvedBy || 'Chưa duyệt',
+      status: r.status === 'APPROVED' ? 'ĐÃ_DUYỆT' : r.status === 'REJECTED' ? 'TỪ_CHỐI' : 'CHỜ_DUYỆT',
+    }));
+  }, [storeRequests]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Tất cả');
   const [selected, setSelected] = useState<LeaveItem|null>(null);
@@ -88,7 +113,7 @@ export function LeaveRequestsPage() {
             {Object.entries(sCfg).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
           </select>
         </div>
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected}/>
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)}/>
       </div>
 
       <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết đơn: ${selected.userName}`:''}>

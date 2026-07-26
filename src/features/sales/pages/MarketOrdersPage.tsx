@@ -281,7 +281,7 @@ export function MarketOrdersPage() {
             <span className="text-sm font-bold text-gray-500">Đang tải danh sách đơn thị trường...</span>
           </div>
         ) : (
-          <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} />
+          <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedItem(row)} />
         )}
       </div>
 

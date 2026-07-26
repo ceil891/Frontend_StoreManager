@@ -27,49 +27,6 @@ interface StockTransferRequestRecord {
   items: TransferRequestItem[];
 }
 
-const MOCK_REQUESTS: StockTransferRequestRecord[] = [
-  {
-    id: '1',
-    requestCode: 'STR-2026-001',
-    sourceWarehouse: 'Tổng kho Thủ Đức',
-    destinationWarehouse: 'Chi nhánh Quận 1',
-    requestDate: '2026-06-04',
-    proposedBy: 'Lê Hoàng Hải (quản lý CN Q1)',
-    status: 'CHỜ_PHÊ_DUYỆT',
-    reason: 'Bổ sung sản phẩm chuẩn bị cho chương trình khuyến mãi hè.',
-    items: [
-      { productName: 'Nước ngọt Coca-Cola lon 320ml', sku: 'COCA-320', quantity: 200, unit: 'Thùng' },
-      { productName: 'Bột giặt Omo Matic 3.8kg', sku: 'OMO-3.8', quantity: 50, unit: 'Túi' },
-    ],
-  },
-  {
-    id: '2',
-    requestCode: 'STR-2026-002',
-    sourceWarehouse: 'Tổng kho Thủ Đức',
-    destinationWarehouse: 'Chi nhánh Bình Thạnh',
-    requestDate: '2026-06-02',
-    proposedBy: 'Nguyễn Bích Vy (quản lý CN BT)',
-    status: 'ĐÃ_PHÊ_DUYỆT',
-    reason: 'Hết hàng dự trữ trên kệ bán lẻ.',
-    items: [
-      { productName: 'Sữa tươi Vinamilk ít đường 1L', sku: 'VNM-MILK-1L', quantity: 150, unit: 'Hộp' },
-    ],
-  },
-  {
-    id: '3',
-    requestCode: 'STR-2026-003',
-    sourceWarehouse: 'Chi nhánh Quận 1',
-    destinationWarehouse: 'Chi nhánh Bình Thạnh',
-    requestDate: '2026-05-30',
-    proposedBy: 'Trần Minh Tâm (Điều phối viên)',
-    status: 'BỊ_TỪ_CHỐI',
-    reason: 'Kho xuất cũng đang ở mức tồn tối thiểu không thể chuyển.',
-    items: [
-      { productName: 'Dầu ăn Simply 1L', sku: 'SIMPLY-1L', quantity: 100, unit: 'Chai' },
-    ],
-  },
-];
-
 export function StockTransferRequestsPage() {
   const { 
     stockTransfers: data, 

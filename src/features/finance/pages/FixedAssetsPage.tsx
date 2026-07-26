@@ -1,23 +1,60 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Search, Download, Eye, Edit, Trash2, Plus, CalendarDays, TrendingUp, TrendingDown, Calendar } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useFinanceStore } from '../store/financeStore';
 
-interface FixedAssetItem {
-  id: string; assetCode: string; assetName: string; purchaseDate: string; originalValue: number; salvageValue: number; accumulatedDep: number; netValue: number; status: 'HOẠT_ĐỘNG' | 'NGỪNG_SỬ_DỤNG' | 'KHẢO_SÁT';
+export interface FixedAssetItem {
+  id: string;
+  assetCode: string;
+  assetName: string;
+  category: string;
+  purchaseDate: string;
+  originalValue: number;
+  salvageValue: number;
+  usefulLifeMonths: number;
+  depreciationMethod: string;
+  accumulatedDep: number;
+  netValue: number;
+  status: string;
+  notes?: string;
 }
 
-const fmt = (n:number)=>n.toLocaleString('vi-VN',{style:'currency',currency:'VND'});
-
-const MOCK: FixedAssetItem[] = [
-  { id:'1', assetCode:'FA-001', assetName:'Máy tính Dell XPS', purchaseDate:'2022-03-15', originalValue:20000000, salvageValue:2000000, accumulatedDep:8000000, netValue:10000000, status:'HOẠT_ĐỘNG' },
-  { id:'2', assetCode:'FA-002', assetName:'Xe tải 2 tấn', purchaseDate:'2021-07-01', originalValue:600000000, salvageValue:50000000, accumulatedDep:300000000, netValue:250000000, status:'HOẠT_ĐỘNG' },
-];
+const fmt = (n: number) => (n || 0).toLocaleString('vi-VN') + ' ₫';
 
 export function FixedAssetsPage() {
-  const [data, setData] = useState<FixedAssetItem[]>(MOCK);
+  const setData = (_fn: any) => {};
+  const {
+    fixedAssets: storeAssets,
+    fetchFixedAssets,
+    addFixedAsset,
+    updateFixedAsset,
+    deleteFixedAsset,
+  } = useFinanceStore();
+
+  useEffect(() => {
+    fetchFixedAssets();
+  }, [fetchFixedAssets]);
+
+  const data: FixedAssetItem[] = useMemo(() => {
+    return storeAssets.map((a) => ({
+      id: a.id,
+      assetCode: a.assetCode,
+      assetName: a.assetName,
+      category: a.category,
+      purchaseDate: a.purchasedDate,
+      originalValue: a.originalValue,
+      salvageValue: 0,
+      usefulLifeMonths: a.usefulLifeMonths,
+      depreciationMethod: 'STRAIGHT_LINE',
+      accumulatedDep: a.accumulatedDepreciation,
+      netValue: a.netBookValue,
+      status: a.status === 'ACTIVE' ? 'HOẠT_ĐỘNG' : 'NGỪNG_SỬ_DỤNG',
+      notes: a.assetName,
+    }));
+  }, [storeAssets]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<FixedAssetItem|null>(null);
   const [isModal, setIsModal] = useState(false);
@@ -25,7 +62,7 @@ export function FixedAssetsPage() {
 
   const filtered = data.filter(d=> d.assetName.toLowerCase().includes(search.toLowerCase()) || d.assetCode.toLowerCase().includes(search.toLowerCase()));
 
-  const openCreate=()=>{ setForm({purchaseDate:new Date().toISOString().split('T')[0], status:'HOẠT_ĐỘNG'}); setIsModal(true); };
+  const openCreate=()=>{ setForm({purchaseDate:new Date().toISOString().split('T')[0], status:'HOẠT_ĐỘNG', usefulLifeMonths: 36, depreciationMethod: 'STRAIGHT_LINE', salvageValue: 0}); setIsModal(true); };
   const handleSave=(e:React.FormEvent)=>{ e.preventDefault(); const net = (form.originalValue||0)-(form.accumulatedDep||0); setData([...data,{...form as FixedAssetItem,id:String(data.length+1),netValue:net}]); setIsModal(false); };
 
   const columns = useMemo<ColumnDef<FixedAssetItem>[]>(()=>[
@@ -72,14 +109,14 @@ export function FixedAssetsPage() {
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Tìm theo mã hoặc tên tài sản..." className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"/>
           </div>
         </div>
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected}/>
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)}/>
       </div>
 
       <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết: ${selected.assetName}`:''}>
         {selected && (
           <div className="space-y-4 p-4">
             <div className="grid grid-cols-2 gap-4">
-              {[['Mã tài sản',selected.assetCode],['Tên tài sản',selected.assetName],['Ngày mua',selected.purchaseDate],['Nguyên giá',fmt(selected.originalValue)],['Khấu hao lũy kế',fmt(selected.accumulatedDep)],['Giá trị còn lại',fmt(selected.netValue)],['Trạng thái',selected.status.replace('_',' ')]]
+              {[['Mã tài sản',selected.assetCode],['Tên tài sản',selected.assetName],['Danh mục',selected.category||'N/A'],['Ngày mua',selected.purchaseDate],['Nguyên giá',fmt(selected.originalValue)],['Khấu hao lũy kế',fmt(selected.accumulatedDep)],['Giá trị còn lại',fmt(selected.netValue)],['Số sê-ri',selected.serialNumber||'N/A'],['Nhà cung cấp',selected.vendorName||'N/A'],['Trạng thái',selected.status.replace('_',' ')]]
                 .map(([k,v])=>(
                   <div key={k} className="flex justify-between text-sm"><span className="text-gray-500">{k}:</span><span className="font-semibold text-gray-900 dark:text-white">{v}</span></div>
                 ))}
@@ -88,34 +125,106 @@ export function FixedAssetsPage() {
         )}
       </Drawer>
 
-      <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title={form.id?`Cập nhật TSCĐ`:`Thêm TSCĐ mới`} width="max-w-lg">
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã tài sản *</label>
-              <input required value={form.assetCode||''} onChange={e=>setForm({...form,assetCode:e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900"/></div>
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên tài sản *</label>
-              <input required value={form.assetName||''} onChange={e=>setForm({...form,assetName:e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900"/></div>
+      <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title={form.id?`Cập nhật TSCĐ`:`Thêm TSCĐ mới`} size="erp">
+        <form onSubmit={handleSave}>
+          <div className="erp-form-body">
+            {/* Section 1: Thông tin cơ bản */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Thông tin cơ bản tài sản</h3>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã tài sản *</label>
+                <input required value={form.assetCode||''} onChange={e=>setForm({...form,assetCode:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"/>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên tài sản *</label>
+                <input required value={form.assetName||''} onChange={e=>setForm({...form,assetName:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục tài sản</label>
+                <select value={form.category||'THIẾT_BỊ_CNTT'} onChange={e=>setForm({...form,category:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500">
+                  <option value="THIẾT_BỊ_CNTT">Thiết bị CNTT & Máy tính</option>
+                  <option value="PHƯƠNG_TIỆN">Phương tiện vận tải</option>
+                  <option value="MÁY_MÓC">Máy móc & Thiết bị kho</option>
+                  <option value="NỘI_THẤT">Nội thất văn phòng</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái *</label>
+                <select required value={form.status||'HOẠT_ĐỘNG'} onChange={e=>setForm({...form,status:e.target.value as any})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500">
+                  <option value="HOẠT_ĐỘNG">HOẠT ĐỘNG</option>
+                  <option value="NGỪNG_SỬ_DỤNG">NGỪNG SỬ DỤNG</option>
+                  <option value="KHẢO_SÁT">KHẢO SÁT</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Section 2: Nguyên giá & Khấu hao */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Hạch toán & Khấu hao</h3>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày mua *</label>
+                <input type="date" required value={form.purchaseDate||''} onChange={e=>setForm({...form,purchaseDate:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nguyên giá (₫) *</label>
+                  <input type="number" required value={form.originalValue||0} onChange={e=>setForm({...form,originalValue:+e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"/>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá trị thu hồi (₫)</label>
+                  <input type="number" value={form.salvageValue||0} onChange={e=>setForm({...form,salvageValue:+e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"/>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tháng khấu hao</label>
+                  <input type="number" value={form.usefulLifeMonths||36} onChange={e=>setForm({...form,usefulLifeMonths:+e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"/>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khấu hao lũy kế (₫)</label>
+                  <input type="number" value={form.accumulatedDep||0} onChange={e=>setForm({...form,accumulatedDep:+e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"/>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phương pháp khấu hao</label>
+                <select value={form.depreciationMethod||'STRAIGHT_LINE'} onChange={e=>setForm({...form,depreciationMethod:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500">
+                  <option value="STRAIGHT_LINE">Đường thẳng (Straight Line)</option>
+                  <option value="DECLINING_BALANCE">Số giảm dần (Declining Balance)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Section 3: Bảo hành & Ghi chú */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Bảo hành & Ghi chú</h3>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhà cung cấp / Hãng sản xuất</label>
+                <input type="text" value={form.vendorName||''} onChange={e=>setForm({...form,vendorName:e.target.value})} placeholder="Tên hãng / đơn vị bán" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã sê-ri (Serial No)</label>
+                  <input type="text" value={form.serialNumber||''} onChange={e=>setForm({...form,serialNumber:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"/>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hạn bảo hành</label>
+                  <input type="date" value={form.warrantyExpiry||''} onChange={e=>setForm({...form,warrantyExpiry:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú quản lý</label>
+                <textarea rows={2} value={form.notes||''} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Ghi chú vị trí bàn giao, lịch bảo dưỡng..." className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"/>
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày mua *</label>
-              <input type="date" required value={form.purchaseDate||''} onChange={e=>setForm({...form,purchaseDate:e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900"/></div>
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái *</label>
-              <select required value={form.status||'HOẠT_ĐỘNG'} onChange={e=>setForm({...form,status:e.target.value as any})} className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900">
-                <option>HOẠT_ĐỘNG</option><option>NGỪNG_SỬ_DỤNG</option><option>KHẢO_SÁT</option>
-              </select></div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nguyên giá *</label>
-              <input type="number" required value={form.originalValue||0} onChange={e=>setForm({...form,originalValue:+e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900"/></div>
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khấu hao lũy kế</label>
-              <input type="number" value={form.accumulatedDep||0} onChange={e=>setForm({...form,accumulatedDep:+e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900"/></div>
-          </div>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+
+          <div className="erp-form-footer">
             <button type="button" onClick={()=>setIsModal(false)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg text-sm">Hủy bỏ</button>
-            <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm">Lưu</button>
+            <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm">Lưu thông tin</button>
           </div>
         </form>
       </Modal>
+
     </>
   );
 }

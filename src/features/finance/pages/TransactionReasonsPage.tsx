@@ -5,6 +5,8 @@ import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type TransactionReasonRecord } from '../store/financeStore';
+import { toast } from 'sonner';
+import { exportToCsv } from '@/shared/utils/exportCsv';
 
 const categoryBadgeStyles = {
   OPERATING_REVENUE: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200',
@@ -236,7 +238,21 @@ export function TransactionReasonsPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Thiết lập danh mục lý do giao dịch, liên kết mã tài khoản tổng hợp (General Ledger), và quản lý quy định kiểm duyệt chứng từ.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
+            <button
+              onClick={() => {
+                exportToCsv('danh_muc_ly_do_gl', filtered, [
+                  { header: 'Mã lý do', accessor: r => r.reasonCode },
+                  { header: 'Tên lý do', accessor: r => r.reasonName },
+                  { header: 'Phân loại', accessor: r => categoryMap[r.category] || r.category },
+                  { header: 'Mã tài khoản GL', accessor: r => r.accountingGLCode },
+                  { header: 'Dòng tiền', accessor: r => impactMap[r.cashFlowImpact] || r.cashFlowImpact },
+                  { header: 'Tài khoản khấu trừ', accessor: r => r.isTaxDeductible ? 'Có' : 'Không' },
+                  { header: 'Trạng thái', accessor: r => statusMap[r.status] || r.status },
+                ]);
+                toast.success('Đã xuất danh mục lý do GL dạng CSV!');
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+            >
               <Download className="w-4 h-4" /> Xuất bảng ánh xạ GL
             </button>
             <button

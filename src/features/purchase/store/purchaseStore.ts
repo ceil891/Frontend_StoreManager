@@ -25,6 +25,8 @@ export interface SupplierRecord {
   activeOrdersCount: number;
   status: 'ACTIVE' | 'ON_HOLD' | 'INACTIVE';
   notes?: string;
+  groupId?: string;
+  areaId?: string;
 }
 
 export interface PurchaseOrderItem {
@@ -59,12 +61,14 @@ function mapSupplier(item: any): SupplierRecord {
     bankAccount: item.bankAccount || '',
     accountHolder: item.accountHolder || '',
     description: item.description || '',
-    rating: 4.0,
-    leadTimeDays: item.paymentTerm ?? 7,
-    paymentTerms: item.paymentTerm ? `Net ${item.paymentTerm}` : 'COD',
-    activeOrdersCount: 0,
+    rating: item.rating || 5,
+    leadTimeDays: item.leadTimeDays || 3,
+    paymentTerms: item.paymentTerms || 'Net 30',
+    activeOrdersCount: item.activeOrdersCount || 0,
     status: item.isActive === false ? 'INACTIVE' : 'ACTIVE',
-    notes: item.description || '',
+    notes: item.note || '',
+    groupId: item.group?.id ? String(item.group.id) : undefined,
+    areaId: item.area?.id ? String(item.area.id) : undefined,
   };
 }
 
@@ -84,11 +88,6 @@ interface PurchaseState {
   updatePurchaseOrder: (id: string, data: Partial<PurchaseOrderItem>) => Promise<void>;
   deletePurchaseOrder: (id: string) => Promise<void>;
 }
-
-const MOCK_PURCHASE_ORDERS: PurchaseOrderItem[] = [
-  { id: '1', poNumber: 'PO-2024-801', supplierName: 'Global Tech Distribution', destinationStore: 'Main Flagship / HQ', orderDate: '2024-05-10', estDeliveryDate: '2024-05-18', totalCost: 35000.00, status: 'DISPATCHED', paymentStatus: 'PARTIAL_ADVANCE', orderedBy: 'Sarah Jenkins', itemsCount: 45, notes: 'Includes 25 Barcode Scanners and 20 Receipt Printers. 50% advance wired.' },
-  { id: '2', poNumber: 'PO-2024-802', supplierName: 'Nordic Apparel Mills', destinationStore: 'Downtown Branch', orderDate: '2024-05-12', estDeliveryDate: '2024-05-25', totalCost: 18500.00, status: 'APPROVED', paymentStatus: 'UNPAID', orderedBy: 'Michael Chang', itemsCount: 350, notes: 'Summer collection cotton basics wholesale batch.' },
-];
 
 export const usePurchaseStore = create<PurchaseState>()(
   persist(
@@ -174,58 +173,51 @@ export const usePurchaseStore = create<PurchaseState>()(
         try {
           const res = await axiosClient.get<any, any>('/purchase/orders');
           const data = res.content || res || [];
-          if (Array.isArray(data) && data.length > 0) {
-            set({ purchaseOrders: data.map((item: any) => ({
-              id: String(item.id),
-              poNumber: item.poNumber || `PO-${item.id}`,
-              supplierName: item.supplierName || '',
-              destinationStore: item.destinationStore || 'Main Branch',
-              orderDate: item.orderDate ? item.orderDate.split('T')[0] : '',
-              estDeliveryDate: item.estDeliveryDate ? item.estDeliveryDate.split('T')[0] : '',
-              totalCost: Number(item.totalCost || 0),
-              status: item.status || 'DRAFT',
-              paymentStatus: item.paymentStatus || 'UNPAID',
-              orderedBy: item.orderedBy || '',
-              itemsCount: Number(item.itemsCount || 0),
-              notes: item.notes || '',
-            })) });
-          }
+          set({ purchaseOrders: Array.isArray(data) ? data.map((item: any) => ({
+            id: String(item.id),
+            poNumber: item.poNumber || `PO-${item.id}`,
+            supplierName: item.supplierName || '',
+            destinationStore: item.destinationStore || 'Main Branch',
+            orderDate: item.orderDate ? item.orderDate.split('T')[0] : '',
+            estDeliveryDate: item.estDeliveryDate ? item.estDeliveryDate.split('T')[0] : '',
+            totalCost: Number(item.totalCost || 0),
+            status: item.status || 'DRAFT',
+            paymentStatus: item.paymentStatus || 'UNPAID',
+            orderedBy: item.orderedBy || '',
+            itemsCount: Number(item.itemsCount || 0),
+            notes: item.notes || '',
+          })) : [] });
         } catch (e) {
           console.error('Failed to fetch purchase orders:', e);
+          set({ purchaseOrders: [] });
         }
       },
 
       addPurchaseOrder: async (po) => {
         try {
           await axiosClient.post('/purchase/orders', po);
+          await get().fetchPurchaseOrders();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          purchaseOrders: [{ id: Date.now().toString(), ...po }, ...state.purchaseOrders],
-        }));
       },
 
       updatePurchaseOrder: async (id, data) => {
         try {
           await axiosClient.put(`/purchase/orders/${id}`, data);
+          await get().fetchPurchaseOrders();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          purchaseOrders: state.purchaseOrders.map((po) => (po.id === id ? { ...po, ...data } : po)),
-        }));
       },
 
       deletePurchaseOrder: async (id) => {
         try {
           await axiosClient.delete(`/purchase/orders/${id}`);
+          await get().fetchPurchaseOrders();
         } catch (e) {
           console.error(e);
         }
-        set((state) => ({
-          purchaseOrders: state.purchaseOrders.filter((po) => po.id !== id),
-        }));
       },
     }),
     { name: 'retailhub-purchase-storage' }

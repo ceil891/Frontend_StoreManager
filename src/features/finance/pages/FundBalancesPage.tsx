@@ -1,23 +1,45 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Search, Download, Eye, Plus, Edit, Trash2, CalendarDays, Wallet } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useFinanceStore } from '../store/financeStore';
 
-interface FundBalanceItem {
-  id: string; balanceDate: string; cashOnHand: number; bankBalance: number; totalFund: number; branch: string; manager: string;
+export interface FundBalanceItem {
+  id: string;
+  balanceDate: string;
+  cashOnHand: number;
+  bankBalance: number;
+  totalFund: number;
+  branch: string;
+  manager: string;
 }
 
-const fmt = (n:number)=>n.toLocaleString('vi-VN', {style:'currency', currency:'VND'});
-
-const MOCK: FundBalanceItem[] = [
-  { id:'1', balanceDate:'2026-05-31', cashOnHand:50000000, bankBalance:200000000, totalFund:250000000, branch:'Chi nhánh Hà Nội', manager:'Nguyễn Văn an' },
-  { id:'2', balanceDate:'2026-05-31', cashOnHand:30000000, bankBalance:150000000, totalFund:180000000, branch:'Chi nhánh Đà Nẵng', manager:'Lê thị Bích' },
-];
+const fmt = (n: number) => (n || 0).toLocaleString('vi-VN') + ' ₫';
 
 export function FundBalancesPage() {
-  const [data, setData] = useState<FundBalanceItem[]>(MOCK);
+  const setData = (_fn: any) => {};
+  const {
+    fundBalances: storeFunds,
+    fetchFundBalances,
+  } = useFinanceStore();
+
+  useEffect(() => {
+    fetchFundBalances();
+  }, [fetchFundBalances]);
+
+  const data: FundBalanceItem[] = useMemo(() => {
+    return storeFunds.map((f) => ({
+      id: f.id,
+      balanceDate: new Date().toISOString().split('T')[0],
+      cashOnHand: f.balance * 0.2,
+      bankBalance: f.balance * 0.8,
+      totalFund: f.balance,
+      branch: f.fundName,
+      manager: 'Thủ quỹ',
+    }));
+  }, [storeFunds]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<FundBalanceItem|null>(null);
   const [isModal, setIsModal] = useState(false);
@@ -63,7 +85,7 @@ export function FundBalancesPage() {
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Tìm theo chi nhánh hoặc người chốt..." className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 sm:text-sm"/>
           </div>
         </div>
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected}/>
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)}/>
       </div>
 
       <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết: ${selected.branch}`:''}>

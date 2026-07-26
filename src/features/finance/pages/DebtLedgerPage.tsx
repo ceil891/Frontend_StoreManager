@@ -4,6 +4,8 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type DebtRecord } from '../store/financeStore';
+import { toast } from 'sonner';
+import { exportToCsv } from '@/shared/utils/exportCsv';
 
 const entityTypeMap: Record<string, string> = {
   CUSTOMER: 'Khách hàng',
@@ -202,7 +204,22 @@ export function DebtLedgerPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý và giám sát công nợ phải thu của khách hàng và công nợ phải trả nhà cung cấp. Số dương: Khách hàng nợ doanh nghiệp. Số âm: Doanh nghiệp nợ đối tác.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
+            <button
+              onClick={() => {
+                exportToCsv('so_cong_no', filtered, [
+                  { header: 'Mã công nợ', accessor: r => r.debtCode },
+                  { header: 'Tên đối tác', accessor: r => r.entityName },
+                  { header: 'Loại đối tác', accessor: r => entityTypeMap[r.entityType] || r.entityType },
+                  { header: 'Tổng công nợ (VND)', accessor: r => r.totalDebt },
+                  { header: 'Đến hạn (VND)', accessor: r => r.dueAmount },
+                  { header: 'Hạn thanh toán', accessor: r => r.dueDate },
+                  { header: 'Trạng thái', accessor: r => statusMapFull[r.status] || r.status },
+                  { header: 'Phụ trách', accessor: r => r.accountManager },
+                ]);
+                toast.success('Đã xuất sổ công nợ dạng CSV!');
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+            >
               <Download className="w-4 h-4" /> Xuất sổ công nợ
             </button>
             <button

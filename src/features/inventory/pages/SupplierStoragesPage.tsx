@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
+import { useInventoryStore } from '../store/inventoryStore';
 import { 
   Plus, Search, Eye, Edit, Trash2, Calendar, MapPin, Grid, Download, 
   HelpCircle, Layers, Shield, Settings, Info, ShoppingBag, Percent, 
@@ -7,6 +8,9 @@ import {
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
+import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
+import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 
@@ -28,43 +32,32 @@ interface SupplierStorageRecord {
   usedPallets?: number;
 }
 
-const MOCK_STORAGE_ZONES: SupplierStorageRecord[] = [
-  {
-    id: '1',
-    storageCode: 'SZ-GBL-A',
-    storageName: 'Phân Khu A - Bánh kẹo & Hàng khô',
-    supplierWarehouseName: 'Kho đông Anh - toàn cầu',
-    storageType: 'THUONG',
-    capacityPallets: 100,
-    status: 'DAY',
-    notes: 'Khu bãi hàng khô đã xếp kín pallet sữa',
-    zoneType: 'NORMAL',
-    putawayRule: 'FIFO',
-    allowImport: true,
-    allowExport: true,
-    allowTransfer: true,
-    usedPallets: 100,
-  },
-  {
-    id: '2',
-    storageCode: 'SZ-ASI-F',
-    storageName: 'Khu đông lạnh thủy Hải sản',
-    supplierWarehouseName: 'Kho cát lái - Á châu',
-    storageType: 'LANH',
-    capacityPallets: 50,
-    status: 'TRONG',
-    notes: 'Duy trì nhiệt độ âm 18 độ C cho thực phẩm đông lạnh',
-    zoneType: 'COLD',
-    putawayRule: 'FEFO',
-    allowImport: true,
-    allowExport: true,
-    allowTransfer: false,
-    usedPallets: 15,
-  },
-];
-
 export function SupplierStoragesPage() {
-  const [data, setData] = useState<SupplierStorageRecord[]>(MOCK_STORAGE_ZONES);
+  const { supplierStorages: storeStorages, fetchSupplierStorages, addSupplierStorage, updateSupplierStorage, deleteSupplierStorage } = useInventoryStore();
+
+  useEffect(() => {
+    fetchSupplierStorages();
+  }, [fetchSupplierStorages]);
+
+  const data: SupplierStorageRecord[] = useMemo(() => {
+    return storeStorages.map((s) => ({
+      id: s.id,
+      storageCode: s.storageCode,
+      storageName: s.storageName,
+      supplierWarehouseName: s.warehouseName,
+      storageType: (s.areaType === 'KHO_LANH' ? 'LANH' : 'THUONG') as any,
+      capacityPallets: s.capacity || 100,
+      status: (s.status === 'TAM_NGUNG' ? 'TAM_KHOA' : s.currentUsage >= s.capacity ? 'DAY' : 'TRONG') as any,
+      notes: s.notes || '',
+      zoneType: (s.areaType === 'KHO_LANH' ? 'COLD' : 'NORMAL') as any,
+      putawayRule: 'FIFO',
+      allowImport: true,
+      allowExport: true,
+      allowTransfer: true,
+      usedPallets: s.currentUsage || 0,
+    }));
+  }, [storeStorages]);
+
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<SupplierStorageRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -85,7 +78,7 @@ export function SupplierStoragesPage() {
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingItem({
-      storageCode: '',
+      storageCode: `SST-${Date.now().toString().slice(-4)}`,
       storageName: '',
       supplierWarehouseName: '',
       storageType: 'THUONG',
@@ -116,50 +109,35 @@ export function SupplierStoragesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.storageCode || !editingItem.storageName || !editingItem.supplierWarehouseName) return;
 
-    // Tự động tính toán trạng thái dựa trên số lượng pallet đang dùng
-    let computedStatus = editingItem.status || 'TRONG';
-    if (editingItem.status !== 'TAM_KHOA') {
-      const u = (editingItem.usedPallets || 0) / (editingItem.capacityPallets || 100);
-      computedStatus = u >= 1 ? 'DAY' : 'TRONG';
-    }
+    const payload: any = {
+      storageCode: editingItem.storageCode.toUpperCase(),
+      storageName: editingItem.storageName,
+      warehouseName: editingItem.supplierWarehouseName,
+      supplierName: 'Nhà cung cấp',
+      areaType: editingItem.storageType === 'LANH' ? 'KHO_LANH' : 'KHO_THUONG',
+      capacity: Number(editingItem.capacityPallets || 100),
+      currentUsage: Number(editingItem.usedPallets || 0),
+      status: editingItem.status === 'TAM_KHOA' ? 'TAM_NGUNG' : 'HOAT_DONG',
+      notes: editingItem.notes || '',
+    };
 
     if (modalMode === 'create') {
-      const newItem: SupplierStorageRecord = {
-        id: String(data.length + 1),
-        storageCode: editingItem.storageCode.toUpperCase(),
-        storageName: editingItem.storageName!,
-        supplierWarehouseName: editingItem.supplierWarehouseName!,
-        storageType: editingItem.storageType as any || 'THUONG',
-        capacityPallets: Number(editingItem.capacityPallets || 0),
-        status: computedStatus as any,
-        notes: editingItem.notes,
-        zoneType: editingItem.zoneType || 'NORMAL',
-        putawayRule: editingItem.putawayRule || 'FIFO',
-        allowImport: editingItem.allowImport !== false,
-        allowExport: editingItem.allowExport !== false,
-        allowTransfer: editingItem.allowTransfer !== false,
-        usedPallets: Number(editingItem.usedPallets || 0),
-      };
-      setData([...data, newItem]);
-      toast.success('Đã lưu phân khu của nhà cung cấp!');
-    } else {
-      const updatedItem = {
-        ...editingItem,
-        status: computedStatus,
-      } as SupplierStorageRecord;
-      setData(data.map((d) => (d.id === editingItem.id ? updatedItem : d)));
-      toast.success('Đã cập nhật thông tin phân khu!');
+      await addSupplierStorage(payload);
+    } else if (editingItem.id) {
+      await updateSupplierStorage(editingItem.id, payload);
     }
+    toast.success('Đã lưu thông tin khu vực lưu trữ!');
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa khu vực lưu trữ này?')) {
-      setData(data.filter((d) => d.id !== id));
+  const handleDelete = async (id: string) => {
+    if (confirm('Bạn có chắc chắn muốn xóa khu vực lưu trữ nhà cung cấp này?')) {
+      await deleteSupplierStorage(id);
+      if (selected?.id === id) setSelected(null);
       toast.success('Đã xóa khu vực.');
     }
   };
@@ -421,14 +399,18 @@ export function SupplierStoragesPage() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase">Thuộc kho đối tác *</label>
-              <input
-                type="text"
-                value={editingItem.supplierWarehouseName || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, supplierWarehouseName: e.target.value })}
-                className="w-full mt-1 p-2 border rounded text-xs dark:bg-gray-950 dark:border-gray-700"
-                placeholder="Tên kho nhà cung cấp sở hữu"
-                required
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Thuộc kho đối tác *</label>
+              <SearchLookupModal
+                title="Chọn Kho Hàng Đối Tác"
+                iconType="building"
+                placeholder="Chọn kho hàng nhà cung cấp..."
+                value={editingItem.supplierWarehouseName}
+                options={[
+                  { id: 'Kho Tổng Vinamilk Bình Dương', code: 'SWH-8821', name: 'Kho Tổng Vinamilk Bình Dương', subtitle: 'KCN Việt Hương, Bình Dương' },
+                  { id: 'Kho Unilever Củ Chi', code: 'SWH-5512', name: 'Kho Unilever Củ Chi', subtitle: 'KCN Tân Phú Trung, Củ Chi' },
+                  { id: 'Kho Samsung Bắc Ninh', code: 'SWH-1029', name: 'Kho Samsung Yên Phong Bắc Ninh', subtitle: 'KCN Yên Phong, Bắc Ninh' },
+                ]}
+                onChange={(val, opt) => setEditingItem(prev => ({ ...prev, supplierWarehouseName: opt ? opt.name : val }))}
               />
             </div>
           </div>

@@ -418,13 +418,13 @@ export function UsersPage() {
           <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-none shrink-0">
             <button 
               onClick={handleExportCSV}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0"
+              className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0"
             >
               <Download className="w-4 h-4" /> Xuất danh sách nhân sự
             </button>
             <button 
               onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm whitespace-nowrap shrink-0"
+              className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0"
             >
               <Plus className="w-4 h-4" /> Cấp tài khoản mới
             </button>
@@ -675,293 +675,290 @@ export function UsersPage() {
         isOpen={formOpen}
         onClose={() => setFormOpen(false)}
         title={formMode === 'create' ? 'Cấp phát tài khoản nhân sự mới' : 'Cập nhật lý lịch nhân viên'}
-        width="max-w-xl"
+        size="erp"
       >
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800">
-            <UserAvatar
-              name={formData.fullName || 'Nhân viên mới'}
-              avatarUrl={formData.avatarUrl}
-              seed={formData.emailAddress || formData.fullName}
-              size="lg"
-            />
-            <div className="flex-1 w-full space-y-2">
-              <label className="block text-xs font-bold text-gray-500 uppercase">Ảnh đại diện nhân viên</label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="file"
-                  accept="image/*"
-                  id="user-avatar-input"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onload = () => {
-                        setFormData(prev => ({ ...prev, avatarUrl: reader.result as string }));
-                      };
-                      reader.readAsDataURL(file);
-                    }
-                  }}
+        <form onSubmit={handleSave}>
+          <div className="erp-form-body">
+            {/* Section 1: Thông tin tài khoản & nhân sự */}
+            <div className="erp-form-section space-y-4" style={{gridColumn: 'span 2'}}>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Thông tin nhân viên</h3>
+
+              {/* Avatar row */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800">
+                <UserAvatar
+                  name={formData.fullName || 'Nhân viên mới'}
+                  avatarUrl={formData.avatarUrl}
+                  seed={formData.emailAddress || formData.fullName}
+                  size="lg"
                 />
-                <button
-                  type="button"
-                  onClick={() => document.getElementById('user-avatar-input')?.click()}
-                  className="px-3 py-1.5 bg-white dark:bg-gray-850 border border-gray-300 dark:border-gray-650 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 text-xs font-semibold shadow-sm animate-pulse-subtle"
-                >
-                  Tải ảnh từ thiết bị
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFormData((p) => ({
-                      ...p,
-                      avatarUrl: buildUserAvatarUrl(p.emailAddress || p.fullName || 'retailhub'),
-                    }))
-                  }
-                  className="text-xs text-primary font-semibold hover:underline"
-                >
-                  Tạo ảnh mặc định
-                </button>
+                <div className="flex-1 w-full space-y-2">
+                  <label className="block text-xs font-bold text-gray-500 uppercase">Ảnh đại diện nhân viên</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="user-avatar-input"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            setFormData(prev => ({ ...prev, avatarUrl: reader.result as string }));
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => document.getElementById('user-avatar-input')?.click()}
+                      className="px-3 py-1.5 bg-white dark:bg-gray-850 border border-gray-300 dark:border-gray-650 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 text-xs font-semibold shadow-sm animate-pulse-subtle"
+                    >
+                      Tải ảnh từ thiết bị
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormData((p) => ({
+                          ...p,
+                          avatarUrl: buildUserAvatarUrl(p.emailAddress || p.fullName || 'retailhub'),
+                        }))
+                      }
+                      className="text-xs text-primary font-semibold hover:underline"
+                    >
+                      Tạo ảnh mặc định
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-gray-400">Hỗ trợ JPG, PNG. Ảnh mặc định sẽ được tự động sinh nếu bỏ trống.</p>
+                </div>
               </div>
-              <p className="text-[10px] text-gray-400">Hỗ trợ JPG, PNG. Ảnh mặc định sẽ được tự động sinh nếu bỏ trống.</p>
-            </div>
-          </div>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Họ và tên đầy đủ nhân viên *</label>
-            <input
-              type="text"
-              required
-              placeholder="Ví dụ: Nguyễn Văn A"
-              value={formData.fullName}
-              onChange={(e) => setFormData(p => ({ ...p, fullName: e.target.value }))}
-              className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Địa chỉ Email đăng nhập *</label>
-              <input
-                type="email"
-                required
-                disabled={formMode === 'edit' && formData.emailAddress === 'admin@system.com'}
-                placeholder="Ví dụ: a.nguyen@retailhub.io"
-                value={formData.emailAddress}
-                onChange={(e) => {
-                  const email = e.target.value;
-                  setFormData((p) => ({
-                    ...p,
-                    emailAddress: email,
-                    avatarUrl:
-                      formMode === 'create' && (!p.avatarUrl || p.avatarUrl.includes('new-user'))
-                        ? buildUserAvatarUrl(email || 'retailhub')
-                        : p.avatarUrl,
-                  }));
-                }}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary disabled:opacity-55"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Số điện thoại liên lạc *</label>
-              <input
-                type="text"
-                required
-                placeholder="Ví dụ: +84 912 345 678"
-                value={formData.contactPhone}
-                onChange={(e) => setFormData(p => ({ ...p, contactPhone: e.target.value }))}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Chức danh *</label>
-              <select
-                required
-                value={formData.positionId}
-                onChange={(e) => setFormData((p) => ({ ...p, positionId: e.target.value }))}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-              >
-                {positions.map(pos => (
-                  <option key={pos.id} value={pos.id}>{pos.positionTitle}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ngày vào làm *</label>
-              <input
-                type="date"
-                required
-                value={formData.hireDate}
-                onChange={(e) => setFormData((p) => ({ ...p, hireDate: e.target.value }))}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bộ phận phòng ban *</label>
-              <select
-                required
-                value={formData.departmentId}
-                onChange={(e) => setFormData((p) => ({ ...p, departmentId: e.target.value }))}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-              >
-                {departments.map(dept => (
-                  <option key={dept.id} value={dept.id}>{dept.departmentName}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Chi nhánh *</label>
-              <select
-                required
-                value={formData.branchId}
-                onChange={(e) => {
-                  const branchId = e.target.value;
-                  const label = branches.find((b) => b.id === branchId)?.name ?? branchId;
-                  setFormData((p) => ({ ...p, branchId, branchLocation: label }));
-                }}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-              >
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Vai trò gán quyền bảo mật *</label>
-              <select
-                value={formData.assignedRole}
-                disabled={formMode === 'edit' && formData.emailAddress === 'admin@system.com'}
-                onChange={(e) => setFormData(p => ({ ...p, assignedRole: e.target.value }))}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-              >
-                {roles.map(r => (
-                  <option key={r.id} value={r.roleCode}>{r.roleTitle} ({r.roleCode})</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Hình thức hợp đồng lao động *</label>
-              <select
-                value={formData.employmentType}
-                onChange={(e) => setFormData(p => ({ ...p, employmentType: e.target.value as any }))}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-              >
-                <option value="FULL_TIME">Chính thức (FULL TIME)</option>
-                <option value="PART_TIME">Bán thời gian (PART TIME)</option>
-                <option value="CONTRACTOR">Nhà thầu ngoài (CONTRACTOR)</option>
-                <option value="SEASONAL">Thử việc/Thời vụ (SEASONAL)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Quản lý trực tiếp</label>
-              <select
-                value={formData.managerId || ''}
-                onChange={(e) => setFormData((p) => ({ ...p, managerId: e.target.value || undefined }))}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-              >
-                <option value="">-- Không có --</option>
-                {users.map(u => (
-                  <option key={u.id} value={u.id}>{u.fullName}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Thông tin định danh (CCCD)</label>
-              <input
-                type="text"
-                placeholder="Số CMND/CCCD"
-                value={formData.identityId || ''}
-                onChange={(e) => setFormData((p) => ({ ...p, identityId: e.target.value }))}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mã số thuế</label>
-              <input
-                type="text"
-                value={formData.taxId || ''}
-                onChange={(e) => setFormData((p) => ({ ...p, taxId: e.target.value }))}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ngày sinh</label>
-              <input
-                type="date"
-                value={formData.dateOfBirth || ''}
-                onChange={(e) => setFormData((p) => ({ ...p, dateOfBirth: e.target.value }))}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ngôn ngữ (Locale)</label>
-              <select
-                value={formData.locale || 'vi-VN'}
-                onChange={(e) => setFormData((p) => ({ ...p, locale: e.target.value }))}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-              >
-                <option value="vi-VN">Tiếng Việt (vi-VN)</option>
-                <option value="en-US">English (en-US)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-6 py-1">
-            {formData.emailAddress !== 'admin@system.com' && (
               <div>
-                <span className="text-xs font-bold text-gray-500 uppercase mr-2">Trạng thái nhân sự:</span>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Họ và tên đầy đủ nhân viên *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ví dụ: Nguyễn Văn A"
+                  value={formData.fullName}
+                  onChange={(e) => setFormData(p => ({ ...p, fullName: e.target.value }))}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Địa chỉ Email đăng nhập *</label>
+                  <input
+                    type="email"
+                    required
+                    disabled={formMode === 'edit' && formData.emailAddress === 'admin@system.com'}
+                    placeholder="Ví dụ: a.nguyen@retailhub.io"
+                    value={formData.emailAddress}
+                    onChange={(e) => {
+                      const email = e.target.value;
+                      setFormData((p) => ({
+                        ...p,
+                        emailAddress: email,
+                        avatarUrl:
+                          formMode === 'create' && (!p.avatarUrl || p.avatarUrl.includes('new-user'))
+                            ? buildUserAvatarUrl(email || 'retailhub')
+                            : p.avatarUrl,
+                      }));
+                    }}
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary disabled:opacity-55"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Số điện thoại liên lạc *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ví dụ: +84 912 345 678"
+                    value={formData.contactPhone}
+                    onChange={(e) => setFormData(p => ({ ...p, contactPhone: e.target.value }))}
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mã số thuế</label>
+                  <input
+                    type="text"
+                    value={formData.taxId || ''}
+                    onChange={(e) => setFormData((p) => ({ ...p, taxId: e.target.value }))}
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ngày sinh</label>
+                  <input
+                    type="date"
+                    value={formData.dateOfBirth || ''}
+                    onChange={(e) => setFormData((p) => ({ ...p, dateOfBirth: e.target.value }))}
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Thông tin định danh (CCCD)</label>
+                  <input
+                    type="text"
+                    placeholder="Số CMND/CCCD"
+                    value={formData.identityId || ''}
+                    onChange={(e) => setFormData((p) => ({ ...p, identityId: e.target.value }))}
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ghi chú &amp; Lý lịch hành chính</label>
+                <textarea
+                  rows={3}
+                  placeholder="Nhập lịch sử ký kết hợp đồng, ghi chú kiểm tra lý lịch bảo mật..."
+                  value={formData.notes}
+                  onChange={(e) => setFormData(p => ({ ...p, notes: e.target.value }))}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            </div>
+
+            {/* Section 2: Phân quyền & Bộ phận */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Phân quyền & Bộ phận</h3>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Chức danh *</label>
                 <select
-                  value={formData.status}
-                  onChange={(e) => setFormData(p => ({ ...p, status: e.target.value as any }))}
-                  className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-xs font-bold"
+                  required
+                  value={formData.positionId}
+                  onChange={(e) => setFormData((p) => ({ ...p, positionId: e.target.value }))}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
                 >
-                  <option value="ACTIVE">ĐANG LÀM VIỆC (ACTIVE)</option>
-                  <option value="SUSPENDED">ĐÌNH CHỈ (SUSPENDED)</option>
-                  <option value="ON_LEAVE">NGHỈ PHÉP (ON_LEAVE)</option>
-                  <option value="TERMINATED">ĐÃ THÔI VIỆC (TERMINATED)</option>
+                  {positions.map(pos => (
+                    <option key={pos.id} value={pos.id}>{pos.positionTitle}</option>
+                  ))}
                 </select>
               </div>
-            )}
-
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.mfaEnabled}
-                onChange={(e) => setFormData(p => ({ ...p, mfaEnabled: e.target.checked }))}
-                className="rounded border-gray-300 text-primary focus:ring-primary w-4 h-4"
-              />
-              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 select-none">Đã kích hoạt xác thực 2FA/MFA?</span>
-            </label>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bộ phận phòng ban *</label>
+                <select
+                  required
+                  value={formData.departmentId}
+                  onChange={(e) => setFormData((p) => ({ ...p, departmentId: e.target.value }))}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                >
+                  {departments.map(dept => (
+                    <option key={dept.id} value={dept.id}>{dept.departmentName}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Chi nhánh *</label>
+                <select
+                  required
+                  value={formData.branchId}
+                  onChange={(e) => {
+                    const branchId = e.target.value;
+                    const label = branches.find((b) => b.id === branchId)?.name ?? branchId;
+                    setFormData((p) => ({ ...p, branchId, branchLocation: label }));
+                  }}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                >
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Vai trò gán quyền bảo mật *</label>
+                <select
+                  value={formData.assignedRole}
+                  disabled={formMode === 'edit' && formData.emailAddress === 'admin@system.com'}
+                  onChange={(e) => setFormData(p => ({ ...p, assignedRole: e.target.value }))}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                >
+                  {roles.map(r => (
+                    <option key={r.id} value={r.roleCode}>{r.roleTitle} ({r.roleCode})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Hình thức hợp đồng lao động *</label>
+                <select
+                  value={formData.employmentType}
+                  onChange={(e) => setFormData(p => ({ ...p, employmentType: e.target.value as any }))}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                >
+                  <option value="FULL_TIME">Chính thức (FULL TIME)</option>
+                  <option value="PART_TIME">Bán thời gian (PART TIME)</option>
+                  <option value="CONTRACTOR">Nhà thầu ngoài (CONTRACTOR)</option>
+                  <option value="SEASONAL">Thử việc/Thời vụ (SEASONAL)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Quản lý trực tiếp</label>
+                <select
+                  value={formData.managerId || ''}
+                  onChange={(e) => setFormData((p) => ({ ...p, managerId: e.target.value || undefined }))}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">-- Không có --</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>{u.fullName}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ngày vào làm *</label>
+                <input
+                  type="date"
+                  required
+                  value={formData.hireDate}
+                  onChange={(e) => setFormData((p) => ({ ...p, hireDate: e.target.value }))}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ngôn ngữ (Locale)</label>
+                <select
+                  value={formData.locale || 'vi-VN'}
+                  onChange={(e) => setFormData((p) => ({ ...p, locale: e.target.value }))}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                >
+                  <option value="vi-VN">Tiếng Việt (vi-VN)</option>
+                  <option value="en-US">English (en-US)</option>
+                </select>
+              </div>
+              {formData.emailAddress !== 'admin@system.com' && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Trạng thái nhân sự</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData(p => ({ ...p, status: e.target.value as any }))}
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="ACTIVE">ĐANG LÀM VIỆC (ACTIVE)</option>
+                    <option value="SUSPENDED">ĐÌNH CHỈ (SUSPENDED)</option>
+                    <option value="ON_LEAVE">NGHỈ PHÉP (ON_LEAVE)</option>
+                    <option value="TERMINATED">ĐÃ THÔI VIỆC (TERMINATED)</option>
+                  </select>
+                </div>
+              )}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.mfaEnabled}
+                  onChange={(e) => setFormData(p => ({ ...p, mfaEnabled: e.target.checked }))}
+                  className="rounded border-gray-300 text-primary focus:ring-primary w-4 h-4"
+                />
+                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 select-none">Đã kích hoạt xác thực 2FA/MFA?</span>
+              </label>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ghi chú & Lý lịch hành chính</label>
-            <textarea
-              rows={3}
-              placeholder="Nhập lịch sử ký kết hợp đồng, ghi chú kiểm tra lý lịch bảo mật..."
-              value={formData.notes}
-              onChange={(e) => setFormData(p => ({ ...p, notes: e.target.value }))}
-              className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-            />
-          </div>
-
-          <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex gap-3 justify-end">
+          <div className="erp-form-footer">
             <button
               type="button"
               onClick={() => setFormOpen(false)}
@@ -978,6 +975,7 @@ export function UsersPage() {
           </div>
         </form>
       </Drawer>
+
 
       <Modal
         isOpen={!!deletingUser}

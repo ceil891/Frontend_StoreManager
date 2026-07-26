@@ -639,7 +639,7 @@ export function WarehouseZonesPage() {
                       checked={(editingItem.priority || 'MEDIUM') === p}
                       onChange={(e) => setEditingItem({ ...editingItem, priority: e.target.value })}
                       disabled={isSaving}
-                      className="text-emerald-650"
+                      className="text-emerald-600"
                     />
                     <span>{p === 'HIGH' ? 'Cao' : p === 'LOW' ? 'Thấp' : 'Trung bình'}</span>
                   </label>

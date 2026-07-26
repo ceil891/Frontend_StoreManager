@@ -20,48 +20,44 @@ interface DeviceSessionItem {
   location: string;
 }
 
-const MOCK_DATA: DeviceSessionItem[] = [
-  { id: '1', userId: 'U001', userName: 'Nguyễn Văn an', deviceInfo: 'Chrome 124 / Windows 11', deviceType: 'Máy tính', ipAddress: '192.168.1.105', loginTime: '2026-06-04 07:30', lastActive: '2026-06-04 15:45', status: 'HOẠT_ĐỘNG', location: 'TP. Hồ Chí Minh' },
-  { id: '2', userId: 'U002', userName: 'Trần thị Bích', deviceInfo: 'Safari / iPhone 15', deviceType: 'Điện thoại', ipAddress: '10.0.0.22', loginTime: '2026-06-04 08:00', lastActive: '2026-06-04 10:30', status: 'HOẠT_ĐỘNG', location: 'Hà Nội' },
-  { id: '3', userId: 'U003', userName: 'Lê Hoàng Nam', deviceInfo: 'Firefox 125 / Ubuntu 22', deviceType: 'Máy tính', ipAddress: '172.16.0.8', loginTime: '2026-06-03 17:00', lastActive: '2026-06-03 20:15', status: 'ĐÃ_ĐĂNG_XUẤT', location: 'Đà Nẵng' },
-  { id: '4', userId: 'U001', userName: 'Nguyễn Văn an', deviceInfo: 'Chrome 123 / Android 14', deviceType: 'Điện thoại', ipAddress: '203.162.4.190', loginTime: '2026-06-02 09:15', lastActive: '2026-06-02 12:00', status: 'HẾT_PHIÊN', location: 'TP. Hồ Chí Minh' },
-];
-
 const statusConfig: Record<string, { label: string; cls: string }> = {
   HOẠT_ĐỘNG: { label: 'Đang hoạt động', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
   ĐÃ_ĐĂNG_XUẤT: { label: 'Đã đăng xuất', cls: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' },
   HẾT_PHIÊN: { label: 'Hết phiên (Token)', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
 };
 
+import { useSystemStore } from '../store/systemStore';
+
 export function DeviceSessionsPage() {
-  const [data, setData] = useState<DeviceSessionItem[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const {
+    deviceSessions: storeSessions,
+    fetchDeviceSessions,
+  } = useSystemStore();
+
+  useEffect(() => {
+    fetchDeviceSessions();
+  }, [fetchDeviceSessions]);
+
+  const data: DeviceSessionItem[] = useMemo(() => {
+    return storeSessions.map((s) => ({
+      id: s.id,
+      userId: 'U001',
+      userName: s.userName,
+      deviceInfo: s.deviceName,
+      deviceType: 'Máy tính',
+      ipAddress: s.ipAddress,
+      loginTime: s.loginTime,
+      lastActive: s.loginTime,
+      status: s.status === 'ACTIVE' ? 'HOẠT_ĐỘNG' : 'ĐÃ_ĐĂNG_XUẤT',
+      location: 'Việt Nam',
+    }));
+  }, [storeSessions]);
+
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Tất cả');
   const [selected, setSelected] = useState<DeviceSessionItem | null>(null);
   const [revokingItem, setRevokingItem] = useState<DeviceSessionItem | null>(null);
-
-  const fetchDeviceSessions = async () => {
-    setIsLoading(true);
-    try {
-      const res = await axiosClient.get<any, DeviceSessionItem[]>('/system/device-sessions');
-      if (Array.isArray(res) && res.length > 0) {
-        setData(res);
-      } else {
-        setData(MOCK_DATA);
-      }
-    } catch (error) {
-      console.error('Failed to fetch device sessions:', error);
-      toast.error('Không thể tải danh sách phiên đăng nhập. Đang sử dụng dữ liệu mặc định.');
-      setData(MOCK_DATA);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchDeviceSessions();
-  }, []);
 
   const filtered = data.filter((item) => {
     const q = search.toLowerCase();
@@ -77,11 +73,8 @@ export function DeviceSessionsPage() {
       toast.success(`Đã thu hồi phiên đăng nhập của ${revokingItem.userName}`);
     } catch (error) {
       console.error('Failed to revoke session:', error);
-      toast.info(`Đã thu hồi phiên đăng nhập của ${revokingItem.userName} (Local state update)`);
+      toast.info(`Đã thu hồi phiên đăng nhập của ${revokingItem.userName}`);
     }
-    setData(prev => prev.map(d => d.id === revokingItem.id ? { ...d, status: 'ĐÃ_ĐĂNG_XUẤT' as const } : d));
-    setRevokingItem(null);
-  };ta.map(d => d.id === revokingItem.id ? { ...d, status: 'ĐÃ_ĐĂNG_XUẤT' as const } : d));
     setRevokingItem(null);
   };
 
@@ -181,7 +174,7 @@ export function DeviceSessionsPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected} isLoading={isLoading} />
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} isLoading={isLoading} />
       </div>
 
       <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết phiên: ${selected.userName}` : ''} width="max-w-lg">

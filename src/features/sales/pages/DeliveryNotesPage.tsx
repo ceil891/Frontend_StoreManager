@@ -42,7 +42,7 @@ export function DeliveryNotesPage() {
         totalWeight: 0,
         itemCount: 0,
         deliveryStaff: n.carrierName || 'Vận chuyển nội bộ',
-        status: n.status === 'DELIVERED' ? 'DA_BAN_GIAO' : n.status === 'FAILED' ? 'BI_TU_CHOI' : 'CHO_BAN_GIAO',
+        status: (n.status === 'DELIVERED' ? 'DA_BAN_GIAO' : n.status === 'FAILED' ? 'BI_TU_CHOI' : 'CHO_BAN_GIAO') as DeliveryNoteRecord['status'],
         notes: n.failureReason || n.cancelReason || '',
       }));
       setData(mapped);

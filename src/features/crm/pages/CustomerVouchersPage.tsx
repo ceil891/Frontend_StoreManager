@@ -1,113 +1,60 @@
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
-
-interface VoucherRecord {
-  id: string;
-  customerId: string;
-  customerName: string;
-  voucherCode: string;
-  issuedAt: string;
-  expiryDate: string;
-  status: 'ACTIVE' | 'EXPIRED' | 'USED' | 'REVOKED';
-  notes?: string;
-}
-
-const MOCK_VOUCHERS: VoucherRecord[] = [
-  {
-    id: '1',
-    customerId: 'C001',
-    customerName: 'Nguyễn Văn A',
-    voucherCode: 'WELCOME10',
-    issuedAt: '2024-01-15',
-    expiryDate: '2024-12-31',
-    status: 'ACTIVE',
-    notes: 'Mã chào mừng lần đầu mua hàng',
-  },
-  {
-    id: '2',
-    customerId: 'C002',
-    customerName: 'Trần thị B',
-    voucherCode: 'VIP50',
-    issuedAt: '2024-03-01',
-    expiryDate: '2024-09-01',
-    status: 'USED',
-    notes: 'Ưu đãi VIP, đã sử dụng cho đơn 2024-04-10',
-  },
-  {
-    id: '3',
-    customerId: 'C003',
-    customerName: 'Lê công C',
-    voucherCode: 'SUMMER25',
-    issuedAt: '2024-06-01',
-    expiryDate: '2024-08-31',
-    status: 'EXPIRED',
-  },
-];
+import { useCrmStore } from '../store/crmStore';
 
 export function CustomerVouchersPage() {
-  const [data, setData] = useState<VoucherRecord[]>([]);
+  const {
+    customerVouchers: storeVouchers,
+    fetchCustomerVouchers,
+    addCustomerVoucher,
+    updateCustomerVoucher,
+    deleteCustomerVoucher,
+  } = useCrmStore();
+
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    setIsLoading(true);
+    fetchCustomerVouchers().finally(() => setIsLoading(false));
+  }, [fetchCustomerVouchers]);
+
+  const data = useMemo(() => {
+    return storeVouchers.map((cv: any) => ({
+      id: cv.id,
+      customerId: cv.customerPhone || '1',
+      customerName: cv.customerName,
+      voucherCode: cv.voucherCode,
+      issuedAt: cv.issueDate,
+      expiryDate: '2026-12-31',
+      status: (cv.status === 'UNUSED' ? 'ACTIVE' : cv.status) as any,
+      notes: cv.voucherName,
+    }));
+  }, [storeVouchers]);
+
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<VoucherRecord | null>(null);
+  const [selected, setSelected] = useState<any | null>(null);
   
-  // Create / Edit modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<VoucherRecord | null>(null);
+  const [editingItem, setEditingItem] = useState<any | null>(null);
   const [form, setForm] = useState({
-    customerId: '1',
     customerName: '',
+    customerPhone: '',
     voucherCode: '',
-    status: 'ACTIVE' as VoucherRecord['status'],
+    status: 'ACTIVE' as any,
     notes: '',
   });
 
-  const fetchCustomerVouchers = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const res: any = await axiosClient.get('/crm/customer-vouchers');
-      const list = Array.isArray(res) ? res : res?.content || res?.data || [];
-      if (list.length > 0) {
-        const mapped: VoucherRecord[] = list.map((item: any) => ({
-          id: String(item.id),
-          customerId: item.customer?.id ? String(item.customer.id) : 'CUST-0',
-          customerName: item.customer?.name || item.customerName || 'Khách hàng',
-          voucherCode: item.voucher?.voucherCode || item.voucherCode || `VC-${item.id}`,
-          issuedAt: item.collectedAt ? String(item.collectedAt).split('T')[0] : '2024-01-01',
-          expiryDate: item.expiredAt ? String(item.expiredAt).split('T')[0] : '2024-12-31',
-          status: item.status === 'UNUSED' ? 'ACTIVE' : (item.status || 'ACTIVE'),
-          notes: item.notes || '',
-        }));
-        setData(mapped);
-      } else {
-        setData(MOCK_VOUCHERS);
-      }
-    } catch (err) {
-      console.error('Error fetching customer vouchers:', err);
-      toast.error('Lỗi khi tải ví voucher khách hàng, dùng dữ liệu tạm');
-      setData(MOCK_VOUCHERS);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchCustomerVouchers();
-  }, [fetchCustomerVouchers]);
-
-  const handleDelete = async (item: VoucherRecord) => {
+  const handleDelete = async (item: any) => {
     if (!confirm(`Xóa voucher ${item.voucherCode} của khách ${item.customerName}?`)) return;
     try {
-      await axiosClient.delete(`/crm/customer-vouchers/${item.id}`);
+      await deleteCustomerVoucher(item.id);
       toast.success(`Đã xóa voucher ${item.voucherCode}`);
-      setData((prev) => prev.filter((v) => v.id !== item.id));
     } catch (err) {
-      console.error('Error deleting customer voucher:', err);
       toast.error('Lỗi khi xóa voucher');
     }
   };
@@ -115,20 +62,20 @@ export function CustomerVouchersPage() {
   const handleOpenCreate = () => {
     setEditingItem(null);
     setForm({
-      customerId: '1',
       customerName: '',
-      voucherCode: `CUST-VC-${Math.floor(1000 + Math.random() * 9000)}`,
+      customerPhone: '',
+      voucherCode: `VC-${Math.floor(1000 + Math.random() * 9000)}`,
       status: 'ACTIVE',
       notes: '',
     });
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (item: VoucherRecord) => {
+  const handleOpenEdit = (item: any) => {
     setEditingItem(item);
     setForm({
-      customerId: item.customerId,
       customerName: item.customerName,
+      customerPhone: item.customerId,
       voucherCode: item.voucherCode,
       status: item.status,
       notes: item.notes || '',
@@ -138,20 +85,27 @@ export function CustomerVouchersPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const payload = {
-      status: form.status,
-      notes: form.notes,
-    };
     try {
       if (editingItem) {
-        await axiosClient.put(`/crm/customer-vouchers/${editingItem.id}`, payload);
-        toast.success(`Cập nhật voucher ${form.voucherCode} thành công!`);
+        await updateCustomerVoucher(editingItem.id, {
+          customerName: form.customerName,
+          voucherCode: form.voucherCode,
+          status: form.status === 'ACTIVE' ? 'UNUSED' : (form.status as any),
+        });
+        toast.success('Cập nhật voucher khách hàng thành công');
       } else {
-        await axiosClient.post('/crm/customer-vouchers', payload);
-        toast.success(`Tạo voucher mới cho khách hàng thành công!`);
+        await addCustomerVoucher({
+          customerName: form.customerName || 'Khách vãng lai',
+          customerPhone: form.customerPhone || '0900000000',
+          voucherCode: form.voucherCode,
+          voucherName: form.notes || 'Voucher tặng',
+          discountValue: 50000,
+          issueDate: new Date().toISOString().split('T')[0],
+          status: 'UNUSED',
+        });
+        toast.success('Cấp voucher cho khách hàng thành công');
       }
       setIsModalOpen(false);
-      fetchCustomerVouchers();
     } catch (err) {
       console.error('Error saving customer voucher:', err);
       toast.error('Không thể lưu voucher khách hàng');

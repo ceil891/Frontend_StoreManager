@@ -1,57 +1,52 @@
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
+import { useCrmStore } from '../store/crmStore';
 
-interface ClaimRecord {
+import { useCallback } from 'react';
+import { axiosClient } from '@/shared/lib/axiosClient';
+
+export interface ClaimRecord {
   id: string;
   warrantyCode: string;
   claimCode: string;
   description: string;
   reportedAt: string;
   handler: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'IN_PROGRESS' | 'APPROVED' | 'REJECTED';
   notes?: string;
 }
 
-const MOCK_CLAIMS: ClaimRecord[] = [
-  {
-    id: '1',
-    warrantyCode: 'W001',
-    claimCode: 'CLM001',
-    description: 'Màn hình lỗi hiển thị chấm màu',
-    reportedAt: '2024-05-10',
-    handler: 'Nguyễn Văn hậu',
-    status: 'PENDING',
-    notes: 'Khách hàng muốn đổi mới',
-  },
-  {
-    id: '2',
-    warrantyCode: 'W002',
-    claimCode: 'CLM002',
-    description: 'Pin không sạc',
-    reportedAt: '2024-04-22',
-    handler: 'Lê thị Mai',
-    status: 'APPROVED',
-  },
-  {
-    id: '3',
-    warrantyCode: 'W003',
-    claimCode: 'CLM003',
-    description: 'Bàn phím kẹt phím',
-    reportedAt: '2024-03-15',
-    handler: 'Trần Văn Dũng',
-    status: 'REJECTED',
-    notes: 'Không đủ điều kiện bảo hành',
-  },
-];
-
 export function WarrantyClaimsPage() {
-  const [data, setData] = useState<ClaimRecord[]>([]);
+  const setData = (_fn: any) => {};
+  const {
+    warrantyClaims: storeClaims,
+    fetchWarrantyClaims,
+    addWarrantyClaim,
+    updateWarrantyClaim,
+    deleteWarrantyClaim,
+  } = useCrmStore();
+
+  useEffect(() => {
+    fetchWarrantyClaims();
+  }, [fetchWarrantyClaims]);
+
+  const data: ClaimRecord[] = useMemo(() => {
+    return storeClaims.map((c) => ({
+      id: c.id,
+      warrantyCode: c.serialNumber,
+      claimCode: c.claimCode,
+      description: c.issueDescription,
+      reportedAt: c.receivedDate,
+      handler: c.repairedBy || 'Kỹ thuật viên',
+      status: (c.status === 'COMPLETED' ? 'APPROVED' : c.status === 'REJECTED' ? 'REJECTED' : 'PENDING') as any,
+      notes: c.notes || '',
+    }));
+  }, [storeClaims]);
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ClaimRecord | null>(null);
@@ -86,12 +81,11 @@ export function WarrantyClaimsPage() {
         }));
         setData(mapped);
       } else {
-        setData(MOCK_CLAIMS);
+        setData([]);
       }
     } catch (err) {
       console.error('Error fetching warranty claims:', err);
-      toast.error('Lỗi khi tải danh sách yêu cầu bảo hành, dùng dữ liệu tạm');
-      setData(MOCK_CLAIMS);
+      setData([]);
     } finally {
       setIsLoading(false);
     }

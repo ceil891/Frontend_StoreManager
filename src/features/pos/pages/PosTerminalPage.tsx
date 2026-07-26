@@ -7,11 +7,14 @@ import {
 } from 'lucide-react';
 import { usePosCartStore } from '../store/posCartStore';
 import type { PosProduct } from '../store/posCartStore';
-import { usePosConfigStore, type PaymentMethodRecord } from '../store/posConfigStore';
+import { usePosConfigStore } from '../store/posConfigStore';
+import { Modal } from '@/shared/components/ui/Modal';
+import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
 import { useSalesStore, BRANCH_NAME_BY_ID, deriveShiftId, WALK_IN_CUSTOMER_ID } from '@/features/sales/store/salesStore';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { Link } from 'react-router';
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
+import { toast } from 'sonner';
 
 // ─── Products (Sản phẩm Việt Nam) ─────────────────────────────────────────────
 const ALL_PRODUCTS: (PosProduct & { category: string; unit: string; stock: number })[] = [
@@ -70,24 +73,34 @@ export function PosTerminalPage() {
   const { items, addItem, removeItem, updateQuantity, getTotal, clearCart } = usePosCartStore();
   const paymentMethodsFromConfig = usePosConfigStore((s) => s.paymentMethods);
   const addSaleOrder = useSalesStore((s) => s.addSaleOrder);
-  const { products, fetchProducts } = useInventoryStore();
+  const { products, fetchProducts, categories, fetchCategories } = useInventoryStore();
 
   useEffect(() => {
     fetchProducts();
-  }, [fetchProducts]);
+    fetchCategories();
+  }, [fetchProducts, fetchCategories]);
 
   const productsList = useMemo(() => {
-    return (products || []).map((p) => ({
-      id: String(p.id),
-      name: p.name || '',
-      price: Number(p.price || 0),
-      image: p.mainImage || 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=200&q=80',
-      sku: p.sku || '',
-      category: p.category || 'Tất cả',
-      unit: p.unit || 'Cái',
-      stock: Number(p.onHand || 0),
-    }));
-  }, [products]);
+    return (products || []).map((p) => {
+      const cat = (categories || []).find((c) => c.categoryName === p.category);
+      const tc = (cat?.taxClass || 'VAT_8') as string;
+      let rate = 0.08;
+      if (tc === 'VAT_5') rate = 0.05;
+      else if (tc === 'VAT_10') rate = 0.10;
+      else if (tc === 'EXEMPT') rate = 0.00;
+      return {
+        id: String(p.id),
+        name: p.name || '',
+        price: Number(p.price || 0),
+        image: p.mainImage || 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=200&q=80',
+        sku: p.sku || '',
+        category: p.category || 'Tất cả',
+        unit: p.unit || 'Cái',
+        stock: Number(p.onHand || 0),
+        taxRate: rate,
+      };
+    });
+  }, [products, categories]);
 
   const displayPayments = useMemo<DisplayPayment[]>(() => {
     const active = paymentMethodsFromConfig.filter((m) => m.status === 'ACTIVE');
@@ -106,6 +119,41 @@ export function PosTerminalPage() {
   const [customerPhone, setCustomerPhone] = useState('');
   const [activeCustomer, setActiveCustomer] = useState<{ id: string; name: string; phone: string; points: number } | null>(null);
   const [usedPoints, setUsedPoints] = useState(0);
+
+  // Quick Create Customer Modal State
+  const [isQuickCustomerOpen, setIsQuickCustomerOpen] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerShortName, setNewCustomerShortName] = useState('');
+  const [newCustomerPhoneInput, setNewCustomerPhoneInput] = useState('');
+  const [newCustomerEmail, setNewCustomerEmail] = useState('');
+  const [newCustomerTaxCode, setNewCustomerTaxCode] = useState('');
+  const [newCustomerType, setNewCustomerType] = useState<'INDIVIDUAL' | 'BUSINESS'>('INDIVIDUAL');
+  const [newCustomerNotes, setNewCustomerNotes] = useState('');
+
+  const handleQuickCreateCustomer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCustomerName.trim() || !newCustomerPhoneInput.trim()) {
+      toast.error('Vui lòng nhập Tên và Số điện thoại khách hàng!');
+      return;
+    }
+    const newCust = {
+      id: 'CUST-POS-' + Math.floor(10000 + Math.random() * 90000),
+      name: newCustomerName.trim(),
+      phone: newCustomerPhoneInput.trim(),
+      points: 100, // Điểm thưởng tặng khi mở thẻ mới tại POS
+    };
+    setActiveCustomer(newCust);
+    setUsedPoints(0);
+    setIsQuickCustomerOpen(false);
+    toast.success(`Đã tạo thành công khách hàng "${newCust.name}" & áp dụng cho đơn POS!`);
+    // Reset form
+    setNewCustomerName('');
+    setNewCustomerShortName('');
+    setNewCustomerPhoneInput('');
+    setNewCustomerEmail('');
+    setNewCustomerTaxCode('');
+    setNewCustomerNotes('');
+  };
 
   // Voucher
   const [voucherCode, setVoucherCode] = useState('');
@@ -225,7 +273,17 @@ export function PosTerminalPage() {
   }
   voucherDiscount = Math.min(voucherDiscount, subtotal);
   const taxableAmount = Math.max(0, subtotal - voucherDiscount - pointsDiscount);
-  const vatAmount = taxableAmount * 0.08;
+  
+  // Calculate VAT dynamically based on each item's tax rate
+  const vatAmount = items.reduce((acc, item) => {
+    const p = productsList.find((x) => x.id === item.id);
+    const itemRate = p?.taxRate ?? 0.08;
+    const itemSubtotal = (item.price * item.quantity) - (item.discount || 0);
+    const discountRatio = subtotal > 0 ? taxableAmount / subtotal : 1;
+    const itemTaxableAmount = itemSubtotal * discountRatio;
+    return acc + (itemTaxableAmount * itemRate);
+  }, 0);
+
   const totalAmount = taxableAmount + vatAmount;
 
   const cashGivenNum = parseFloat(cashGiven.replace(/\./g, '')) || 0;
@@ -242,6 +300,7 @@ export function PosTerminalPage() {
     const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
     const orderLines = items.map((i, idx) => ({
       id: `pos_${now.getTime()}_${idx}`,
+      productVariantId: Number(i.id),
       sku: i.sku || String(i.id),
       productName: i.name,
       quantity: i.quantity,
@@ -447,14 +506,27 @@ export function PosTerminalPage() {
         {/* Customer Section */}
         <div className="p-3 border-b border-gray-200 dark:border-gray-700 shrink-0 space-y-2 bg-gray-50 dark:bg-gray-900/20">
           {!activeCustomer ? (
-            <form onSubmit={handleSearchCustomer} className="flex gap-2">
-              <input
-                type="text" placeholder="Nhập SĐT khách hàng..."
-                value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
-                className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-              />
-              <button type="submit" className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors">Tìm</button>
-            </form>
+            <div className="flex gap-2">
+              <form onSubmit={handleSearchCustomer} className="flex-1 flex gap-2">
+                <input
+                  type="text" placeholder="Nhập SĐT khách..."
+                  value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
+                  className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+                <button type="submit" className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors">Tìm</button>
+              </form>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewCustomerPhoneInput(customerPhone);
+                  setIsQuickCustomerOpen(true);
+                }}
+                className="px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shrink-0"
+                title="Tạo khách hàng mới tại chỗ"
+              >
+                <UserPlus className="w-4 h-4" /> + Thêm KH
+              </button>
+            </div>
           ) : (
             <div className="bg-white dark:bg-gray-800 border border-emerald-200 dark:border-emerald-800/50 rounded-xl p-3">
               <div className="flex justify-between items-start mb-2">
@@ -619,6 +691,121 @@ export function PosTerminalPage() {
           </div>
         </div>
       </div>
+
+      {/* Quick Create Customer Modal for POS */}
+      <Modal
+        isOpen={isQuickCustomerOpen}
+        onClose={() => setIsQuickCustomerOpen(false)}
+        title="Tạo Nhanh Khách Hàng Tại Quầy POS"
+        width="max-w-xl"
+      >
+        <form onSubmit={handleQuickCreateCustomer} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại khách hàng *</label>
+              <select
+                value={newCustomerType}
+                onChange={(e) => setNewCustomerType(e.target.value as any)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="INDIVIDUAL">Cá nhân (Hộ gia đình)</option>
+                <option value="BUSINESS">Doanh nghiệp (Công ty)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại liên hệ *</label>
+              <input
+                type="text"
+                required
+                value={newCustomerPhoneInput}
+                onChange={(e) => setNewCustomerPhoneInput(e.target.value)}
+                placeholder="0901234567..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Họ & Tên khách hàng *</label>
+              <input
+                type="text"
+                required
+                value={newCustomerName}
+                onChange={(e) => setNewCustomerName(e.target.value)}
+                placeholder="Nguyễn Văn A..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên ngắn / Gọi tắt</label>
+              <input
+                type="text"
+                value={newCustomerShortName}
+                onChange={(e) => setNewCustomerShortName(e.target.value)}
+                placeholder="Anh A..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
+              <input
+                type="email"
+                value={newCustomerEmail}
+                onChange={(e) => setNewCustomerEmail(e.target.value)}
+                placeholder="khachhang@gmail.com"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã số thuế (Xuất HĐ GTGT)</label>
+              <input
+                type="text"
+                value={newCustomerTaxCode}
+                onChange={(e) => setNewCustomerTaxCode(e.target.value)}
+                placeholder="MST Doanh nghiệp..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <AddressCascadeSelect
+              label="Địa chỉ nhận hàng (Giao hàng tận nơi)"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú sở thích / Yêu cầu xuất hóa đơn</label>
+            <textarea
+              rows={2}
+              value={newCustomerNotes}
+              onChange={(e) => setNewCustomerNotes(e.target.value)}
+              placeholder="Nhập lưu ý của khách..."
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={() => setIsQuickCustomerOpen(false)}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold shadow transition-colors"
+            >
+              ✓ Tạo & Áp dụng ngay
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {isPaymentOpen && (
         <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center z-50 p-4">

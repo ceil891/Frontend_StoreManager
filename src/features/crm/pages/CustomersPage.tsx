@@ -12,6 +12,12 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { useCrmStore, type CustomerProfile } from '../store/crmStore';
 import { UserAvatar } from '@/shared/components/ui/UserAvatar';
 import { buildUserAvatarUrl } from '@/shared/utils/userAvatar';
+import { toast } from 'sonner';
+import { exportToCsv } from '@/shared/utils/exportCsv';
+import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
+import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
+import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
+import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 
 // ─── Tier config ────────────────────────────────────────────────────────────
 // NOTE: lifetimeSpent trong store dùng đơn vị USD ($).
@@ -41,7 +47,7 @@ const tierLabel: Record<string, string> = {
   BRONZE: 'Đồng', SILVER: 'Bạc', GOLD: 'Vàng', DIAMOND: 'Kim Cương', ELITE_CLUB: 'Elite Club',
 };
 
-// ─── Mock transaction history ────────────────────────────────────────────────
+// ─── Transaction history ────────────────────────────────────────────────
 type Transaction = {
   id: string;
   orderId: string;
@@ -50,15 +56,8 @@ type Transaction = {
   total: number;
   status: 'Hoàn thành' | 'Đang xử lý';
 };
-const MOCK_TRANSACTIONS: Transaction[] = [
-  { id: 't1', orderId: 'ORD-8821', date: '2024-05-10', summary: 'Laptop Dell XPS 15, chuột Logitech', total: 1250.00, status: 'Hoàn thành' },
-  { id: 't2', orderId: 'ORD-8745', date: '2024-04-22', summary: 'Tai nghe Sony WH-1000XM5', total: 349.00, status: 'Hoàn thành' },
-  { id: 't3', orderId: 'ORD-8690', date: '2024-03-15', summary: 'iPhone 15 Pro Max 256GB', total: 1199.00, status: 'Hoàn thành' },
-  { id: 't4', orderId: 'ORD-8630', date: '2024-02-28', summary: 'Màn hình LG 27" 4K', total: 599.00, status: 'Hoàn thành' },
-  { id: 't5', orderId: 'ORD-8910', date: '2024-05-20', summary: 'Bàn phím cơ Keychron K2', total: 119.00, status: 'Đang xử lý' },
-];
 
-// ─── Mock loyalty point history ──────────────────────────────────────────────
+// ─── Loyalty point history ──────────────────────────────────────────────
 type PointRecord = {
   id: string;
   date: string;
@@ -66,13 +65,6 @@ type PointRecord = {
   points: number;
   balance: number;
 };
-const MOCK_POINTS: PointRecord[] = [
-  { id: 'p1', date: '2024-05-10', type: 'Tích điểm', points: +125,  balance: 3420 },
-  { id: 'p2', date: '2024-05-05', type: 'Dùng điểm',  points: -200,  balance: 3295 },
-  { id: 'p3', date: '2024-04-22', type: 'Tích điểm', points: +34,   balance: 3495 },
-  { id: 'p4', date: '2024-03-15', type: 'Tích điểm', points: +119,  balance: 3461 },
-  { id: 'p5', date: '2024-01-01', type: 'Hết hạn',   points: -50,   balance: 3342 },
-];
 
 // ─── Drawer tab type ─────────────────────────────────────────────────────────
 type DrawerTab = 'info' | 'transactions' | 'points';
@@ -150,6 +142,12 @@ export function CustomersPage() {
         phone:          editingCustomer.phone || '',
         email:          editingCustomer.email || '',
         address:        editingCustomer.address || '',
+        taxCode:        editingCustomer.taxCode || '',
+        gender:         editingCustomer.gender || 'OTHER',
+        dateOfBirth:    editingCustomer.dateOfBirth || '',
+        creditLimit:    editingCustomer.creditLimit || 0,
+        groupId:        editingCustomer.groupId || '',
+        areaId:         editingCustomer.areaId || '',
         avatarUrl:      editingCustomer.avatarUrl?.trim() || buildUserAvatarUrl(editingCustomer.email || editingCustomer.name || 'customer'),
         loyaltyTier:    autoTier,           // ← tự động thăng hạng
         loyaltyPoints:  editingCustomer.loyaltyPoints || 0,
@@ -306,12 +304,27 @@ export function CustomersPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
+            <button
+              onClick={() => {
+                exportToCsv('danh_sach_khach_hang', filtered, [
+                  { header: 'Họ tên', accessor: r => r.name },
+                  { header: 'Email', accessor: r => r.email },
+                  { header: 'Số điện thoại', accessor: r => r.phone },
+                  { header: 'Hạng thẻ', accessor: r => tierLabel[r.loyaltyTier] || r.loyaltyTier },
+                  { header: 'Điểm tích lũy', accessor: r => r.loyaltyPoints },
+                  { header: 'Tổng chi tiêu ($)', accessor: r => r.lifetimeSpent },
+                  { header: 'Tổng số đơn', accessor: r => r.totalOrders },
+                  { header: 'Lần mua cuối', accessor: r => r.lastVisit },
+                ]);
+                toast.success('Đã xuất danh sách khách hàng dạng CSV!');
+              }}
+              className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap"
+            >
               <Download className="w-4 h-4" /> Xuất danh sách
             </button>
             <button
               onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-medium shadow-sm"
+              className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap"
             >
               <UserPlus className="w-4 h-4" /> Thêm khách hàng mới
             </button>
@@ -515,7 +528,7 @@ export function CustomersPage() {
                   <p className="text-xs text-gray-400 dark:text-gray-500 font-medium uppercase tracking-wider">
                     5 giao dịch gần nhất
                   </p>
-                  {MOCK_TRANSACTIONS.map((tx) => (
+                  {([] as Transaction[]).map((tx) => (
                     <div
                       key={tx.id}
                       className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3.5 shadow-sm hover:border-primary/40 transition-colors"
@@ -598,7 +611,7 @@ export function CustomersPage() {
                     Lịch sử tích / tiêu điểm
                   </p>
                   <div className="space-y-2">
-                    {MOCK_POINTS.map((rec) => (
+                    {([] as PointRecord[]).map((rec) => (
                       <div
                         key={rec.id}
                         className="flex items-center justify-between bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 px-3.5 py-2.5 hover:border-primary/30 transition-colors"
@@ -641,229 +654,291 @@ export function CustomersPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={modalMode === 'create' ? 'Thêm khách hàng mới' : 'Chỉnh sửa hồ sơ khách hàng'}
-        width="max-w-xl"
+        size="erp"
       >
-        <form onSubmit={handleSaveCustomer} className="space-y-4">
-          <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800">
-            <UserAvatar
-              name={editingCustomer.name || 'Khách mới'}
-              avatarUrl={editingCustomer.avatarUrl}
-              seed={editingCustomer.email || editingCustomer.name}
-              size="lg"
-            />
-            <div className="flex-1 w-full space-y-2">
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Ảnh đại diện khách hàng</label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="file"
-                  accept="image/*"
-                  id="customer-avatar-input"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onload = () => {
-                        setEditingCustomer(prev => ({ ...prev, avatarUrl: reader.result as string }));
-                      };
-                      reader.readAsDataURL(file);
-                    }
-                  }}
+        <form onSubmit={handleSaveCustomer}>
+          <div className="erp-form-body">
+            {/* Section 1: Thông tin cá nhân & Liên hệ */}
+            <div className="erp-form-section space-y-4" style={{gridColumn: 'span 2'}}>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-150 dark:border-gray-700 pb-2 mb-4">Thông tin cá nhân & Liên hệ</h3>
+              
+              <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800">
+                <UserAvatar
+                  name={editingCustomer.name || 'Khách mới'}
+                  avatarUrl={editingCustomer.avatarUrl}
+                  seed={editingCustomer.email || editingCustomer.name}
+                  size="lg"
                 />
-                <button
-                  type="button"
-                  onClick={() => document.getElementById('customer-avatar-input')?.click()}
-                  className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-750 text-xs font-semibold shadow-sm"
-                >
-                  Tải ảnh từ thiết bị
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setEditingCustomer((p) => ({
-                      ...p,
-                      avatarUrl: buildUserAvatarUrl(p.email || p.name || 'customer'),
-                    }))
-                  }
-                  className="text-xs text-primary font-semibold hover:underline"
-                >
-                  Tạo ảnh mặc định
-                </button>
-              </div>
-              <p className="text-[10px] text-gray-400">Hỗ trợ JPG, PNG. Ảnh mặc định sẽ được sinh ra từ email/tên nếu để trống.</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã khách hàng</label>
-                {modalMode === 'create' && (
-                  <label className="flex items-center gap-1 text-[10px] text-primary cursor-pointer select-none">
+                <div className="flex-1 w-full space-y-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Ảnh đại diện</label>
+                  <div className="flex items-center gap-3">
                     <input
-                      type="checkbox"
-                      checked={isAutoCode}
+                      type="file"
+                      accept="image/*"
+                      id="customer-avatar-input"
+                      className="hidden"
                       onChange={(e) => {
-                        setIsAutoCode(e.target.checked);
-                        if (e.target.checked) {
-                          setEditingCustomer(prev => ({
-                            ...prev,
-                            customerCode: `CUST-${Math.floor(10000 + Math.random() * 90000)}`
-                          }));
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            setEditingCustomer(prev => ({ ...prev, avatarUrl: reader.result as string }));
+                          };
+                          reader.readAsDataURL(file);
                         }
                       }}
-                      className="rounded text-primary focus:ring-primary w-3 h-3"
                     />
-                    <span>Tự động sinh</span>
-                  </label>
-                )}
-              </div>
-              <input
-                type="text"
-                value={editingCustomer.customerCode || ''}
-                onChange={(e) => setEditingCustomer({ ...editingCustomer, customerCode: e.target.value })}
-                disabled={modalMode === 'create' && isAutoCode}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-60"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Hạng thành viên <span className="text-primary font-normal">(tự động cập nhật theo chi tiêu)</span>
-              </label>
-              <input
-                type="text"
-                readOnly
-                value={tierLabel[calcTier(editingCustomer.lifetimeSpent ?? 0)]}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white text-sm cursor-not-allowed"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Họ và tên khách hàng *</label>
-            <input
-              type="text"
-              value={editingCustomer.name || ''}
-              onChange={(e) => setEditingCustomer({ ...editingCustomer, name: e.target.value })}
-              placeholder="Ví dụ: Nguyễn Văn A"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại *</label>
-              <input
-                type="text"
-                value={editingCustomer.phone || ''}
-                onChange={(e) => setEditingCustomer({ ...editingCustomer, phone: e.target.value })}
-                placeholder="+84 9xx xxx xxx"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary font-mono"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ Email</label>
-              <input
-                type="email"
-                value={editingCustomer.email || ''}
-                onChange={(e) => {
-                  const email = e.target.value;
-                  setEditingCustomer((p) => ({
-                    ...p,
-                    email,
-                    avatarUrl:
-                      modalMode === 'create' && (!p.avatarUrl || p.avatarUrl.includes('new-customer'))
-                        ? buildUserAvatarUrl(email || 'customer')
-                        : p.avatarUrl,
-                  }));
-                }}
-                placeholder="email@example.com"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ liên hệ</label>
-            <input
-              type="text"
-              value={editingCustomer.address || ''}
-              onChange={(e) => setEditingCustomer({ ...editingCustomer, address: e.target.value })}
-              placeholder="Số nhà, đường, quận/huyện, tỉnh/thành phố"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-            />
-          </div>
-
-          {modalMode === 'edit' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Điểm tích lũy</label>
-                <input
-                  type="number"
-                  value={editingCustomer.loyaltyPoints ?? 0}
-                  onChange={(e) => setEditingCustomer({ ...editingCustomer, loyaltyPoints: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng chi tiêu ($)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={editingCustomer.lifetimeSpent ?? 0}
-                  onChange={(e) => setEditingCustomer({ ...editingCustomer, lifetimeSpent: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
-                <select
-                  value={editingCustomer.status || 'ACTIVE'}
-                  onChange={(e) => setEditingCustomer({ ...editingCustomer, status: e.target.value as any })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-                >
-                  <option value="ACTIVE">Hoạt động</option>
-                  <option value="DORMANT">Không hoạt động</option>
-                  <option value="CHURNED">Đã rời đi</option>
-                </select>
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
-                <select
-                  value={editingCustomer.status || 'ACTIVE'}
-                  onChange={(e) => setEditingCustomer({ ...editingCustomer, status: e.target.value as any })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-                >
-                  <option value="ACTIVE">Hoạt động</option>
-                  <option value="DORMANT">Không hoạt động</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Phân hạng khởi tạo</label>
-                <div className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-sm font-semibold">
-                  Đồng (0 điểm / $0.00 chi tiêu)
+                    <button
+                      type="button"
+                      onClick={() => document.getElementById('customer-avatar-input')?.click()}
+                      className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-750 text-xs font-semibold shadow-sm"
+                    >
+                      Tải ảnh
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingCustomer((p) => ({
+                          ...p,
+                          avatarUrl: buildUserAvatarUrl(p.email || p.name || 'customer'),
+                        }))
+                      }
+                      className="text-xs text-primary font-semibold hover:underline"
+                    >
+                      Mặc định
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
 
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú CSKH</label>
-            <textarea
-              rows={3}
-              value={editingCustomer.notes || ''}
-              onChange={(e) => setEditingCustomer({ ...editingCustomer, notes: e.target.value })}
-              placeholder="Ghi chú sở thích, thói quen mua hàng hoặc yêu cầu đặc biệt..."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary resize-none"
-            />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã khách hàng *</label>
+                    {modalMode === 'create' && (
+                      <label className="flex items-center gap-1 text-[10px] text-primary cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={isAutoCode}
+                          onChange={(e) => {
+                            setIsAutoCode(e.target.checked);
+                            if (e.target.checked) {
+                              setEditingCustomer(prev => ({
+                                ...prev,
+                                customerCode: `CUST-${Math.floor(10000 + Math.random() * 90000)}`
+                              }));
+                            }
+                          }}
+                          className="rounded text-primary focus:ring-primary w-3 h-3"
+                        />
+                        <span>Tự động sinh</span>
+                      </label>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={editingCustomer.customerCode || ''}
+                    onChange={(e) => setEditingCustomer({ ...editingCustomer, customerCode: e.target.value })}
+                    disabled={modalMode === 'create' && isAutoCode}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-60"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Họ và tên khách hàng *</label>
+                  <input
+                    type="text"
+                    value={editingCustomer.name || ''}
+                    onChange={(e) => setEditingCustomer({ ...editingCustomer, name: e.target.value })}
+                    placeholder="Ví dụ: Nguyễn Văn A"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại *</label>
+                  <input
+                    type="text"
+                    value={editingCustomer.phone || ''}
+                    onChange={(e) => setEditingCustomer({ ...editingCustomer, phone: e.target.value })}
+                    placeholder="+84 9xx xxx xxx"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary font-mono"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ Email</label>
+                  <input
+                    type="email"
+                    value={editingCustomer.email || ''}
+                    onChange={(e) => {
+                      const email = e.target.value;
+                      setEditingCustomer((p) => ({
+                        ...p,
+                        email,
+                        avatarUrl:
+                          modalMode === 'create' && (!p.avatarUrl || p.avatarUrl.includes('new-customer'))
+                            ? buildUserAvatarUrl(email || 'customer')
+                            : p.avatarUrl,
+                      }));
+                    }}
+                    placeholder="email@example.com"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã số thuế</label>
+                  <input
+                    type="text"
+                    value={editingCustomer.taxCode || ''}
+                    onChange={(e) => setEditingCustomer({ ...editingCustomer, taxCode: e.target.value })}
+                    placeholder="MST"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giới tính</label>
+                  <select
+                    value={editingCustomer.gender || 'OTHER'}
+                    onChange={(e) => setEditingCustomer({ ...editingCustomer, gender: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="MALE">Nam</option>
+                    <option value="FEMALE">Nữ</option>
+                    <option value="OTHER">Khác</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày sinh</label>
+                  <input
+                    type="date"
+                    value={editingCustomer.dateOfBirth || ''}
+                    onChange={(e) => setEditingCustomer({ ...editingCustomer, dateOfBirth: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <AddressCascadeSelect
+                  addressDetail={editingCustomer.address || ''}
+                  onChange={({ province, district, ward, addressDetail }) => {
+                    const fullAddr = [addressDetail, ward, district, province].filter(Boolean).join(', ');
+                    setEditingCustomer(prev => ({ ...prev, address: fullAddr }));
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Section 2: Tài chính, Phân loại & CSKH */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-150 dark:border-gray-700 pb-2 mb-4">Tài chính, Phân loại & CSKH</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhóm khách hàng</label>
+                  <SearchLookupModal
+                    title="Chọn Nhóm Khách Hàng"
+                    iconType="building"
+                    placeholder="Chọn nhóm khách hàng..."
+                    value={editingCustomer.groupId}
+                    options={[
+                      { id: 'GRP-VIP', code: 'GRP-VIP', name: 'Khách hàng VIP / Doanh nghiệp', subtitle: 'Chiết khấu 10%' },
+                      { id: 'GRP-RETAIL', code: 'GRP-RETAIL', name: 'Khách hàng Bán lẻ', subtitle: 'Chiết khấu chuẩn' },
+                      { id: 'GRP-WHOLESALE', code: 'GRP-WHOLESALE', name: 'Đại lý / Bán sỉ', subtitle: 'Chiết khấu 15%' },
+                    ]}
+                    onChange={(val) => setEditingCustomer(prev => ({ ...prev, groupId: val }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khu vực địa lý</label>
+                  <SearchLookupModal
+                    title="Chọn Khu Vực"
+                    iconType="location"
+                    placeholder="Chọn khu vực..."
+                    value={editingCustomer.areaId}
+                    options={[
+                      { id: 'AREA-HN', code: 'AREA-HN', name: 'Khu vực Hà Nội & Miền Bắc' },
+                      { id: 'AREA-HCM', code: 'AREA-HCM', name: 'Khu vực TP. Hồ Chí Minh & Miền Nam' },
+                      { id: 'AREA-DN', code: 'AREA-DN', name: 'Khu vực Đà Nẵng & Miền Trung' },
+                    ]}
+                    onChange={(val) => setEditingCustomer(prev => ({ ...prev, areaId: val }))}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Hạng thành viên <span className="text-primary font-normal">(Tự động tính)</span>
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={tierLabel[calcTier(editingCustomer.lifetimeSpent ?? 0)]}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white text-sm cursor-not-allowed font-semibold text-primary"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Điểm tích lũy</label>
+                  <input
+                    type="number"
+                    value={editingCustomer.loyaltyPoints ?? 0}
+                    onChange={(e) => setEditingCustomer({ ...editingCustomer, loyaltyPoints: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hạn mức nợ cho phép</label>
+                  <CurrencyInput
+                    value={editingCustomer.creditLimit ?? 0}
+                    onChange={(val) => setEditingCustomer(prev => ({ ...prev, creditLimit: val }))}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái tài khoản</label>
+                <select
+                  value={editingCustomer.status || 'ACTIVE'}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, status: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                >
+                  <option value="ACTIVE">Hoạt động (ACTIVE)</option>
+                  <option value="DORMANT">Tạm ngưng (DORMANT)</option>
+                  <option value="CHURNED">Đã rời đi (CHURNED)</option>
+                </select>
+              </div>
+
+              <div>
+                <FileDropzone
+                  label="Hồ sơ & Giấy tờ đính kèm (Hợp đồng, Đăng ký kinh doanh...)"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú từ CSKH & Lưu ý đặc biệt</label>
+                <textarea
+                  rows={3}
+                  value={editingCustomer.notes || ''}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, notes: e.target.value })}
+                  placeholder="Lịch sử trao đổi, sở thích hoặc lưu ý chăm sóc..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary resize-none"
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          {/* Footer Buttons */}
+          <div className="erp-form-footer border-t border-gray-200 dark:border-gray-700 pt-4">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}

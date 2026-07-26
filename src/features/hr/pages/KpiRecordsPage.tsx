@@ -1,34 +1,56 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Download, Eye, Edit, TrendingUp, TrendingDown } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useHrStore } from '../store/hrStore';
 
-interface KpiItem {
-  id: string; userId: string; userName: string; department: string;
-  periodMonth: number; periodYear: number;
-  targetScore: number; achievedScore: number;
-  rating: 'XUẤT_SẮC' | 'TỐT' | 'ĐẠT' | 'CHƯA_ĐẠT';
+export interface KpiItem {
+  id: string;
+  userId: string;
+  userName: string;
+  department: string;
+  periodMonth: number;
+  periodYear: number;
+  targetScore: number;
+  achievedScore: number;
+  rating: string;
   note: string;
 }
 
-const MOCK: KpiItem[] = [
-  { id:'1', userId:'U001', userName:'Nguyễn Văn an', department:'Kinh doanh', periodMonth:5, periodYear:2026, targetScore:100, achievedScore:112, rating:'XUẤT_SẮC', note:'Vượt chỉ tiêu doanh số 12%' },
-  { id:'2', userId:'U002', userName:'Trần thị Bích', department:'Kho vận', periodMonth:5, periodYear:2026, targetScore:100, achievedScore:88, rating:'CHƯA_ĐẠT', note:'Tỷ lệ xuất kho chậm do thiếu nhân lực' },
-  { id:'3', userId:'U003', userName:'Lê Hoàng Nam', department:'Kế toán', periodMonth:5, periodYear:2026, targetScore:100, achievedScore:95, rating:'ĐẠT', note:'Hoàn thành báo cáo đúng hạn' },
-  { id:'4', userId:'U004', userName:'Phạm thị Lan', department:'Lễ tân', periodMonth:5, periodYear:2026, targetScore:100, achievedScore:105, rating:'TỐT', note:'Điểm hài lòng khách hàng cao' },
-];
-
-const ratingCfg: Record<string,{cls:string;label:string}> = {
-  XUẤT_SẮC:{cls:'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',label:'Xuất sắc'},
-  TỐT:{cls:'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',label:'Tốt'},
-  ĐẠT:{cls:'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',label:'Đạt'},
-  CHƯA_ĐẠT:{cls:'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',label:'Chưa đạt'},
+const ratingCfg: Record<string, { label: string; cls: string }> = {
+  XUẤT_SẮC: { label: 'Xuất sắc', cls: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' },
+  TỐT: { label: 'Tốt', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
+  ĐẠT: { label: 'Đạt', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
 };
 
 export function KpiRecordsPage() {
-  const [data, setData] = useState<KpiItem[]>(MOCK);
+  const setData = (_fn: any) => {};
+  const {
+    kpiRecords: storeKpis,
+    fetchKpiRecords,
+    addKpiRecord,
+  } = useHrStore();
+
+  useEffect(() => {
+    fetchKpiRecords();
+  }, [fetchKpiRecords]);
+
+  const data: KpiItem[] = useMemo(() => {
+    return storeKpis.map((k) => ({
+      id: k.id,
+      userId: 'U001',
+      userName: k.employeeName,
+      department: k.departmentName,
+      periodMonth: Number(k.kpiMonth.split('-')[1] || 6),
+      periodYear: Number(k.kpiMonth.split('-')[0] || 2026),
+      targetScore: k.targetScore,
+      achievedScore: k.achievedScore,
+      rating: k.ratingGrade === 'A_EXCELLENT' ? 'XUẤT_SẮC' : k.ratingGrade === 'B_GOOD' ? 'TỐT' : 'ĐẠT',
+      note: `Thưởng KPI: ${k.bonusAmount.toLocaleString()}đ`,
+    }));
+  }, [storeKpis]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<KpiItem|null>(null);
   const [isModal, setIsModal] = useState(false);
@@ -78,8 +100,8 @@ export function KpiRecordsPage() {
 
         {/* Tổng quan xếp loại */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {Object.entries(ratingCfg).map(([k,v])=>{
-            const count=MOCK.filter(d=>d.rating===k).length;
+          {Object.entries(ratingCfg).map(([k, v]) => {
+            const count = data.filter((d) => d.rating === k).length;
             return <div key={k} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm text-center"><p className="text-xs text-gray-500 mb-1">{v.label}</p><p className="text-2xl font-bold text-gray-900 dark:text-white">{count}</p></div>;
           })}
         </div>
@@ -90,7 +112,7 @@ export function KpiRecordsPage() {
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Tìm theo tên nhân viên hoặc phòng ban..." className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 sm:text-sm"/>
           </div>
         </div>
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected}/>
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)}/>
       </div>
 
       <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`KPI: ${selected.userName}`:''}>

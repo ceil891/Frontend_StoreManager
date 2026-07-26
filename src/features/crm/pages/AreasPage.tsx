@@ -262,7 +262,7 @@ export function AreasPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} isLoading={isLoading}/>
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedItem(row)} isLoading={isLoading}/>
       </div>
 
       {/* Drawer Chi tiết */}
