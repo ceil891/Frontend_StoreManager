@@ -424,8 +424,8 @@ export function MainLayout() {
           </header>
 
           {/* Page Content */}
-          <main className="flex-1 overflow-y-auto">
-            <div className="p-4 sm:p-6 lg:p-8 max-w-screen-2xl mx-auto">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 w-full">
+            <div className="p-4 sm:p-6 lg:p-8 max-w-screen-2xl mx-auto w-full min-w-0">
               {currentGroup && currentItem && (
                 <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-6 font-medium flex-wrap">
                   <Link to="/" className="hover:text-gray-900 dark:hover:text-gray-200 transition-colors">

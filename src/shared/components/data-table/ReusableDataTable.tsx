@@ -33,7 +33,8 @@ interface DataTableProps<TData, TValue> {
   bulkActions?: (selectedRows: TData[], clearSelection: () => void) => React.ReactNode;
 }
 
-import { memo } from 'react';
+import { useDebounce } from '@/shared/hooks/useDebounce';
+import { useEffect } from 'react';
 
 const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
   columns,
@@ -48,7 +49,14 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState({});
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [searchInput, setSearchInput] = useState('');
   const [globalFilter, setGlobalFilter] = useState('');
+
+  const debouncedSearch = useDebounce(searchInput, 250);
+
+  useEffect(() => {
+    setGlobalFilter(debouncedSearch);
+  }, [debouncedSearch]);
 
   const table = useReactTable({
     data,
@@ -77,7 +85,7 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
   const clearSelection = () => setRowSelection({});
 
   return (
-    <div className="space-y-4 relative">
+    <div className="space-y-4 relative w-full max-w-full min-w-0 overflow-hidden">
       {/* Toolbar: Global Search, Column Visibility & Bulk Actions */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex flex-1 items-center gap-3 w-full">
@@ -88,8 +96,8 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
               </div>
               <input
                 type="text"
-                value={globalFilter ?? ''}
-                onChange={(e) => setGlobalFilter(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 placeholder={globalFilterPlaceholder}
                 className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
               />
