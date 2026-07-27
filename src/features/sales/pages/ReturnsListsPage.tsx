@@ -72,18 +72,69 @@ export function ReturnsListsPage() {
     );
   }, [search, data]);
 
+  const [returnLines, setReturnLines] = useState<{
+    id: string;
+    sku: string;
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    condition: 'UNOPENED' | 'DEFECTIVE' | 'USED_DAMAGED';
+  }>([
+    { id: '1', sku: 'SP-IP15-256', productName: 'iPhone 15 Pro 256GB - Titan Tự Nhiên', quantity: 1, unitPrice: 28500000, condition: 'UNOPENED' }
+  ]);
+
+  const updateLinesAndTotals = (newLines: typeof returnLines) => {
+    setReturnLines(newLines);
+    const total = newLines.reduce((sum, l) => sum + ((Number(l.quantity) || 0) * (Number(l.unitPrice) || 0)), 0);
+    setEditingItem(prev => ({
+      ...prev,
+      returnAmount: total,
+      refundedAmount: total,
+    }));
+  };
+
+  const handleAddReturnLine = () => {
+    const newLine = {
+      id: Date.now().toString(),
+      sku: 'SKU-SP-TRA',
+      productName: 'Sản phẩm trả mới',
+      quantity: 1,
+      unitPrice: 500000,
+      condition: 'UNOPENED' as const,
+    };
+    updateLinesAndTotals([...returnLines, newLine]);
+  };
+
+  const handleRemoveReturnLine = (id: string) => {
+    updateLinesAndTotals(returnLines.filter(l => l.id !== id));
+  };
+
+  const handleUpdateReturnLine = (id: string, field: string, value: any) => {
+    const updated = returnLines.map(l => l.id === id ? { ...l, [field]: value } : l);
+    updateLinesAndTotals(updated);
+  };
+
   const handleOpenCreate = () => {
     setModalMode('create');
+    const defaultItem = {
+      id: '1',
+      sku: 'SP-IP15-256',
+      productName: 'iPhone 15 Pro 256GB - Titan Tự Nhiên',
+      quantity: 1,
+      unitPrice: 28500000,
+      condition: 'UNOPENED' as const,
+    };
+    setReturnLines([defaultItem]);
     setEditingItem({
       returnCode: `RT-2026-${Date.now().toString().slice(-4)}`,
-      invoiceCode: '',
-      customerName: '',
+      invoiceCode: 'INV-2026-8892',
+      customerName: 'Nguyễn Văn An',
       returnDate: new Date().toISOString().split('T')[0],
-      returnAmount: 0,
-      refundedAmount: 0,
-      receiver: '',
+      returnAmount: 28500000,
+      refundedAmount: 28500000,
+      receiver: 'Trần Văn Hùng',
       status: 'CHO_KIEM_TRA',
-      notes: '',
+      notes: 'Khách trả nguyên seal chưa kích hoạt',
     });
     setIsModalOpen(true);
   };
@@ -116,6 +167,20 @@ export function ReturnsListsPage() {
         status: apiStatus as any,
         inspector: editingItem.receiver || 'Nhân viên kiểm tra',
         notes: editingItem.notes || '',
+        returnLines: returnLines.map(l => ({
+          productId: l.id,
+          sku: l.sku,
+          productName: l.productName,
+          quantity: l.quantity,
+          refundPrice: l.unitPrice,
+          unitPrice: l.unitPrice,
+          condition: l.condition
+        })),
+        details: returnLines.map(l => ({
+          productId: Number(l.id) || 1,
+          quantity: l.quantity,
+          refundPrice: l.unitPrice
+        }))
       };
 
       if (modalMode === 'create') {
@@ -340,120 +405,236 @@ export function ReturnsListsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo phiếu trả hàng mới' : 'Sửa thông tin phiếu trả'}
+        title={modalMode === 'create' ? '🚚 Tạo phiếu trả hàng mới (Khách Hàng)' : '⚙️ Sửa thông tin phiếu trả hàng'}
+        width="max-w-3xl"
       >
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <form onSubmit={handleSave} className="space-y-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã phiếu trả *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã phiếu trả *</label>
+                {modalMode === 'create' && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem({ ...editingItem, returnCode: `RT-2026-${Date.now().toString().slice(-4)}` })}
+                    className="text-[10px] text-emerald-600 font-bold hover:underline"
+                  >
+                    ⚡ Sinh mã
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingItem.returnCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, returnCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono bg-gray-50"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
-                disabled
+                disabled={modalMode === 'edit'}
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Hóa đơn mua gốc *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Hóa đơn mua gốc *</label>
               <input
                 type="text"
                 value={editingItem.invoiceCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, invoiceCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 placeholder="INV-2026-XXX"
                 required
               />
             </div>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Tên khách hàng *</label>
-            <input
-              type="text"
-              value={editingItem.customerName || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, customerName: e.target.value })}
-              className="w-full p-2 border rounded"
-              placeholder="Họ tên khách hàng"
-              required
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Giá trị hàng trả (VND) *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tên khách hàng *</label>
+              <input
+                type="text"
+                value={editingItem.customerName || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, customerName: e.target.value })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Họ tên khách hàng"
+                required
+              />
+            </div>
+          </div>
+
+          {/* TABLE SẢN PHẨM TRẢ HÀNG */}
+          <div className="p-3 bg-gray-50/80 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                📦 Danh sách sản phẩm trả lại ({returnLines.length})
+              </h4>
+              <button
+                type="button"
+                onClick={handleAddReturnLine}
+                className="px-2.5 py-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm flex items-center gap-1 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> Thêm SP trả
+              </button>
+            </div>
+
+            <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-bold border-b dark:border-gray-700">
+                  <tr>
+                    <th className="p-2">Sản phẩm / SKU</th>
+                    <th className="p-2 w-20 text-center">Số lượng</th>
+                    <th className="p-2 w-28 text-right">Đơn giá hoàn</th>
+                    <th className="p-2 w-32">Tình trạng SP</th>
+                    <th className="p-2 w-28 text-right">Thành tiền</th>
+                    <th className="p-2 w-10 text-center">Xóa</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-900">
+                  {returnLines.map((line) => (
+                    <tr key={line.id}>
+                      <td className="p-1.5 space-y-1">
+                        <input
+                          type="text"
+                          value={line.productName}
+                          onChange={(e) => handleUpdateReturnLine(line.id, 'productName', e.target.value)}
+                          placeholder="Tên sản phẩm..."
+                          className="w-full p-1 border rounded text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                        />
+                        <input
+                          type="text"
+                          value={line.sku}
+                          onChange={(e) => handleUpdateReturnLine(line.id, 'sku', e.target.value.toUpperCase())}
+                          placeholder="Mã SKU..."
+                          className="w-full p-1 border rounded text-[10px] font-mono bg-white dark:bg-gray-800 text-gray-500"
+                        />
+                      </td>
+                      <td className="p-1.5">
+                        <input
+                          type="number"
+                          min="1"
+                          value={line.quantity}
+                          onChange={(e) => handleUpdateReturnLine(line.id, 'quantity', Number(e.target.value))}
+                          className="w-full p-1 border rounded text-center font-mono text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                        />
+                      </td>
+                      <td className="p-1.5">
+                        <input
+                          type="number"
+                          value={line.unitPrice}
+                          onChange={(e) => handleUpdateReturnLine(line.id, 'unitPrice', Number(e.target.value))}
+                          className="w-full p-1 border rounded text-right font-mono text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                        />
+                      </td>
+                      <td className="p-1.5">
+                        <select
+                          value={line.condition}
+                          onChange={(e) => handleUpdateReturnLine(line.id, 'condition', e.target.value)}
+                          className="w-full p-1 border rounded text-[11px] bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                        >
+                          <option value="UNOPENED">🟢 Chưa mở hộp</option>
+                          <option value="DEFECTIVE">🟠 Lỗi nhà sản xuất</option>
+                          <option value="USED_DAMAGED">🔴 Đã dùng / Hỏng</option>
+                        </select>
+                      </td>
+                      <td className="p-1.5 text-right font-mono font-bold text-red-600">
+                        {formatCurrency(line.quantity * line.unitPrice)}
+                      </td>
+                      <td className="p-1.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveReturnLine(line.id)}
+                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {returnLines.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="p-3 text-center text-gray-400 font-medium">
+                        Chưa có sản phẩm trả lại. Bấm "+ Thêm SP trả" để chọn sản phẩm.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Giá trị hàng trả (VND) *</label>
               <input
                 type="number"
                 value={editingItem.returnAmount || 0}
                 onChange={(e) => setEditingItem({ ...editingItem, returnAmount: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full p-2 border border-red-300 dark:border-red-900 rounded font-mono font-bold text-red-600 bg-white dark:bg-gray-900"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Đã hoàn khách (VND) *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Đã hoàn khách (VND) *</label>
               <input
                 type="number"
                 value={editingItem.refundedAmount || 0}
                 onChange={(e) => setEditingItem({ ...editingItem, refundedAmount: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full p-2 border border-emerald-300 dark:border-emerald-900 rounded font-mono font-bold text-emerald-600 bg-white dark:bg-gray-900"
                 required
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày trả hàng *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày trả hàng *</label>
               <input
                 type="date"
                 value={editingItem.returnDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, returnDate: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Thủ kho nhận hàng</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Thủ kho nhận hàng</label>
               <input
                 type="text"
                 value={editingItem.receiver || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, receiver: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 placeholder="Tên nhân viên nhận kho"
               />
             </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tình trạng xử lý *</label>
+              <select
+                value={editingItem.status || 'CHO_KIEM_TRA'}
+                onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              >
+                <option value="CHO_KIEM_TRA">⏳ Chờ Kiểm Kho (Chưa nhập kho)</option>
+                <option value="DA_NHAN_LAI">🟢 Đã nhập lại kho & Duyệt trả</option>
+                <option value="DA_HUY">🔴 Đã hủy phiếu</option>
+              </select>
+            </div>
           </div>
+
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Tình trạng xử lý *</label>
-            <select
-              value={editingItem.status || 'CHO_KIEM_TRA'}
-              onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-              className="w-full p-2 border rounded"
-            >
-              <option value="CHO_KIEM_TRA">Chờ Kiểm Kho (Chưa nhập kho)</option>
-              <option value="DA_NHAN_LAI">Đã nhập lại kho & Duyệt trả</option>
-              <option value="DA_HUY">Đã hủy phiếu</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Chi tiết lý do trả</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chi tiết lý do trả & Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border rounded"
-              rows={3}
-              placeholder="Chi tiết lỗi sản phẩm, số lượng..."
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              rows={2}
+              placeholder="Chi tiết lý do trả hàng, tình trạng phụ kiện đính kèm..."
             />
           </div>
-          <div className="flex justify-end gap-2 pt-2 border-t">
+
+          <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded hover:bg-gray-100"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium rounded-lg transition-colors"
             >
-              Hủy
+              Hủy bỏ
             </button>
-            <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu phiếu
+            <button type="submit" className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow transition-colors">
+              {modalMode === 'create' ? 'Lưu phiếu trả hàng' : 'Cập nhật phiếu'}
             </button>
           </div>
         </form>
