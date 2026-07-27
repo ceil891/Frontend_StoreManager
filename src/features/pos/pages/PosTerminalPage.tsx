@@ -443,7 +443,7 @@ export function PosTerminalPage() {
         setPaymentState('idle');
         setIsPaymentOpen(false);
         setCashGiven('');
-        setIsPrintInvoiceOpen(true);
+        toast.success(`Thanh toán thành công đơn hàng ${code}!`);
       }, 1000);
     };
 
