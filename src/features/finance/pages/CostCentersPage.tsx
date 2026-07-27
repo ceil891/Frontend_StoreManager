@@ -1,33 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit, Trash, Info } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
-
-// Dữ liệu mẫu cho Trung tâm chi phí
-const MOCK_COST_CENTERS = [
-  {
-    id: 'CC001',
-    name: 'Trung tâm chi phí bán hàng',
-    description: 'Chi phí liên quan đến hoạt động bán hàng và marketing',
-    branch: 'Chi nhánh Hà Nội',
-    isActive: true,
-  },
-  {
-    id: 'CC002',
-    name: 'Trung tâm chi phí sản xuất',
-    description: 'Chi phí nguyên vật liệu, máy móc, và lao động',
-    branch: 'Chi nhánh Đà Nẵng',
-    isActive: true,
-  },
-  {
-    id: 'CC003',
-    name: 'Trung tâm chi phí hành chính',
-    description: 'Chi phí văn phòng, nhân sự, pháp lý',
-    branch: 'Chi nhánh TP.HCM',
-    isActive: false,
-  },
-];
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 const columns = [
   {
@@ -79,11 +56,38 @@ const columns = [
 ];
 
 const CostCentersPage: React.FC = () => {
-  const [data, setData] = useState(MOCK_COST_CENTERS);
+  const [data, setData] = useState<any[]>([]);
   const [isDrawerOpen, setDrawerOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [isModalOpen, setModalOpen] = useState(false);
   const [isEditMode, setEditMode] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fetchCostCenters = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const res = await axiosClient.get('/accounting/cost-centers');
+      const list = (res as any).content || res || [];
+      const mapped = (Array.isArray(list) ? list : []).map((item: any) => ({
+        dbId: item.id, // Lưu ID thực tế của database để gọi PUT/DELETE
+        id: item.centerCode || `CC-${item.id}`,
+        name: item.centerName || '',
+        description: item.description || item.note || '',
+        branch: 'Chi nhánh mặc định', // backend CostCenter chưa có branch, lưu tạm
+        isActive: item.isDeleted !== true,
+      }));
+      setData(mapped);
+    } catch (err) {
+      console.error('Lỗi khi lấy dữ liệu trung tâm chi phí:', err);
+      toast.error('Không thể tải danh sách trung tâm chi phí');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCostCenters();
+  }, [fetchCostCenters]);
 
   // Xử lý mở Drawer chi tiết
   const handleRowClick = (item: any) => {
@@ -106,30 +110,55 @@ const CostCentersPage: React.FC = () => {
   };
 
   // Xóa
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    const item = data.find(c => c.id === id);
+    if (!item) return;
+
     if (confirm('Bạn có chắc muốn xóa trung tâm chi phí này?')) {
-      setData(prev => prev.filter(c => c.id !== id));
+      try {
+        await axiosClient.delete(`/accounting/cost-centers/${item.dbId}`);
+        toast.success('Xóa trung tâm chi phí thành công');
+        await fetchCostCenters();
+      } catch (err) {
+        console.error('Lỗi khi xóa trung tâm chi phí:', err);
+        toast.error('Không thể xóa trung tâm chi phí');
+      }
     }
   };
 
   // Lưu (thêm hoặc cập nhật)
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem.id || !selectedItem.name) {
       alert('Vui lòng nhập đầy đủ Mã và Tên trung tâm');
       return;
     }
-    if (isEditMode) {
-      setData(prev => prev.map(c => (c.id === selectedItem.id ? selectedItem : c)));
-    } else {
-      // Kiểm tra trùng mã
-      if (data.some(c => c.id === selectedItem.id)) {
-        alert('Mã trung tâm đã tồn tại');
-        return;
+
+    try {
+      const payload = {
+        centerCode: selectedItem.id,
+        centerName: selectedItem.name,
+        description: selectedItem.description || '',
+      };
+
+      if (isEditMode) {
+        await axiosClient.put(`/accounting/cost-centers/${selectedItem.dbId}`, payload);
+        toast.success('Cập nhật trung tâm chi phí thành công');
+      } else {
+        // Kiểm tra trùng mã
+        if (data.some(c => c.id === selectedItem.id)) {
+          alert('Mã trung tâm đã tồn tại');
+          return;
+        }
+        await axiosClient.post('/accounting/cost-centers', payload);
+        toast.success('Thêm trung tâm chi phí thành công');
       }
-      setData(prev => [...prev, selectedItem]);
+      setModalOpen(false);
+      await fetchCostCenters();
+    } catch (err) {
+      console.error('Lỗi khi lưu trung tâm chi phí:', err);
+      toast.error('Lỗi khi lưu trung tâm chi phí');
     }
-    setModalOpen(false);
   };
 
   // Gắn các hàm thao tác vào mỗi dòng để ReusableDataTable có thể gọi
@@ -153,11 +182,17 @@ const CostCentersPage: React.FC = () => {
           <span>Thêm mới</span>
         </button>
       </div>
-      <ReusableDataTable
-        columns={columns}
-        data={enrichedData}
-        onRowClick={(row: any) => row.original.onRowClick && row.original.onRowClick()}
-      />
+      {isLoading ? (
+        <div className="flex justify-center items-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+        </div>
+      ) : (
+        <ReusableDataTable
+          columns={columns}
+          data={enrichedData}
+          onRowClick={(row: any) => row.original.onRowClick && row.original.onRowClick()}
+        />
+      )}
 
       {/* Drawer chi tiết */}
       <Drawer isOpen={isDrawerOpen} onClose={() => setDrawerOpen(false)} title="Chi tiết Trung tâm chi phí">

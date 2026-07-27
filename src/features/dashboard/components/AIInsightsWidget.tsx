@@ -40,7 +40,7 @@ export function AIInsightsWidget() {
           </div>
           <ul className="space-y-2">
             <li className="flex items-center justify-between text-sm text-gray-700 dark:text-gray-300">
-              <span>Bia Heineken Thùng 24</span>
+              <span>Bia Heineken thùng 24</span>
               <span className="font-medium text-red-600 dark:text-red-400">2 ngày</span>
             </li>
             <li className="flex items-center justify-between text-sm text-gray-700 dark:text-gray-300">

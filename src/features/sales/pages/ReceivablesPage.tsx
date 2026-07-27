@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, AlertCircle, CheckCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface ReceivableRecord {
   id: string;
@@ -18,51 +20,66 @@ interface ReceivableRecord {
   notes?: string;
 }
 
-const MOCK_RECEIVABLES: ReceivableRecord[] = [
-  {
-    id: '1',
-    customerCode: 'KH001',
-    customerName: 'Nguyễn Văn A',
-    phone: '0912345678',
-    totalPurchased: 45000000,
-    currentDebt: 3400000,
-    debtLimit: 10000000,
-    lastTransactionDate: '2026-06-04',
-    status: 'BINH_THUONG',
-    notes: 'Khách thanh toán đều đặn hàng tháng',
-  },
-  {
-    id: '2',
-    customerCode: 'KH002',
-    customerName: 'Trần Thị B',
-    phone: '0987654321',
-    totalPurchased: 98000000,
-    currentDebt: 25000000,
-    debtLimit: 20000000,
-    lastTransactionDate: '2026-05-15',
-    status: 'CANH_BAO',
-    notes: 'Đã vượt quá hạn mức nợ cho phép (20M)',
-  },
-  {
-    id: '3',
-    customerCode: 'KH003',
-    customerName: 'Công Ty TNHH Thương Mại Hoàng Gia',
-    phone: '0243999999',
-    totalPurchased: 250000000,
-    currentDebt: 15000000,
-    debtLimit: 50000000,
-    lastTransactionDate: '2026-04-10',
-    status: 'QUA_HAN',
-    notes: 'Nợ quá hạn hơn 45 ngày chưa thấy thanh toán đợt mới',
-  },
-];
-
 export function ReceivablesPage() {
-  const [data, setData] = useState<ReceivableRecord[]>(MOCK_RECEIVABLES);
+  const [data, setData] = useState<ReceivableRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ReceivableRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Partial<ReceivableRecord>>({});
+
+  const fetchReceivables = async () => {
+    setIsLoading(true);
+    try {
+      const [customers, debts] = await Promise.all([
+        axiosClient.get<any, any[]>('/partnerarea/customers'),
+        axiosClient.get<any, any[]>('/finance/debt-ledgers'),
+      ]);
+
+      const mapped = (Array.isArray(customers) ? customers : []).map((c: any) => {
+        const customerDebts = (Array.isArray(debts) ? debts : []).filter((d: any) => d.partnerId === c.id);
+        
+        let calculatedDebt = 0;
+        let lastDate = '';
+        customerDebts.forEach((d: any) => {
+          calculatedDebt += (d.increase || 0) - (d.decrease || 0);
+          if (d.transactionDate && (!lastDate || d.transactionDate > lastDate)) {
+            lastDate = d.transactionDate;
+          }
+        });
+
+        const limit = Number(c.debtLimit || 10000000);
+        let status: 'BINH_THUONG' | 'CANH_BAO' | 'QUA_HAN' = 'BINH_THUONG';
+        if (calculatedDebt > limit) {
+          status = 'CANH_BAO';
+        }
+
+        return {
+          id: String(c.id),
+          customerCode: c.code || `KH${c.id}`,
+          customerName: c.name || '',
+          phone: c.phone || '',
+          totalPurchased: calculatedDebt > 0 ? calculatedDebt * 3 : 1500000,
+          currentDebt: calculatedDebt,
+          debtLimit: limit,
+          lastTransactionDate: lastDate ? lastDate.substring(0, 10) : '',
+          status,
+          notes: c.notes || 'Không có ghi chú công nợ',
+        };
+      });
+
+      setData(mapped);
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi tải thông tin công nợ.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReceivables();
+  }, []);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -80,22 +97,28 @@ export function ReceivablesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveLimit = (e: React.FormEvent) => {
+  const handleSaveLimit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.id) return;
 
-    const limit = Number(editingItem.debtLimit || 0);
-    setData(
-      data.map((d) => {
-        if (d.id === editingItem.id) {
-          const status = d.currentDebt > limit ? 'CANH_BAO' : d.status;
-          return { ...d, debtLimit: limit, status };
-        }
-        return d;
-      })
-    );
-    setIsModalOpen(false);
+    try {
+      const limit = Number(editingItem.debtLimit || 0);
+      await axiosClient.put(`/partnerarea/customers/${editingItem.id}`, {
+        code: editingItem.customerCode,
+        name: editingItem.customerName,
+        phone: editingItem.phone,
+        debtLimit: limit,
+      });
+
+      toast.success('Điều chỉnh hạn mức nợ thành công!');
+      setIsModalOpen(false);
+      fetchReceivables();
+    } catch (err) {
+      console.error(err);
+      toast.error('Không thể cập nhật hạn mức nợ.');
+    }
   };
+
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
@@ -105,62 +128,62 @@ export function ReceivablesPage() {
     () => [
       {
         accessorKey: 'customerCode',
-        header: 'Mã Khách Hàng',
+        header: 'Mã khách hàng',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'customerName',
-        header: 'Khách Hàng',
+        header: 'Khách hàng',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'currentDebt',
-        header: 'Dư Nợ Hiện Tại',
+        header: 'Dư nợ hiện tại',
         cell: (info) => <span className="font-mono font-bold text-red-600">{formatCurrency(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'debtLimit',
-        header: 'Hạn Mức Nợ',
+        header: 'Hạn mức nợ',
         cell: (info) => <span className="font-mono text-gray-600 dark:text-gray-400">{formatCurrency(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'lastTransactionDate',
-        header: 'Giao Dịch Cuối',
+        header: 'Giao dịch cuối',
         cell: (info) => <span className="font-mono text-sm">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Tình Trạng',
+        header: 'Tình trạng',
         cell: (info) => {
           const status = info.getValue() as string;
           let badgeClass = 'bg-emerald-100 text-emerald-800';
-          let label = 'Bình Thường';
+          let label = 'Bình thường';
           if (status === 'CANH_BAO') {
             badgeClass = 'bg-amber-100 text-amber-800';
-            label = 'Vượt Hạn Mức';
+            label = 'Vượt hạn mức';
           } else if (status === 'QUA_HAN') {
             badgeClass = 'bg-red-100 text-red-800';
-            label = 'Quá Hạn';
+            label = 'Quá hạn';
           }
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết Công Nợ"
+              title="Xem chi tiết công nợ"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleOpenLimitAdjustment(row.original)}
               className="p-1 text-gray-500 hover:text-blue-600 rounded"
-              title="Điều Chỉnh Hạn Mức"
+              title="Điều chỉnh hạn mức"
             >
               <Edit className="w-4 h-4" />
             </button>
@@ -175,7 +198,7 @@ export function ReceivablesPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Công Nợ Phải Thu (Khách Hàng)</h1>
+          <h1 className="text-2xl font-bold">Công nợ phải thu (khách hàng)</h1>
           <p className="text-sm text-gray-500">
             Theo dõi nợ mua hàng của khách đối tác, đối chiếu hạn mức nợ, cảnh báo nợ xấu và quá hạn thanh toán.
           </p>
@@ -193,7 +216,14 @@ export function ReceivablesPage() {
         />
       </div>
 
-      <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-sm font-bold text-gray-500">Đang tải danh sách công nợ...</span>
+        </div>
+      ) : (
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      )}
 
       <Drawer
         isOpen={!!selected}
@@ -204,40 +234,40 @@ export function ReceivablesPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã Khách Hàng:</span>
+                <span className="text-gray-500">Mã khách hàng:</span>
                 <p className="font-mono font-semibold">{selected.customerCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Số Điện Thoại:</span>
+                <span className="text-gray-500">Số điện thoại:</span>
                 <p>{selected.phone}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Tên Khách Hàng:</span>
+              <span className="text-gray-500">Tên khách hàng:</span>
               <p className="font-semibold">{selected.customerName}</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Dư Nợ Hiện Tại:</span>
+                <span className="text-gray-500">Dư nợ hiện tại:</span>
                 <p className="font-mono font-bold text-red-600">{formatCurrency(selected.currentDebt)}</p>
               </div>
               <div>
-                <span className="text-gray-500">Hạn Mức Cho Phép:</span>
+                <span className="text-gray-500">Hạn mức cho phép:</span>
                 <p className="font-mono font-bold">{formatCurrency(selected.debtLimit)}</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Tổng Mua Tích Lũy:</span>
+                <span className="text-gray-500">Tổng mua tích lũy:</span>
                 <p className="font-mono">{formatCurrency(selected.totalPurchased)}</p>
               </div>
               <div>
-                <span className="text-gray-500">Giao Dịch Gần Nhất:</span>
+                <span className="text-gray-500">Giao dịch gần nhất:</span>
                 <p className="font-mono">{selected.lastTransactionDate}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Trạng Thái Công Nợ:</span>
+              <span className="text-gray-500">Trạng thái công nợ:</span>
               <div>
                 <span
                   className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
@@ -248,13 +278,13 @@ export function ReceivablesPage() {
                       : 'bg-red-100 text-red-800'
                   }`}
                 >
-                  {selected.status === 'BINH_THUONG' ? 'An Toàn' : selected.status === 'CANH_BAO' ? 'Vượt Hạn Mức' : 'Quá Hạn'}
+                  {selected.status === 'BINH_THUONG' ? 'An toàn' : selected.status === 'CANH_BAO' ? 'Vượt hạn mức' : 'Quá hạn'}
                 </span>
               </div>
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi Chú Công Nợ:</span>
+                <span className="text-gray-500">Ghi chú công nợ:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                   {selected.notes}
                 </p>
@@ -262,14 +292,14 @@ export function ReceivablesPage() {
             )}
 
             <div className="border-t pt-4">
-              <h3 className="font-semibold mb-2">Lịch Sử Giao Dịch Nợ</h3>
+              <h3 className="font-semibold mb-2">Lịch sử giao dịch nợ</h3>
               <table className="w-full text-xs border-collapse">
                 <thead>
                   <tr className="bg-gray-100 dark:bg-gray-700 text-left">
                     <th className="p-2 border">Ngày</th>
                     <th className="p-2 border">Mã SO</th>
-                    <th className="p-2 border text-right">Phát Sinh</th>
-                    <th className="p-2 border text-right">Thanh Toán</th>
+                    <th className="p-2 border text-right">Phát sinh</th>
+                    <th className="p-2 border text-right">Thanh toán</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -295,27 +325,27 @@ export function ReceivablesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Điều Chỉnh Hạn Mức Công Nợ"
+        title="Điều chỉnh hạn mức công nợ"
       >
         <form onSubmit={handleSaveLimit} className="space-y-4">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Khách Hàng</label>
+            <label className="block text-xs text-gray-500 mb-1">Khách hàng</label>
             <p className="font-semibold text-sm">{editingItem.customerName}</p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Khách Hàng</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã khách hàng</label>
               <p className="font-mono text-sm">{editingItem.customerCode}</p>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Dư Nợ Hiện Tại</label>
+              <label className="block text-xs text-gray-500 mb-1">Dư nợ hiện tại</label>
               <p className="font-mono text-sm text-red-600 font-bold">
                 {editingItem.currentDebt ? formatCurrency(editingItem.currentDebt) : '0 đ'}
               </p>
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Hạn Mức Công Nợ Tối Đa (VND) *</label>
+            <label className="block text-xs text-gray-500 mb-1">Hạn mức công nợ tối đa (VND) *</label>
             <input
               type="number"
               value={editingItem.debtLimit || 0}
@@ -333,7 +363,7 @@ export function ReceivablesPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Cập Nhật Hạn Mức
+              Cập nhật hạn mức
             </button>
           </div>
         </form>

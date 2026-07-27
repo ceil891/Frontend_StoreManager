@@ -1,34 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, MapPin, Globe, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-
-interface AreaItem {
-  id: string;
-  areaCode: string;
-  name: string;
-  level: 'TỈNH_THÀNH' | 'QUẬN_HUYỆN' | 'PHƯỜNG_XÃ';
-  parentId: string | null;
-  parentName?: string;
-  status: 'KÍCH_HOẠT' | 'KHOÁ';
-  createdAt: string;
-  description?: string;
-}
-
-const MOCK_DATA: AreaItem[] = [
-  { id: '1', areaCode: 'KV_HN', name: 'Thành phố Hà Nội', level: 'TỈNH_THÀNH', parentId: null, status: 'KÍCH_HOẠT', createdAt: '2026-01-01', description: 'Khu vực quản lý trọng điểm phía Bắc' },
-  { id: '2', areaCode: 'KV_HCM', name: 'Thành phố Hồ Chí Minh', level: 'TỈNH_THÀNH', parentId: null, status: 'KÍCH_HOẠT', createdAt: '2026-01-01', description: 'Khu vực trung tâm thương mại lớn phía Nam' },
-  { id: '3', areaCode: 'KV_HN_CG', name: 'Quận Cầu Giấy', level: 'QUẬN_HUYỆN', parentId: '1', parentName: 'Thành phố Hà Nội', status: 'KÍCH_HOẠT', createdAt: '2026-01-05', description: 'Khu vực tập trung nhiều văn phòng và trường đại học' },
-  { id: '4', areaCode: 'KV_HCM_Q1', name: 'Quận 1', level: 'QUẬN_HUYỆN', parentId: '2', parentName: 'Thành phố Hồ Chí Minh', status: 'KÍCH_HOẠT', createdAt: '2026-01-06', description: 'Quận tài chính trung tâm TP.HCM' },
-  { id: '5', areaCode: 'KV_HN_CG_DV', name: 'Phường Dịch Vọng', level: 'PHƯỜNG_XÃ', parentId: '3', parentName: 'Quận Cầu Giấy', status: 'KÍCH_HOẠT', createdAt: '2026-01-10', description: 'Thuộc địa bàn Cầu Giấy' },
-  { id: '6', areaCode: 'KV_HCM_Q1_BN', name: 'Phường Bến Nghé', level: 'PHƯỜNG_XÃ', parentId: '4', parentName: 'Quận 1', status: 'KÍCH_HOẠT', createdAt: '2026-01-11', description: 'Thuộc địa bàn trung tâm Quận 1' },
-  { id: '7', areaCode: 'KV_DN', name: 'Thành phố Đà Nẵng', level: 'TỈNH_THÀNH', parentId: null, status: 'KHOÁ', createdAt: '2026-02-01', description: 'Khu vực miền Trung đang tạm ngưng quản lý do tái cấu trúc' }
-];
-
+import { useAreaStore } from '../store/areaStore';
+import type { AreaItem } from '../store/areaStore';
 export function AreasPage() {
-  const [data, setData] = useState<AreaItem[]>(MOCK_DATA);
+  const { areas: data, isLoading, fetchAreas, createArea, updateArea, deleteArea, toggleStatus } = useAreaStore();
+  
+  useEffect(() => {
+    fetchAreas();
+  }, [fetchAreas]);
+
   const [search, setSearch] = useState('');
   const [levelFilter, setLevelFilter] = useState<string>('Tất cả');
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
@@ -91,31 +75,30 @@ export function AreasPage() {
     }
 
     if (modalMode === 'create') {
-      const newItem: AreaItem = {
-        id: String(data.length + 1),
+      createArea({
         areaCode: editingItem.areaCode.toUpperCase(),
         name: editingItem.name,
         level: editingItem.level as any,
         parentId: parentIdVal,
-        parentName: resolvedParentName || undefined,
         description: editingItem.description || '',
         status: editingItem.status || 'KÍCH_HOẠT',
-        createdAt: editingItem.createdAt || new Date().toISOString().split('T')[0],
-      };
-      setData([...data, newItem]);
+      });
     } else if (editingItem.id) {
-      setData(data.map((item) => (item.id === editingItem.id ? {
-        ...(editingItem as AreaItem),
+      updateArea(editingItem.id, {
+        areaCode: editingItem.areaCode.toUpperCase(),
+        name: editingItem.name,
+        level: editingItem.level as any,
         parentId: parentIdVal,
-        parentName: resolvedParentName || undefined
-      } : item)));
+        description: editingItem.description || '',
+        status: editingItem.status || 'KÍCH_HOẠT',
+      });
     }
     setIsModalOpen(false);
   };
 
   const handleDelete = () => {
     if (!deletingItem) return;
-    setData(data.filter((item) => item.id !== deletingItem.id));
+    deleteArea(deletingItem.id);
     setDeletingItem(null);
   };
 
@@ -123,7 +106,7 @@ export function AreasPage() {
     () => [
       {
         accessorKey: 'areaCode',
-        header: 'Mã Khu Vực',
+        header: 'Mã khu vực',
         cell: (info) => (
           <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
             {info.getValue() as string}
@@ -132,12 +115,12 @@ export function AreasPage() {
       },
       {
         accessorKey: 'name',
-        header: 'Tên Khu Vực',
+        header: 'Tên khu vực',
         cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'level',
-        header: 'Cấp Quản Lý',
+        header: 'Cấp quản lý',
         cell: (info) => {
           const val = info.getValue() as string;
           const levelMap: Record<string, { label: string; color: string }> = {
@@ -155,7 +138,7 @@ export function AreasPage() {
       },
       {
         accessorKey: 'parentName',
-        header: 'Khu Vực Cha',
+        header: 'Khu vực cha',
         cell: (info) => (
           <span className="text-gray-600 dark:text-gray-400 font-medium">
             {info.getValue() as string || '—'}
@@ -164,7 +147,7 @@ export function AreasPage() {
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           return (
@@ -183,7 +166,7 @@ export function AreasPage() {
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <button
@@ -219,7 +202,7 @@ export function AreasPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Khu Vực Địa Lý (Địa Bàn Kinh Doanh)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Khu vực địa lý (địa bàn kinh doanh)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Quản lý phân cấp địa lý hành chính phục vụ định tuyến giao hàng, phân công nhân sự và phân tích doanh thu khu vực.
             </p>
@@ -260,8 +243,8 @@ export function AreasPage() {
               >
                 <option value="Tất cả">Tất cả cấp độ</option>
                 <option value="TỈNH_THÀNH">Tỉnh / Thành phố</option>
-                <option value="QUẬN_HUYỆN">Quận / Huyện</option>
-                <option value="PHƯỜNG_XÃ">Phường / Xã</option>
+                <option value="QUẬN_HUYỆN">Quận / huyện</option>
+                <option value="PHƯỜNG_XÃ">Phường / xã</option>
               </select>
             </div>
             <div className="flex items-center gap-2">
@@ -279,7 +262,7 @@ export function AreasPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} />
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedItem(row)} isLoading={isLoading}/>
       </div>
 
       {/* Drawer Chi tiết */}
@@ -306,7 +289,7 @@ export function AreasPage() {
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500">Cấp quản lý hành chính:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">
-                  {selectedItem.level === 'TỈNH_THÀNH' ? 'Tỉnh / Thành phố' : selectedItem.level === 'QUẬN_HUYỆN' ? 'Quận / Huyện' : 'Phường / Xã'}
+                  {selectedItem.level === 'TỈNH_THÀNH' ? 'Tỉnh / Thành phố' : selectedItem.level === 'QUẬN_HUYỆN' ? 'Quận / huyện' : 'Phường / xã'}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
@@ -342,11 +325,11 @@ export function AreasPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Khu Vực Mới' : 'Cập Nhật Khu Vực'}
+        title={modalMode === 'create' ? 'Thêm khu vực mới' : 'Cập nhật khu vực'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã Khu Vực *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã khu vực *</label>
             <input
               type="text"
               value={editingItem.areaCode || ''}
@@ -359,7 +342,7 @@ export function AreasPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên Khu Vực Địa Lý *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên khu vực địa lý *</label>
             <input
               type="text"
               value={editingItem.name || ''}
@@ -371,21 +354,21 @@ export function AreasPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Cấp Quản Lý *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Cấp quản lý *</label>
             <select
               value={editingItem.level || 'TỈNH_THÀNH'}
               onChange={(e) => setEditingItem({ ...editingItem, level: e.target.value as any })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
             >
               <option value="TỈNH_THÀNH">Tỉnh / Thành phố</option>
-              <option value="QUẬN_HUYỆN">Quận / Huyện</option>
-              <option value="PHƯỜNG_XÃ">Phường / Xã</option>
+              <option value="QUẬN_HUYỆN">Quận / huyện</option>
+              <option value="PHƯỜNG_XÃ">Phường / xã</option>
             </select>
           </div>
 
           {editingItem.level !== 'TỈNH_THÀNH' && (
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khu Vực Cha (Cấp trên)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khu vực cha (cấp trên)</label>
               <select
                 value={editingItem.parentId || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, parentId: e.target.value })}
@@ -402,7 +385,7 @@ export function AreasPage() {
           )}
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng Thái</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
             <select
               value={editingItem.status || 'KÍCH_HOẠT'}
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}

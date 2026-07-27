@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, MapPin, Building, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface ShippingAddressRecord {
   id: string;
@@ -18,61 +20,56 @@ interface ShippingAddressRecord {
   notes?: string;
 }
 
-const MOCK_ADDRESSES: ShippingAddressRecord[] = [
-  {
-    id: '1',
-    customerCode: 'KH001',
-    customerName: 'Nguyễn Văn A',
-    phone: '0912345678',
-    fullAddress: '123 Đường Láng, Đống Đa, Hà Nội',
-    city: 'Hà Nội',
-    district: 'Đống Đa',
-    addressType: 'NHA_RIENG',
-    isDefault: true,
-    notes: 'Giao giờ hành chính hoặc tối đều được',
-  },
-  {
-    id: '2',
-    customerCode: 'KH002',
-    customerName: 'Trần Thị B',
-    phone: '0987654321',
-    fullAddress: 'Tòa nhà Keangnam, Mễ Trì, Nam Từ Liêm, Hà Nội',
-    city: 'Hà Nội',
-    district: 'Nam Từ Liêm',
-    addressType: 'VAN_PHONG',
-    isDefault: false,
-    notes: 'Chỉ giao từ thứ 2 đến thứ 6 trước 17h',
-  },
-];
-
 export function ShippingAddressesPage() {
-  const [data, setData] = useState<ShippingAddressRecord[]>(MOCK_ADDRESSES);
+  const [data, setData] = useState<ShippingAddressRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ShippingAddressRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<ShippingAddressRecord>>({});
 
-  const filtered = useMemo(() => {
-    if (!search) return data;
-    const q = search.toLowerCase();
-    return data.filter(
-      (d) =>
-        d.customerName.toLowerCase().includes(q) ||
-        d.customerCode.toLowerCase().includes(q) ||
-        d.phone.includes(q) ||
-        d.fullAddress.toLowerCase().includes(q)
-    );
-  }, [search, data]);
+  const fetchAddresses = async () => {
+    setIsLoading(true);
+    try {
+      const res = await axiosClient.get<any, any[]>('/logistics/addresses');
+      if (Array.isArray(res)) {
+        const mapped = res.map((item: any) => ({
+          id: String(item.id),
+          customerCode: item.customerCode || `KH-${item.id}`,
+          customerName: item.customerName || 'Khách hàng',
+          phone: item.phone || '',
+          fullAddress: item.fullAddress || '',
+          city: item.city || 'Hà Nội',
+          district: item.district || '',
+          addressType: item.addressType || 'NHA_RIENG',
+          isDefault: !!item.isDefault,
+          notes: item.notes || ''
+        }));
+        setData(mapped);
+      } else {
+        setData([]);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi tải danh sách địa chỉ giao hàng.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAddresses();
+  }, []);
 
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingItem({
-      customerCode: '',
+      customerCode: `KH-${Date.now().toString().slice(-6)}`,
       customerName: '',
       phone: '',
       fullAddress: '',
-      city: '',
+      city: 'Hà Nội',
       district: '',
       addressType: 'NHA_RIENG',
       isDefault: false,
@@ -87,74 +84,101 @@ export function ShippingAddressesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.customerCode || !editingItem.customerName || !editingItem.fullAddress) return;
 
-    if (modalMode === 'create') {
-      const newItem: ShippingAddressRecord = {
-        id: String(data.length + 1),
-        customerCode: editingItem.customerCode.toUpperCase(),
-        customerName: editingItem.customerName!,
-        phone: editingItem.phone || '',
-        fullAddress: editingItem.fullAddress!,
-        city: editingItem.city || '',
-        district: editingItem.district || '',
-        addressType: editingItem.addressType as any || 'NHA_RIENG',
-        isDefault: editingItem.isDefault || false,
-        notes: editingItem.notes,
+    try {
+      const payload = {
+        customerCode: editingItem.customerCode,
+        customerName: editingItem.customerName,
+        phone: editingItem.phone,
+        fullAddress: editingItem.fullAddress,
+        city: editingItem.city,
+        district: editingItem.district,
+        addressType: editingItem.addressType,
+        isDefault: !!editingItem.isDefault,
+        notes: editingItem.notes
       };
-      setData([...data, newItem]);
-    } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as ShippingAddressRecord) : d)));
+
+      if (modalMode === 'create') {
+        await axiosClient.post('/logistics/addresses', payload);
+        toast.success('Thêm địa chỉ giao hàng mới thành công!');
+      } else {
+        await axiosClient.put(`/logistics/addresses/${editingItem.id}`, payload);
+        toast.success('Cập nhật địa chỉ giao hàng thành công!');
+      }
+      setIsModalOpen(false);
+      fetchAddresses();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi lưu địa chỉ giao hàng.');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa địa chỉ này?')) {
-      setData(data.filter((d) => d.id !== id));
+      try {
+        await axiosClient.delete(`/logistics/addresses/${id}`);
+        toast.success('Đã xóa địa chỉ giao hàng thành công!');
+        fetchAddresses();
+      } catch (err) {
+        console.error(err);
+        toast.error('Lỗi khi xóa địa chỉ giao hàng.');
+      }
     }
   };
+
+  const filtered = useMemo(() => {
+    if (!search) return data;
+    const q = search.toLowerCase();
+    return data.filter(
+      (d) =>
+        d.customerName.toLowerCase().includes(q) ||
+        d.customerCode.toLowerCase().includes(q) ||
+        d.phone.includes(q) ||
+        d.fullAddress.toLowerCase().includes(q)
+    );
+  }, [search, data]);
 
   const columns = useMemo<ColumnDef<ShippingAddressRecord>[]>(
     () => [
       {
         accessorKey: 'customerCode',
-        header: 'Mã Khách Hàng',
+        header: 'Mã khách hàng',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'customerName',
-        header: 'Tên Khách Hàng',
+        header: 'Tên khách hàng',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'phone',
-        header: 'Số Điện Thoại',
+        header: 'Số điện thoại',
         cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'fullAddress',
-        header: 'Địa Chỉ Giao Hàng',
+        header: 'Địa chỉ giao hàng',
         cell: (info) => <span className="truncate max-w-xs block">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'addressType',
-        header: 'Loại Địa Chỉ',
+        header: 'Loại địa chỉ',
         cell: (info) => {
           const val = info.getValue() as string;
-          const label = val === 'VAN_PHONG' ? 'Văn Phòng' : 'Nhà Riêng';
+          const label = val === 'VAN_PHONG' ? 'Văn Phòng' : 'Nhà riêng';
           return <span>{label}</span>;
         },
       },
       {
         accessorKey: 'isDefault',
-        header: 'Mặc Định',
+        header: 'Mặc định',
         cell: (info) => {
           const val = info.getValue() as boolean;
           return val ? (
-            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Mặc Định</span>
+            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Mặc định</span>
           ) : (
             <span className="px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">Phụ</span>
           );
@@ -162,13 +186,13 @@ export function ShippingAddressesPage() {
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết"
+              title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -197,7 +221,7 @@ export function ShippingAddressesPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Danh Mục Địa Chỉ Nhận Hàng (Shipping Addresses)</h1>
+          <h1 className="text-2xl font-bold">Danh mục địa chỉ nhận hàng (shipping addresses)</h1>
           <p className="text-sm text-gray-500">
             Xem và cấu hình sổ địa chỉ nhận hàng của khách hàng đối tác, cấu hình địa chỉ giao mặc định hỗ trợ POS lên đơn.
           </p>
@@ -221,7 +245,14 @@ export function ShippingAddressesPage() {
         />
       </div>
 
-      <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-sm font-bold text-gray-500">Đang tải danh sách địa chỉ giao hàng...</span>
+        </div>
+      ) : (
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      )}
 
       <Drawer
         isOpen={!!selected}
@@ -232,11 +263,11 @@ export function ShippingAddressesPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã Khách Hàng:</span>
+                <span className="text-gray-500">Mã khách hàng:</span>
                 <p className="font-mono font-semibold">{selected.customerCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Số Điện Thoại:</span>
+                <span className="text-gray-500">Số điện thoại:</span>
                 <p className="font-mono">{selected.phone}</p>
               </div>
             </div>
@@ -252,31 +283,31 @@ export function ShippingAddressesPage() {
                 <p className="font-semibold">{selected.district}</p>
               </div>
               <div>
-                <span className="text-gray-500">Tỉnh/Thành Phố:</span>
+                <span className="text-gray-500">Tỉnh/thành phố:</span>
                 <p className="font-semibold">{selected.city}</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Loại Địa Chỉ:</span>
-                <p>{selected.addressType === 'VAN_PHONG' ? 'Văn Phòng Công Ty' : 'Nhà Riêng'}</p>
+                <span className="text-gray-500">Loại địa chỉ:</span>
+                <p>{selected.addressType === 'VAN_PHONG' ? 'Văn Phòng công ty' : 'Nhà riêng'}</p>
               </div>
               <div>
-                <span className="text-gray-500">Mặc Định:</span>
+                <span className="text-gray-500">Mặc định:</span>
                 <div>
                   <span
                     className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
                       selected.isDefault ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
                     }`}
                   >
-                    {selected.isDefault ? 'Đồng Ý Mặc Định' : 'Địa Chỉ Phụ'}
+                    {selected.isDefault ? 'Đồng Ý mặc định' : 'Địa chỉ phụ'}
                   </span>
                 </div>
               </div>
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi Chú Giao Nhận:</span>
+                <span className="text-gray-500">Ghi chú giao nhận:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                   {selected.notes}
                 </p>
@@ -289,12 +320,12 @@ export function ShippingAddressesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Địa Chỉ Giao Hàng Mới' : 'Sửa Địa Chỉ Giao Hàng'}
+        title={modalMode === 'create' ? 'Thêm địa chỉ giao hàng mới' : 'Sửa địa chỉ giao hàng'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Khách Hàng *</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã khách hàng *</label>
               <input
                 type="text"
                 value={editingItem.customerCode || ''}
@@ -305,7 +336,7 @@ export function ShippingAddressesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tổng Đài / Số Điện Thoại *</label>
+              <label className="block text-xs text-gray-500 mb-1">Tổng đài / số điện thoại *</label>
               <input
                 type="text"
                 value={editingItem.phone || ''}
@@ -318,7 +349,7 @@ export function ShippingAddressesPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tên Khách Hàng *</label>
+              <label className="block text-xs text-gray-500 mb-1">Tên khách hàng *</label>
               <input
                 type="text"
                 value={editingItem.customerName || ''}
@@ -329,7 +360,7 @@ export function ShippingAddressesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Địa Chỉ Chi Tiết *</label>
+              <label className="block text-xs text-gray-500 mb-1">Địa chỉ chi tiết *</label>
               <input
                 type="text"
                 value={editingItem.fullAddress || ''}
@@ -342,7 +373,7 @@ export function ShippingAddressesPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Quận / Huyện *</label>
+              <label className="block text-xs text-gray-500 mb-1">Quận / huyện *</label>
               <input
                 type="text"
                 value={editingItem.district || ''}
@@ -353,7 +384,7 @@ export function ShippingAddressesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tỉnh / Thành Phố *</label>
+              <label className="block text-xs text-gray-500 mb-1">Tỉnh / thành phố *</label>
               <input
                 type="text"
                 value={editingItem.city || ''}
@@ -366,7 +397,7 @@ export function ShippingAddressesPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Loại Địa Chỉ *</label>
+              <label className="block text-xs text-gray-500 mb-1">Loại địa chỉ *</label>
               <select
                 value={editingItem.addressType || 'NHA_RIENG'}
                 onChange={(e) => setEditingItem({ ...editingItem, addressType: e.target.value as any })}
@@ -390,7 +421,7 @@ export function ShippingAddressesPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú</label>
+            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
@@ -408,7 +439,7 @@ export function ShippingAddressesPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Địa Chỉ
+              Lưu địa chỉ
             </button>
           </div>
         </form>

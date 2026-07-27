@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, Calendar, FileCheck, Landmark, ShieldAlert, Award, FileText, CheckCircle2, Clock, XCircle, UserCheck } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface SupplierContractItem {
   id: string;
@@ -19,55 +21,50 @@ interface SupplierContractItem {
   appendixText?: string;
 }
 
-const MOCK_DATA: SupplierContractItem[] = [
-  {
-    id: '1',
-    contractNumber: 'HD-NCC-2026-001',
-    supplierName: 'Công ty Cổ phần Sữa Việt Nam (Vinamilk)',
-    signingDate: '2026-01-01',
-    expirationDate: '2027-01-01',
-    maxDebtLimit: 500000000,
-    status: 'ĐANG_HIỆU_LỰC',
-    representative: 'Bà Mai Kiều Liên (Giám đốc)',
-    paymentTerms: 'Gối đầu công nợ 30 ngày từ khi nhận hóa đơn tài chính.',
-    contractVal: 2400000000,
-    appendixText: 'Đảm bảo chiết khấu thương mại 5% nếu tổng sản lượng mua hàng vượt 200 triệu/tháng.'
-  },
-  {
-    id: '2',
-    contractNumber: 'HD-NCC-2025-089',
-    supplierName: 'Công ty TNHH Unilever Việt Nam',
-    signingDate: '2025-01-10',
-    expirationDate: '2026-01-10',
-    maxDebtLimit: 800000000,
-    status: 'THANH_LÝ',
-    representative: 'Ông Jean-Laurent Ingles (Tổng giám đốc)',
-    paymentTerms: 'Thanh toán chuyển khoản 100% sau khi giao hàng 15 ngày.',
-    contractVal: 5000000000,
-    appendixText: 'Hợp đồng đã kết thúc kỳ hạn và các bên đã hoàn tất đối chiếu công nợ cuối kỳ.'
-  },
-  {
-    id: '3',
-    contractNumber: 'HD-NCC-2026-042',
-    supplierName: 'Nhà máy Bia & Nước giải khát Heineken Việt Nam',
-    signingDate: '2026-05-20',
-    expirationDate: '2028-05-20',
-    maxDebtLimit: 1200000000,
-    status: 'CHỜ_KÝ',
-    representative: 'Ông Alexander Koch (Giám đốc thương mại)',
-    paymentTerms: 'Đặt cọc 20%, thanh toán 80% còn lại trong vòng 7 ngày làm việc sau khi nhận hàng.',
-    contractVal: 8000000000,
-    appendixText: 'Phụ lục về phân phối độc quyền dòng sản phẩm mới đang đợi phê duyệt từ ban lãnh đạo.'
-  }
-];
-
 export function SupplierContractsPage() {
-  const [data, setData] = useState<SupplierContractItem[]>(MOCK_DATA);
+  const [data, setData] = useState<SupplierContractItem[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
   const [selectedItem, setSelectedItem] = useState<SupplierContractItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Partial<SupplierContractItem>>({});
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fetchContracts = async () => {
+    try {
+      setIsLoading(true);
+      const res = await axiosClient.get('/purchase/contracts?size=500');
+      const list = (res as any).content || res || [];
+      const mapped: SupplierContractItem[] = (Array.isArray(list) ? list : []).map((item: any) => {
+        let status: SupplierContractItem['status'] = 'CHỜ_KÝ';
+        if (item.status === 'ACTIVE') status = 'ĐANG_HIỆU_LỰC';
+        else if (item.status === 'EXPIRED' || item.status === 'TERMINATED') status = 'THANH_LÝ';
+        return {
+          id: String(item.id),
+          contractNumber: item.contractCode || '',
+          supplierName: item.supplier?.name || '',
+          signingDate: item.signedDate || item.startDate || '',
+          expirationDate: item.endDate || '',
+          maxDebtLimit: item.maxDebtLimit || 0,
+          status,
+          representative: item.signedBy || '',
+          paymentTerms: item.paymentTerm || '',
+          contractVal: item.contractValue || 0,
+          appendixText: item.appendixText || '',
+        };
+      });
+      setData(mapped);
+    } catch (err) {
+      console.error('Lỗi tải danh sách hợp đồng:', err);
+      toast.error('Không thể tải danh sách hợp đồng');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchContracts();
+  }, []);
 
   const filtered = data.filter((item) => {
     const matchesSearch =
@@ -94,25 +91,34 @@ export function SupplierContractsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.supplierName || !editingItem.maxDebtLimit) return;
 
-    const newItem: SupplierContractItem = {
-      id: String(data.length + 1),
-      contractNumber: editingItem.contractNumber || `HD-NCC-2026-0${data.length + 1}`,
-      supplierName: editingItem.supplierName,
-      signingDate: editingItem.signingDate || new Date().toISOString().split('T')[0],
-      expirationDate: editingItem.expirationDate || new Date().toISOString().split('T')[0],
-      maxDebtLimit: Number(editingItem.maxDebtLimit),
-      status: (editingItem.status as any) || 'CHỜ_KÝ',
-      representative: editingItem.representative || 'Chưa cập nhật',
-      paymentTerms: editingItem.paymentTerms || '',
-      contractVal: Number(editingItem.contractVal || 0),
-      appendixText: editingItem.appendixText || ''
-    };
-    setData([newItem, ...data]);
-    setIsModalOpen(false);
+    try {
+      const statusMap: Record<string, string> = {
+        'ĐANG_HIỆU_LỰC': 'ACTIVE',
+        'THANH_LÝ': 'TERMINATED',
+        'CHỜ_KÝ': 'DRAFT',
+      };
+      const payload = {
+        contractCode: editingItem.contractNumber || `HD-NCC-2026-0${data.length + 1}`,
+        startDate: editingItem.signingDate || new Date().toISOString().split('T')[0],
+        signedDate: editingItem.signingDate || new Date().toISOString().split('T')[0],
+        endDate: editingItem.expirationDate || new Date().toISOString().split('T')[0],
+        maxDebtLimit: Number(editingItem.maxDebtLimit),
+        status: statusMap[editingItem.status || 'CHỜ_KÝ'] || 'DRAFT',
+        signedBy: editingItem.representative || '',
+        paymentTerm: editingItem.paymentTerms || '',
+      };
+      await axiosClient.post('/purchase/contracts', payload);
+      toast.success('Tạo hợp đồng nhà cung cấp thành công');
+      await fetchContracts();
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error('Lỗi tạo hợp đồng:', err);
+      toast.error('Không thể tạo hợp đồng nhà cung cấp');
+    }
   };
 
   const formatCurrency = (val: number) => {
@@ -123,7 +129,7 @@ export function SupplierContractsPage() {
     () => [
       {
         accessorKey: 'contractNumber',
-        header: 'Số Hợp Đồng',
+        header: 'Số hợp đồng',
         cell: (info) => (
           <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
             {info.getValue() as string}
@@ -132,12 +138,12 @@ export function SupplierContractsPage() {
       },
       {
         accessorKey: 'supplierName',
-        header: 'Nhà Cung Cấp',
+        header: 'Nhà cung cấp',
         cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'signingDate',
-        header: 'Ngày Ký Kết',
+        header: 'Ngày ký kết',
         cell: (info) => (
           <span className="inline-flex items-center gap-1 text-sm text-gray-600 dark:text-gray-300">
             <Calendar className="w-3.5 h-3.5 text-gray-400" />
@@ -147,7 +153,7 @@ export function SupplierContractsPage() {
       },
       {
         accessorKey: 'expirationDate',
-        header: 'Ngày Hết Hạn',
+        header: 'Ngày hết hạn',
         cell: (info) => (
           <span className="inline-flex items-center gap-1 text-sm text-gray-600 dark:text-gray-300">
             <Calendar className="w-3.5 h-3.5 text-red-400" />
@@ -157,12 +163,12 @@ export function SupplierContractsPage() {
       },
       {
         accessorKey: 'maxDebtLimit',
-        header: 'Hạn Mức Nợ Tối Đa',
+        header: 'Hạn mức nợ tối đa',
         cell: (info) => <span className="font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái Hiệu Lực',
+        header: 'Trạng thái hiệu lực',
         cell: (info) => {
           const status = info.getValue() as string;
           let badgeClass = '';
@@ -189,7 +195,7 @@ export function SupplierContractsPage() {
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <button
@@ -211,7 +217,7 @@ export function SupplierContractsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hợp Đồng Nhà Cung Cấp (Supplier Contract)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hợp đồng nhà cung cấp (supplier contract)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Lưu trữ hợp đồng pháp lý, điều khoản thanh toán, hạn mức nợ và sản lượng chiết khấu cam kết với đối tác phân phối.
             </p>
@@ -257,7 +263,13 @@ export function SupplierContractsPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} />
+        {isLoading ? (
+          <div className="flex justify-center items-center py-20">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-500" />
+          </div>
+        ) : (
+          <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedItem(row)} />
+        )}
       </div>
 
       {/* Drawer chi tiết hợp đồng */}

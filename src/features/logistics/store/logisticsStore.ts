@@ -18,15 +18,26 @@ const resolveProductIdBySku = (sku?: string): number => {
   return p ? Number(p.id) : 1;
 };
 
+const resolveProductUnitIdBySku = (sku?: string): number | undefined => {
+  if (!sku) return undefined;
+  const products = useInventoryStore.getState().products;
+  const p = products.find(prod => prod.sku === sku);
+  if (!p || !p.units?.length) return undefined;
+  const base = p.units.find(u => u.isBaseUnit) ?? p.units.find(u => u.conversionRate === 1) ?? p.units[0];
+  return base ? Number(base.id) : undefined;
+};
+
 // ---------------------------
 // TYPES: PRICE LISTS
 // ---------------------------
 export interface PriceListDetail {
   id: string;
-  sku: string;           // Target Product SKU
+  sku: string;
   productName: string;
-  basePrice: number;     // Reference retail base price
-  overridePrice: number; // The new target price in this matrix
+  basePrice: number;
+  overridePrice: number;
+  productUnitId?: string;
+  unitName?: string;
 }
 
 export interface PriceListSchedule {
@@ -44,17 +55,47 @@ export interface PriceListSchedule {
   details: PriceListDetail[]; // Specifically overridden SKUs for this list
 }
 
-// ---------------------------
-// STATE INTERFACE
-// ---------------------------
 interface LogisticsState {
   priceLists: PriceListSchedule[];
-  
   fetchPriceLists: () => Promise<void>;
-  // PriceList Actions
   addPriceList: (list: Omit<PriceListSchedule, 'id'>) => Promise<void>;
   updatePriceList: (id: string, data: Partial<PriceListSchedule>) => Promise<void>;
   deletePriceList: (id: string) => Promise<void>;
+
+  promotions: PromotionRecord[];
+  shippingCharges: ShippingChargeRecord[];
+
+  fetchPromotions: () => Promise<void>;
+  addPromotion: (item: Omit<PromotionRecord, 'id'>) => Promise<void>;
+  updatePromotion: (id: string, data: Partial<PromotionRecord>) => Promise<void>;
+  deletePromotion: (id: string) => Promise<void>;
+
+  fetchShippingCharges: () => Promise<void>;
+  addShippingCharge: (item: Omit<ShippingChargeRecord, 'id'>) => Promise<void>;
+  updateShippingCharge: (id: string, data: Partial<ShippingChargeRecord>) => Promise<void>;
+  deleteShippingCharge: (id: string) => Promise<void>;
+}
+
+export interface PromotionRecord {
+  id: string;
+  promoCode: string;
+  promoName: string;
+  discountType: 'PERCENT' | 'AMOUNT';
+  discountValue: number;
+  startDate: string;
+  endDate: string;
+  status: 'ACTIVE' | 'EXPIRED' | 'PAUSED';
+}
+
+export interface ShippingChargeRecord {
+  id: string;
+  zoneCode: string;
+  zoneName: string;
+  carrierName: string;
+  baseFee: number;
+  perKgFee: number;
+  estimatedHours: number;
+  status: 'ACTIVE' | 'INACTIVE';
 }
 
 export const useLogisticsStore = create<LogisticsState>()(
@@ -64,7 +105,7 @@ export const useLogisticsStore = create<LogisticsState>()(
 
       fetchPriceLists: async () => {
         try {
-          const res = await axiosClient.get<any, any[]>('/pricelists');
+           const res = await axiosClient.get<any, any[]>('/catalog/price-lists');
           const mapped = res.map((p: any) => ({
             id: String(p.id),
             listCode: p.listCode || '',
@@ -83,6 +124,8 @@ export const useLogisticsStore = create<LogisticsState>()(
               productName: d.productName || '',
               basePrice: Number(d.price || 0),
               overridePrice: Number(d.price || 0),
+              productUnitId: d.productUnitId ? String(d.productUnitId) : undefined,
+              unitName: d.unitName || '',
             })) : [],
           }));
           set({ priceLists: mapped });
@@ -101,10 +144,11 @@ export const useLogisticsStore = create<LogisticsState>()(
             isActive: list.status === 'ACTIVE',
             details: list.details?.map(d => ({
               productId: resolveProductIdBySku(d.sku),
+              productUnitId: d.productUnitId ? Number(d.productUnitId) : resolveProductUnitIdBySku(d.sku),
               price: d.overridePrice,
             })) || [],
           };
-          await axiosClient.post('/pricelists', payload);
+          await axiosClient.post('/catalog/price-lists', payload);
           await get().fetchPriceLists();
         } catch (error) {
           console.error('Failed to add price list:', error);
@@ -121,10 +165,11 @@ export const useLogisticsStore = create<LogisticsState>()(
             isActive: data.status === undefined ? undefined : data.status === 'ACTIVE',
             details: data.details?.map(d => ({
               productId: resolveProductIdBySku(d.sku),
+              productUnitId: d.productUnitId ? Number(d.productUnitId) : resolveProductUnitIdBySku(d.sku),
               price: d.overridePrice,
             })) || [],
           };
-          await axiosClient.put(`/pricelists/${id}`, payload);
+          await axiosClient.put(`/catalog/price-lists/${id}`, payload);
           await get().fetchPriceLists();
         } catch (error) {
           console.error('Failed to update price list:', error);
@@ -132,10 +177,81 @@ export const useLogisticsStore = create<LogisticsState>()(
       },
       deletePriceList: async (id) => {
         try {
-          await axiosClient.delete(`/pricelists/${id}`);
+          await axiosClient.delete(`/catalog/price-lists/${id}`);
           await get().fetchPriceLists();
         } catch (error) {
           console.error('Failed to delete price list:', error);
+        }
+      },
+
+      promotions: [],
+      shippingCharges: [],
+
+      fetchPromotions: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/logistics/promotions');
+          const data = res.content || res || [];
+          set({ promotions: Array.isArray(data) ? data : [] });
+        } catch (error) {
+          console.error('Failed to fetch promotions:', error);
+        }
+      },
+      addPromotion: async (item) => {
+        try {
+          await axiosClient.post('/logistics/promotions', item);
+          await get().fetchPromotions();
+        } catch (error) {
+          console.error('Failed to add promotion:', error);
+        }
+      },
+      updatePromotion: async (id, data) => {
+        try {
+          await axiosClient.put(`/logistics/promotions/${id}`, data);
+          await get().fetchPromotions();
+        } catch (error) {
+          console.error('Failed to update promotion:', error);
+        }
+      },
+      deletePromotion: async (id) => {
+        try {
+          await axiosClient.delete(`/logistics/promotions/${id}`);
+          await get().fetchPromotions();
+        } catch (error) {
+          console.error('Failed to delete promotion:', error);
+        }
+      },
+
+      fetchShippingCharges: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/logistics/shipping-charges');
+          const data = res.content || res || [];
+          set({ shippingCharges: Array.isArray(data) ? data : [] });
+        } catch (error) {
+          console.error('Failed to fetch shipping charges:', error);
+        }
+      },
+      addShippingCharge: async (item) => {
+        try {
+          await axiosClient.post('/logistics/shipping-charges', item);
+          await get().fetchShippingCharges();
+        } catch (error) {
+          console.error('Failed to add shipping charge:', error);
+        }
+      },
+      updateShippingCharge: async (id, data) => {
+        try {
+          await axiosClient.put(`/logistics/shipping-charges/${id}`, data);
+          await get().fetchShippingCharges();
+        } catch (error) {
+          console.error('Failed to update shipping charge:', error);
+        }
+      },
+      deleteShippingCharge: async (id) => {
+        try {
+          await axiosClient.delete(`/logistics/shipping-charges/${id}`);
+          await get().fetchShippingCharges();
+        } catch (error) {
+          console.error('Failed to delete shipping charge:', error);
         }
       },
     }),

@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, AlertOctagon, Terminal, ShieldAlert, Cpu, CheckCircle2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface SystemErrorLogRecord {
   id: string;
@@ -19,13 +21,6 @@ interface SystemErrorLogRecord {
   assignedEngineer?: string;
 }
 
-const MOCK_ERROR_LOGS: SystemErrorLogRecord[] = [
-  { id: '1', errorHash: 'ERR-20240518-A81', timestamp: '2024-05-18 06:42:12', severity: 'FATAL_PANIC', subsystem: 'POSTGRES_MASTER', errorCode: 'PG-08006', errorMessage: 'Connection pool exhausted. HikariCP failed to obtain connection within 30000ms timeout.', stackTraceSnippet: 'org.postgresql.util.PSQLException: FATAL: remaining connection slots are reserved for non-replication superuser connections\n\tat org.postgresql.core.v3.ConnectionFactoryImpl.readStartupMessages(ConnectionFactoryImpl.java:130)', nodeHostname: 'prod-db-us-east-1a', resolved: false, assignedEngineer: 'Johnathan Vance' },
-  { id: '2', errorHash: 'ERR-20240518-B22', timestamp: '2024-05-18 05:15:00', severity: 'CRITICAL_EXCEPTION', subsystem: 'STRIPE_WEBHOOK_GW', errorCode: 'GW-STRIPE-401', errorMessage: 'Webhook signature verification failed for event ch_3Mxx. Potential replay attack or secret mismatch.', stackTraceSnippet: 'com.stripe.exception.SignatureVerificationException: No matching signature found for payload\n\tat com.stripe.net.Webhook.Signature.verifyHeader(Webhook.java:82)', nodeHostname: 'api-gw-node-04', resolved: true, resolvedTimestamp: '2024-05-18 05:30:00', assignedEngineer: 'Sarah Jenkins' },
-  { id: '3', errorHash: 'ERR-20240517-C91', timestamp: '2024-05-17 21:00:45', severity: 'ERROR_TIMEOUT', subsystem: 'REDIS_CACHE_CLUSTER', errorCode: 'RDS-TIMEOUT-504', errorMessage: 'Redis command timed out after 5000ms on key cache:inventory:stock:sku-9921', stackTraceSnippet: 'io.lettuce.core.RedisCommandTimeoutException: Command timed out after 5 second(s)\n\tat io.lettuce.core.ExceptionFactory.createTimeoutException(ExceptionFactory.java:51)', nodeHostname: 'redis-cache-shard-2', resolved: false },
-  { id: '4', errorHash: 'ERR-20240517-D04', timestamp: '2024-05-17 14:10:00', severity: 'AUTH_VIOLATION', subsystem: 'BBPOS_SLED_UART', errorCode: 'POS-SEC-880', errorMessage: 'Biometric fingerprint reader UART parity error during supervisor override sequence.', stackTraceSnippet: 'java.io.IOException: UART frame corruption detected on /dev/ttyUSB0\n\tat com.retailhub.pos.hardware.BioSled.readBuffer(BioSled.java:204)', nodeHostname: 'pos-register-term-02', resolved: true, resolvedTimestamp: '2024-05-17 14:15:00', assignedEngineer: 'Marcus Aurelius' },
-  { id: '5', errorHash: 'ERR-20240516-E12', timestamp: '2024-05-16 09:00:00', severity: 'WARNING_DEPRECATION', subsystem: 'OMNICHANNEL_SYNC', errorCode: 'SYNC-DEP-202', errorMessage: 'Shopify Admin API version 2023-04 deprecation header received in sync response payload.', stackTraceSnippet: 'Header Warning: 299 - "This API version is scheduled for deprecation on July 1st, 2024"', nodeHostname: 'sync-worker-k8s-01', resolved: false },
-];
 
 const severityBadgeStyles = {
   FATAL_PANIC: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-red-200 animate-pulse font-mono font-bold',
@@ -45,8 +40,34 @@ const subsystemStyles = {
 
 type SearchField = 'all' | 'errorHash' | 'errorCode' | 'errorMessage' | 'subsystem' | 'nodeHostname';
 
+import { useSystemStore } from '../store/systemStore';
+
 export function SystemErrorLogPage() {
-  const [data, setData] = useState<SystemErrorLogRecord[]>(MOCK_ERROR_LOGS);
+  const {
+    systemErrorLogs: storeLogs,
+    fetchSystemErrorLogs,
+  } = useSystemStore();
+
+  useEffect(() => {
+    fetchSystemErrorLogs();
+  }, [fetchSystemErrorLogs]);
+
+  const data: SystemErrorLogRecord[] = useMemo(() => {
+    return storeLogs.map((l) => ({
+      id: l.id,
+      errorHash: l.logCode,
+      timestamp: l.timestamp,
+      severity: l.severity === 'CRITICAL' ? 'FATAL_PANIC' : 'ERROR_TIMEOUT',
+      subsystem: 'POSTGRES_MASTER',
+      errorCode: l.logCode,
+      errorMessage: `${l.serviceName}: ${l.errorMessage}`,
+      stackTraceSnippet: l.stackTrace,
+      nodeHostname: 'server-node-01',
+      resolved: false,
+    }));
+  }, [storeLogs]);
+
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [search, setSearch] = useState('');
   const [searchField, setSearchField] = useState<SearchField>('all');
   const [selectedError, setSelectedError] = useState<SystemErrorLogRecord | null>(null);
@@ -122,11 +143,8 @@ export function SystemErrorLogPage() {
     const isResolved = !error.resolved;
     const timestamp = isResolved ? new Date().toISOString().replace('T', ' ').substring(0, 19) : undefined;
     
-    setData(prev => prev.map(item => item.id === error.id ? {
-      ...item,
-      resolved: isResolved,
-      resolvedTimestamp: timestamp
-    } : item));
+    // TODO: update store
+    // setData(prev => prev.map(item => item.id === error.id ? { ... } : item));
 
     setSelectedError(prev => prev && prev.id === error.id ? {
       ...prev,
@@ -333,7 +351,7 @@ export function SystemErrorLogPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedError(row)} />
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedError(row)} isLoading={isLoading} />
       </div>
 
       <Drawer

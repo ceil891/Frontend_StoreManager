@@ -18,7 +18,7 @@ const REVENUE_DATASET = {
     { name: 'Thứ 5', total: 2400, orders: 48 },
     { name: 'Thứ 6', total: 2800, orders: 56 },
     { name: 'Thứ 7', total: 3200, orders: 64 },
-    { name: 'Chủ Nhật', total: 2900, orders: 58 },
+    { name: 'Chủ nhật', total: 2900, orders: 58 },
   ],
   '30d': [
     { name: 'Tuần 1', total: 14500, orders: 290 },
@@ -75,13 +75,6 @@ const KPI_DATASET = {
     { title: 'Tỷ lệ chốt đơn', value: '3.9%', valueSuffix: '', trend: '+2.5%', isUp: true, icon: TrendingUp, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40 border-amber-100 dark:border-amber-900/20' },
   ]
 };
-
-const MOCK_RECENT_ACTIVITIES = [
-  { id: 'act-1', type: 'SALE', text: 'Đơn hàng POS #1024 hoàn tất giao dịch', meta: 'Tổng cộng: 1.250.000đ', time: '5 phút trước' },
-  { id: 'act-2', type: 'INVENTORY', text: 'Nhập kho thành công Lô Bánh Ngọt Pháp #204', meta: 'SKU-FOOD-102 • Qty: 200', time: '18 phút trước' },
-  { id: 'act-3', type: 'WARNING', text: 'Cảnh báo: Sản phẩm Samsung Galaxy S24 sắp hết hàng', meta: 'Còn lại trong kho: 5 đơn vị', time: '1 giờ trước' },
-  { id: 'act-4', type: 'CUSTOMER', text: 'Khách hàng VIP Nguyễn Văn A nâng hạng kim cương', meta: 'Chi tiêu tích lũy vượt 50.000.000đ', time: '2 giờ trước' },
-];
 
 export function DashboardPage() {
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'ytd'>('7d');
@@ -343,7 +336,7 @@ export function DashboardPage() {
           </div>
 
           <div className="space-y-4 mt-6">
-            {MOCK_RECENT_ACTIVITIES.map((act) => (
+            {([] as any[]).map((act) => (
               <div key={act.id} className="flex gap-3 text-xs leading-relaxed group">
                 {/* Indicator Line Left icon */}
                 <div className="relative flex flex-col items-center">

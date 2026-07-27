@@ -342,7 +342,7 @@ export function PaymentMethodsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Phương Thức Thanh Toán' : 'Cập Nhật Phương Thức'}
+        title={modalMode === 'create' ? 'Thêm phương thức thanh toán' : 'Cập nhật phương thức'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveMethod} className="space-y-4">

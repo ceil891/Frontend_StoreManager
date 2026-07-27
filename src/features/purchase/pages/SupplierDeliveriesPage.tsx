@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, ShieldCheck, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface SupplierDeliveryRecord {
   id: string;
@@ -17,47 +19,52 @@ interface SupplierDeliveryRecord {
   notes?: string;
 }
 
-const MOCK_DELIVERIES: SupplierDeliveryRecord[] = [
-  {
-    id: '1',
-    deliveryCode: 'SD-2026-001',
-    poCode: 'PO-2026-881',
-    supplierName: 'Nhà Cung Cấp Toàn Cầu',
-    expectedDate: '2026-06-10',
-    receiver: 'Lưu Hữu Phước',
-    status: 'CHO_GIAO',
-    notes: 'Giao đợt 1 gồm 500 thùng nước ngọt',
-  },
-  {
-    id: '2',
-    deliveryCode: 'SD-2026-002',
-    poCode: 'PO-2026-882',
-    supplierName: 'Công Ty Nhập Khẩu Á Châu',
-    expectedDate: '2026-06-02',
-    actualDate: '2026-06-03',
-    receiver: 'Nguyễn Thị Hoa',
-    status: 'DA_NHAN',
-    notes: 'Đã nhận đủ và kiểm kho không phát hiện lỗi',
-  },
-  {
-    id: '3',
-    deliveryCode: 'SD-2026-003',
-    poCode: 'PO-2026-883',
-    supplierName: 'Tổng Kho Thực Phẩm HN',
-    expectedDate: '2026-05-28',
-    status: 'DA_HUY',
-    receiver: 'Trần Văn Mạnh',
-    notes: 'Hủy đơn do nhà cung cấp hết hàng đột xuất',
-  },
-];
-
 export function SupplierDeliveriesPage() {
-  const [data, setData] = useState<SupplierDeliveryRecord[]>(MOCK_DELIVERIES);
+  const [data, setData] = useState<SupplierDeliveryRecord[]>([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<SupplierDeliveryRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<SupplierDeliveryRecord>>({});
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fetchDeliveries = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await axiosClient.get('/purchase/orders');
+      const list = Array.isArray(res) ? res : (res as any)?.content || [];
+      const mapped: SupplierDeliveryRecord[] = list.map((item: any) => {
+        const status: SupplierDeliveryRecord['status'] =
+          item.status === 'DELIVERED'
+            ? 'DA_NHAN'
+            : item.status === 'CANCELLED'
+              ? 'DA_HUY'
+              : 'CHO_GIAO';
+        return {
+          id: String(item.id),
+          deliveryCode: `DLV-${item.id}`,
+          poCode: item.poNumber || '',
+          supplierName: item.supplierName || item.supplier?.name || '',
+          expectedDate: item.estDeliveryDate ? String(item.estDeliveryDate).substring(0, 10) : '',
+          actualDate: item.status === 'DELIVERED' && item.estDeliveryDate
+            ? String(item.estDeliveryDate).substring(0, 10)
+            : undefined,
+          receiver: item.orderedBy || 'Thủ kho',
+          status,
+        };
+      });
+      setData(mapped);
+    } catch (err) {
+      console.error(err);
+      toast.error('Không thể tải danh sách đợt giao hàng');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDeliveries();
+  }, [fetchDeliveries]);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -91,32 +98,48 @@ export function SupplierDeliveriesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.deliveryCode || !editingItem.poCode || !editingItem.supplierName) return;
 
-    if (modalMode === 'create') {
-      const newItem: SupplierDeliveryRecord = {
-        id: String(data.length + 1),
-        deliveryCode: editingItem.deliveryCode!,
-        poCode: editingItem.poCode!,
-        supplierName: editingItem.supplierName!,
-        expectedDate: editingItem.expectedDate!,
-        actualDate: editingItem.actualDate,
-        receiver: editingItem.receiver || '',
-        status: editingItem.status as any || 'CHO_GIAO',
-        notes: editingItem.notes,
-      };
-      setData([...data, newItem]);
-    } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as SupplierDeliveryRecord) : d)));
+    try {
+      if (modalMode === 'create') {
+        await axiosClient.post('/purchase/orders', {
+          poNumber: editingItem.poCode,
+          supplierName: editingItem.supplierName,
+          estDeliveryDate: editingItem.expectedDate,
+          orderedBy: editingItem.receiver,
+          notes: editingItem.notes,
+        });
+        toast.success('Tạo đợt giao hàng thành công');
+      } else {
+        await axiosClient.put(`/purchase/orders/${editingItem.id}`, {
+          poNumber: editingItem.poCode,
+          supplierName: editingItem.supplierName,
+          estDeliveryDate: editingItem.expectedDate,
+          orderedBy: editingItem.receiver,
+          notes: editingItem.notes,
+        });
+        toast.success('Cập nhật đợt giao hàng thành công');
+      }
+      setIsModalOpen(false);
+      await fetchDeliveries();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lưu đợt giao hàng thất bại');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa lịch sử giao hàng này?')) {
-      setData(data.filter((d) => d.id !== id));
+      try {
+        await axiosClient.delete(`/purchase/orders/${id}`);
+        toast.success('Đã xóa đợt giao hàng');
+        await fetchDeliveries();
+      } catch (err) {
+        console.error(err);
+        toast.error('Xóa đợt giao hàng thất bại');
+      }
     }
   };
 
@@ -124,27 +147,27 @@ export function SupplierDeliveriesPage() {
     () => [
       {
         accessorKey: 'deliveryCode',
-        header: 'Mã Đợt Giao',
+        header: 'Mã đợt giao',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'poCode',
-        header: 'Mã Đơn Mua (PO)',
+        header: 'Mã đơn mua (PO)',
         cell: (info) => <span className="font-mono font-medium">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'supplierName',
-        header: 'Nhà Cung Cấp',
+        header: 'Nhà cung cấp',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'expectedDate',
-        header: 'Ngày Giao Dự Kiến',
+        header: 'Ngày giao dự kiến',
         cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           const badgeClass =
@@ -153,19 +176,19 @@ export function SupplierDeliveriesPage() {
               : status === 'CHO_GIAO'
               ? 'bg-amber-100 text-amber-800'
               : 'bg-red-100 text-red-800';
-          const label = status === 'DA_NHAN' ? 'Đã Nhận' : status === 'CHO_GIAO' ? 'Chờ Giao' : 'Đã Hủy';
+          const label = status === 'DA_NHAN' ? 'Đã nhận' : status === 'CHO_GIAO' ? 'Chờ giao' : 'Đã hủy';
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết"
+              title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -194,7 +217,7 @@ export function SupplierDeliveriesPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Quản Lý Nhận Hàng Nhà Cung Cấp</h1>
+          <h1 className="text-2xl font-bold">Quản lý nhận hàng nhà cung cấp</h1>
           <p className="text-sm text-gray-500">
             Theo dõi, kiểm tra tình trạng các đợt giao nhận hàng từ nhà cung cấp theo đơn đặt mua.
           </p>
@@ -218,7 +241,13 @@ export function SupplierDeliveriesPage() {
         />
       </div>
 
-      <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      {isLoading ? (
+        <div className="flex justify-center items-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        </div>
+      ) : (
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      )}
 
       <Drawer
         isOpen={!!selected}
@@ -229,35 +258,35 @@ export function SupplierDeliveriesPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã Đợt Giao:</span>
+                <span className="text-gray-500">Mã đợt giao:</span>
                 <p className="font-mono font-semibold">{selected.deliveryCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Mã PO Đơn Mua:</span>
+                <span className="text-gray-500">Mã PO đơn mua:</span>
                 <p className="font-mono font-semibold">{selected.poCode}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Nhà Cung Cấp:</span>
+              <span className="text-gray-500">Nhà cung cấp:</span>
               <p className="font-semibold">{selected.supplierName}</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Ngày Giao Dự Kiến:</span>
+                <span className="text-gray-500">Ngày giao dự kiến:</span>
                 <p className="font-mono">{selected.expectedDate}</p>
               </div>
               <div>
-                <span className="text-gray-500">Ngày Giao Thực Tế:</span>
+                <span className="text-gray-500">Ngày giao thực tế:</span>
                 <p className="font-mono">{selected.actualDate || 'Chưa nhận hàng'}</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Người Nhận Hàng:</span>
+                <span className="text-gray-500">Người nhận hàng:</span>
                 <p>{selected.receiver || 'Chưa phân công'}</p>
               </div>
               <div>
-                <span className="text-gray-500">Trạng Thái:</span>
+                <span className="text-gray-500">Trạng thái:</span>
                 <div>
                   <span
                     className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
@@ -268,14 +297,14 @@ export function SupplierDeliveriesPage() {
                         : 'bg-red-100 text-red-800'
                     }`}
                   >
-                    {selected.status === 'DA_NHAN' ? 'Đã Nhận' : selected.status === 'CHO_GIAO' ? 'Chờ Giao' : 'Đã Hủy'}
+                    {selected.status === 'DA_NHAN' ? 'Đã nhận' : selected.status === 'CHO_GIAO' ? 'Chờ giao' : 'Đã hủy'}
                   </span>
                 </div>
               </div>
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi Chú / Nội Dung:</span>
+                <span className="text-gray-500">Ghi chú / Nội dung:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                   {selected.notes}
                 </p>
@@ -288,12 +317,12 @@ export function SupplierDeliveriesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo Đợt Nhận Hàng Mới' : 'Sửa Thông Tin Đợt Nhận Hàng'}
+        title={modalMode === 'create' ? 'Tạo đợt nhận hàng mới' : 'Sửa thông tin đợt nhận hàng'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Đợt Giao</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã đợt giao</label>
               <input
                 type="text"
                 value={editingItem.deliveryCode || ''}
@@ -304,7 +333,7 @@ export function SupplierDeliveriesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã PO Đơn Mua *</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã PO đơn mua *</label>
               <input
                 type="text"
                 value={editingItem.poCode || ''}
@@ -316,7 +345,7 @@ export function SupplierDeliveriesPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Nhà Cung Cấp *</label>
+            <label className="block text-xs text-gray-500 mb-1">Nhà cung cấp *</label>
             <input
               type="text"
               value={editingItem.supplierName || ''}
@@ -328,7 +357,7 @@ export function SupplierDeliveriesPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày Giao Dự Kiến *</label>
+              <label className="block text-xs text-gray-500 mb-1">Ngày giao dự kiến *</label>
               <input
                 type="date"
                 value={editingItem.expectedDate || ''}
@@ -338,7 +367,7 @@ export function SupplierDeliveriesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày Giao Thực Tế</label>
+              <label className="block text-xs text-gray-500 mb-1">Ngày giao thực tế</label>
               <input
                 type="date"
                 value={editingItem.actualDate || ''}
@@ -349,7 +378,7 @@ export function SupplierDeliveriesPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Người Nhận Hàng</label>
+              <label className="block text-xs text-gray-500 mb-1">Người nhận hàng</label>
               <input
                 type="text"
                 value={editingItem.receiver || ''}
@@ -359,20 +388,20 @@ export function SupplierDeliveriesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Trạng Thái</label>
+              <label className="block text-xs text-gray-500 mb-1">Trạng thái</label>
               <select
                 value={editingItem.status || 'CHO_GIAO'}
                 onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
                 className="w-full p-2 border rounded"
               >
-                <option value="CHO_GIAO">Chờ Giao</option>
-                <option value="DA_NHAN">Đã Nhận</option>
-                <option value="DA_HUY">Đã Hủy</option>
+                <option value="CHO_GIAO">Chờ giao</option>
+                <option value="DA_NHAN">Đã nhận</option>
+                <option value="DA_HUY">Đã hủy</option>
               </select>
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú</label>
+            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
@@ -390,7 +419,7 @@ export function SupplierDeliveriesPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Lại
+              Lưu lại
             </button>
           </div>
         </form>

@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, Calendar, User, FileText, ArrowDownLeft, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type ReceiptVoucher } from '../store/financeStore';
 import { toast } from 'sonner';
+import { exportToCsv } from '@/shared/utils/exportCsv';
 
 const categoryMap: Record<string, string> = {
   SALES_REVENUE: 'Doanh thu bán hàng',
@@ -24,11 +25,18 @@ export function ReceiptVouchersPage() {
   const addReceipt = useFinanceStore((s) => s.addReceipt);
   const updateReceipt = useFinanceStore((s) => s.updateReceipt);
   const deleteReceipt = useFinanceStore((s) => s.deleteReceipt);
+  const fetchReceipts = useFinanceStore((s) => s.fetchReceipts);
+
+  useEffect(() => {
+    fetchReceipts();
+  }, [fetchReceipts]);
+
   const [search, setSearch] = useState('');
   const [selectedVoucher, setSelectedVoucher] = useState<ReceiptVoucher | null>(null);
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAutoCode, setIsAutoCode] = useState(true);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingVoucher, setEditingVoucher] = useState<Partial<ReceiptVoucher>>({});
   const [deletingVoucher, setDeletingVoucher] = useState<ReceiptVoucher | null>(null);
@@ -41,6 +49,7 @@ export function ReceiptVouchersPage() {
 
   const handleOpenCreate = () => {
     setModalMode('create');
+    setIsAutoCode(true);
     setEditingVoucher({
       voucherNumber: `REC-2024-${Math.floor(100 + Math.random() * 900)}`,
       payerName: '',
@@ -58,6 +67,7 @@ export function ReceiptVouchersPage() {
 
   const handleOpenEdit = (voucher: ReceiptVoucher) => {
     setModalMode('edit');
+    setIsAutoCode(false);
     setEditingVoucher(voucher);
     setIsModalOpen(true);
   };
@@ -167,12 +177,23 @@ export function ReceiptVouchersPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu Thu Doanh Thu (Receipt Vouchers)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu thu doanh thu (receipt vouchers)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Ghi nhận và quản lý dòng tiền vào từ hoạt động bán hàng, thu hồi công nợ đối tác và tiền mặt ký quỹ.</p>
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => toast.success('Xuất sổ quỹ thu thành công!')}
+              onClick={() => {
+                exportToCsv('danh_sach_phieu_thu', filtered, [
+                  { header: 'Số phiếu thu', accessor: r => r.voucherNumber },
+                  { header: 'Người nộp', accessor: r => r.payerName },
+                  { header: 'Nhóm doanh thu', accessor: r => categoryMap[r.category] || r.category },
+                  { header: 'Số tiền (VND)', accessor: r => r.amount },
+                  { header: 'Hình thức', accessor: r => methodMap[r.paymentMethod] || r.paymentMethod },
+                  { header: 'Ngày thu', accessor: r => r.receivedDate },
+                  { header: 'Chứng từ gốc', accessor: r => r.referenceDoc || '' },
+                ]);
+                toast.success('Đã xuất sổ quỹ thu dạng CSV!');
+              }}
               className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
             >
               <Download className="w-4 h-4" /> Xuất sổ quỹ thu
@@ -210,7 +231,7 @@ export function ReceiptVouchersPage() {
       <Modal
         isOpen={!!selectedVoucher}
         onClose={() => setSelectedVoucher(null)}
-        title={selectedVoucher ? `Hồ Sơ Phiếu Thu: ${selectedVoucher.voucherNumber}` : 'Chi Tiết Phiếu Thu'}
+        title={selectedVoucher ? `Hồ Sơ Phiếu Thu: ${selectedVoucher.voucherNumber}` : 'Chi tiết phiếu thu'}
         width="max-w-lg"
       >
         {selectedVoucher && (
@@ -308,18 +329,40 @@ export function ReceiptVouchersPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Lập Phiếu Thu Mới' : 'Chỉnh Sửa Thông Tin Phiếu Thu'}
+        title={modalMode === 'create' ? 'Lập phiếu thu mới' : 'Chỉnh sửa thông tin phiếu thu'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveVoucher} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số phiếu thu *</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Số phiếu thu *</label>
+                {modalMode === 'create' && (
+                  <label className="flex items-center gap-1 text-[10px] text-emerald-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isAutoCode}
+                      onChange={(e) => {
+                        setIsAutoCode(e.target.checked);
+                        if (e.target.checked) {
+                          setEditingVoucher(prev => ({
+                            ...prev,
+                            voucherNumber: `REC-2024-${Math.floor(100 + Math.random() * 900)}`
+                          }));
+                        }
+                      }}
+                      className="rounded text-emerald-600 focus:ring-emerald-550 w-3 h-3"
+                    />
+                    <span>Tự động sinh</span>
+                  </label>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingVoucher.voucherNumber || ''}
                 onChange={(e) => setEditingVoucher({ ...editingVoucher, voucherNumber: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                disabled={modalMode === 'create' && isAutoCode}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:opacity-60"
                 required
               />
             </div>

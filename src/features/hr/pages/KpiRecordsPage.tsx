@@ -1,34 +1,56 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Download, Eye, Edit, TrendingUp, TrendingDown } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useHrStore } from '../store/hrStore';
 
-interface KpiItem {
-  id: string; userId: string; userName: string; department: string;
-  periodMonth: number; periodYear: number;
-  targetScore: number; achievedScore: number;
-  rating: 'XUẤT_SẮC' | 'TỐT' | 'ĐẠT' | 'CHƯA_ĐẠT';
+export interface KpiItem {
+  id: string;
+  userId: string;
+  userName: string;
+  department: string;
+  periodMonth: number;
+  periodYear: number;
+  targetScore: number;
+  achievedScore: number;
+  rating: string;
   note: string;
 }
 
-const MOCK: KpiItem[] = [
-  { id:'1', userId:'U001', userName:'Nguyễn Văn An', department:'Kinh doanh', periodMonth:5, periodYear:2026, targetScore:100, achievedScore:112, rating:'XUẤT_SẮC', note:'Vượt chỉ tiêu doanh số 12%' },
-  { id:'2', userId:'U002', userName:'Trần Thị Bích', department:'Kho vận', periodMonth:5, periodYear:2026, targetScore:100, achievedScore:88, rating:'CHƯA_ĐẠT', note:'Tỷ lệ xuất kho chậm do thiếu nhân lực' },
-  { id:'3', userId:'U003', userName:'Lê Hoàng Nam', department:'Kế toán', periodMonth:5, periodYear:2026, targetScore:100, achievedScore:95, rating:'ĐẠT', note:'Hoàn thành báo cáo đúng hạn' },
-  { id:'4', userId:'U004', userName:'Phạm Thị Lan', department:'Lễ tân', periodMonth:5, periodYear:2026, targetScore:100, achievedScore:105, rating:'TỐT', note:'Điểm hài lòng khách hàng cao' },
-];
-
-const ratingCfg: Record<string,{cls:string;label:string}> = {
-  XUẤT_SẮC:{cls:'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',label:'Xuất sắc'},
-  TỐT:{cls:'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',label:'Tốt'},
-  ĐẠT:{cls:'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',label:'Đạt'},
-  CHƯA_ĐẠT:{cls:'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',label:'Chưa đạt'},
+const ratingCfg: Record<string, { label: string; cls: string }> = {
+  XUẤT_SẮC: { label: 'Xuất sắc', cls: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' },
+  TỐT: { label: 'Tốt', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
+  ĐẠT: { label: 'Đạt', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
 };
 
 export function KpiRecordsPage() {
-  const [data, setData] = useState<KpiItem[]>(MOCK);
+  const setData = (_fn: any) => {};
+  const {
+    kpiRecords: storeKpis,
+    fetchKpiRecords,
+    addKpiRecord,
+  } = useHrStore();
+
+  useEffect(() => {
+    fetchKpiRecords();
+  }, [fetchKpiRecords]);
+
+  const data: KpiItem[] = useMemo(() => {
+    return storeKpis.map((k) => ({
+      id: k.id,
+      userId: 'U001',
+      userName: k.employeeName,
+      department: k.departmentName,
+      periodMonth: Number(k.kpiMonth.split('-')[1] || 6),
+      periodYear: Number(k.kpiMonth.split('-')[0] || 2026),
+      targetScore: k.targetScore,
+      achievedScore: k.achievedScore,
+      rating: k.ratingGrade === 'A_EXCELLENT' ? 'XUẤT_SẮC' : k.ratingGrade === 'B_GOOD' ? 'TỐT' : 'ĐẠT',
+      note: `Thưởng KPI: ${k.bonusAmount.toLocaleString()}đ`,
+    }));
+  }, [storeKpis]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<KpiItem|null>(null);
   const [isModal, setIsModal] = useState(false);
@@ -40,10 +62,10 @@ export function KpiRecordsPage() {
   const handleSave=(e:React.FormEvent)=>{ e.preventDefault(); setData([...data,{...form as KpiItem,id:String(data.length+1)}]); setIsModal(false); };
 
   const columns = useMemo<ColumnDef<KpiItem>[]>(()=>[
-    {accessorKey:'userName',header:'Nhân Viên',cell:({row})=><div><p className="font-medium text-gray-900 dark:text-white">{row.original.userName}</p><p className="text-xs text-gray-400">{row.original.department}</p></div>},
-    {id:'period',header:'Kỳ Đánh Giá',cell:({row})=><span className="text-sm font-mono text-gray-700 dark:text-gray-300">Tháng {row.original.periodMonth}/{row.original.periodYear}</span>},
-    {accessorKey:'targetScore',header:'Mục Tiêu',cell:info=><span className="font-bold text-gray-700 dark:text-gray-300">{info.getValue() as number} điểm</span>},
-    {accessorKey:'achievedScore',header:'Thực Đạt',cell:({row})=>{
+    {accessorKey:'userName',header:'Nhân viên',cell:({row})=><div><p className="font-medium text-gray-900 dark:text-white">{row.original.userName}</p><p className="text-xs text-gray-400">{row.original.department}</p></div>},
+    {id:'period',header:'Kỳ đánh giá',cell:({row})=><span className="text-sm font-mono text-gray-700 dark:text-gray-300">Tháng {row.original.periodMonth}/{row.original.periodYear}</span>},
+    {accessorKey:'targetScore',header:'Mục tiêu',cell:info=><span className="font-bold text-gray-700 dark:text-gray-300">{info.getValue() as number} điểm</span>},
+    {accessorKey:'achievedScore',header:'Thực đạt',cell:({row})=>{
       const ratio = row.original.achievedScore/row.original.targetScore;
       return (
         <div className="flex items-center gap-1.5">
@@ -53,7 +75,7 @@ export function KpiRecordsPage() {
         </div>
       );
     }},
-    {accessorKey:'rating',header:'Xếp Loại',cell:info=>{const r=ratingCfg[info.getValue() as string];return <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${r?.cls}`}>{r?.label}</span>;}},
+    {accessorKey:'rating',header:'Xếp loại',cell:info=>{const r=ratingCfg[info.getValue() as string];return <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${r?.cls}`}>{r?.label}</span>;}},
     {id:'actions',header:'',cell:({row})=>(
       <div className="flex gap-1" onClick={e=>e.stopPropagation()}>
         <button onClick={()=>setSelected(row.original)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"><Eye className="w-4 h-4"/></button>
@@ -67,7 +89,7 @@ export function KpiRecordsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Đánh Giá KPI Nhân Viên</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Đánh giá KPI nhân viên</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Theo dõi và chấm điểm hiệu suất làm việc của nhân sự theo từng kỳ.</p>
           </div>
           <div className="flex gap-3">
@@ -78,8 +100,8 @@ export function KpiRecordsPage() {
 
         {/* Tổng quan xếp loại */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {Object.entries(ratingCfg).map(([k,v])=>{
-            const count=MOCK.filter(d=>d.rating===k).length;
+          {Object.entries(ratingCfg).map(([k, v]) => {
+            const count = data.filter((d) => d.rating === k).length;
             return <div key={k} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm text-center"><p className="text-xs text-gray-500 mb-1">{v.label}</p><p className="text-2xl font-bold text-gray-900 dark:text-white">{count}</p></div>;
           })}
         </div>
@@ -90,7 +112,7 @@ export function KpiRecordsPage() {
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Tìm theo tên nhân viên hoặc phòng ban..." className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 sm:text-sm"/>
           </div>
         </div>
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected}/>
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)}/>
       </div>
 
       <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`KPI: ${selected.userName}`:''}>
@@ -120,12 +142,12 @@ export function KpiRecordsPage() {
         )}
       </Drawer>
 
-      <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title="Chấm Điểm KPI Nhân Viên" width="max-w-lg">
+      <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title="Chấm điểm KPI nhân viên" width="max-w-lg">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên Nhân Viên *</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên nhân viên *</label>
               <input required value={form.userName||''} onChange={e=>setForm({...form,userName:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phòng Ban</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phòng ban</label>
               <input value={form.department||''} onChange={e=>setForm({...form,department:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -135,16 +157,16 @@ export function KpiRecordsPage() {
               <input type="number" value={form.periodYear||2026} onChange={e=>setForm({...form,periodYear:+e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Điểm Mục Tiêu</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Điểm mục tiêu</label>
               <input type="number" value={form.targetScore||100} onChange={e=>setForm({...form,targetScore:+e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Điểm Đạt Được</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Điểm đạt được</label>
               <input type="number" value={form.achievedScore||0} onChange={e=>setForm({...form,achievedScore:+e.target.value})} className="w-full px-3 py-2 border border-emerald-300 dark:border-emerald-700 rounded-lg bg-emerald-50 dark:bg-emerald-900/10 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
           </div>
-          <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Xếp Loại</label>
+          <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Xếp loại</label>
             <select value={form.rating||'ĐẠT'} onChange={e=>setForm({...form,rating:e.target.value as any})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500">
               <option value="XUẤT_SẮC">Xuất sắc</option><option value="TỐT">Tốt</option><option value="ĐẠT">Đạt</option><option value="CHƯA_ĐẠT">Chưa đạt</option>
             </select></div>
-          <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhận Xét</label>
+          <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhận xét</label>
             <textarea rows={2} value={form.note||''} onChange={e=>setForm({...form,note:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"/></div>
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button type="button" onClick={()=>setIsModal(false)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg text-sm">Hủy bỏ</button>

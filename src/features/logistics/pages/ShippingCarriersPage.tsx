@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, ShieldCheck, Link2, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface CarrierRecord {
   id: string;
@@ -16,46 +18,105 @@ interface CarrierRecord {
   notes?: string;
 }
 
-const MOCK_CARRIERS: CarrierRecord[] = [
-  {
-    id: '1',
-    carrierCode: 'CR-GHTK',
-    carrierName: 'Giao Hàng Tiết Kiệm (GHTK)',
-    phone: '19006092',
-    address: '8 Phạm Hùng, Cầu Giấy, Hà Nội',
-    apiStatus: 'CONNECTED',
-    serviceTypes: 'Nhanh, Tiết Kiệm, Đường Bộ',
-    notes: 'Đơn vị vận chuyển chính cho các đơn đi tỉnh miền Bắc và miền Trung',
-  },
-  {
-    id: '2',
-    carrierCode: 'CR-GHN',
-    carrierName: 'Giao Hàng Nhanh (GHN)',
-    phone: '1900636671',
-    address: '405/15 Xô Viết Nghệ Tĩnh, Bình Thạnh, TP. HCM',
-    apiStatus: 'CONNECTED',
-    serviceTypes: 'Nhanh, Chuẩn, Hỏa Tốc',
-    notes: 'Hỗ trợ lấy hàng nhanh tại khu vực phía Nam',
-  },
-  {
-    id: '3',
-    carrierCode: 'CR-VTP',
-    carrierName: 'Viettel Post',
-    phone: '19008095',
-    address: 'Tòa nhà Viettel, Cầu Giấy, Hà Nội',
-    apiStatus: 'DISCONNECTED',
-    serviceTypes: 'Chuyển Phát Nhanh, Tiết Kiệm',
-    notes: 'Đang tạm dừng kết nối API để bảo trì hệ thống đồng bộ mã vận đơn',
-  },
-];
-
 export function ShippingCarriersPage() {
-  const [data, setData] = useState<CarrierRecord[]>(MOCK_CARRIERS);
+  const [data, setData] = useState<CarrierRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<CarrierRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<CarrierRecord>>({});
+
+  const fetchCarriers = async () => {
+    setIsLoading(true);
+    try {
+      const res = await axiosClient.get<any, any[]>('/logistics/carriers');
+      if (Array.isArray(res)) {
+        const mapped = res.map((item: any) => ({
+          id: String(item.id),
+          carrierCode: item.carrierCode || `CR-${item.id}`,
+          carrierName: item.carrierName || 'Hãng vận chuyển',
+          phone: '1900 1234',
+          address: 'Hà Nội, Việt Nam',
+          apiStatus: (item.isActive ? 'CONNECTED' : 'DISCONNECTED') as CarrierRecord['apiStatus'],
+          serviceTypes: 'Standard, Fast',
+          notes: item.note || ''
+        }));
+        setData(mapped);
+      } else {
+        setData([]);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi tải danh sách hãng vận chuyển.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCarriers();
+  }, []);
+
+  const handleOpenCreate = () => {
+    setModalMode('create');
+    setEditingItem({
+      carrierCode: `CR-${Date.now().toString().slice(-6)}`,
+      carrierName: '',
+      phone: '1900 1234',
+      address: 'Hà Nội, Việt Nam',
+      apiStatus: 'DISCONNECTED',
+      serviceTypes: 'Standard, Fast',
+      notes: '',
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: CarrierRecord) => {
+    setModalMode('edit');
+    setEditingItem(item);
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem.carrierCode || !editingItem.carrierName) return;
+
+    try {
+      const payload = {
+        carrierCode: editingItem.carrierCode,
+        carrierName: editingItem.carrierName,
+        isActive: editingItem.apiStatus === 'CONNECTED',
+        note: editingItem.notes
+      };
+
+      if (modalMode === 'create') {
+        await axiosClient.post('/logistics/carriers', payload);
+        toast.success('Thêm hãng vận chuyển mới thành công!');
+      } else {
+        await axiosClient.put(`/logistics/carriers/${editingItem.id}`, payload);
+        toast.success('Cập nhật hãng vận chuyển thành công!');
+      }
+      setIsModalOpen(false);
+      fetchCarriers();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi lưu hãng vận chuyển.');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (confirm('Bạn có chắc chắn muốn xóa đối tác vận chuyển này?')) {
+      try {
+        await axiosClient.delete(`/logistics/carriers/${id}`);
+        toast.success('Đã xóa đối tác vận chuyển thành công!');
+        fetchCarriers();
+      } catch (err) {
+        console.error(err);
+        toast.error('Lỗi khi xóa đối tác vận chuyển.');
+      }
+    }
+  };
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -68,109 +129,61 @@ export function ShippingCarriersPage() {
     );
   }, [search, data]);
 
-  const handleOpenCreate = () => {
-    setModalMode('create');
-    setEditingItem({
-      carrierCode: '',
-      carrierName: '',
-      phone: '',
-      address: '',
-      apiStatus: 'DISCONNECTED',
-      serviceTypes: '',
-      notes: '',
-    });
-    setIsModalOpen(true);
-  };
-
-  const handleOpenEdit = (item: CarrierRecord) => {
-    setModalMode('edit');
-    setEditingItem(item);
-    setIsModalOpen(true);
-  };
-
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingItem.carrierCode || !editingItem.carrierName) return;
-
-    if (modalMode === 'create') {
-      const newItem: CarrierRecord = {
-        id: String(data.length + 1),
-        carrierCode: editingItem.carrierCode.toUpperCase(),
-        carrierName: editingItem.carrierName!,
-        phone: editingItem.phone || '',
-        address: editingItem.address || '',
-        apiStatus: editingItem.apiStatus as any || 'DISCONNECTED',
-        serviceTypes: editingItem.serviceTypes || 'Nhanh',
-        notes: editingItem.notes,
-      };
-      setData([...data, newItem]);
-    } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as CarrierRecord) : d)));
-    }
-    setIsModalOpen(false);
-  };
-
-  const handleDelete = (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa đối tác vận chuyển này?')) {
-      setData(data.filter((d) => d.id !== id));
-    }
-  };
-
   const columns = useMemo<ColumnDef<CarrierRecord>[]>(
     () => [
       {
         accessorKey: 'carrierCode',
-        header: 'Mã Đối Tác',
+        header: 'Mã đối tác',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'carrierName',
-        header: 'Đơn Vị Vận Chuyển',
+        header: 'Đơn vị vận chuyển',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'phone',
-        header: 'Tổng Đài Hỗ Trợ',
+        header: 'Tổng đài hỗ trợ',
         cell: (info) => <span className="font-mono text-gray-700 dark:text-gray-300">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'serviceTypes',
-        header: 'Dịch Vụ Cung Cấp',
+        header: 'Dịch vụ cung cấp',
         cell: (info) => <span>{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'apiStatus',
-        header: 'Đồng Bộ API',
+        header: 'Đồng bộ API',
         cell: (info) => {
           const status = info.getValue() as string;
           let badgeClass = 'bg-gray-100 text-gray-800';
-          let label = 'Chưa Kết Nối';
+          let label = 'Chưa kết nối';
           if (status === 'CONNECTED') {
             badgeClass = 'bg-emerald-100 text-emerald-800';
-            label = 'Đã Kết Nối';
+            label = 'Đã kết nối';
           } else if (status === 'SUSPENDED') {
             badgeClass = 'bg-red-100 text-red-800';
-            label = 'Tạm Khóa';
+            label = 'Tạm khóa';
           }
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết"
+              title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleOpenEdit(row.original)}
               className="p-1 text-gray-500 hover:text-blue-600 rounded"
-              title="Cấu Hình API / Sửa"
+              title="Cấu hình API / sửa"
             >
               <Edit className="w-4 h-4" />
             </button>
@@ -192,7 +205,7 @@ export function ShippingCarriersPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Đối Tác Vận Chuyển (Carriers)</h1>
+          <h1 className="text-2xl font-bold">Đối tác vận chuyển (carriers)</h1>
           <p className="text-sm text-gray-500">
             Quản lý danh sách các đơn vị chuyển phát liên kết ngoài, theo dõi trạng thái tích hợp API tạo đơn tự động.
           </p>
@@ -216,7 +229,14 @@ export function ShippingCarriersPage() {
         />
       </div>
 
-      <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-sm font-bold text-gray-500">Đang tải danh sách hãng vận chuyển...</span>
+        </div>
+      ) : (
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      )}
 
       <Drawer
         isOpen={!!selected}
@@ -227,29 +247,29 @@ export function ShippingCarriersPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã Đơn Vị:</span>
+                <span className="text-gray-500">Mã đơn vị:</span>
                 <p className="font-mono font-semibold">{selected.carrierCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Tổng Đài Hỗ Trợ:</span>
+                <span className="text-gray-500">Tổng đài hỗ trợ:</span>
                 <p className="font-mono">{selected.phone}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Tên Đối Tác Vận Chuyển:</span>
+              <span className="text-gray-500">Tên đối tác vận chuyển:</span>
               <p className="font-semibold">{selected.carrierName}</p>
             </div>
             <div>
-              <span className="text-gray-500">Địa Chỉ Văn Phòng / Trụ Sở:</span>
+              <span className="text-gray-500">Địa chỉ Văn Phòng / trụ sở:</span>
               <p className="text-gray-700 dark:text-gray-300">{selected.address}</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Các Dịch Vụ:</span>
+                <span className="text-gray-500">Các dịch vụ:</span>
                 <p>{selected.serviceTypes}</p>
               </div>
               <div>
-                <span className="text-gray-500">Trạng Thái Kết Nối API:</span>
+                <span className="text-gray-500">Trạng thái kết nối API:</span>
                 <div>
                   <span
                     className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
@@ -261,17 +281,17 @@ export function ShippingCarriersPage() {
                     }`}
                   >
                     {selected.apiStatus === 'CONNECTED'
-                      ? 'Đã Kết Nối API'
+                      ? 'Đã kết nối API'
                       : selected.apiStatus === 'DISCONNECTED'
-                      ? 'Chưa Kết Nối'
-                      : 'Đang Tạm Khóa'}
+                      ? 'Chưa kết nối'
+                      : 'Đang tạm khóa'}
                   </span>
                 </div>
               </div>
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi Chú Vận Hành:</span>
+                <span className="text-gray-500">Ghi chú vận hành:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                   {selected.notes}
                 </p>
@@ -284,12 +304,12 @@ export function ShippingCarriersPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Đơn Vị Vận Chuyển Đối Tác' : 'Sửa Thông Tin Đơn Vị'}
+        title={modalMode === 'create' ? 'Thêm đơn vị vận chuyển đối tác' : 'Sửa thông tin đơn vị'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Đối Tác *</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã đối tác *</label>
               <input
                 type="text"
                 value={editingItem.carrierCode || ''}
@@ -301,7 +321,7 @@ export function ShippingCarriersPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tổng Đài Hỗ Trợ *</label>
+              <label className="block text-xs text-gray-500 mb-1">Tổng đài hỗ trợ *</label>
               <input
                 type="text"
                 value={editingItem.phone || ''}
@@ -313,7 +333,7 @@ export function ShippingCarriersPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Tên Đối Tác Vận Chuyển *</label>
+            <label className="block text-xs text-gray-500 mb-1">Tên đối tác vận chuyển *</label>
             <input
               type="text"
               value={editingItem.carrierName || ''}
@@ -324,7 +344,7 @@ export function ShippingCarriersPage() {
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Địa Chỉ Trụ Sở *</label>
+            <label className="block text-xs text-gray-500 mb-1">Địa chỉ trụ sở *</label>
             <input
               type="text"
               value={editingItem.address || ''}
@@ -336,7 +356,7 @@ export function ShippingCarriersPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Dịch Vụ Cung Cấp *</label>
+              <label className="block text-xs text-gray-500 mb-1">Dịch vụ cung cấp *</label>
               <input
                 type="text"
                 value={editingItem.serviceTypes || ''}
@@ -347,7 +367,7 @@ export function ShippingCarriersPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Đồng Bộ API</label>
+              <label className="block text-xs text-gray-500 mb-1">Đồng bộ API</label>
               <select
                 value={editingItem.apiStatus || 'DISCONNECTED'}
                 onChange={(e) => setEditingItem({ ...editingItem, apiStatus: e.target.value as any })}
@@ -360,7 +380,7 @@ export function ShippingCarriersPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú</label>
+            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
@@ -378,7 +398,7 @@ export function ShippingCarriersPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Đối Tác
+              Lưu đối tác
             </button>
           </div>
         </form>

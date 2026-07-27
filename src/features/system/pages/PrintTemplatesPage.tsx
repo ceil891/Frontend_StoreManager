@@ -180,12 +180,12 @@ export function PrintTemplatesPage() {
     () => [
       {
         accessorKey: 'templateCode',
-        header: 'Mã Mẫu (Template Code)',
+        header: 'Mã mẫu (template code)',
         cell: (info) => <span className="font-mono font-bold text-primary px-2 py-0.5 bg-primary/10 rounded border border-primary/20 hover:underline">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'templateName',
-        header: 'Tên Tài Liệu & Cổng Máy In',
+        header: 'Tên tài liệu & cổng máy in',
         cell: ({ row }) => (
           <div>
             <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.templateName}</p>
@@ -195,7 +195,7 @@ export function PrintTemplatesPage() {
       },
       {
         accessorKey: 'documentType',
-        header: 'Khổ Giấy',
+        header: 'Khổ giấy',
         cell: (info) => {
           const t = info.getValue() as keyof typeof docTypeStyles;
           return (
@@ -207,17 +207,17 @@ export function PrintTemplatesPage() {
       },
       {
         accessorKey: 'formatSyntax',
-        header: 'Công Nghệ Layout',
+        header: 'Công nghệ layout',
         cell: (info) => <span className="font-mono text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 py-0.5 rounded border border-gray-200 dark:border-gray-700">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'version',
-        header: 'Phiên Bản',
+        header: 'Phiên bản',
         cell: (info) => <span className="font-mono text-xs text-gray-600 dark:text-gray-400 font-bold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'isDefault',
-        header: 'Hệ Thống Mặc Định',
+        header: 'Hệ thống mặc định',
         cell: (info) => (
           <span className={`text-xs px-2 py-0.5 rounded font-mono font-bold ${
             info.getValue() as boolean ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200' : 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700'
@@ -228,7 +228,7 @@ export function PrintTemplatesPage() {
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           return (
@@ -280,7 +280,7 @@ export function PrintTemplatesPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mẫu In Tài Liệu & Cấu Hình Spooler</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mẫu in tài liệu & cấu hình spooler</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Định nghĩa cấu trúc in bill nhiệt POS 80mm ESC/POS, nhãn dán vạch Zebra ZPL II, hóa đơn đỏ VAT A4 HTML5 và biểu mẫu xuất kho Jasper.</p>
           </div>
           <div className="flex items-center gap-3">
@@ -491,7 +491,7 @@ export function PrintTemplatesPage() {
 
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Mã code Spooler / Macro Code</span>
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Mã code spooler / macro code</span>
                   <button 
                     onClick={() => handleCopySnippet(selectedTemplate.sampleCodeSnippet)}
                     className="text-xs flex items-center gap-1 text-primary font-semibold hover:underline"

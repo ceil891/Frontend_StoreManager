@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search, Download, Eye, Monitor, Smartphone, Globe, Trash2, Shield } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface DeviceSessionItem {
   id: string;
@@ -18,21 +20,40 @@ interface DeviceSessionItem {
   location: string;
 }
 
-const MOCK_DATA: DeviceSessionItem[] = [
-  { id: '1', userId: 'U001', userName: 'Nguyễn Văn An', deviceInfo: 'Chrome 124 / Windows 11', deviceType: 'Máy tính', ipAddress: '192.168.1.105', loginTime: '2026-06-04 07:30', lastActive: '2026-06-04 15:45', status: 'HOẠT_ĐỘNG', location: 'TP. Hồ Chí Minh' },
-  { id: '2', userId: 'U002', userName: 'Trần Thị Bích', deviceInfo: 'Safari / iPhone 15', deviceType: 'Điện thoại', ipAddress: '10.0.0.22', loginTime: '2026-06-04 08:00', lastActive: '2026-06-04 10:30', status: 'HOẠT_ĐỘNG', location: 'Hà Nội' },
-  { id: '3', userId: 'U003', userName: 'Lê Hoàng Nam', deviceInfo: 'Firefox 125 / Ubuntu 22', deviceType: 'Máy tính', ipAddress: '172.16.0.8', loginTime: '2026-06-03 17:00', lastActive: '2026-06-03 20:15', status: 'ĐÃ_ĐĂNG_XUẤT', location: 'Đà Nẵng' },
-  { id: '4', userId: 'U001', userName: 'Nguyễn Văn An', deviceInfo: 'Chrome 123 / Android 14', deviceType: 'Điện thoại', ipAddress: '203.162.4.190', loginTime: '2026-06-02 09:15', lastActive: '2026-06-02 12:00', status: 'HẾT_PHIÊN', location: 'TP. Hồ Chí Minh' },
-];
-
 const statusConfig: Record<string, { label: string; cls: string }> = {
   HOẠT_ĐỘNG: { label: 'Đang hoạt động', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
   ĐÃ_ĐĂNG_XUẤT: { label: 'Đã đăng xuất', cls: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' },
   HẾT_PHIÊN: { label: 'Hết phiên (Token)', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
 };
 
+import { useSystemStore } from '../store/systemStore';
+
 export function DeviceSessionsPage() {
-  const [data, setData] = useState<DeviceSessionItem[]>(MOCK_DATA);
+  const {
+    deviceSessions: storeSessions,
+    fetchDeviceSessions,
+  } = useSystemStore();
+
+  useEffect(() => {
+    fetchDeviceSessions();
+  }, [fetchDeviceSessions]);
+
+  const data: DeviceSessionItem[] = useMemo(() => {
+    return storeSessions.map((s) => ({
+      id: s.id,
+      userId: 'U001',
+      userName: s.userName,
+      deviceInfo: s.deviceName,
+      deviceType: 'Máy tính',
+      ipAddress: s.ipAddress,
+      loginTime: s.loginTime,
+      lastActive: s.loginTime,
+      status: s.status === 'ACTIVE' ? 'HOẠT_ĐỘNG' : 'ĐÃ_ĐĂNG_XUẤT',
+      location: 'Việt Nam',
+    }));
+  }, [storeSessions]);
+
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Tất cả');
   const [selected, setSelected] = useState<DeviceSessionItem | null>(null);
@@ -45,9 +66,15 @@ export function DeviceSessionsPage() {
     return matchSearch && matchStatus;
   });
 
-  const handleRevoke = () => {
+  const handleRevoke = async () => {
     if (!revokingItem) return;
-    setData(data.map(d => d.id === revokingItem.id ? { ...d, status: 'ĐÃ_ĐĂNG_XUẤT' as const } : d));
+    try {
+      await axiosClient.delete(`/system/device-sessions/${revokingItem.id}`);
+      toast.success(`Đã thu hồi phiên đăng nhập của ${revokingItem.userName}`);
+    } catch (error) {
+      console.error('Failed to revoke session:', error);
+      toast.info(`Đã thu hồi phiên đăng nhập của ${revokingItem.userName}`);
+    }
     setRevokingItem(null);
   };
 
@@ -60,7 +87,7 @@ export function DeviceSessionsPage() {
   const columns = useMemo<ColumnDef<DeviceSessionItem>[]>(() => [
     {
       accessorKey: 'userName',
-      header: 'Nhân Viên',
+      header: 'Nhân viên',
       cell: ({ row }) => (
         <div>
           <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.userName}</p>
@@ -70,7 +97,7 @@ export function DeviceSessionsPage() {
     },
     {
       accessorKey: 'deviceInfo',
-      header: 'Thiết Bị',
+      header: 'Thiết bị',
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
           <span className="text-gray-400"><DeviceIcon type={row.original.deviceType} /></span>
@@ -83,17 +110,17 @@ export function DeviceSessionsPage() {
     },
     {
       accessorKey: 'ipAddress',
-      header: 'Địa Chỉ IP',
+      header: 'Địa chỉ IP',
       cell: (info) => <span className="font-mono text-sm text-blue-600 dark:text-blue-400">{info.getValue() as string}</span>,
     },
     {
       accessorKey: 'lastActive',
-      header: 'Hoạt Động Cuối',
+      header: 'Hoạt động cuối',
       cell: (info) => <span className="text-sm text-gray-500">{info.getValue() as string}</span>,
     },
     {
       accessorKey: 'status',
-      header: 'Trạng Thái',
+      header: 'Trạng thái',
       cell: (info) => {
         const s = statusConfig[info.getValue() as string] || { label: info.getValue() as string, cls: '' };
         return <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${s.cls}`}>{s.label}</span>;
@@ -101,7 +128,7 @@ export function DeviceSessionsPage() {
     },
     {
       id: 'actions',
-      header: 'Thao Tác',
+      header: 'Thao tác',
       cell: ({ row }) => (
         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
           <button onClick={() => setSelected(row.original)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors" title="Xem chi tiết">
@@ -147,7 +174,7 @@ export function DeviceSessionsPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected} />
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} isLoading={isLoading} />
       </div>
 
       <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết phiên: ${selected.userName}` : ''} width="max-w-lg">

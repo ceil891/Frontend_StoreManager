@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, Calendar, CheckCircle2, Send, Building2, FileText, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -8,14 +8,29 @@ import { resolveCustomerName, paymentTermsToDueDate } from '../store/salesHelper
 import { useCrmStore } from '@/features/crm/store/crmStore';
 import { CustomerSelect } from '@/shared/components/sales/CustomerSelect';
 import { usePermission } from '@/shared/hooks/usePermission';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 export function ExportInvoicesPage() {
   const canManage = usePermission('sales:invoices:manage');
   const customers = useCrmStore((s) => s.customers);
-  const exportInvoices = useSalesStore((s) => s.exportInvoices);
-  const addExportInvoice = useSalesStore((s) => s.addExportInvoice);
-  const updateExportInvoice = useSalesStore((s) => s.updateExportInvoice);
-  const deleteExportInvoice = useSalesStore((s) => s.deleteExportInvoice);
+  const { exportInvoices, addExportInvoice, updateExportInvoice, deleteExportInvoice, fetchExportInvoices } = useSalesStore();
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        await fetchExportInvoices();
+      } catch (err) {
+        console.error(err);
+        toast.error('Không thể tải danh sách hóa đơn xuất');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+  }, [fetchExportInvoices]);
 
   const [search, setSearch] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<ExportInvoiceItem | null>(null);
@@ -28,8 +43,8 @@ export function ExportInvoicesPage() {
   const filtered = exportInvoices.filter(
     (item) =>
       resolveCustomerName(item.customerId, customers).toLowerCase().includes(search.toLowerCase()) ||
-      item.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
-      item.taxId.toLowerCase().includes(search.toLowerCase())
+      (item.invoiceNumber || '').toLowerCase().includes(search.toLowerCase()) ||
+      (item.taxId || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const handleOpenCreate = () => {
@@ -58,7 +73,7 @@ export function ExportInvoicesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing.invoiceNumber || !editing.customerId) return;
     const subtotal = Number(editing.subtotal) || 0;
@@ -67,45 +82,67 @@ export function ExportInvoicesPage() {
     const issueDate = editing.issueDate || new Date().toISOString().split('T')[0];
     const paymentTerms = editing.paymentTerms || 'Net 30';
     const dueDate = editing.dueDate || paymentTermsToDueDate(issueDate, paymentTerms);
-    if (modalMode === 'create') {
-      addExportInvoice({
-        invoiceNumber: editing.invoiceNumber,
-        customerId: editing.customerId,
-        taxId: editing.taxId || '—',
-        billingAddress: editing.billingAddress || '—',
-        orderIds: editing.orderIds || [],
-        issueDate,
-        dueDate,
-        subtotal,
-        vatAmount: vat,
-        totalAmount: total,
-        status: (editing.status as ExportInvoiceItem['status']) || 'ISSUED',
-        paymentTerms,
-        notes: editing.notes,
-      });
-    } else if (editing.id) {
-      updateExportInvoice(editing.id, {
-        ...editing,
-        subtotal,
-        vatAmount: vat,
-        totalAmount: total,
-        dueDate,
-      } as Partial<ExportInvoiceItem>);
+    try {
+      if (modalMode === 'create') {
+        await addExportInvoice({
+          invoiceNumber: editing.invoiceNumber,
+          customerId: editing.customerId,
+          taxId: editing.taxId || '—',
+          billingAddress: editing.billingAddress || '—',
+          orderIds: editing.orderIds || [],
+          issueDate,
+          dueDate,
+          subtotal,
+          vatAmount: vat,
+          totalAmount: total,
+          status: (editing.status as ExportInvoiceItem['status']) || 'ISSUED',
+          paymentTerms,
+          notes: editing.notes,
+        });
+        toast.success('Thêm hóa đơn xuất thành công!');
+      } else if (editing.id) {
+        await updateExportInvoice(editing.id, {
+          ...editing,
+          subtotal,
+          vatAmount: vat,
+          totalAmount: total,
+          dueDate,
+        } as Partial<ExportInvoiceItem>);
+        toast.success('Cập nhật hóa đơn xuất thành công!');
+      }
+      setIsModalOpen(false);
+      fetchExportInvoices();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi lưu hóa đơn xuất.');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deleting) return;
-    deleteExportInvoice(deleting.id);
-    if (selectedInvoice?.id === deleting.id) setSelectedInvoice(null);
-    setDeleting(null);
+    try {
+      await deleteExportInvoice(deleting.id);
+      toast.success('Đã xóa hóa đơn xuất!');
+      if (selectedInvoice?.id === deleting.id) setSelectedInvoice(null);
+      setDeleting(null);
+      fetchExportInvoices();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi xóa hóa đơn xuất.');
+    }
   };
 
-  const handleMarkPaid = () => {
+  const handleMarkPaid = async () => {
     if (!selectedInvoice) return;
-    updateExportInvoice(selectedInvoice.id, { status: 'PAID' });
-    setSelectedInvoice({ ...selectedInvoice, status: 'PAID' });
+    try {
+      await updateExportInvoice(selectedInvoice.id, { status: 'PAID' });
+      setSelectedInvoice({ ...selectedInvoice, status: 'PAID' });
+      toast.success('Đã đánh dấu đã thanh toán!');
+      fetchExportInvoices();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi cập nhật trạng thái thanh toán.');
+    }
   };
 
   const columns = useMemo<ColumnDef<ExportInvoiceItem>[]>(
@@ -257,7 +294,14 @@ export function ExportInvoicesPage() {
           </button>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedInvoice(row)} />
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-sm font-bold text-gray-500">Đang tải danh sách hóa đơn xuất...</span>
+          </div>
+        ) : (
+          <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedInvoice(row)} />
+        )}
       </div>
 
       <Modal

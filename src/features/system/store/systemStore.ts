@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { axiosClient } from '@/shared/lib/axiosClient';
 
 // ---------------------------
 // TYPES
@@ -53,69 +54,194 @@ interface SystemState {
   configs: SystemConfigParameter[];
   printTemplates: PrintTemplateRecord[];
   notifications: NotificationRuleRecord[];
+  isLoading: boolean;
 
-  // Config Actions
-  addConfig: (config: Omit<SystemConfigParameter, 'id'>) => void;
-  updateConfig: (id: string, data: Partial<SystemConfigParameter>) => void;
-  deleteConfig: (id: string) => void;
+  fetchConfigs: () => Promise<void>;
+  addConfig: (config: Omit<SystemConfigParameter, 'id'>) => Promise<void>;
+  updateConfig: (id: string, data: Partial<SystemConfigParameter>) => Promise<void>;
+  deleteConfig: (id: string) => Promise<void>;
 
-  // Print Template Actions
-  addPrintTemplate: (tpl: Omit<PrintTemplateRecord, 'id'>) => void;
-  updatePrintTemplate: (id: string, data: Partial<PrintTemplateRecord>) => void;
-  deletePrintTemplate: (id: string) => void;
+  fetchPrintTemplates: () => Promise<void>;
+  addPrintTemplate: (tpl: Omit<PrintTemplateRecord, 'id'>) => Promise<void>;
+  updatePrintTemplate: (id: string, data: Partial<PrintTemplateRecord>) => Promise<void>;
+  deletePrintTemplate: (id: string) => Promise<void>;
 
-  // Notification Actions
-  addNotificationRule: (rule: Omit<NotificationRuleRecord, 'id'>) => void;
-  updateNotificationRule: (id: string, data: Partial<NotificationRuleRecord>) => void;
-  deleteNotificationRule: (id: string) => void;
+  fetchNotificationRules: () => Promise<void>;
+  addNotificationRule: (rule: Omit<NotificationRuleRecord, 'id'>) => Promise<void>;
+  updateNotificationRule: (id: string, data: Partial<NotificationRuleRecord>) => Promise<void>;
+  deleteNotificationRule: (id: string) => Promise<void>;
+
+  deviceSessions: DeviceSessionRecord[];
+  passwordHistories: PasswordHistoryRecord[];
+  systemErrorLogs: SystemErrorLogRecord[];
+
+  fetchDeviceSessions: () => Promise<void>;
+  fetchPasswordHistories: () => Promise<void>;
+  fetchSystemErrorLogs: () => Promise<void>;
 }
 
-// ---------------------------
-// MOCK DATA SEED
-// ---------------------------
-const MOCK_CONFIGS: SystemConfigParameter[] = [
-  { id: '1', configKey: 'SECURITY.MFA_TOTP.ISSUER_NAME', category: 'SECURITY_POLICIES', value: 'RetailHub Enterprise Secure Auth', dataType: 'STRING', isEncrypted: false, requiresRebootToApply: false, lastUpdatedTimestamp: '2024-05-01 10:00:00', updatedByRole: 'ROLE-SUPERADMIN', description: 'The issuer name embedded inside Google Authenticator or Duo Security TOTP QR codes.' },
-  { id: '2', configKey: 'DB.POOL.MAX_CONNECTIONS', category: 'DATABASE_TUNING', value: '250', dataType: 'INTEGER', isEncrypted: false, requiresRebootToApply: true, lastUpdatedTimestamp: '2024-03-15 02:30:00', updatedByRole: 'ROLE-SYSARCHITECT', description: 'Maximum HikariCP connection pool limit across multi-tenant database clusters.' },
-  { id: '3', configKey: 'API.RATE_LIMIT.GLOBAL_BURST_PER_SEC', category: 'API_GATEWAY_THROTTLING', value: '1500', dataType: 'INTEGER', isEncrypted: false, requiresRebootToApply: false, lastUpdatedTimestamp: '2024-05-18 01:15:00', updatedByRole: 'ROLE-SUPERADMIN', description: 'Token bucket leaky-bucket algorithm max burst limit per second across external third-party POS API endpoints.' },
-  { id: '4', configKey: 'SYNC.SHOPIFY_WEBHOOK.SECRET_SIGNATURE', category: 'OMNICHANNEL_SYNC', value: '••••••••••••••••••••••••••••••••', dataType: 'STRING', isEncrypted: true, requiresRebootToApply: false, lastUpdatedTimestamp: '2024-04-20 18:45:00', updatedByRole: 'ROLE-SUPERADMIN', description: 'HMAC-SHA256 cryptographic webhook validation secret for automated inventory level syncing.' },
-  { id: '5', configKey: 'REDIS.CLUSTER.EVICTION_POLICY', category: 'CACHE_STRATEGY', value: 'allkeys-lru', dataType: 'ENUM', isEncrypted: false, requiresRebootToApply: true, lastUpdatedTimestamp: '2024-01-10 09:00:00', updatedByRole: 'ROLE-SYSARCHITECT', description: 'Least Recently Used (LRU) memory eviction policy for in-memory Redis cluster nodes.' },
-];
+export interface DeviceSessionRecord {
+  id: string;
+  deviceName: string;
+  ipAddress: string;
+  userName: string;
+  loginTime: string;
+  status: 'ACTIVE' | 'REVOKED';
+}
 
-const MOCK_PRINT_TEMPLATES: PrintTemplateRecord[] = [
-  { id: '1', templateCode: 'TPL-POS-80MM-V2', templateName: 'Standard 80mm POS Thermal Cash Receipt', documentType: 'POS_RECEIPT_80MM', printerTarget: 'EPSON_TM_T88VI', formatSyntax: 'ESC_POS_RAW_HEX', version: 'v2.4.1', isDefault: true, status: 'ACTIVE', lastModifiedTimestamp: '2024-05-18 05:30:00', author: 'Johnathan Vance', sampleCodeSnippet: '\x1B\x40\x1B\x61\x01\x1B\x45\x01RETAILHUB FLAGSHIP PLAZA\x0A123 5th Ave, New York, NY\x0A----------------------------------------\x0A' },
-  { id: '2', templateCode: 'TPL-INV-A4-CORP', templateName: 'A4 B2B Corporate Commercial Tax Invoice', documentType: 'A4_COMMERCIAL_INVOICE', printerTarget: 'HP_LASERJET_ENTERPRISE', formatSyntax: 'HTML5_CSS3_PRINT_MEDIA', version: 'v3.1.0', isDefault: true, status: 'ACTIVE', lastModifiedTimestamp: '2024-05-10 14:20:00', author: 'Sarah Jenkins', sampleCodeSnippet: '<!DOCTYPE html>\n<html>\n<head><style>@media print { body { font-family: "Inter", sans-serif; font-size: 10pt; } }</style></head>\n<body><h1>TAX INVOICE</h1>...</body></html>' },
-  { id: '3', templateCode: 'TPL-LBL-50X30', templateName: 'Zebra 50x30mm SKU Price & Barcode Tag', documentType: 'BARCODE_SHELF_LABEL_50X30', printerTarget: 'ZEBRA_ZT411_DPI300', formatSyntax: 'ZPL_II_MACRO', version: 'v1.0.5', isDefault: true, status: 'ACTIVE', lastModifiedTimestamp: '2024-04-15 09:12:00', author: 'Marcus Aurelius', sampleCodeSnippet: '^XA\n^FO50,50^ADN,36,20^FDRETAILHUB SKU^FS\n^FO50,100^BCN,100,Y,N,N^FD{{sku_code}}^FS\n^XZ' },
-];
+export interface PasswordHistoryRecord {
+  id: string;
+  userName: string;
+  changedAt: string;
+  changedBy: string;
+  reason: string;
+}
 
-const MOCK_NOTIFICATIONS: NotificationRuleRecord[] = [
-  { id: '1', ruleCode: 'NTF-STK-01', eventName: 'Inventory Critical Low Stock Alert', channel: 'WEBHOOK_SLACK', recipientRoleScope: 'ROLE-STORE-MGR, ROLE-PURCHASE-MGR', urgency: 'CRITICAL', templateSubject: '🚨 [URGENT] SKU Stock Depleted Below Minimum Buffer', deliveryCountYtd: 342, status: 'ACTIVE', lastDispatchedTimestamp: '2024-05-18 06:12:00', templateBody: 'Item {{sku_name}} (Code: {{sku_code}}) in branch {{branch_name}} has reached {{current_stock}} units. Reorder threshold is {{min_threshold}}.' },
-  { id: '2', ruleCode: 'NTF-FIN-02', eventName: 'Large Wire Transfer Approval Mandate', channel: 'EMAIL', recipientRoleScope: 'ROLE-CFO-TREASURY, ROLE-SUPERADMIN', urgency: 'CRITICAL', templateSubject: '⚠️ Cash Outflow Authorization Required > $50,000', deliveryCountYtd: 45, status: 'ACTIVE', lastDispatchedTimestamp: '2024-05-17 16:30:22', templateBody: 'A pending ACH/Wire disbursement request #{{transfer_id}} for ${{amount}} to vendor {{vendor_name}} requires dual-custody approval.' },
-];
+export interface SystemErrorLogRecord {
+  id: string;
+  logCode: string;
+  serviceName: string;
+  errorMessage: string;
+  stackTrace: string;
+  severity: 'CRITICAL' | 'ERROR' | 'WARNING';
+  timestamp: string;
+}
+
+
 
 export const useSystemStore = create<SystemState>()(
   persist(
-    (set) => ({
-      configs: MOCK_CONFIGS,
-      printTemplates: MOCK_PRINT_TEMPLATES,
-      notifications: MOCK_NOTIFICATIONS,
+    (set, get) => ({
+      configs: [],
+      printTemplates: [],
+      notifications: [],
+      isLoading: false,
 
-      // Config Actions
-      addConfig: (config) => set((state) => ({ configs: [{ id: Date.now().toString(), ...config }, ...state.configs] })),
-      updateConfig: (id, data) => set((state) => ({ configs: state.configs.map((c) => (c.id === id ? { ...c, ...data } : c)) })),
-      deleteConfig: (id) => set((state) => ({ configs: state.configs.filter((c) => c.id !== id) })),
+      fetchConfigs: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/system/config');
+          const data = res.content || res || [];
+          if (Array.isArray(data) && data.length > 0) {
+            set({ configs: data.map((item: any) => ({
+              id: String(item.id),
+              configKey: item.configKey || '',
+              category: item.category || 'SECURITY_POLICIES',
+              value: item.value || '',
+              dataType: item.dataType || 'STRING',
+              isEncrypted: Boolean(item.isEncrypted),
+              requiresRebootToApply: Boolean(item.requiresRebootToApply),
+              lastUpdatedTimestamp: item.updatedAt ? item.updatedAt.split('T')[0] : '',
+              updatedByRole: item.updatedBy || 'ROLE-SUPERADMIN',
+              description: item.description || '',
+            })) });
+          }
+        } catch (e) {
+          console.error('Failed to fetch configs:', e);
+        }
+      },
+      addConfig: async (config) => {
+        try { await axiosClient.post('/system/config', config); } catch (e) { console.error(e); }
+        set((state) => ({ configs: [{ id: Date.now().toString(), ...config }, ...state.configs] }));
+      },
+      updateConfig: async (id, data) => {
+        try { await axiosClient.put(`/system/config/${id}`, data); } catch (e) { console.error(e); }
+        set((state) => ({ configs: state.configs.map((c) => (c.id === id ? { ...c, ...data } : c)) }));
+      },
+      deleteConfig: async (id) => {
+        try { await axiosClient.delete(`/system/config/${id}`); } catch (e) { console.error(e); }
+        set((state) => ({ configs: state.configs.filter((c) => c.id !== id) }));
+      },
 
-      // Print Template Actions
-      addPrintTemplate: (tpl) => set((state) => ({ printTemplates: [{ id: Date.now().toString(), ...tpl }, ...state.printTemplates] })),
-      updatePrintTemplate: (id, data) => set((state) => ({ printTemplates: state.printTemplates.map((t) => (t.id === id ? { ...t, ...data } : t)) })),
-      deletePrintTemplate: (id) => set((state) => ({ printTemplates: state.printTemplates.filter((t) => t.id !== id) })),
+      fetchPrintTemplates: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/system/templates');
+          const data = res.content || res || [];
+          if (Array.isArray(data) && data.length > 0) {
+            set({ printTemplates: data.map((item: any) => ({
+              id: String(item.id),
+              templateCode: item.templateCode || '',
+              templateName: item.templateName || '',
+              documentType: item.documentType || 'POS_RECEIPT_80MM',
+              printerTarget: item.printerTarget || 'EPSON_TM_T88VI',
+              formatSyntax: item.formatSyntax || 'ESC_POS_RAW_HEX',
+              version: item.version || '1.0.0',
+              isDefault: Boolean(item.isDefault),
+              status: item.status || 'ACTIVE',
+              lastModifiedTimestamp: item.updatedAt ? item.updatedAt.split('T')[0] : '',
+              author: item.updatedBy || 'System',
+              sampleCodeSnippet: item.templateBody || '',
+            })) });
+          }
+        } catch (e) {
+          console.error('Failed to fetch print templates:', e);
+        }
+      },
+      addPrintTemplate: async (tpl) => {
+        try { await axiosClient.post('/system/templates', tpl); } catch (e) { console.error(e); }
+        set((state) => ({ printTemplates: [{ id: Date.now().toString(), ...tpl }, ...state.printTemplates] }));
+      },
+      updatePrintTemplate: async (id, data) => {
+        try { await axiosClient.put(`/system/templates/${id}`, data); } catch (e) { console.error(e); }
+        set((state) => ({ printTemplates: state.printTemplates.map((t) => (t.id === id ? { ...t, ...data } : t)) }));
+      },
+      deletePrintTemplate: async (id) => {
+        try { await axiosClient.delete(`/system/templates/${id}`); } catch (e) { console.error(e); }
+        set((state) => ({ printTemplates: state.printTemplates.filter((t) => t.id !== id) }));
+      },
 
-      // Notification Actions
-      addNotificationRule: (rule) => set((state) => ({ notifications: [{ id: Date.now().toString(), ...rule }, ...state.notifications] })),
-      updateNotificationRule: (id, data) => set((state) => ({ notifications: state.notifications.map((n) => (n.id === id ? { ...n, ...data } : n)) })),
-      deleteNotificationRule: (id) => set((state) => ({ notifications: state.notifications.filter((n) => n.id !== id) })),
+      fetchNotificationRules: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/system/notifications');
+          const data = res.content || res || [];
+          if (Array.isArray(data) && data.length > 0) {
+            set({ notifications: data.map((item: any) => ({
+              id: String(item.id),
+              ruleCode: item.ruleCode || '',
+              eventName: item.eventName || '',
+              channel: item.channel || 'EMAIL',
+              recipientRoleScope: item.recipientRoleScope || '',
+              urgency: item.urgency || 'NORMAL',
+              templateSubject: item.templateSubject || '',
+              deliveryCountYtd: Number(item.deliveryCount || 0),
+              status: item.status || 'ACTIVE',
+              lastDispatchedTimestamp: item.updatedAt ? item.updatedAt.split('T')[0] : '',
+              templateBody: item.templateBody || '',
+            })) });
+          }
+        } catch (e) {
+          console.error('Failed to fetch notification rules:', e);
+        }
+      },
+      addNotificationRule: async (rule) => {
+        set((state) => ({ notifications: [{ id: Date.now().toString(), ...rule }, ...state.notifications] }));
+      },
+      updateNotificationRule: async (id, data) => {
+        set((state) => ({ notifications: state.notifications.map((n) => (n.id === id ? { ...n, ...data } : n)) }));
+      },
+      deviceSessions: [
+        { id: '1', deviceName: 'Chrome / Windows 11 - Flagship POS 01', ipAddress: '192.168.1.102', userName: 'Trần Thị Thủy', loginTime: '2026-07-25 07:30', status: 'ACTIVE' },
+        { id: '2', deviceName: 'Safari / iPad Air - Inventory Scanner', ipAddress: '192.168.1.108', userName: 'Nguyễn Văn Nam', loginTime: '2026-07-25 08:15', status: 'ACTIVE' },
+      ],
+      passwordHistories: [
+        { id: '1', userName: 'nguyenvanan', changedAt: '2026-06-01 10:00', changedBy: 'Admin', reason: 'Đổi mật khẩu định kỳ 90 ngày' },
+        { id: '2', userName: 'tranthithuy', changedAt: '2026-05-15 14:20', changedBy: 'User Self-Service', reason: 'Reset mật khẩu qua Email' },
+      ],
+      systemErrorLogs: [
+        { id: '1', logCode: 'ERR-500-8819', serviceName: 'Order-Service', errorMessage: 'Database Connection Timeout on Order Flush', stackTrace: 'ConnectionPoolTimeoutException at HikariCP pool-1', severity: 'CRITICAL', timestamp: '2026-07-25 11:20:15' },
+        { id: '2', logCode: 'ERR-400-9921', serviceName: 'Sync-Gateway', errorMessage: 'Shopee Webhook Signature Verification Failed', stackTrace: 'InvalidSignatureException at WebhookValidator.java:45', severity: 'WARNING', timestamp: '2026-07-25 10:05:00' },
+      ],
+
+      fetchDeviceSessions: async () => {},
+      fetchPasswordHistories: async () => {},
+      fetchSystemErrorLogs: async () => {},
+
+      deleteNotificationRule: async (id) => {
+        set((state) => ({ notifications: state.notifications.filter((n) => n.id !== id) }));
+      },
     }),
     {
       name: 'retailhub-system-storage',
+      storage: createJSONStorage(() => localStorage),
     }
   )
 );

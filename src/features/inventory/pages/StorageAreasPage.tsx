@@ -1,73 +1,49 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Calendar, MapPin, Grid, Download } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, MapPin, Grid } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
-
-interface StorageAreaRecord {
-  id: string;
-  areaCode: string;
-  areaName: string;
-  branchName: string;
-  storageCondition: 'NORMAL' | 'COOL' | 'FREEZE';
-  capacityPallets: number;
-  status: 'ACTIVE' | 'INACTIVE';
-  notes?: string;
-}
+import { useInventoryStore, type AreaRecord } from '@/features/inventory/store/inventoryStore';
 
 export function StorageAreasPage() {
-  const { warehouseZones, fetchWarehouseZones, addWarehouseZone, updateWarehouseZone, deleteWarehouseZone } = useInventoryStore();
+  const { areas, fetchAreas, addArea, updateArea, deleteArea, warehouseZones, fetchWarehouseZones } = useInventoryStore();
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<StorageAreaRecord | null>(null);
+  const [selected, setSelected] = useState<AreaRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  const [editingItem, setEditingItem] = useState<Partial<StorageAreaRecord>>({});
+  const [editingItem, setEditingItem] = useState<Partial<AreaRecord>>({});
 
   useEffect(() => {
+    fetchAreas();
     fetchWarehouseZones();
-  }, [fetchWarehouseZones]);
-
-  const data = useMemo<StorageAreaRecord[]>(() => {
-    return warehouseZones.map((z) => ({
-      id: z.id,
-      areaCode: z.zoneCode,
-      areaName: z.zoneName,
-      branchName: z.branchName,
-      storageCondition: z.condition === 'Phòng lạnh bảo quản sản phẩm sữa & bơ' || z.condition === 'COOL' ? 'COOL' : z.condition === 'FREEZE' ? 'FREEZE' : 'NORMAL',
-      capacityPallets: z.capacity || 100,
-      status: z.status === 'TẠM_NGƯNG' ? 'INACTIVE' : 'ACTIVE',
-      notes: z.description,
-    }));
-  }, [warehouseZones]);
+  }, [fetchAreas, fetchWarehouseZones]);
 
   const filtered = useMemo(() => {
-    if (!search) return data;
+    if (!search) return areas;
     const q = search.toLowerCase();
-    return data.filter(
+    return areas.filter(
       (d) =>
         d.areaCode.toLowerCase().includes(q) ||
         d.areaName.toLowerCase().includes(q) ||
-        d.branchName.toLowerCase().includes(q)
+        (d.zoneName && d.zoneName.toLowerCase().includes(q)) ||
+        (d.branchName && d.branchName.toLowerCase().includes(q))
     );
-  }, [search, data]);
+  }, [search, areas]);
 
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingItem({
       areaCode: '',
       areaName: '',
-      branchName: 'Chi nhánh Quận 1',
-      storageCondition: 'NORMAL',
-      capacityPallets: 100,
-      status: 'ACTIVE',
-      notes: '',
+      zoneId: warehouseZones[0]?.id || '',
+      isActive: true,
+      description: '',
     });
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (item: StorageAreaRecord) => {
+  const handleOpenEdit = (item: AreaRecord) => {
     setModalMode('edit');
     setEditingItem(item);
     setIsModalOpen(true);
@@ -75,90 +51,71 @@ export function StorageAreasPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.areaCode || !editingItem.areaName) return;
+    if (!editingItem.areaCode || !editingItem.areaName || !editingItem.zoneId) return;
 
     const payload = {
-      zoneCode: editingItem.areaCode.toUpperCase(),
-      zoneName: editingItem.areaName!,
-      condition: editingItem.storageCondition || 'NORMAL',
-      capacity: Number(editingItem.capacityPallets || 0),
-      branchName: editingItem.branchName || 'Chi nhánh Quận 1',
-      status: editingItem.status === 'INACTIVE' ? ('TẠM_NGƯNG' as const) : ('HOẠT_ĐỘNG' as const),
-      description: editingItem.notes,
+      areaCode: editingItem.areaCode.toUpperCase(),
+      areaName: editingItem.areaName,
+      zoneId: editingItem.zoneId,
+      isActive: editingItem.isActive !== false,
+      description: editingItem.description || '',
     };
 
     if (modalMode === 'create') {
-      await addWarehouseZone(payload);
+      await addArea(payload);
     } else {
-      await updateWarehouseZone(editingItem.id!, payload);
+      await updateArea(editingItem.id!, payload);
     }
     setIsModalOpen(false);
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa phân khu kho này?')) {
-      await deleteWarehouseZone(id);
+    if (confirm('Bạn có chắc chắn muốn xóa bãi kho (Storage Area) này?')) {
+      await deleteArea(id);
     }
   };
 
-  const columns = useMemo<ColumnDef<StorageAreaRecord>[]>(
+  const columns = useMemo<ColumnDef<AreaRecord>[]>(
     () => [
       {
         accessorKey: 'areaCode',
-        header: 'Mã Phân Khu',
+        header: 'Mã bãi kho',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'areaName',
-        header: 'Tên Phân Khu',
+        header: 'Tên bãi kho',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
+        accessorKey: 'zoneName',
+        header: 'Thuộc phân khu (zone)',
+        cell: (info) => <span className="font-semibold text-purple-600">{info.getValue() as string}</span>,
+      },
+      {
         accessorKey: 'branchName',
-        header: 'Thuộc Chi Nhánh',
-        cell: (info) => <span className="font-semibold text-blue-600">{info.getValue() as string}</span>,
+        header: 'Thuộc chi nhánh',
+        cell: (info) => <span className="font-semibold text-blue-600">{info.getValue() as string || 'N/A'}</span>,
       },
       {
-        accessorKey: 'storageCondition',
-        header: 'Điều Kiện Bảo Quản',
+        accessorKey: 'isActive',
+        header: 'Trạng thái',
         cell: (info) => {
-          const val = info.getValue() as string;
-          let label = 'Nhiệt Độ Thường';
-          let color = 'text-gray-700 bg-gray-50';
-          if (val === 'COOL') {
-            label = 'Hàng Mát (2-15°C)';
-            color = 'text-teal-600 bg-teal-50';
-          } else if (val === 'FREEZE') {
-            label = 'Đông Lạnh (< 0°C)';
-            color = 'text-blue-600 bg-blue-50';
-          }
-          return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${color}`}>{label}</span>;
-        },
-      },
-      {
-        accessorKey: 'capacityPallets',
-        header: 'Sức Chứa (Pallets)',
-        cell: (info) => <span className="font-mono">{info.getValue() as number} kệ</span>,
-      },
-      {
-        accessorKey: 'status',
-        header: 'Trạng Thái',
-        cell: (info) => {
-          const status = info.getValue() as string;
-          const badgeClass = status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800';
-          const label = status === 'ACTIVE' ? 'Hoạt Động' : 'Tạm Khóa';
+          const isActive = info.getValue() as boolean;
+          const badgeClass = isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800';
+          const label = isActive ? 'Hoạt động' : 'Tạm khóa';
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết Khu"
+              title="Xem chi tiết bãi kho"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -180,33 +137,33 @@ export function StorageAreasPage() {
         ),
       },
     ],
-    [data]
+    [areas]
   );
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Phân Khu Lưu Trữ Nội Bộ (Storage Areas)</h1>
+          <h1 className="text-2xl font-bold">Bãi kho lưu trữ (storage areas)</h1>
           <p className="text-sm text-gray-500">
-            Xem và cấu hình các phân khu lưu trữ chính trong kho của từng chi nhánh, quản lý điều kiện bảo quản thực phẩm/hàng hóa.
+            Xem và cấu hình các bãi kho lưu trữ chính trực thuộc các phân khu (Zones) trong kho của từng chi nhánh.
           </p>
         </div>
         <button
           onClick={handleOpenCreate}
           className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition"
         >
-          <Plus className="w-4 h-4" /> Thêm Phân Khu Kho
+          <Plus className="w-4 h-4" /> Thêm Bãi Kho
         </button>
       </div>
 
       <div className="p-4 bg-white dark:bg-gray-800 rounded shadow flex items-center gap-4">
-        <MapPin className="w-5 h-5 text-gray-400" />
+        <Search className="w-5 h-5 text-gray-400" />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm kiếm mã phân khu, tên phân khu, chi nhánh..."
+          placeholder="Tìm kiếm mã bãi kho, tên bãi kho, phân khu, chi nhánh..."
           className="w-full bg-transparent outline-none text-sm"
         />
       </div>
@@ -216,53 +173,47 @@ export function StorageAreasPage() {
       <Drawer
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title={`Chi tiết phân khu: ${selected?.areaName}`}
+        title={`Chi tiết bãi kho: ${selected?.areaName}`}
       >
         {selected && (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã Phân Khu:</span>
+                <span className="text-gray-500">Mã bãi kho:</span>
                 <p className="font-mono font-semibold">{selected.areaCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Chi Nhánh Quản Lý:</span>
-                <p className="font-semibold text-blue-600">{selected.branchName}</p>
+                <span className="text-gray-500">Tên bãi kho:</span>
+                <p className="font-semibold">{selected.areaName}</p>
               </div>
-            </div>
-            <div>
-              <span className="text-gray-500">Tên Phân Khu Kho:</span>
-              <p className="font-semibold text-base">{selected.areaName}</p>
             </div>
             <div className="grid grid-cols-2 gap-4 border-t pt-2">
               <div>
-                <span className="text-gray-500">Điều Kiện Bảo Quản:</span>
-                <p className="font-semibold text-teal-600">
-                  {selected.storageCondition === 'NORMAL' ? 'Nhiệt Độ Thường' : selected.storageCondition === 'COOL' ? 'Hàng Mát' : 'Đông Lạnh'}
-                </p>
+                <span className="text-gray-500">Thuộc phân khu (zone):</span>
+                <p className="font-semibold text-purple-600">{selected.zoneName}</p>
               </div>
               <div>
-                <span className="text-gray-500">Sức Chứa Pallets:</span>
-                <p className="font-mono font-semibold">{selected.capacityPallets} kệ</p>
+                <span className="text-gray-500">Chi nhánh quản lý:</span>
+                <p className="font-semibold text-blue-600">{selected.branchName || 'N/A'}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Trạng Thái:</span>
+              <span className="text-gray-500">Trạng thái:</span>
               <div>
                 <span
                   className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
-                    selected.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                    selected.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
                   }`}
                 >
-                  {selected.status === 'ACTIVE' ? 'Hoạt Động' : 'Tạm Khóa'}
+                  {selected.isActive ? 'Hoạt động' : 'Tạm khóa'}
                 </span>
               </div>
             </div>
-            {selected.notes && (
+            {selected.description && (
               <div>
-                <span className="text-gray-500">Ghi Chú Vận Hành:</span>
+                <span className="text-gray-500">Ghi chú vận hành:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
-                  {selected.notes}
+                  {selected.description}
                 </p>
               </div>
             )}
@@ -273,88 +224,111 @@ export function StorageAreasPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Phân Khu Kho Mới' : 'Sửa Phân Khu Kho'}
+        title={modalMode === 'create' ? '📦 Thêm bãi kho (Storage Area) mới' : '⚙️ Sửa thông tin bãi kho'}
+        width="max-w-xl"
       >
-        <form onSubmit={handleSave} className="space-y-4">
+        <form onSubmit={handleSave} className="space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Phân Khu *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã bãi kho *</label>
+                {modalMode === 'create' && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem({ ...editingItem, areaCode: `AREA-${Math.floor(100 + Math.random() * 900)}` })}
+                    className="text-[10px] text-emerald-600 hover:underline font-bold"
+                  >
+                    ⚡ Sinh mã
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingItem.areaCode || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, areaCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
-                placeholder="ZA-XX"
+                onChange={(e) => setEditingItem({ ...editingItem, areaCode: e.target.value.toUpperCase() })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Ví dụ: AREA-A1, AREA-B2..."
                 required
                 disabled={modalMode === 'edit'}
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Chi Nhánh Quản Lý *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tên bãi kho *</label>
               <input
                 type="text"
-                value={editingItem.branchName || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, branchName: e.target.value })}
-                className="w-full p-2 border rounded"
-                placeholder="Chọn chi nhánh"
+                value={editingItem.areaName || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, areaName: e.target.value })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Ví dụ: Bãi hàng khô A1, Khu nguyên liệu B..."
                 required
               />
             </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Tên Phân Khu Kho *</label>
-            <input
-              type="text"
-              value={editingItem.areaName || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, areaName: e.target.value })}
-              className="w-full p-2 border rounded"
-              placeholder="Tên phân khu chi tiết"
-              required
-            />
-          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Điều Kiện Bảo Quản *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Phân khu (zone) *</label>
               <select
-                value={editingItem.storageCondition || 'NORMAL'}
-                onChange={(e) => setEditingItem({ ...editingItem, storageCondition: e.target.value as any })}
-                className="w-full p-2 border rounded"
+                value={editingItem.zoneId || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, zoneId: e.target.value })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                required
               >
-                <option value="NORMAL">Nhiệt Độ Thường</option>
-                <option value="COOL">Hàng Mát (2-15°C)</option>
-                <option value="FREEZE">Đông Lạnh (&lt; 0°C)</option>
+                <option value="">-- Chọn zone --</option>
+                {warehouseZones.map((z) => (
+                  <option key={z.id} value={z.id}>
+                    {z.zoneCode} - {z.zoneName} ({z.branchName})
+                  </option>
+                ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Sức Chứa (Pallets) *</label>
-              <input
-                type="number"
-                value={editingItem.capacityPallets || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, capacityPallets: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
-                required
-              />
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Trạng thái *</label>
+              <select
+                value={editingItem.isActive === false ? 'false' : 'true'}
+                onChange={(e) => setEditingItem({ ...editingItem, isActive: e.target.value === 'true' })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              >
+                <option value="true">🟢 Hoạt động</option>
+                <option value="false">🔴 Tạm khóa</option>
+              </select>
             </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Trạng Thái *</label>
-            <select
-              value={editingItem.status || 'ACTIVE'}
-              onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-              className="w-full p-2 border rounded"
-            >
-              <option value="ACTIVE">Hoạt Động</option>
-              <option value="INACTIVE">Tạm Khóa (Đang xử lý dọn dẹp bãi)</option>
-            </select>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Diện tích bãi (m²)</label>
+              <input
+                type="number"
+                value={(editingItem as any).areaSizeM2 || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, areaSizeM2: Number(e.target.value) } as any)}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Ví dụ: 150"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Điều kiện bảo quản</label>
+              <select
+                value={(editingItem as any).storageCondition || 'NORMAL'}
+                onChange={(e) => setEditingItem({ ...editingItem, storageCondition: e.target.value } as any)}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              >
+                <option value="NORMAL">Nhiệt độ thường (15 - 25°C)</option>
+                <option value="COLD">Kho lạnh (0 - 5°C)</option>
+                <option value="FROZEN">Kho đông (-18°C)</option>
+                <option value="HAZMAT">Hóa chất / Hàng nguy hiểm</option>
+              </select>
+            </div>
           </div>
+
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mô tả / Ghi Chú vận hành</label>
             <textarea
-              value={editingItem.notes || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border rounded"
+              value={editingItem.description || ''}
+              onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
               rows={3}
-              placeholder="Ghi chú vận hành, thời gian bốc dỡ hàng..."
+              placeholder="Ghi chú vận hành, loại hàng hóa lưu trữ tối ưu..."
             />
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t">
@@ -366,7 +340,7 @@ export function StorageAreasPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Phân Khu
+              Lưu bãi kho
             </button>
           </div>
         </form>
@@ -375,3 +349,4 @@ export function StorageAreasPage() {
   );
 }
 export default StorageAreasPage;
+

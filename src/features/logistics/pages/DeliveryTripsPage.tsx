@@ -1,8 +1,11 @@
-import { useMemo, useState } from 'react';
-import { Plus, Download, Search, Filter, Eye, Truck, CheckCircle2, Clock, Navigation, AlertTriangle, UserCheck, DollarSign, MapPin } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
+import { Plus, Download, Search, Filter, Eye, Truck, CheckCircle2, Clock, Navigation, AlertTriangle, UserCheck, DollarSign, MapPin, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
+import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface DeliveryTripRecord {
   id: string;
@@ -23,17 +26,122 @@ interface DeliveryTripRecord {
   notes?: string;
 }
 
-const MOCK_TRIPS: DeliveryTripRecord[] = [
-  { id: '1', manifestNumber: 'TRIP-2024-001', driverName: 'Marcus Aurelius', driverPhone: '+1 (555) 912-3456', vehiclePlate: '59C-881.02', vehicleType: 'REFRIGERATED_TRUCK', departureHub: 'Central Distribution Warehouse', destinationZone: 'Downtown Retail Stores (Zone A)', scheduledDeparture: '2024-05-18 06:00', actualDeparture: '2024-05-18 06:15', estimatedArrival: '2024-05-18 10:30', totalParcels: 42, totalWeightKg: 1850.5, tripStatus: 'IN_TRANSIT', cashOnDeliveryTotal: 4500.00, notes: 'Carrying temperature-sensitive dairy and beverage stock. Cabin cooling unit verified at 4°C.' },
-  { id: '2', manifestNumber: 'TRIP-2024-002', driverName: 'Lucius Vorenus', driverPhone: '+1 (555) 819-2034', vehiclePlate: '29D-445.19', vehicleType: 'LIGHT_TRUCK', departureHub: 'North Suburb Annex', destinationZone: 'Industrial Park (Zone D)', scheduledDeparture: '2024-05-18 08:30', estimatedArrival: '2024-05-18 12:00', totalParcels: 18, totalWeightKg: 920.0, tripStatus: 'SCHEDULED', cashOnDeliveryTotal: 1200.00 },
-  { id: '3', manifestNumber: 'TRIP-2024-003', driverName: 'Titus Pullo', driverPhone: '+1 (555) 777-8811', vehiclePlate: '61A-901.55', vehicleType: 'VAN', departureHub: 'Westside Logistics Hub', destinationZone: 'Metro Airport Strip (Zone B)', scheduledDeparture: '2024-05-17 14:00', actualDeparture: '2024-05-17 14:05', estimatedArrival: '2024-05-17 17:45', totalParcels: 55, totalWeightKg: 640.0, tripStatus: 'COMPLETED', cashOnDeliveryTotal: 8900.50, notes: 'All cash on delivery receipts handed over to HQ treasury desk successfully.' },
-  { id: '4', manifestNumber: 'TRIP-2024-004', driverName: 'Gaius Julius', driverPhone: '+1 (555) 333-4444', vehiclePlate: '59B-112.99', vehicleType: 'MOTORBIKE', departureHub: 'Central Distribution Warehouse', destinationZone: 'Highland Ridge (Zone C)', scheduledDeparture: '2024-05-18 09:00', estimatedArrival: '2024-05-18 14:00', totalParcels: 8, totalWeightKg: 45.0, tripStatus: 'DELAYED', cashOnDeliveryTotal: 340.00, notes: 'Heavy monsoon downpour reported along mountainous pass. Driver sheltering at rest stop.' },
-];
-
 export function DeliveryTripsPage() {
-  const [data] = useState<DeliveryTripRecord[]>(MOCK_TRIPS);
+  const [data, setData] = useState<DeliveryTripRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedTrip, setSelectedTrip] = useState<DeliveryTripRecord | null>(null);
+
+  // States for creation
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [shippersList, setShippersList] = useState<any[]>([]);
+  const [tripCode, setTripCode] = useState('');
+  const [selectedShipperId, setSelectedShipperId] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [notes, setNotes] = useState('');
+
+  const fetchTrips = async () => {
+    setIsLoading(true);
+    try {
+      const res = await axiosClient.get<any, any[]>('/logistics/trips');
+      if (Array.isArray(res)) {
+        const mapped = res.map((item: any) => ({
+          id: String(item.id),
+          manifestNumber: item.tripCode || `TRIP-${item.id}`,
+          driverName: item.shipper?.fullName || item.receiverName || 'Chưa phân công',
+          driverPhone: item.shipper?.phone || item.receiverPhone || '',
+          vehiclePlate: item.shipper?.licensePlate || 'N/A',
+          vehicleType: (item.shipper?.vehicleType || 'VAN') as any,
+          departureHub: 'Kho tổng',
+          destinationZone: item.deliveryAddress || 'Chưa nhập địa chỉ',
+          scheduledDeparture: item.createdAt ? item.createdAt.substring(0, 16).replace('T', ' ') : 'N/A',
+          actualDeparture: item.createdAt ? item.createdAt.substring(0, 16).replace('T', ' ') : undefined,
+          estimatedArrival: item.updatedAt ? item.updatedAt.substring(0, 16).replace('T', ' ') : 'N/A',
+          totalParcels: 10,
+          totalWeightKg: 25.5,
+          tripStatus: (item.status || 'SCHEDULED') as any,
+          cashOnDeliveryTotal: item.order?.totalAmount || 500000,
+          notes: item.deliveryNote || ''
+        }));
+        setData(mapped);
+      } else {
+        setData([]);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi tải danh sách chuyến giao hàng.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchShippers = async () => {
+    try {
+      const res = await axiosClient.get<any, any[]>('/logistics/shippers');
+      setShippersList(Array.isArray(res) ? res : []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchTrips();
+  }, []);
+
+  const handleOpenCreate = () => {
+    setTripCode(`TRIP-${Date.now().toString().slice(-6)}`);
+    setSelectedShipperId('');
+    setDeliveryAddress('');
+    setNotes('');
+    setIsCreateOpen(true);
+    fetchShippers();
+  };
+
+  const handleCreateTrip = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        tripCode,
+        status: 'SCHEDULED',
+        deliveryAddress,
+        deliveryNote: notes,
+        shipperId: selectedShipperId ? Number(selectedShipperId) : undefined
+      };
+      await axiosClient.post('/logistics/trips', payload);
+      toast.success('Tạo lệnh điều vận mới thành công!');
+      setIsCreateOpen(false);
+      fetchTrips();
+    } catch (err) {
+      console.error(err);
+      toast.error('Không thể tạo lệnh điều vận.');
+    }
+  };
+
+  const handleUpdateStatus = async (tripId: string, status: string) => {
+    try {
+      await axiosClient.put(`/logistics/trips/${tripId}`, { status });
+      toast.success(`Cập nhật trạng thái chuyến đi thành công!`);
+      setSelectedTrip(null);
+      fetchTrips();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi cập nhật trạng thái.');
+    }
+  };
+
+  const handleDeleteTrip = async (tripId: string) => {
+    if (confirm('Bạn có chắc chắn muốn hủy chuyến xe này?')) {
+      try {
+        await axiosClient.delete(`/logistics/trips/${tripId}`);
+        toast.success('Hủy chuyến giao hàng thành công!');
+        setSelectedTrip(null);
+        fetchTrips();
+      } catch (err) {
+        console.error(err);
+        toast.error('Lỗi khi hủy chuyến xe.');
+      }
+    }
+  };
 
   const filtered = data.filter((item) =>
     item.manifestNumber.toLowerCase().includes(search.toLowerCase()) ||
@@ -77,7 +185,7 @@ export function DeliveryTripsPage() {
       {
         accessorKey: 'cashOnDeliveryTotal',
         header: 'COD thu hộ',
-        cell: (info) => <span className="font-mono font-bold text-primary">${(info.getValue() as number).toFixed(2)}</span>,
+        cell: (info) => <span className="font-mono font-bold text-primary">{Number(info.getValue()).toLocaleString('vi-VN')} ₫</span>,
       },
       {
         accessorKey: 'tripStatus',
@@ -106,12 +214,20 @@ export function DeliveryTripsPage() {
         id: 'actions',
         header: 'Actions',
         cell: ({ row }) => (
-          <button
-            onClick={(e) => { e.stopPropagation(); setSelectedTrip(row.original); }}
-            className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => { e.stopPropagation(); setSelectedTrip(row.original); }}
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDeleteTrip(row.original.id); }}
+              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         ),
       },
     ],
@@ -130,7 +246,10 @@ export function DeliveryTripsPage() {
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
               <Download className="w-4 h-4" /> Xuất nhật ký điều vận
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
+            <button
+              onClick={handleOpenCreate}
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
+            >
               <Plus className="w-4 h-4" /> Tạo lệnh điều vận mới
             </button>
           </div>
@@ -149,12 +268,16 @@ export function DeliveryTripsPage() {
               className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-all"
             />
           </div>
-          <button className="flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors text-sm">
-            <Filter className="w-4 h-4" /> Lọc tuyến
-          </button>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} />
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-150 dark:border-gray-700 shadow-sm">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-sm font-bold text-gray-500">Đang tải danh sách chuyến xe...</span>
+          </div>
+        ) : (
+          <ReusableDataTable columns={columns} data={filtered} />
+        )}
       </div>
 
       <Drawer
@@ -182,11 +305,7 @@ export function DeliveryTripsPage() {
                   <p className="text-lg font-bold text-gray-900 dark:text-white uppercase mt-0.5">{selectedTrip.tripStatus.replace('_', ' ')}</p>
                 </div>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-bold font-mono ${
-                selectedTrip.tripStatus === 'COMPLETED' ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
-                selectedTrip.tripStatus === 'IN_TRANSIT' ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100' :
-                'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100'
-              }`}>
+              <span className="px-3 py-1 rounded-full text-xs font-bold font-mono bg-indigo-100 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-200">
                 {selectedTrip.vehicleType.replace('_', ' ')}
               </span>
             </div>
@@ -203,7 +322,7 @@ export function DeliveryTripsPage() {
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   <DollarSign className="w-4 h-4 text-emerald-600" /> COD đang chờ bàn giao
                 </div>
-                <p className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 truncate">${selectedTrip.cashOnDeliveryTotal.toFixed(2)}</p>
+                <p className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 truncate">{selectedTrip.cashOnDeliveryTotal.toLocaleString('vi-VN')} ₫</p>
               </div>
             </div>
 
@@ -225,11 +344,11 @@ export function DeliveryTripsPage() {
 
               <div className="grid grid-cols-2 pt-2 border-t border-gray-200 dark:border-gray-700 text-xs">
                 <div>
-                  <span className="text-gray-400 block mb-0.5">Scheduled Departure:</span>
+                  <span className="text-gray-400 block mb-0.5">Giờ lập lệnh:</span>
                   <span className="font-mono font-semibold text-gray-800 dark:text-gray-200">{selectedTrip.scheduledDeparture}</span>
                 </div>
                 <div>
-                  <span className="text-gray-400 block mb-0.5">Giờ đến dự kiến:</span>
+                  <span className="text-gray-400 block mb-0.5">Cập nhật cuối:</span>
                   <span className="font-mono font-semibold text-primary">{selectedTrip.estimatedArrival}</span>
                 </div>
               </div>
@@ -252,18 +371,106 @@ export function DeliveryTripsPage() {
             </div>
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
-              {selectedTrip.tripStatus === 'IN_TRANSIT' && (
-                <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                  <CheckCircle2 className="w-4 h-4" /> Confirm Hub Arrival
+              {selectedTrip.tripStatus === 'SCHEDULED' && (
+                <button
+                  onClick={() => handleUpdateStatus(selectedTrip.id, 'IN_TRANSIT')}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                >
+                  <Truck className="w-4 h-4" /> Bắt đầu di chuyển
                 </button>
               )}
-              <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
-                <Clock className="w-4 h-4 inline mr-1" /> Ghi lại chậm tuyến
+              {selectedTrip.tripStatus === 'IN_TRANSIT' && (
+                <button
+                  onClick={() => handleUpdateStatus(selectedTrip.id, 'COMPLETED')}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                >
+                  <CheckCircle2 className="w-4 h-4" /> Hoàn thành chuyến xe
+                </button>
+              )}
+              <button
+                onClick={() => handleUpdateStatus(selectedTrip.id, 'DELAYED')}
+                className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
+              >
+                <Clock className="w-4 h-4 inline mr-1" /> Báo chậm tuyến
               </button>
             </div>
           </div>
         )}
       </Drawer>
+
+      <Modal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        title="Tạo Lệnh Điều Vận Mới"
+        width="max-w-md"
+      >
+        <form onSubmit={handleCreateTrip} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mã lệnh điều vận *</label>
+            <input
+              type="text"
+              value={tripCode}
+              onChange={(e) => setTripCode(e.target.value)}
+              required
+              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Tài xế phân công *</label>
+            <select
+              value={selectedShipperId}
+              onChange={(e) => setSelectedShipperId(e.target.value)}
+              required
+              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
+            >
+              <option value="">-- Chọn tài xế --</option>
+              {shippersList.map(s => (
+                <option key={s.id} value={s.id}>{s.fullName} ({s.licensePlate})</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Tuyến đến / Địa chỉ *</label>
+            <input
+              type="text"
+              value={deliveryAddress}
+              onChange={(e) => setDeliveryAddress(e.target.value)}
+              required
+              placeholder="VD: 123 Nguyễn Trãi, Quận 5, HCM"
+              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Ghi chú điều vận</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              placeholder="Ghi chú thêm về hàng hóa, nhiệt độ cabin hoặc lưu ý..."
+              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t mt-6">
+            <button
+              type="button"
+              onClick={() => setIsCreateOpen(false)}
+              className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold shadow-sm"
+            >
+              Lập lệnh
+            </button>
+          </div>
+        </form>
+      </Modal>
     </>
   );
 }

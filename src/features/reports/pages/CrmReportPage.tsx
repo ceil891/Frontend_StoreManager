@@ -22,7 +22,7 @@ const CUSTOMER_TIERS = [
   { name: 'Thành viên Đồng', value: 4500, color: '#9CA3AF' },
   { name: 'Thành viên Bạc', value: 2100, color: '#94A3B8' },
   { name: 'Thành viên Vàng', value: 850, color: '#FBBF24' },
-  { name: 'Khách VIP (Kim Cương)', value: 150, color: '#818CF8' },
+  { name: 'Khách VIP (kim Cương)', value: 150, color: '#818CF8' },
 ];
 
 interface TopCustomer {
@@ -36,9 +36,9 @@ interface TopCustomer {
 
 const TOP_CUSTOMERS: TopCustomer[] = [
   { id: 'CUS-001', name: 'Nguyễn Văn A', phone: '0901xxx123', tier: 'Kim Cương', totalSpent: 125000000, lastVisit: 'Hôm nay' },
-  { id: 'CUS-002', name: 'Trần Thị B', phone: '0982xxx456', tier: 'Vàng', totalSpent: 85000000, lastVisit: 'Hôm qua' },
+  { id: 'CUS-002', name: 'Trần thị B', phone: '0982xxx456', tier: 'Vàng', totalSpent: 85000000, lastVisit: 'Hôm qua' },
   { id: 'CUS-003', name: 'Lê Văn C', phone: '0913xxx789', tier: 'Vàng', totalSpent: 72000000, lastVisit: '3 ngày trước' },
-  { id: 'CUS-004', name: 'Phạm Thị D', phone: '0904xxx321', tier: 'Bạc', totalSpent: 45000000, lastVisit: '1 tuần trước' },
+  { id: 'CUS-004', name: 'Phạm thị D', phone: '0904xxx321', tier: 'Bạc', totalSpent: 45000000, lastVisit: '1 tuần trước' },
   { id: 'CUS-005', name: 'Hoàng Văn E', phone: '0975xxx654', tier: 'Đồng', totalSpent: 15000000, lastVisit: '1 tháng trước' },
 ];
 
@@ -120,7 +120,7 @@ export function CrmReportPage() {
           </select>
           <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
             <Download className="w-4 h-4" />
-            Xuất Data
+            Xuất data
           </button>
         </div>
       </div>

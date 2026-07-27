@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, FileText, Send, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface RFQRecord {
   id: string;
@@ -17,38 +19,48 @@ interface RFQRecord {
   notes?: string;
 }
 
-const MOCK_RFQS: RFQRecord[] = [
-  {
-    id: '1',
-    rfqCode: 'RFQ-2026-001',
-    supplierName: 'Nhà Cung Cấp Toàn Cầu',
-    sentDate: '2026-06-01',
-    expiryDate: '2026-06-10',
-    itemsDescription: 'Yêu cầu báo giá 500 thùng sữa, 1000 lon nước ngọt các loại',
-    handler: 'Lưu Hữu Phước',
-    status: 'CHO_BAO_GIA',
-    notes: 'Liên hệ gửi báo giá qua email sales@global.com',
-  },
-  {
-    id: '2',
-    rfqCode: 'RFQ-2026-002',
-    supplierName: 'Công Ty Nhập Khẩu Á Châu',
-    sentDate: '2026-05-15',
-    expiryDate: '2026-05-25',
-    itemsDescription: 'Báo giá 20 bộ máy lạnh DAIKIN 1.5 HP tiết kiệm điện',
-    handler: 'Nguyễn Thị Hoa',
-    status: 'DA_BAO_GIA',
-    notes: 'Nhà cung cấp đã phản hồi giá tốt, đang soạn thảo đơn mua PO',
-  },
-];
-
 export function SupplierRequestsPage() {
-  const [data, setData] = useState<RFQRecord[]>(MOCK_RFQS);
+  const [data, setData] = useState<RFQRecord[]>([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<RFQRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<RFQRecord>>({});
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fetchRFQs = async () => {
+    try {
+      setIsLoading(true);
+      const res = await axiosClient.get('/purchase/orders?size=500');
+      const list = (res as any).content || res || [];
+      const mapped: RFQRecord[] = (Array.isArray(list) ? list : []).map((item: any) => {
+        let status: RFQRecord['status'] = 'CHO_BAO_GIA';
+        if (item.status === 'CONFIRMED' || item.status === 'COMPLETED') status = 'DA_BAO_GIA';
+        else if (item.status === 'CANCELLED') status = 'DA_HUY';
+        return {
+          id: String(item.id),
+          rfqCode: item.poNumber || '',
+          supplierName: item.supplierName || item.supplier?.name || '',
+          sentDate: item.orderDate || '',
+          expiryDate: item.estDeliveryDate || '',
+          itemsDescription: item.notes || `${item.itemsCount || 0} sản phẩm`,
+          handler: item.orderedBy || '',
+          status,
+          notes: item.notes || '',
+        };
+      });
+      setData(mapped);
+    } catch (err) {
+      console.error('Lỗi tải danh sách yêu cầu báo giá:', err);
+      toast.error('Không thể tải danh sách yêu cầu báo giá');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRFQs();
+  }, []);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -82,32 +94,54 @@ export function SupplierRequestsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.rfqCode || !editingItem.supplierName) return;
 
-    if (modalMode === 'create') {
-      const newItem: RFQRecord = {
-        id: String(data.length + 1),
-        rfqCode: editingItem.rfqCode!,
-        supplierName: editingItem.supplierName!,
-        sentDate: editingItem.sentDate!,
-        expiryDate: editingItem.expiryDate || editingItem.sentDate!,
-        itemsDescription: editingItem.itemsDescription || '',
-        handler: editingItem.handler || '',
-        status: editingItem.status as any || 'CHO_BAO_GIA',
-        notes: editingItem.notes,
-      };
-      setData([...data, newItem]);
-    } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as RFQRecord) : d)));
+    try {
+      if (modalMode === 'create') {
+        const payload = {
+          poNumber: editingItem.rfqCode,
+          supplierName: editingItem.supplierName,
+          orderDate: editingItem.sentDate || new Date().toISOString().split('T')[0],
+          estDeliveryDate: editingItem.expiryDate || editingItem.sentDate,
+          notes: editingItem.itemsDescription || '',
+          orderedBy: editingItem.handler || '',
+          status: 'DRAFT',
+        };
+        await axiosClient.post('/purchase/orders', payload);
+        toast.success('Tạo yêu cầu báo giá thành công');
+      } else {
+        const payload = {
+          poNumber: editingItem.rfqCode,
+          supplierName: editingItem.supplierName,
+          orderDate: editingItem.sentDate,
+          estDeliveryDate: editingItem.expiryDate,
+          notes: editingItem.itemsDescription || '',
+          orderedBy: editingItem.handler || '',
+          status: 'DRAFT',
+        };
+        await axiosClient.put(`/purchase/orders/${editingItem.id}`, payload);
+        toast.success('Cập nhật yêu cầu báo giá thành công');
+      }
+      await fetchRFQs();
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error('Lỗi lưu yêu cầu báo giá:', err);
+      toast.error('Không thể lưu yêu cầu báo giá');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa yêu cầu báo giá này?')) {
-      setData(data.filter((d) => d.id !== id));
+      try {
+        await axiosClient.delete(`/purchase/orders/${id}`);
+        toast.success('Đã xóa yêu cầu báo giá');
+        await fetchRFQs();
+      } catch (err) {
+        console.error('Lỗi xóa yêu cầu báo giá:', err);
+        toast.error('Không thể xóa yêu cầu báo giá');
+      }
     }
   };
 
@@ -115,50 +149,50 @@ export function SupplierRequestsPage() {
     () => [
       {
         accessorKey: 'rfqCode',
-        header: 'Mã Yêu Cầu (RFQ)',
+        header: 'Mã yêu cầu (RFQ)',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'supplierName',
-        header: 'Nhà Cung Cấp',
+        header: 'Nhà cung cấp',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'sentDate',
-        header: 'Ngày Gửi',
+        header: 'Ngày gửi',
         cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'itemsDescription',
-        header: 'Nội Dung Yêu Cầu',
+        header: 'Nội dung yêu cầu',
         cell: (info) => <span className="truncate max-w-xs block">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           let badgeClass = 'bg-amber-100 text-amber-800';
-          let label = 'Chờ Báo Giá';
+          let label = 'Chờ báo giá';
           if (status === 'DA_BAO_GIA') {
             badgeClass = 'bg-emerald-100 text-emerald-800';
-            label = 'Đã Báo Giá';
+            label = 'Đã báo giá';
           } else if (status === 'DA_HUY') {
             badgeClass = 'bg-red-100 text-red-800';
-            label = 'Đã Hủy';
+            label = 'Đã hủy';
           }
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết RFQ"
+              title="Xem chi tiết RFQ"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -187,7 +221,7 @@ export function SupplierRequestsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Yêu Cầu Báo Giá Nhà Cung Cấp (RFQs)</h1>
+          <h1 className="text-2xl font-bold">Yêu cầu báo giá nhà cung cấp (rfqs)</h1>
           <p className="text-sm text-gray-500">
             Tạo và theo dõi các bản yêu cầu báo giá (Requests for Quotation) gửi tới nhà cung cấp nhằm tìm kiếm giá tốt nhất.
           </p>
@@ -211,7 +245,13 @@ export function SupplierRequestsPage() {
         />
       </div>
 
-      <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      {isLoading ? (
+        <div className="flex justify-center items-center py-20">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-500" />
+        </div>
+      ) : (
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      )}
 
       <Drawer
         isOpen={!!selected}
@@ -226,32 +266,32 @@ export function SupplierRequestsPage() {
                 <p className="font-mono font-semibold">{selected.rfqCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Người Thực Hiện:</span>
+                <span className="text-gray-500">Người thực hiện:</span>
                 <p>{selected.handler || 'Nhân viên mua hàng'}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Nhà Cung Cấp:</span>
+              <span className="text-gray-500">Nhà cung cấp:</span>
               <p className="font-semibold">{selected.supplierName}</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Ngày Gửi RFQ:</span>
+                <span className="text-gray-500">Ngày gửi RFQ:</span>
                 <p className="font-mono">{selected.sentDate}</p>
               </div>
               <div>
-                <span className="text-gray-500">Ngày Hết Hạn Nhận Báo Giá:</span>
+                <span className="text-gray-500">Ngày hết hạn nhận báo giá:</span>
                 <p className="font-mono">{selected.expiryDate}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Nội Dung / Mặt Hàng Yêu Cầu:</span>
+              <span className="text-gray-500">Nội dung / mặt hàng yêu cầu:</span>
               <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                 {selected.itemsDescription}
               </p>
             </div>
             <div>
-              <span className="text-gray-500">Trạng Thái RFQ:</span>
+              <span className="text-gray-500">Trạng thái RFQ:</span>
               <div>
                 <span
                   className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
@@ -263,16 +303,16 @@ export function SupplierRequestsPage() {
                   }`}
                 >
                   {selected.status === 'DA_BAO_GIA'
-                    ? 'Đã Nhận Báo Giá'
+                    ? 'Đã nhận báo giá'
                     : selected.status === 'CHO_BAO_GIA'
-                    ? 'Chờ Báo Giá'
-                    : 'Đã Hủy RFQ'}
+                    ? 'Chờ báo giá'
+                    : 'Đã hủy RFQ'}
                 </span>
               </div>
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi Chú Vận Hành:</span>
+                <span className="text-gray-500">Ghi chú vận hành:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                   {selected.notes}
                 </p>
@@ -285,7 +325,7 @@ export function SupplierRequestsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Gửi Yêu Cầu Báo Giá RFQ' : 'Sửa Yêu Cầu Báo Giá RFQ'}
+        title={modalMode === 'create' ? 'Gửi yêu cầu báo giá RFQ' : 'Sửa yêu cầu báo giá RFQ'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -301,7 +341,7 @@ export function SupplierRequestsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Người Liên Hệ / Nhân Viên *</label>
+              <label className="block text-xs text-gray-500 mb-1">Người liên hệ / nhân viên *</label>
               <input
                 type="text"
                 value={editingItem.handler || ''}
@@ -313,7 +353,7 @@ export function SupplierRequestsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Tên Nhà Cung Cấp Yêu Cầu *</label>
+            <label className="block text-xs text-gray-500 mb-1">Tên nhà cung cấp yêu cầu *</label>
             <input
               type="text"
               value={editingItem.supplierName || ''}
@@ -325,7 +365,7 @@ export function SupplierRequestsPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày Gửi *</label>
+              <label className="block text-xs text-gray-500 mb-1">Ngày gửi *</label>
               <input
                 type="date"
                 value={editingItem.sentDate || ''}
@@ -335,7 +375,7 @@ export function SupplierRequestsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày Hết Hạn Phản Hồi *</label>
+              <label className="block text-xs text-gray-500 mb-1">Ngày hết hạn phản hồi *</label>
               <input
                 type="date"
                 value={editingItem.expiryDate || ''}
@@ -346,7 +386,7 @@ export function SupplierRequestsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Nội Dung / Mặt Hàng Yêu Cầu *</label>
+            <label className="block text-xs text-gray-500 mb-1">Nội dung / mặt hàng yêu cầu *</label>
             <textarea
               value={editingItem.itemsDescription || ''}
               onChange={(e) => setEditingItem({ ...editingItem, itemsDescription: e.target.value })}
@@ -357,19 +397,19 @@ export function SupplierRequestsPage() {
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Trạng Thái *</label>
+            <label className="block text-xs text-gray-500 mb-1">Trạng thái *</label>
             <select
               value={editingItem.status || 'CHO_BAO_GIA'}
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
               className="w-full p-2 border rounded"
             >
-              <option value="CHO_BAO_GIA">Chờ Báo Giá</option>
-              <option value="DA_BAO_GIA">Đã Nhận Báo Giá</option>
-              <option value="DA_HUY">Đã Hủy RFQ</option>
+              <option value="CHO_BAO_GIA">Chờ báo giá</option>
+              <option value="DA_BAO_GIA">Đã nhận báo giá</option>
+              <option value="DA_HUY">Đã hủy RFQ</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú</label>
+            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
@@ -387,7 +427,7 @@ export function SupplierRequestsPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Gửi Yêu Cầu
+              Gửi yêu cầu
             </button>
           </div>
         </form>

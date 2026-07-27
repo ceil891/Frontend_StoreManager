@@ -30,6 +30,7 @@
   }
 
   body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     @apply bg-gray-50 text-gray-900 antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
@@ -56,4 +57,116 @@
     -webkit-appearance: none;
     margin: 0;
   }
+}
+
+/* ============================================================
+   ERP FORM DESIGN SYSTEM
+   All styles are scoped under .erp-form to avoid polluting
+   global inputs, search boxes, filters, login forms, etc.
+   Only Modals/Drawers using size="erp" receive these styles.
+   Existing dialogs remain pixel-identical unless size="erp".
+   ============================================================ */
+
+/* Container — size & max dimensions managed here, not in component logic */
+.erp-form {
+  width: min(90vw, 1400px);
+  max-width: 1400px;
+  max-height: 90vh;
+}
+
+/* Drawer override: right side drawers span 100vh full height */
+.erp-drawer {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  top: 0 !important;
+  bottom: 0 !important;
+}
+
+/* Modal content area for erp size */
+.erp-form-content {
+  max-height: calc(90vh - 73px); /* subtract header height */
+  overflow-y: auto;
+}
+
+/* ---- Body grid ---- */
+/* Uses auto-fit so columns adapt naturally:
+   3 cols @ ≥1024px, 2 cols @ ≥640px, 1 col on mobile */
+.erp-form-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+@media (max-width: 639px) {
+  .erp-form-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- Section card ---- */
+.erp-form-section {
+  padding: 24px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background-color: #ffffff;
+}
+
+.dark .erp-form-section {
+  border-color: #374151;
+  background-color: #1f2937;
+}
+
+/* Spacing between consecutive sections within the same column */
+.erp-form-section + .erp-form-section {
+  margin-top: 24px;
+}
+
+/* ---- Sticky footer — Save button always visible on long forms ---- */
+.erp-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  margin-top: 24px;
+  margin-left: -24px;
+  margin-right: -24px;
+  margin-bottom: -24px;
+  position: sticky;
+  bottom: -24px;
+  background-color: #ffffff;
+  border-top: 1px solid #e5e7eb;
+  z-index: 30;
+  box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.dark .erp-form-footer {
+  background-color: #1f2937;
+  border-top-color: #374151;
+  box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+/* ---- Input sizing — SCOPED to .erp-form only ---- */
+/* Does NOT affect: search boxes, filter bars, login, table filters */
+.erp-form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+.erp-form select {
+  min-height: 46px;
+  font-size: 15px;
+}
+
+.erp-form textarea {
+  min-height: 120px;
+  font-size: 15px;
+}
+
+.erp-form label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Action buttons inside ERP forms */
+.erp-form-footer button {
+  min-height: 44px;
+  padding-left: 20px;
+  padding-right: 20px;
+  font-size: 15px;
 }

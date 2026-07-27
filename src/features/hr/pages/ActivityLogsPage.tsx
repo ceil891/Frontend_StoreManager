@@ -181,7 +181,7 @@ export function ActivityLogsPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Lịch sử hoạt động</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Theo dõi ai đã <strong>Xem / Thêm / Sửa / Xóa</strong> trên từng màn hình — kèm tên người, tài khoản,
+              Theo dõi ai đã <strong>Xem / thêm / sửa / xóa</strong> trên từng màn hình — kèm tên người, tài khoản,
               đối tượng và chi nhánh.
             </p>
           </div>

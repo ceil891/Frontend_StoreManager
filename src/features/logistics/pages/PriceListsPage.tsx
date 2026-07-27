@@ -6,6 +6,25 @@ import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useLogisticsStore, type PriceListSchedule, type PriceListDetail } from '../store/logisticsStore';
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
+import { axiosClient } from '@/shared/lib/axiosClient';
+
+type ProductUnitOption = {
+  id: string;
+  unitId: string;
+  unitCode: string;
+  unitName: string;
+  isBaseUnit: boolean;
+  price: number;
+};
+
+const mapUnitOption = (u: any): ProductUnitOption => ({
+  id: String(u.id),
+  unitId: String(u.unitId ?? u.id),
+  unitCode: u.unitCode || '',
+  unitName: u.unitName || u.unitCode || '',
+  isBaseUnit: Boolean(u.isBaseUnit),
+  price: Number(u.price || 0),
+});
 
 const tierBadgeStyles = {
   RETAIL_DEFAULT: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200',
@@ -16,10 +35,11 @@ const tierBadgeStyles = {
 
 export function PriceListsPage() {
   const { priceLists: data, fetchPriceLists, addPriceList, updatePriceList, deletePriceList } = useLogisticsStore();
-  const { products, fetchProducts } = useInventoryStore(); // Fetch available products to map prices
+  const { products, fetchProducts, fetchProductUnits } = useInventoryStore();
 
   const [search, setSearch] = useState('');
   const [selectedList, setSelectedList] = useState<PriceListSchedule | null>(null);
+  const [productUnitsCache, setProductUnitsCache] = useState<Record<string, ProductUnitOption[]>>({});
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
@@ -59,11 +79,16 @@ export function PriceListsPage() {
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (list: PriceListSchedule) => {
+  const handleOpenEdit = async (list: PriceListSchedule) => {
     setModalMode('edit');
     setEditingList(list);
-    setEditingDetails(list.details || []);
+    const details = list.details || [];
+    setEditingDetails(details);
     setIsModalOpen(true);
+    for (const d of details) {
+      const product = products.find(p => p.sku === d.sku);
+      if (product) await loadProductUnits(product.id);
+    }
   };
 
   const handleSaveList = (e: React.FormEvent) => {
@@ -99,27 +124,83 @@ export function PriceListsPage() {
   };
 
   // Details Handling
-  const handleAddDetail = () => {
+  const loadProductUnits = async (productId: string): Promise<ProductUnitOption[]> => {
+    if (productUnitsCache[productId]) {
+      return productUnitsCache[productId];
+    }
+    try {
+      const data = await fetchProductUnits(productId);
+      const mapped = data.map(u => ({
+        id: u.id,
+        unitId: u.unitId || u.id,
+        unitCode: u.unitCode,
+        unitName: u.unitName,
+        isBaseUnit: Boolean(u.isBaseUnit),
+        price: u.price,
+      }));
+      setProductUnitsCache(prev => ({ ...prev, [productId]: mapped }));
+      return mapped;
+    } catch {
+      const data = await axiosClient.get<any, any[]>(`/products/${productId}/units`);
+      const mapped = (data || []).map(mapUnitOption);
+      setProductUnitsCache(prev => ({ ...prev, [productId]: mapped }));
+      return mapped;
+    }
+  };
+
+  const handleAddDetail = async () => {
     if (products.length === 0) {
       alert("Không có sản phẩm nào trong Inventory để tạo chi tiết giá.");
       return;
     }
     const firstProduct = products[0];
+    const units = await loadProductUnits(firstProduct.id);
+    const baseUnit = units.find(u => u.isBaseUnit) ?? units[0];
     setEditingDetails([...editingDetails, { 
       id: Date.now().toString(), 
       sku: firstProduct.sku, 
       productName: firstProduct.name, 
       basePrice: firstProduct.price, 
-      overridePrice: firstProduct.price 
+      overridePrice: baseUnit?.price ?? firstProduct.price,
+      productUnitId: baseUnit?.id,
+      unitName: baseUnit?.unitName,
     }]);
   };
 
-  const handleDetailSkuChange = (id: string, newSku: string) => {
+  const handleDetailSkuChange = async (id: string, newSku: string) => {
     const product = products.find(p => p.sku === newSku);
     if (!product) return;
+
+    const units = await loadProductUnits(product.id);
+    const baseUnit = units.find(u => u.isBaseUnit) ?? units[0];
     
     setEditingDetails(editingDetails.map(d => 
-      d.id === id ? { ...d, sku: product.sku, productName: product.name, basePrice: product.price, overridePrice: product.price } : d
+      d.id === id ? {
+        ...d,
+        sku: product.sku,
+        productName: product.name,
+        basePrice: product.price,
+        overridePrice: baseUnit?.price ?? product.price,
+        productUnitId: baseUnit?.id,
+        unitName: baseUnit?.unitName,
+      } : d
+    ));
+  };
+
+  const handleDetailUnitChange = (detailId: string, productUnitId: string) => {
+    const detail = editingDetails.find(d => d.id === detailId);
+    const product = products.find(p => p.sku === detail?.sku);
+    if (!product) return;
+    const units = productUnitsCache[product.id] || [];
+    const unit = units.find(u => u.id === productUnitId);
+    setEditingDetails(editingDetails.map(d =>
+      d.id === detailId ? {
+        ...d,
+        productUnitId,
+        unitName: unit?.unitName,
+        basePrice: unit?.price ?? d.basePrice,
+        overridePrice: unit?.price ?? d.overridePrice,
+      } : d
     ));
   };
 
@@ -135,7 +216,7 @@ export function PriceListsPage() {
     () => [
       {
         accessorKey: 'listCode',
-        header: 'Mã Bảng Giá',
+        header: 'Mã bảng giá',
         cell: (info) => <span className="font-mono font-bold text-emerald-600 hover:underline">{info.getValue() as string}</span>,
       },
       {
@@ -348,7 +429,7 @@ export function PriceListsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo Bảng Giá Mới' : 'Cập Nhật Bảng Giá'}
+        title={modalMode === 'create' ? 'Tạo bảng giá mới' : 'Cập nhật bảng giá'}
         width="max-w-3xl"
       >
         <form onSubmit={handleSaveList} className="space-y-6">
@@ -360,7 +441,7 @@ export function PriceListsPage() {
               
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Mã Bảng Giá *</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Mã bảng giá *</label>
                   <input
                     type="text"
                     value={editingList.listCode || ''}
@@ -385,7 +466,7 @@ export function PriceListsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Tên Bảng Giá *</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Tên bảng giá *</label>
                 <input
                   type="text"
                   value={editingList.listName || ''}
@@ -468,7 +549,10 @@ export function PriceListsPage() {
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {editingDetails.length === 0 && <p className="text-xs text-gray-400 italic text-center py-2">Chưa có SKU nào được chỉ định giá riêng.</p>}
                   
-                  {editingDetails.map((d) => (
+                  {editingDetails.map((d) => {
+                    const product = products.find(p => p.sku === d.sku);
+                    const unitOptions = product ? (productUnitsCache[product.id] || []) : [];
+                    return (
                     <div key={d.id} className="bg-white border p-2 rounded relative flex flex-col gap-2 shadow-sm">
                       <div>
                         <label className="block text-[10px] text-gray-500 font-bold">Chọn Sản phẩm (SKU)</label>
@@ -480,16 +564,34 @@ export function PriceListsPage() {
                           {products.map(p => <option key={p.id} value={p.sku}>{p.name} ({p.sku})</option>)}
                         </select>
                       </div>
+                      <div>
+                        <label className="block text-[10px] text-gray-500 font-bold">Đơn vị áp giá</label>
+                        <select
+                          value={d.productUnitId || ''}
+                          onFocus={() => product && loadProductUnits(product.id)}
+                          onChange={(e) => handleDetailUnitChange(d.id, e.target.value)}
+                          className="w-full p-1 border rounded text-xs"
+                        >
+                          {unitOptions.length === 0 && (
+                            <option value="">Đơn vị gốc (mặc định)</option>
+                          )}
+                          {unitOptions.map(u => (
+                            <option key={u.id} value={u.id}>
+                              {u.unitName || u.unitCode}{u.isBaseUnit ? ' (Gốc)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                       <div className="flex gap-2 items-end">
                         <div className="w-1/2">
-                          <label className="block text-[10px] text-gray-400 font-bold">Giá bán gốc (Retail)</label>
+                          <label className="block text-[10px] text-gray-400 font-bold">Giá tham chiếu</label>
                           <input 
                             type="number" readOnly value={d.basePrice} 
                             className="w-full p-1 border rounded text-xs text-gray-500 bg-gray-100 font-mono"
                           />
                         </div>
                         <div className="w-1/2">
-                          <label className="block text-[10px] text-emerald-700 font-bold">Giá Ghi Đè Mới ($)</label>
+                          <label className="block text-[10px] text-emerald-700 font-bold">Giá ghi đè (₫)</label>
                           <input 
                             type="number" step="0.01" value={d.overridePrice} 
                             onChange={(e) => handleDetailPriceChange(d.id, parseFloat(e.target.value) || 0)}
@@ -501,7 +603,7 @@ export function PriceListsPage() {
                         </button>
                       </div>
                     </div>
-                  ))}
+                  );})}
                 </div>
               </div>
             </div>
@@ -519,7 +621,7 @@ export function PriceListsPage() {
               type="submit"
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow"
             >
-              Lưu Bảng Giá
+              Lưu bảng giá
             </button>
           </div>
         </form>
@@ -528,7 +630,7 @@ export function PriceListsPage() {
       <Modal
         isOpen={!!deletingList}
         onClose={() => setDeletingList(null)}
-        title="Xóa Bảng Giá"
+        title="Xóa bảng giá"
         isDestructive
         width="max-w-md"
       >

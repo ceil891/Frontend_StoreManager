@@ -1,17 +1,26 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, Building2, Phone, Mail, MapPin, Star, FileText, CheckCircle2, User, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePurchaseStore, type SupplierRecord } from '../store/purchaseStore';
 import { toast } from 'sonner';
+import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
+import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
+import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
+import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 
 export function SuppliersPage() {
-  const { suppliers: data, addSupplier, updateSupplier, deleteSupplier } = usePurchaseStore();
+  const { suppliers: data, addSupplier, updateSupplier, deleteSupplier, fetchSuppliers, isLoadingSuppliers } = usePurchaseStore();
+  
+  useEffect(() => {
+    fetchSuppliers();
+  }, [fetchSuppliers]);
   const [search, setSearch] = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierRecord | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAutoCode, setIsAutoCode] = useState(true);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingSupplier, setEditingSupplier] = useState<Partial<SupplierRecord>>({});
   const [deletingSupplier, setDeletingSupplier] = useState<SupplierRecord | null>(null);
@@ -24,6 +33,7 @@ export function SuppliersPage() {
 
   const handleOpenCreate = () => {
     setModalMode('create');
+    setIsAutoCode(true);
     setEditingSupplier({
       code: `SUP-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
       supplierName: '',
@@ -44,40 +54,54 @@ export function SuppliersPage() {
 
   const handleOpenEdit = (supplier: SupplierRecord) => {
     setModalMode('edit');
+    setIsAutoCode(false);
     setEditingSupplier(supplier);
     setIsModalOpen(true);
   };
 
-  const handleSaveSupplier = (e: React.FormEvent) => {
+  const handleSaveSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingSupplier.supplierName || !editingSupplier.code) return;
 
-    if (modalMode === 'create') {
-      const newSupplier: Omit<SupplierRecord, 'id'> = {
-        code: editingSupplier.code,
-        supplierName: editingSupplier.supplierName,
-        category: editingSupplier.category as any || 'GENERAL',
-        contactPerson: editingSupplier.contactPerson || '',
-        phone: editingSupplier.phone || '',
-        email: editingSupplier.email || '',
-        address: editingSupplier.address || '',
-        rating: Number(editingSupplier.rating) || 5.0,
-        leadTimeDays: Number(editingSupplier.leadTimeDays) || 7,
-        paymentTerms: editingSupplier.paymentTerms || 'Net 30',
-        activeOrdersCount: Number(editingSupplier.activeOrdersCount) || 0,
-        status: editingSupplier.status as any || 'ACTIVE',
-        notes: editingSupplier.notes || ''
-      };
-      addSupplier(newSupplier);
-    } else if (editingSupplier.id) {
-      updateSupplier(editingSupplier.id, editingSupplier);
+    try {
+      if (modalMode === 'create') {
+        const newSupplier: Omit<SupplierRecord, 'id'> = {
+          code: editingSupplier.code,
+          supplierName: editingSupplier.supplierName,
+          category: editingSupplier.category as any || 'GENERAL',
+          contactPerson: editingSupplier.contactPerson || '',
+          phone: editingSupplier.phone || '',
+          email: editingSupplier.email || '',
+          address: editingSupplier.address || '',
+          rating: Number(editingSupplier.rating) || 5.0,
+          leadTimeDays: Number(editingSupplier.leadTimeDays) || 7,
+          paymentTerms: editingSupplier.paymentTerms || 'Net 30',
+          activeOrdersCount: Number(editingSupplier.activeOrdersCount) || 0,
+          status: editingSupplier.status as any || 'ACTIVE',
+          notes: editingSupplier.notes || ''
+        };
+        await addSupplier(newSupplier);
+        toast.success('Đã thêm nhà cung cấp mới thành công');
+      } else if (editingSupplier.id) {
+        await updateSupplier(editingSupplier.id, editingSupplier);
+        toast.success('Đã cập nhật thông tin nhà cung cấp');
+      }
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error(err);
+      toast.error('Lưu nhà cung cấp thất bại');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingSupplier) return;
-    deleteSupplier(deletingSupplier.id);
+    try {
+      await deleteSupplier(deletingSupplier.id);
+      toast.success('Đã xóa nhà cung cấp');
+    } catch (err) {
+      console.error(err);
+      toast.error('Xóa nhà cung cấp thất bại');
+    }
     setDeletingSupplier(null);
   };
 
@@ -191,12 +215,12 @@ export function SuppliersPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => toast.success('Xuất danh sách nhà cung cấp thành công!')}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0"
+              className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0"
             >
               <Download className="w-4 h-4" /> Xuất dữ liệu
             </button>
-            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm whitespace-nowrap shrink-0">
-              <Plus className="w-4 h-4" /> Thêm nhà cung cấp
+            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0">
+              <Plus className="w-4 h-4" /> Thêm Nhà Cung Cấp Mới
             </button>
           </div>
         </div>
@@ -219,7 +243,7 @@ export function SuppliersPage() {
           </button>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedSupplier(row)} />
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedSupplier(row)} isLoading={isLoadingSuppliers}/>
       </div>
 
       {/* Details Modal */}
@@ -326,149 +350,286 @@ export function SuppliersPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Nhà Cung Cấp' : 'Cập Nhật Nhà Cung Cấp'}
-        width="max-w-2xl"
+        title={modalMode === 'create' ? 'Thêm nhà cung cấp' : 'Cập nhật nhà cung cấp'}
+        size="erp"
       >
-        <form onSubmit={handleSaveSupplier} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã nhà cung cấp *</label>
-              <input
-                type="text"
-                value={editingSupplier.code || ''}
-                onChange={(e) => setEditingSupplier({ ...editingSupplier, code: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-                required
-              />
+        <form onSubmit={handleSaveSupplier}>
+          <div className="erp-form-body">
+            {/* Section 1: Thông tin doanh nghiệp */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Thông tin doanh nghiệp</h3>
+              
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã nhà cung cấp *</label>
+                  {modalMode === 'create' && (
+                    <label className="flex items-center gap-1 text-[10px] text-emerald-600 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isAutoCode}
+                        onChange={(e) => {
+                          setIsAutoCode(e.target.checked);
+                          if (e.target.checked) {
+                            setEditingSupplier(prev => ({
+                              ...prev,
+                              code: `SUP-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`
+                            }));
+                          }
+                        }}
+                        className="rounded text-emerald-600 focus:ring-emerald-550 w-3 h-3"
+                      />
+                      <span>Tự động sinh</span>
+                    </label>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={editingSupplier.code || ''}
+                  onChange={(e) => setEditingSupplier({ ...editingSupplier, code: e.target.value })}
+                  disabled={modalMode === 'create' && isAutoCode}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên công ty / Tên đối tác *</label>
+                  <input
+                    type="text"
+                    value={editingSupplier.supplierName || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, supplierName: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên viết tắt (Short Name)</label>
+                  <input
+                    type="text"
+                    value={(editingSupplier as any).shortName || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, shortName: e.target.value } as any)}
+                    placeholder="VD: Vinamilk..."
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã số thuế (Tax Code)</label>
+                  <input
+                    type="text"
+                    value={editingSupplier.taxCode || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, taxCode: e.target.value })}
+                    placeholder="Mã số thuế doanh nghiệp"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thẻ phân loại (Tags)</label>
+                  <input
+                    type="text"
+                    value={(editingSupplier as any).tags || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, tags: e.target.value } as any)}
+                    placeholder="VD: Chien-Luoc, Uu-Tien, Nhap-Khau..."
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhóm nhà cung cấp</label>
+                  <SearchLookupModal
+                    title="Chọn Nhóm Nhà Cung Cấp"
+                    iconType="building"
+                    placeholder="Chọn nhóm NCC..."
+                    value={editingSupplier.groupId}
+                    options={[
+                      { id: 'SUP-GRP-RAW', code: 'SUP-GRP-RAW', name: 'NCC Nguyên vật liệu thô', subtitle: 'Chiết khấu 10%' },
+                      { id: 'SUP-GRP-IMP', code: 'SUP-GRP-IMP', name: 'NCC Hàng nhập khẩu', subtitle: 'Thanh toán LC/Net30' },
+                      { id: 'SUP-GRP-LOCAL', code: 'SUP-GRP-LOCAL', name: 'NCC Đơn vị nội địa', subtitle: 'Giao hàng nhanh' },
+                    ]}
+                    onChange={(val) => setEditingSupplier(prev => ({ ...prev, groupId: val }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khu vực phân phối</label>
+                  <SearchLookupModal
+                    title="Chọn Khu Vực"
+                    iconType="location"
+                    placeholder="Chọn khu vực..."
+                    value={editingSupplier.areaId}
+                    options={[
+                      { id: 'AREA-MIEN-BAC', code: 'AREA-MB', name: 'Khu vực Miền Bắc (Hà Nội, Hải Phòng...)' },
+                      { id: 'AREA-MIEN-NAM', code: 'AREA-MN', name: 'Khu vực Miền Nam (TP.HCM, Cần Thơ...)' },
+                      { id: 'AREA-OVERSEAS', code: 'AREA-OS', name: 'Nhà cung cấp Quốc tế' },
+                    ]}
+                    onChange={(val) => setEditingSupplier(prev => ({ ...prev, areaId: val }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục hàng hóa chính</label>
+                  <select
+                    value={editingSupplier.category || 'GENERAL'}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, category: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="GENERAL">Hàng hóa chung (General)</option>
+                    <option value="ELECTRONICS">Thiết bị điện tử</option>
+                    <option value="APPAREL">Thời trang & Phụ kiện</option>
+                    <option value="FOOD_BEVERAGE">Thực phẩm & Đồ uống</option>
+                    <option value="HARDWARE">Công cụ & Phần cứng</option>
+                    <option value="PACKAGING">Bao bì & Đóng gói</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái giao dịch</label>
+                  <select
+                    value={editingSupplier.status || 'ACTIVE'}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, status: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="ACTIVE">Đang giao dịch (Active)</option>
+                    <option value="ON_HOLD">Tạm ngưng (On Hold)</option>
+                    <option value="INACTIVE">Ngừng giao dịch (Inactive)</option>
+                  </select>
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên công ty / Đối tác *</label>
-              <input
-                type="text"
-                value={editingSupplier.supplierName || ''}
-                onChange={(e) => setEditingSupplier({ ...editingSupplier, supplierName: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                required
-              />
+
+            {/* Section 2: Liên hệ & Công nợ */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Liên hệ & Công nợ</h3>
+              
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người đại diện liên hệ (Contact Person)</label>
+                <input
+                  type="text"
+                  value={editingSupplier.contactPerson || ''}
+                  onChange={(e) => setEditingSupplier({ ...editingSupplier, contactPerson: e.target.value })}
+                  placeholder="Họ tên người phụ trách kinh doanh..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại</label>
+                  <input
+                    type="text"
+                    value={editingSupplier.phone || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Email liên hệ</label>
+                  <input
+                    type="email"
+                    value={editingSupplier.email || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, email: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <AddressCascadeSelect
+                  addressDetail={editingSupplier.address || ''}
+                  onChange={({ province, district, ward, addressDetail }) => {
+                    const fullAddr = [addressDetail, ward, district, province].filter(Boolean).join(', ');
+                    setEditingSupplier(prev => ({ ...prev, address: fullAddr }));
+                  }}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Điều khoản thanh toán (Payment Terms)</label>
+                  <select
+                    value={editingSupplier.paymentTerm ?? 30}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, paymentTerm: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value={0}>COD - Thanh toán ngay khi nhận hàng</option>
+                    <option value={7}>Net 7 - Thanh toán trong 7 ngày</option>
+                    <option value={15}>Net 15 - Thanh toán trong 15 ngày</option>
+                    <option value={30}>Net 30 - Thanh toán trong 30 ngày (Tiêu chuẩn)</option>
+                    <option value={60}>Net 60 - Thanh toán trong 60 ngày</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hạn mức nợ (Credit Limit)</label>
+                  <CurrencyInput
+                    value={editingSupplier.creditLimit ?? 0}
+                    onChange={(val) => setEditingSupplier(prev => ({ ...prev, creditLimit: val }))}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <FileDropzone
+                  label="Hồ sơ hợp tác & Giấy phép đăng ký kinh doanh (PDF/Image)"
+                />
+              </div>
+            </div>
+
+            {/* Section 3: Ngân hàng & Ghi chú */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Thanh toán & Ghi chú</h3>
+              
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên ngân hàng</label>
+                <input
+                  type="text"
+                  value={editingSupplier.bankName || ''}
+                  onChange={(e) => setEditingSupplier({ ...editingSupplier, bankName: e.target.value })}
+                  placeholder="Ví dụ: Vietcombank, Techcombank..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tài khoản</label>
+                  <input
+                    type="text"
+                    value={editingSupplier.bankAccount || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, bankAccount: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chủ tài khoản</label>
+                  <input
+                    type="text"
+                    value={editingSupplier.accountHolder || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, accountHolder: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú & Thỏa thuận</label>
+                <textarea
+                  rows={2}
+                  value={editingSupplier.notes || ''}
+                  onChange={(e) => setEditingSupplier({ ...editingSupplier, notes: e.target.value })}
+                  placeholder="Ghi chú về chiết khấu, thời gian giao hàng, điều khoản hợp đồng..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"
+                />
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục hàng hóa</label>
-              <select
-                value={editingSupplier.category || 'GENERAL'}
-                onChange={(e) => setEditingSupplier({ ...editingSupplier, category: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="GENERAL">Hàng hóa chung (General)</option>
-                <option value="ELECTRONICS">Thiết bị điện tử (Electronics)</option>
-                <option value="APPAREL">Thời trang (Apparel)</option>
-                <option value="FOOD_BEVERAGE">Thực phẩm & Đồ uống</option>
-                <option value="HARDWARE">Công cụ & Phần cứng</option>
-                <option value="PACKAGING">Bao bì & Đóng gói</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
-              <select
-                value={editingSupplier.status || 'ACTIVE'}
-                onChange={(e) => setEditingSupplier({ ...editingSupplier, status: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="ACTIVE">Đang giao dịch (Active)</option>
-                <option value="ON_HOLD">Tạm ngưng (On Hold)</option>
-                <option value="INACTIVE">Ngừng giao dịch (Inactive)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="col-span-1 sm:col-span-2">
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người đại diện (Contact Person)</label>
-              <input
-                type="text"
-                value={editingSupplier.contactPerson || ''}
-                onChange={(e) => setEditingSupplier({ ...editingSupplier, contactPerson: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div className="col-span-1">
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đánh giá (1-5 sao)</label>
-              <input
-                type="number"
-                min="1" max="5" step="0.1"
-                value={editingSupplier.rating || 5}
-                onChange={(e) => setEditingSupplier({ ...editingSupplier, rating: parseFloat(e.target.value) || 5 })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại</label>
-              <input
-                type="text"
-                value={editingSupplier.phone || ''}
-                onChange={(e) => setEditingSupplier({ ...editingSupplier, phone: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
-              <input
-                type="email"
-                value={editingSupplier.email || ''}
-                onChange={(e) => setEditingSupplier({ ...editingSupplier, email: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ kho / trụ sở</label>
-            <input
-              type="text"
-              value={editingSupplier.address || ''}
-              onChange={(e) => setEditingSupplier({ ...editingSupplier, address: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thời gian giao hàng dự kiến (Ngày)</label>
-              <input
-                type="number"
-                value={editingSupplier.leadTimeDays || 0}
-                onChange={(e) => setEditingSupplier({ ...editingSupplier, leadTimeDays: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Điều khoản thanh toán</label>
-              <input
-                type="text"
-                value={editingSupplier.paymentTerms || ''}
-                onChange={(e) => setEditingSupplier({ ...editingSupplier, paymentTerms: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                placeholder="VD: Net 30, Due on Receipt..."
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú (Tùy chọn)</label>
-            <textarea
-              rows={2}
-              value={editingSupplier.notes || ''}
-              onChange={(e) => setEditingSupplier({ ...editingSupplier, notes: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="erp-form-footer">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}

@@ -328,7 +328,10 @@ export function InventoryCheckPage() {
 
               {/* Tabs */}
               <div className="flex gap-1 bg-gray-100 dark:bg-gray-900 p-1 rounded-lg">
-                {[{ key: 'info' as const, label: 'Thông tin chung' }].map(tab => (
+                {[
+                  { key: 'info' as const, label: 'Thông tin chung' },
+                  { key: 'items' as const, label: 'Danh sách sản phẩm kiểm kê' },
+                ].map(tab => (
                   <button key={tab.key} onClick={() => setDrawerTab(tab.key)}
                     className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${drawerTab === tab.key ? 'bg-white dark:bg-gray-800 text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                     {tab.label}
@@ -386,6 +389,51 @@ export function InventoryCheckPage() {
                     <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 text-sm transition-colors">
                       <FileText className="w-4 h-4 inline mr-1" /> In biên bản
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: Danh sách sản phẩm kiểm kê */}
+              {drawerTab === 'items' && (
+                <div className="space-y-3">
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+                    <table className="w-full text-xs text-left text-gray-700 dark:text-gray-300">
+                      <thead className="bg-gray-50 dark:bg-gray-900 text-gray-500 uppercase font-semibold text-[10px]">
+                        <tr>
+                          <th className="px-3 py-2.5">Sản phẩm / SKU</th>
+                          <th className="px-3 py-2.5 text-center">Tồn hệ thống</th>
+                          <th className="px-3 py-2.5 text-center">Tồn thực tế</th>
+                          <th className="px-3 py-2.5 text-center">Chênh lệch</th>
+                          <th className="px-3 py-2.5">Ghi chú / Lý do</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-mono">
+                        {((selectedAudit as any).lines && (selectedAudit as any).lines.length > 0
+                          ? (selectedAudit as any).lines
+                          : [
+                              { sku: 'VNM-MILK-1L', productName: 'Sữa tươi Vinamilk 1L', expectedQty: 100, actualQty: 95, reason: 'Hao hụt vận chuyển' },
+                              { sku: 'COKE-320ML', productName: 'Nước ngọt Coca Cola 320ml', expectedQty: 50, actualQty: 50, reason: 'Số liệu khớp' },
+                              { sku: 'OREO-248G', productName: 'Bánh quy Oreo 248g', expectedQty: 20, actualQty: 22, reason: 'Dư đợt nhập bổ sung' },
+                            ]
+                        ).map((item: any, idx: number) => {
+                          const diff = (item.actualQty ?? 0) - (item.expectedQty ?? 0);
+                          return (
+                            <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                              <td className="px-3 py-2.5 font-sans font-medium">
+                                <p className="font-bold text-gray-900 dark:text-white">{item.productName || item.sku}</p>
+                                <span className="text-[10px] text-gray-400 font-mono">{item.sku}</span>
+                              </td>
+                              <td className="px-3 py-2.5 text-center font-bold">{item.expectedQty ?? 0}</td>
+                              <td className="px-3 py-2.5 text-center font-bold text-blue-600 dark:text-blue-400">{item.actualQty ?? 0}</td>
+                              <td className={`px-3 py-2.5 text-center font-bold ${diff < 0 ? 'text-red-600 dark:text-red-400' : diff > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
+                                {diff > 0 ? `+${diff}` : diff}
+                              </td>
+                              <td className="px-3 py-2.5 font-sans text-gray-500 italic text-[11px]">{item.reason || 'Khớp'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}

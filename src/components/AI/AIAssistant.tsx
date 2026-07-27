@@ -1,15 +1,56 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, X, Send, Sparkles } from 'lucide-react';
+import { Bot, X, Send, Sparkles, BarChart2, TrendingUp } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
+import { useNavigate } from 'react-router';
+
+interface ChatMessageItem {
+  id: string;
+  role: string;
+  content: string;
+  time: string;
+  parsed?: any;
+}
+
+/** Render msg string with **bold** and newline support */
+function renderMsg(text: string) {
+  if (!text) return null;
+  const lines = text.split('\n');
+  return (
+    <>
+      {lines.map((line, i) => {
+        // Parse **bold** patterns
+        const parts = line.split(/\*\*(.+?)\*\*/);
+        return (
+          <span key={i}>
+            {parts.map((part, j) =>
+              j % 2 === 1
+                ? <strong key={j} className="font-bold text-gray-900 dark:text-white">{part}</strong>
+                : <span key={j}>{part}</span>
+            )}
+            {i < lines.length - 1 && <br />}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+/** Detect if a msg contains a data result (number + đ or count) */
+function parseDataResult(msg: string): { label: string; value: string; unit: string } | null {
+  const match = msg.match(/^(.+?):\s*\*\*([\d.,]+)\s*(đ|)\*\*$/);
+  if (!match) return null;
+  return { label: match[1].trim(), value: match[2].trim(), unit: match[3] || '' };
+}
 
 export function AIAssistant() {
   const [isOpen, setIsOpen] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<ChatMessageItem[]>([
     {
       id: '1',
       role: 'assistant',
@@ -26,42 +67,89 @@ export function AIAssistant() {
     scrollToBottom();
   }, [messages, isTyping]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim()) return;
 
-    const userMsg = {
+    const userMsg: ChatMessageItem = {
       id: Date.now().toString(),
       role: 'user',
       content: input,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
     setInput('');
     setIsTyping(true);
 
-    // Mock AI response
-    setTimeout(() => {
+    try {
+      // Chuyển đổi lịch sử trò chuyện để gửi cho API (giữ lịch sử là các tin nhắn text thông thường)
+      const apiHistory = updatedMessages
+        .filter(m => m.id !== '1') // Bỏ qua tin nhắn chào mừng ban đầu
+        .map(m => {
+          let textContent = m.content;
+          if (m.parsed && m.parsed.loai === 0) {
+            textContent = m.parsed.msg;
+          } else if (m.parsed && m.parsed.loai === 1) {
+            textContent = `Yêu cầu báo cáo: ${m.parsed.name}`;
+          }
+          return {
+            role: m.role,
+            content: textContent
+          };
+        });
+
+      // Gọi API AI Agent cục bộ (trả về JSON dạng n8n)
+      const response = await fetch('http://localhost:8000/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMsg.content,
+          history: apiHistory.slice(0, -1), // Lịch sử không bao gồm tin nhắn vừa gửi
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('API request failed');
+      }
+
+      const data = await response.json();
+      const rawResponse = data.response || '';
+      
+      // Thử giải mã JSON phản hồi từ Agent
+      let parsed = null;
+      let displayContent = rawResponse;
+      try {
+        parsed = JSON.parse(rawResponse);
+        if (parsed && typeof parsed === 'object') {
+          displayContent = parsed.loai === 0 ? parsed.msg : `Yêu cầu báo cáo: ${parsed.name || 'Báo cáo số liệu'}`;
+        }
+      } catch (e) {
+        // Nếu không phải là chuỗi JSON, giữ nguyên văn bản thô
+      }
+      
       const aiResponse = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: generateMockResponse(userMsg.content),
+        content: displayContent,
+        parsed: parsed,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, aiResponse]);
+    } catch (error) {
+      console.error('Error calling AI Agent:', error);
+      const errorMsg = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'Không thể kết nối tới trợ lý AI. Vui lòng đảm bảo server AI Agent đã được khởi động tại http://localhost:8000.',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
-  };
-
-  const generateMockResponse = (text: string) => {
-    const lower = text.toLowerCase();
-    if (lower.includes('tồn kho')) {
-      return 'Hiện tại có 5 sản phẩm sắp hết hàng (dự kiến hết trong 3 ngày tới). Đặc biệt là "Nước giải khát Coca-Cola 1.5L" chỉ còn 20 chai ở kho Quận 1. Sếp có muốn tôi tự động tạo đơn đặt hàng (Purchase Order) không?';
     }
-    if (lower.includes('doanh thu') || lower.includes('bán chạy')) {
-      return 'Doanh thu hôm nay đạt 125.000.000 VNĐ, tăng 15% so với hôm qua. Sản phẩm bán chạy nhất là "Sữa tươi Vinamilk" (bán được 300 lốc).';
-    }
-    return 'Tôi đã ghi nhận yêu cầu của sếp. Hệ thống đang phân tích dữ liệu từ Google Sheets để đưa ra câu trả lời chính xác nhất...';
   };
 
   return (
@@ -137,7 +225,91 @@ export function AIAssistant() {
                           : "rounded-tl-sm bg-white border border-gray-100 text-gray-800 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-100"
                       )}
                     >
-                      {msg.content}
+                      {/* TYPE 1 — Report request card */}
+                      {msg.parsed && msg.parsed.loai === 1 ? (
+                        <div className="flex flex-col gap-2 min-w-[240px] py-1">
+                          <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
+                            <BarChart2 className="w-4 h-4" />
+                            <span className="font-semibold text-[11px] uppercase tracking-wider">Yêu cầu báo cáo</span>
+                          </div>
+                          <div className="text-gray-800 dark:text-gray-200 text-sm font-semibold leading-snug">
+                            {msg.parsed.name || 'Báo cáo dữ liệu'}
+                          </div>
+                          <div className="flex flex-col gap-1 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            {(msg.parsed.fromdate || msg.parsed.todate) && (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-gray-400">📅</span>
+                                <span className="text-gray-600 dark:text-gray-300">
+                                  {msg.parsed.fromdate?.split('/').reverse().join('/')} – {msg.parsed.todate?.split('/').reverse().join('/')}
+                                </span>
+                              </div>
+                            )}
+                            {msg.parsed.draw === 1 && (
+                              <div className="flex items-center gap-1.5">
+                                <TrendingUp className="w-3 h-3 text-indigo-400" />
+                                <span>Có biểu đồ</span>
+                              </div>
+                            )}
+                            {msg.parsed.tel && msg.parsed.tel !== 'SĐT|null' && !msg.parsed.tel.includes('null') && (
+                              <div className="flex items-center gap-1.5">
+                                <span>📞</span>
+                                <span className="font-semibold text-indigo-600">{msg.parsed.tel}</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="mt-1.5 pt-2 border-t border-gray-100 dark:border-gray-700/50 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const val = msg.parsed.val;
+                                if (val === 103) {
+                                  navigate('/reports/sales');
+                                } else if (val === 102) {
+                                  navigate('/reports/inventory');
+                                } else if (val === 100 || val === 101 || val === 104) {
+                                  navigate('/reports/finance');
+                                } else if (val === 61 || val === 120 || val === 121) {
+                                  navigate('/reports/crm');
+                                } else {
+                                  navigate('/reports/sales');
+                                }
+                                setIsOpen(false); // Close AI panel so the user sees the page transition
+                              }}
+                              className="px-3 py-1.5 text-[11px] font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 active:scale-95 transition-all shadow-sm cursor-pointer"
+                            >
+                              Xem báo cáo →
+                            </button>
+                          </div>
+                        </div>
+
+                      ) : msg.parsed && msg.parsed.loai === 0 ? (() => {
+                        // TYPE 0 — Direct answer
+                        const msgText: string = msg.parsed.msg || msg.content;
+                        const dataResult = parseDataResult(msgText);
+
+                        if (dataResult) {
+                          // Highlighted data card for numeric results
+                          return (
+                            <div className="flex flex-col gap-1 min-w-[200px]">
+                              <div className="text-xs text-gray-500 dark:text-gray-400">{dataResult.label}</div>
+                              <div className="flex items-baseline gap-1">
+                                <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 tabular-nums tracking-tight">
+                                  {dataResult.value}
+                                </span>
+                                {dataResult.unit && (
+                                  <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">{dataResult.unit}</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // Regular text answer (multiline / list)
+                        return <div className="leading-relaxed whitespace-pre-line">{renderMsg(msgText)}</div>;
+                      })() : (
+                        // Plain message (no parsed, greeting etc.)
+                        <div className="leading-relaxed whitespace-pre-line">{renderMsg(msg.content)}</div>
+                      )}
                     </div>
                     <span className={twMerge(
                       "text-[10px] text-gray-400",

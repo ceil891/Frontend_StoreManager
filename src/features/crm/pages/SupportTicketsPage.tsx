@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, LifeBuoy, Building2, CheckCircle2, Clock, ShieldAlert, Send, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { toast } from 'sonner';
+import { useCrmStore } from '../store/crmStore';
 
 interface SupportTicketRecord {
   id: string;
@@ -20,13 +22,6 @@ interface SupportTicketRecord {
   lastMessage: string;
   internalNotes?: string;
 }
-
-const MOCK_TICKETS: SupportTicketRecord[] = [
-  { id: '1', ticketNumber: 'TCK-9910', customerName: 'Johnathan Vance', customerEmail: 'j.vance@enterprise-group.org', subject: 'Barcode scanner intermittent connection drop on aisle 4', category: 'POS_HARDWARE', priority: 'HIGH', status: 'IN_PROGRESS', assignedAgent: 'Michael Chang', createdAt: '2024-05-17 09:15', updatedAt: '2024-05-17 14:30', lastMessage: 'We have dispatched a replacement USB dongle via courier. Please test upon arrival.', internalNotes: 'VIP enterprise account. Ensure minimal downtime. Hardware swapped under advance RMA.' },
-  { id: '2', ticketNumber: 'TCK-9912', customerName: 'Alice Smith-Bauer', customerEmail: 'alice@smithbauer-design.com', subject: 'Requesting bulk export of annual VAT tax invoices', category: 'BILLING_DISPUTE', priority: 'MEDIUM', status: 'RESOLVED', assignedAgent: 'Sarah Jenkins', createdAt: '2024-05-16 11:20', updatedAt: '2024-05-17 10:00', lastMessage: 'Attached zip archive containing all monthly statements for FY2023. Ticket resolved.' },
-  { id: '3', ticketNumber: 'TCK-9915', customerName: 'Robert Jenkins Junior', customerEmail: 'rob.jenkins@outlook.com', subject: 'Loyalty points did not credit after purchasing coffee grinder', category: 'SOFTWARE_SYNC', priority: 'LOW', status: 'OPEN', assignedAgent: 'Unassigned', createdAt: '2024-05-17 15:45', updatedAt: '2024-05-17 15:45', lastMessage: 'Customer receipt #RCP-8819 indicates offline transaction during network outage.' },
-  { id: '4', ticketNumber: 'TCK-9918', customerName: 'Diana Prince', customerEmail: 'diana@themyscira-imports.com', subject: 'Damaged display case glass during freight transit', category: 'SHIPPING_DELAY', priority: 'URGENT', status: 'WAITING_ON_CUSTOMER', assignedAgent: 'David Ross', createdAt: '2024-05-15 16:30', updatedAt: '2024-05-16 09:00', lastMessage: 'Please provide photos of the damaged shipping pallet so we can file an insurance claim with DHL.' },
-];
 
 const priorityStyles = {
   LOW: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300',
@@ -59,8 +54,41 @@ const catMapFull: Record<string, string> = {
   GENERAL_INQUIRY: 'Tư vấn chung',
 };
 
+import { axiosClient } from '@/shared/lib/axiosClient';
+
 export function SupportTicketsPage() {
-  const [data, setData] = useState<SupportTicketRecord[]>(MOCK_TICKETS);
+  const setData = (_fn: any) => {};
+  const fetchTickets = () => {};
+  const {
+    supportTickets: storeTickets,
+    fetchSupportTickets,
+    addSupportTicket,
+    updateSupportTicket,
+    deleteSupportTicket,
+  } = useCrmStore();
+
+  useEffect(() => {
+    fetchSupportTickets();
+  }, [fetchSupportTickets]);
+
+  const data: SupportTicketRecord[] = useMemo(() => {
+    return storeTickets.map((t) => ({
+      id: t.id,
+      ticketNumber: t.ticketCode,
+      customerName: t.customerName,
+      customerEmail: `${t.customerName.toLowerCase().replace(/\s+/g, '.')}@email.com`,
+      subject: t.subject,
+      category: 'GENERAL_INQUIRY',
+      priority: t.priority as any,
+      status: (t.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : t.status === 'CLOSED' ? 'CLOSED' : 'OPEN') as any,
+      assignedAgent: t.assignee || 'Chưa phân công',
+      createdAt: t.createdAt,
+      updatedAt: t.createdAt,
+      lastMessage: t.subject,
+    }));
+  }, [storeTickets]);
+
+  const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedTicket, setSelectedTicket] = useState<SupportTicketRecord | null>(null);
 
@@ -69,13 +97,6 @@ export function SupportTicketsPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingTicket, setEditingTicket] = useState<Partial<SupportTicketRecord>>({});
   const [deletingTicket, setDeletingTicket] = useState<SupportTicketRecord | null>(null);
-
-  const filtered = data.filter((item) =>
-    item.ticketNumber.toLowerCase().includes(search.toLowerCase()) ||
-    item.subject.toLowerCase().includes(search.toLowerCase()) ||
-    item.customerName.toLowerCase().includes(search.toLowerCase()) ||
-    item.assignedAgent.toLowerCase().includes(search.toLowerCase())
-  );
 
   const handleOpenCreate = () => {
     setModalMode('create');
@@ -102,37 +123,46 @@ export function SupportTicketsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveTicket = (e: React.FormEvent) => {
+  const handleSaveTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTicket.subject || !editingTicket.customerName) return;
 
-    if (modalMode === 'create') {
-      const newRecord: SupportTicketRecord = {
-        id: Date.now().toString(),
-        ticketNumber: editingTicket.ticketNumber || `TCK-${Math.floor(1000 + Math.random() * 9000)}`,
-        customerName: editingTicket.customerName || 'Khách hàng',
-        customerEmail: editingTicket.customerEmail || 'email@example.com',
-        subject: editingTicket.subject || '',
-        category: editingTicket.category || 'GENERAL_INQUIRY',
-        priority: editingTicket.priority || 'LOW',
-        status: editingTicket.status || 'OPEN',
-        assignedAgent: editingTicket.assignedAgent || 'Unassigned',
-        createdAt: editingTicket.createdAt || new Date().toISOString().replace('T', ' ').substring(0, 16),
-        updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-        lastMessage: editingTicket.lastMessage || 'Đã tạo phiếu yêu cầu hỗ trợ.',
-        internalNotes: editingTicket.internalNotes
-      };
-      setData([newRecord, ...data]);
-    } else {
-      setData(data.map(item => item.id === editingTicket.id ? { ...item, ...editingTicket, updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16) } as SupportTicketRecord : item));
+    const payload = {
+      ticketNumber: editingTicket.ticketNumber,
+      title: editingTicket.subject,
+      description: editingTicket.lastMessage,
+      priority: editingTicket.priority,
+      status: editingTicket.status,
+    };
+
+    try {
+      if (modalMode === 'create') {
+        await axiosClient.post('/crm/tickets', payload);
+        toast.success(`Tạo phiếu hỗ trợ ${editingTicket.ticketNumber} thành công!`);
+      } else if (editingTicket.id) {
+        await axiosClient.put(`/crm/tickets/${editingTicket.id}`, payload);
+        toast.success(`Cập nhật phiếu hỗ trợ ${editingTicket.ticketNumber} thành công!`);
+      }
+      setIsModalOpen(false);
+      fetchTickets();
+    } catch (err) {
+      console.error('Error saving ticket:', err);
+      toast.error('Lỗi khi lưu phiếu hỗ trợ');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingTicket) return;
-    setData(data.filter(item => item.id !== deletingTicket.id));
-    setDeletingTicket(null);
+    try {
+      await axiosClient.delete(`/crm/tickets/${deletingTicket.id}`);
+      toast.success(`Đã xóa phiếu hỗ trợ ${deletingTicket.ticketNumber}`);
+      setData((prev) => prev.filter((item) => item.id !== deletingTicket.id));
+    } catch (err) {
+      console.error('Error deleting ticket:', err);
+      toast.error('Lỗi khi xóa phiếu hỗ trợ');
+    } finally {
+      setDeletingTicket(null);
+    }
   };
 
   const columns = useMemo<ColumnDef<SupportTicketRecord>[]>(
@@ -241,7 +271,7 @@ export function SupportTicketsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hỗ Trợ Khách Hàng (Support Helpdesk)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hỗ trợ khách hàng (support helpdesk)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý các yêu cầu hỗ trợ từ nhiều kênh, xử lý bảo hành thiết bị và khiếu nại dịch vụ. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
@@ -256,6 +286,8 @@ export function SupportTicketsPage() {
             </button>
           </div>
         </div>
+
+        {/* Filters and search row */}
 
         <div className="flex flex-col sm:flex-row gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
           <div className="flex-1 relative">
@@ -275,13 +307,13 @@ export function SupportTicketsPage() {
           </button>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedTicket(row)} />
+        <ReusableDataTable columns={columns} data={data.filter(item => !search || item.ticketNumber.toLowerCase().includes(search.toLowerCase()) || item.subject.toLowerCase().includes(search.toLowerCase()) || item.customerName.toLowerCase().includes(search.toLowerCase()) || item.assignedAgent?.toLowerCase().includes(search.toLowerCase()))} isLoading={isLoading} onRowClick={(row) => setSelectedTicket(row)} />
       </div>
 
       <Drawer
         isOpen={!!selectedTicket}
         onClose={() => setSelectedTicket(null)}
-        title={selectedTicket ? `Phiếu Hỗ Trợ: ${selectedTicket.ticketNumber}` : 'Chi Tiết Phiếu'}
+        title={selectedTicket ? `Phiếu Hỗ Trợ: ${selectedTicket.ticketNumber}` : 'Chi tiết phiếu'}
         width="max-w-lg"
       >
         {selectedTicket && (
@@ -384,7 +416,7 @@ export function SupportTicketsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo Phiếu Hỗ Trợ Mới' : 'Chỉnh Sửa Phiếu Hỗ Trợ'}
+        title={modalMode === 'create' ? 'Tạo phiếu hỗ trợ mới' : 'Chỉnh sửa phiếu hỗ trợ'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveTicket} className="space-y-4">
@@ -461,7 +493,7 @@ export function SupportTicketsPage() {
                 onChange={(e) => setEditingTicket({ ...editingTicket, priority: e.target.value as any })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
               >
-                <option value="LOW">Thấp (Low)</option>
+                <option value="LOW">Thấp (low)</option>
                 <option value="MEDIUM">Trung bình (Med)</option>
                 <option value="HIGH">Cao (High)</option>
                 <option value="URGENT">Khẩn cấp (Urgent)</option>

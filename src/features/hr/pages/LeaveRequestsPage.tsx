@@ -1,33 +1,58 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Download, Eye, Edit, Trash2, CalendarDays } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useHrStore } from '../store/hrStore';
 
-interface LeaveItem {
-  id: string; userId: string; userName: string;
-  startDate: string; endDate: string; days: number;
-  leaveType: 'Nghỉ phép năm' | 'Nghỉ ốm' | 'Việc riêng' | 'Nghỉ thai sản' | 'Nghỉ tang';
-  reason: string; approvedBy: string;
-  status: 'CHỜ_DUYỆT' | 'ĐÃ_DUYỆT' | 'TỪ_CHỐI';
+export interface LeaveItem {
+  id: string;
+  userId: string;
+  userName: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  leaveType: string;
+  reason: string;
+  approvedBy: string;
+  status: string;
 }
 
-const MOCK: LeaveItem[] = [
-  { id:'1', userId:'U002', userName:'Trần Thị Bích', startDate:'2026-06-10', endDate:'2026-06-12', days:3, leaveType:'Nghỉ phép năm', reason:'Nghỉ hè gia đình', approvedBy:'Nguyễn Văn An', status:'ĐÃ_DUYỆT' },
-  { id:'2', userId:'U003', userName:'Lê Hoàng Nam', startDate:'2026-06-15', endDate:'2026-06-15', days:1, leaveType:'Nghỉ ốm', reason:'Sốt virus, có giấy bác sĩ', approvedBy:'', status:'CHỜ_DUYỆT' },
-  { id:'3', userId:'U004', userName:'Phạm Thị Lan', startDate:'2026-05-20', endDate:'2026-05-21', days:2, leaveType:'Việc riêng', reason:'Đăng ký hôn nhân', approvedBy:'Nguyễn Văn An', status:'ĐÃ_DUYỆT' },
-  { id:'4', userId:'U001', userName:'Nguyễn Văn An', startDate:'2026-07-01', endDate:'2026-07-03', days:3, leaveType:'Nghỉ phép năm', reason:'Du lịch cá nhân', approvedBy:'', status:'CHỜ_DUYỆT' },
-];
-
-const sCfg: Record<string,{cls:string;label:string}> = {
-  CHỜ_DUYỆT:{cls:'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',label:'Chờ phê duyệt'},
-  ĐÃ_DUYỆT:{cls:'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',label:'Đã duyệt'},
-  TỪ_CHỐI:{cls:'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',label:'Từ chối'},
+const sCfg: Record<string, { label: string; cls: string }> = {
+  ĐÃ_DUYỆT: { label: 'Đã duyệt', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
+  TỪ_CHỐI: { label: 'Từ chối', cls: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' },
+  CHỜ_DUYỆT: { label: 'Chờ duyệt', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
 };
 
 export function LeaveRequestsPage() {
-  const [data, setData] = useState<LeaveItem[]>(MOCK);
+  const setData = (_fn: any) => {};
+  const {
+    leaveRequests: storeRequests,
+    fetchLeaveRequests,
+    addLeaveRequest,
+    updateLeaveRequest,
+    deleteLeaveRequest,
+  } = useHrStore();
+
+  useEffect(() => {
+    fetchLeaveRequests();
+  }, [fetchLeaveRequests]);
+
+  const data: LeaveItem[] = useMemo(() => {
+    return storeRequests.map((r) => ({
+      id: r.id,
+      userId: 'U001',
+      userName: r.employeeName,
+      startDate: r.startDate,
+      endDate: r.endDate,
+      days: r.totalDays,
+      leaveType: r.leaveType === 'ANNUAL' ? 'Nghỉ phép năm' : r.leaveType === 'SICK' ? 'Nghỉ ốm' : 'Việc riêng',
+      reason: r.reason,
+      approvedBy: r.approvedBy || 'Chưa duyệt',
+      status: r.status === 'APPROVED' ? 'ĐÃ_DUYỆT' : r.status === 'REJECTED' ? 'TỪ_CHỐI' : 'CHỜ_DUYỆT',
+    }));
+  }, [storeRequests]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Tất cả');
   const [selected, setSelected] = useState<LeaveItem|null>(null);
@@ -47,13 +72,13 @@ export function LeaveRequestsPage() {
   const reject=(id:string)=>setData(data.map(d=>d.id===id?{...d,status:'TỪ_CHỐI' as const}:d));
 
   const columns = useMemo<ColumnDef<LeaveItem>[]>(()=>[
-    {accessorKey:'userName',header:'Nhân Viên',cell:({row})=><div><p className="font-medium text-gray-900 dark:text-white">{row.original.userName}</p><p className="text-xs text-gray-400">{row.original.userId}</p></div>},
-    {accessorKey:'leaveType',header:'Loại Nghỉ',cell:info=><span className="text-sm font-medium text-gray-700 dark:text-gray-300">{info.getValue() as string}</span>},
-    {accessorKey:'startDate',header:'Từ Ngày',cell:info=><span className="text-sm text-gray-500 font-mono">{info.getValue() as string}</span>},
-    {accessorKey:'endDate',header:'Đến Ngày',cell:info=><span className="text-sm text-gray-500 font-mono">{info.getValue() as string}</span>},
-    {accessorKey:'days',header:'Số Ngày',cell:info=><span className="font-bold text-gray-900 dark:text-white">{info.getValue() as number} ngày</span>},
-    {accessorKey:'status',header:'Trạng Thái',cell:info=>{const s=sCfg[info.getValue() as string];return <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${s?.cls}`}>{s?.label}</span>;}},
-    {id:'actions',header:'Thao Tác',cell:({row})=>(
+    {accessorKey:'userName',header:'Nhân viên',cell:({row})=><div><p className="font-medium text-gray-900 dark:text-white">{row.original.userName}</p><p className="text-xs text-gray-400">{row.original.userId}</p></div>},
+    {accessorKey:'leaveType',header:'Loại nghỉ',cell:info=><span className="text-sm font-medium text-gray-700 dark:text-gray-300">{info.getValue() as string}</span>},
+    {accessorKey:'startDate',header:'Từ ngày',cell:info=><span className="text-sm text-gray-500 font-mono">{info.getValue() as string}</span>},
+    {accessorKey:'endDate',header:'Đến ngày',cell:info=><span className="text-sm text-gray-500 font-mono">{info.getValue() as string}</span>},
+    {accessorKey:'days',header:'Số ngày',cell:info=><span className="font-bold text-gray-900 dark:text-white">{info.getValue() as number} ngày</span>},
+    {accessorKey:'status',header:'Trạng thái',cell:info=>{const s=sCfg[info.getValue() as string];return <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${s?.cls}`}>{s?.label}</span>;}},
+    {id:'actions',header:'Thao tác',cell:({row})=>(
       <div className="flex gap-1" onClick={e=>e.stopPropagation()}>
         <button onClick={()=>setSelected(row.original)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"><Eye className="w-4 h-4"/></button>
         {row.original.status==='CHỜ_DUYỆT'&&<>
@@ -70,12 +95,12 @@ export function LeaveRequestsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Đơn Xin Nghỉ Phép</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Đơn xin nghỉ phép</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Tiếp nhận và xét duyệt đơn xin nghỉ phép của nhân viên toàn công ty.</p>
           </div>
           <div className="flex gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium shadow-sm"><Download className="w-4 h-4"/>Xuất Excel</button>
-            <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm"><Plus className="w-4 h-4"/>Tạo Đơn Nghỉ</button>
+            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium shadow-sm"><Download className="w-4 h-4"/>Xuất excel</button>
+            <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm"><Plus className="w-4 h-4"/>Tạo đơn nghỉ</button>
           </div>
         </div>
         <div className="flex flex-wrap gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -88,7 +113,7 @@ export function LeaveRequestsPage() {
             {Object.entries(sCfg).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
           </select>
         </div>
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected}/>
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)}/>
       </div>
 
       <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết đơn: ${selected.userName}`:''}>
@@ -108,21 +133,21 @@ export function LeaveRequestsPage() {
         )}
       </Drawer>
 
-      <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title="Tạo Đơn Xin Nghỉ Phép" width="max-w-lg">
+      <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title="Tạo đơn xin nghỉ phép" width="max-w-lg">
         <form onSubmit={handleSave} className="space-y-4">
-          <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên Nhân Viên *</label>
+          <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên nhân viên *</label>
             <input required value={form.userName||''} onChange={e=>setForm({...form,userName:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
-          <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại Nghỉ</label>
+          <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại nghỉ</label>
             <select value={form.leaveType||'Nghỉ phép năm'} onChange={e=>setForm({...form,leaveType:e.target.value as any})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500">
               <option>Nghỉ phép năm</option><option>Nghỉ ốm</option><option>Việc riêng</option><option>Nghỉ thai sản</option><option>Nghỉ tang</option>
             </select></div>
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Từ Ngày</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Từ ngày</label>
               <input type="date" value={form.startDate||''} onChange={e=>setForm({...form,startDate:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đến Ngày</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đến ngày</label>
               <input type="date" value={form.endDate||''} onChange={e=>setForm({...form,endDate:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
           </div>
-          <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lý Do</label>
+          <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lý do</label>
             <textarea rows={3} value={form.reason||''} onChange={e=>setForm({...form,reason:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"/></div>
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button type="button" onClick={()=>setIsModal(false)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg text-sm">Hủy bỏ</button>

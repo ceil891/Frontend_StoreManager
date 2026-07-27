@@ -33,8 +33,8 @@ interface LowStockItem {
 }
 
 const LOW_STOCK_ITEMS: LowStockItem[] = [
-  { sku: 'SP-101', name: 'Nước giải khát Coca-Cola 1.5L', category: 'Đồ uống', currentStock: 12, minStock: 50, supplier: 'NPP Nước Giải Khát' },
-  { sku: 'SP-105', name: 'Bia Tiger Thùng 24', category: 'Đồ uống', currentStock: 5, minStock: 30, supplier: 'Đại lý Bia Sài Gòn' },
+  { sku: 'SP-101', name: 'Nước giải khát Coca-Cola 1.5L', category: 'Đồ uống', currentStock: 12, minStock: 50, supplier: 'NPP nước giải khát' },
+  { sku: 'SP-105', name: 'Bia Tiger thùng 24', category: 'Đồ uống', currentStock: 5, minStock: 30, supplier: 'Đại lý bia Sài Gòn' },
   { sku: 'SP-203', name: 'Gạo ST25 5kg', category: 'Thực phẩm khô', currentStock: 8, minStock: 20, supplier: 'Công ty Lương Thực' },
   { sku: 'SP-304', name: 'Bột giặt OMO 3kg', category: 'Đồ gia dụng', currentStock: 3, minStock: 15, supplier: 'Unilever VN' },
   { sku: 'SP-401', name: 'Nước mắm Chinsu', category: 'Gia vị', currentStock: 18, minStock: 40, supplier: 'Masan Consumer' },
@@ -105,7 +105,7 @@ export function InventoryReportPage() {
           </select>
           <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
             <Download className="w-4 h-4" />
-            Xuất Excel
+            Xuất excel
           </button>
         </div>
       </div>

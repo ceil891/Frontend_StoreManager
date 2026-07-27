@@ -1,46 +1,44 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, FileCode, Play, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useOmnichannelStore } from '../store/omnichannelStore';
 
-interface WebhookLogRecord {
+export interface WebhookLogRecord {
   id: string;
   logId: string;
   channelName: string;
-  eventType: 'ORDER_CREATED' | 'ORDER_CANCELLED' | 'STOCK_CHANGED';
+  eventType: string;
   receivedTime: string;
   httpStatus: number;
   payloadSummary: string;
-  notes?: string;
+  notes: string;
 }
 
-const MOCK_LOGS: WebhookLogRecord[] = [
-  {
-    id: '1',
-    logId: 'WH-LOG-100231',
-    channelName: 'Shopee - Gian Hàng Thời Trang',
-    eventType: 'ORDER_CREATED',
-    receivedTime: '2026-06-04 16:30:12',
-    httpStatus: 200,
-    payloadSummary: '{ "order_id": "SHP-9812", "total": 1450000, "items_count": 2 }',
-    notes: 'Webhook xử lý thành công, đã tạo đơn SO tương ứng trên POS',
-  },
-  {
-    id: '2',
-    logId: 'WH-LOG-100232',
-    channelName: 'TikTok Shop - RetailHub',
-    eventType: 'STOCK_CHANGED',
-    receivedTime: '2026-06-04 16:32:00',
-    httpStatus: 500,
-    payloadSummary: '{ "product_id": "TT-12001", "stock": 0 }',
-    notes: 'Lỗi kết nối cơ sở dữ liệu nội bộ khi lưu trữ nhật ký đồng bộ tồn kho',
-  },
-];
-
 export function WebhookLogsPage() {
-  const [data, setData] = useState<WebhookLogRecord[]>(MOCK_LOGS);
+  const {
+    webhookLogs: storeLogs,
+    fetchWebhookLogs,
+  } = useOmnichannelStore();
+
+  useEffect(() => {
+    fetchWebhookLogs();
+  }, [fetchWebhookLogs]);
+
+  const data: WebhookLogRecord[] = useMemo(() => {
+    return storeLogs.map((w) => ({
+      id: w.id,
+      logId: w.logCode,
+      channelName: w.channelName,
+      eventType: (w.eventType === 'PRICE_CHANGED' ? 'STOCK_CHANGED' : w.eventType) as any,
+      receivedTime: w.createdAt,
+      httpStatus: w.responseCode,
+      payloadSummary: w.payloadSummary,
+      notes: w.status === 'SUCCESS' ? 'Xử lý thành công' : 'Thất bại',
+    }));
+  }, [storeLogs]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<WebhookLogRecord | null>(null);
 
@@ -57,18 +55,6 @@ export function WebhookLogsPage() {
 
   const handleRetryWebhook = (item: WebhookLogRecord) => {
     alert(`Đang gửi lại yêu cầu xử lý Webhook ID: ${item.logId}...`);
-    setData(
-      data.map((d) => {
-        if (d.id === item.id) {
-          return {
-            ...d,
-            httpStatus: 200,
-            notes: 'Đã gửi lại thủ công và xử lý thành công (200 OK)',
-          };
-        }
-        return d;
-      })
-    );
   };
 
   const columns = useMemo<ColumnDef<WebhookLogRecord>[]>(
@@ -80,21 +66,21 @@ export function WebhookLogsPage() {
       },
       {
         accessorKey: 'channelName',
-        header: 'Kênh Gửi',
+        header: 'Kênh gửi',
         cell: (info) => <span className="font-semibold text-blue-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'eventType',
-        header: 'Sự Kiện',
+        header: 'Sự kiện',
         cell: (info) => {
           const val = info.getValue() as string;
-          let label = 'Đơn Hàng Mới';
+          let label = 'Đơn hàng mới';
           let color = 'text-blue-600 bg-blue-50';
           if (val === 'ORDER_CANCELLED') {
-            label = 'Hủy Đơn Hàng';
+            label = 'Hủy đơn hàng';
             color = 'text-red-600 bg-red-50';
           } else if (val === 'STOCK_CHANGED') {
-            label = 'Thay Đổi Tồn';
+            label = 'Thay đổi tồn';
             color = 'text-amber-600 bg-amber-50';
           }
           return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${color}`}>{label}</span>;
@@ -102,7 +88,7 @@ export function WebhookLogsPage() {
       },
       {
         accessorKey: 'receivedTime',
-        header: 'Thời Gian Nhận',
+        header: 'Thời gian nhận',
         cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
       },
       {
@@ -120,20 +106,20 @@ export function WebhookLogsPage() {
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết Payload"
+              title="Xem chi tiết payload"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleRetryWebhook(row.original)}
               className="p-1 text-gray-500 hover:text-blue-600 rounded"
-              title="Gửi Lại Webhook (Retry)"
+              title="Gửi lại webhook (retry)"
             >
               <Play className="w-4 h-4" />
             </button>
@@ -148,7 +134,7 @@ export function WebhookLogsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Nhật Ký Gọi Webhook TMĐT (Webhook Logs)</h1>
+          <h1 className="text-2xl font-bold">Nhật ký gọi webhook TMĐT (webhook logs)</h1>
           <p className="text-sm text-gray-500">
             Theo dõi, phân tích các cuộc gọi API Webhook từ Shopee, Lazada, TikTok Shop truyền dữ liệu về hệ thống bán hàng đa kênh POS.
           </p>
@@ -181,17 +167,17 @@ export function WebhookLogsPage() {
                 <p className="font-mono font-semibold">{selected.logId}</p>
               </div>
               <div>
-                <span className="text-gray-500">Kênh Phát:</span>
+                <span className="text-gray-500">Kênh phát:</span>
                 <p className="font-semibold text-blue-600">{selected.channelName}</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Thời Gian Nhận:</span>
+                <span className="text-gray-500">Thời gian nhận:</span>
                 <p className="font-mono">{selected.receivedTime}</p>
               </div>
               <div>
-                <span className="text-gray-500">Mã HTTP Status:</span>
+                <span className="text-gray-500">Mã HTTP status:</span>
                 <div>
                   <span
                     className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
@@ -213,7 +199,7 @@ export function WebhookLogsPage() {
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Mô Tả Lỗi / Hành Động:</span>
+                <span className="text-gray-500">Mô tả lỗi / hành động:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                   {selected.notes}
                 </p>

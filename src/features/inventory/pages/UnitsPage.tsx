@@ -364,127 +364,123 @@ export function UnitsPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={modalMode === 'create' ? 'Thêm đơn vị đo lường mới' : 'Cập nhật đơn vị đo lường'}
-        width="max-w-lg"
+        size="erp"
       >
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-                Mã đơn vị <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={unitCode}
-                onChange={(e) => setUnitCode(e.target.value.toUpperCase())}
-                placeholder="VD: PCS, BOX, KG"
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all font-mono font-bold"
-                disabled={modalMode === 'edit'}
-                required
-              />
+        <form onSubmit={handleSave}>
+          <div className="erp-form-body">
+
+            {/* Section 1: Định danh */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Định danh đơn vị</h3>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Mã đơn vị <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={unitCode}
+                  onChange={(e) => setUnitCode(e.target.value.toUpperCase())}
+                  placeholder="VD: PCS, BOX, KG"
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 text-sm font-mono font-bold"
+                  disabled={modalMode === 'edit'}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Tên đơn vị <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={unitName}
+                  onChange={(e) => setUnitName(e.target.value)}
+                  placeholder="VD: cái, hộp, kilogam"
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 text-sm"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại đo lường</label>
+                <select
+                  value={unitType}
+                  onChange={(e) => setUnitType(e.target.value as UnitOfMeasure['type'])}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 text-sm"
+                >
+                  <option value="QUANTITY">Đếm số lượng (QUANTITY)</option>
+                  <option value="WEIGHT">Trọng lượng (WEIGHT)</option>
+                  <option value="VOLUME">Thể tích (VOLUME)</option>
+                  <option value="DIMENSION">Kích thước (DIMENSION)</option>
+                  <option value="PACKAGING">Đóng gói (PACKAGING)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as UnitOfMeasure['status'])}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 text-sm"
+                >
+                  <option value="ACTIVE">Hoạt động (ACTIVE)</option>
+                  <option value="DEPRECATED">Ngưng sử dụng (DEPRECATED)</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-                Tên đơn vị <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={unitName}
-                onChange={(e) => setUnitName(e.target.value)}
-                placeholder="VD: Cái, Hộp, Kilogam"
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
-                required
-              />
+
+            {/* Section 2: Quy đổi */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Quy đổi & Độ chính xác</h3>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tỷ lệ quy đổi</label>
+                <input
+                  type="number"
+                  step="any"
+                  min={0}
+                  value={conversionFactor}
+                  onChange={(e) => setConversionFactor(parseFloat(e.target.value) || 1)}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 text-sm font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã đơn vị cơ bản</label>
+                <input
+                  type="text"
+                  value={baseUnitCode}
+                  onChange={(e) => setBaseUnitCode(e.target.value.toUpperCase())}
+                  placeholder="Mặc định là chính nó"
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 text-sm font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số chữ số thập phân (0–6)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={6}
+                  value={precisionDecimals}
+                  onChange={(e) => setPrecisionDecimals(parseInt(e.target.value) || 0)}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 text-sm"
+                />
+              </div>
             </div>
+
+            {/* Section 3: Ghi chú */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Ghi chú & Mô tả</h3>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú / Quy tắc quy đổi</label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Mô tả đơn vị, quy tắc kiểm đếm, điều kiện áp dụng..."
+                  rows={8}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 text-sm resize-none"
+                />
+              </div>
+            </div>
+
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-                Loại đo lường
-              </label>
-              <select
-                value={unitType}
-                onChange={(e) => setUnitType(e.target.value as any)}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all font-medium"
-              >
-                <option value="QUANTITY">Đếm số lượng (QUANTITY)</option>
-                <option value="WEIGHT">Trọng lượng (WEIGHT)</option>
-                <option value="VOLUME">Thể tích (VOLUME)</option>
-                <option value="DIMENSION">Kích thước (DIMENSION)</option>
-                <option value="PACKAGING">Đóng gói (PACKAGING)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-                Số thập phân hiển thị
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={6}
-                value={precisionDecimals}
-                onChange={(e) => setPrecisionDecimals(parseInt(e.target.value) || 0)}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-                Tỷ lệ quy đổi
-              </label>
-              <input
-                type="number"
-                step="any"
-                min={0}
-                value={conversionFactor}
-                onChange={(e) => setConversionFactor(parseFloat(e.target.value) || 1)}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-                Mã đơn vị cơ bản
-              </label>
-              <input
-                type="text"
-                value={baseUnitCode}
-                onChange={(e) => setBaseUnitCode(e.target.value.toUpperCase())}
-                placeholder="Mặc định là chính nó"
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all font-mono"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-              Trạng thái
-            </label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as any)}
-              className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all font-medium"
-            >
-              <option value="ACTIVE">Hoạt động (ACTIVE)</option>
-              <option value="DEPRECATED">Ngưng sử dụng (DEPRECATED)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-              Ghi chú / Mô tả
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Nhập mô tả hoặc quy tắc quy đổi..."
-              rows={3}
-              className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all text-sm"
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700/50 mt-6">
+          <div className="erp-form-footer border-t border-gray-200 dark:border-gray-700 pt-4">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}

@@ -12,6 +12,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User, RoleType, LoginCredentials, ApiError } from '../types';
 import { mockAuthApi } from '../api/mockAuthApi';
+import { axiosClient } from '@/shared/lib/axiosClient';
 import { recordActivity } from '@/shared/utils/activityLogger';
 
 // ----------------------------------------------------------------
@@ -30,6 +31,7 @@ interface AuthActions {
   loginAsync: (credentials: LoginCredentials) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
+  loadPermissions: () => Promise<void>;
   // Used by axios interceptor to refresh tokens
   setAccessToken: (token: string) => void;
 }
@@ -39,7 +41,7 @@ interface AuthActions {
 // ----------------------------------------------------------------
 export const useAuthStore = create<AuthState & AuthActions>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       // Initial State
       user: null,
       accessToken: null,
@@ -53,13 +55,26 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         set({ isLoading: true, error: null });
         try {
           const response = await mockAuthApi.login(credentials);
-          
+
           // Lưu token vào localStorage để axiosClient sử dụng
           localStorage.setItem('access_token', response.accessToken);
           localStorage.setItem('refresh_token', response.refreshToken);
 
+          // Lấy danh sách quyền thực từ backend
+          // axiosClient interceptor đã unwrap ApiResponse.data rồi → permRes là string[] trực tiếp
+          let permissions: string[] = [];
+          try {
+            const permRes = await axiosClient.get<any, string[]>('/auth/me/permissions');
+            console.log('[AuthStore] /auth/me/permissions raw response:', permRes);
+            permissions = Array.isArray(permRes) ? permRes : [];
+            console.log('[AuthStore] Parsed permissions:', permissions);
+          } catch (permErr) {
+            console.error('[AuthStore] Failed to fetch permissions:', permErr);
+            permissions = [];
+          }
+
           set({
-            user: response.user,
+            user: { ...response.user, permissions },
             accessToken: response.accessToken,
             refreshToken: response.refreshToken,
             isAuthenticated: true,
@@ -83,6 +98,22 @@ export const useAuthStore = create<AuthState & AuthActions>()(
           });
           // Re-throw so the UI can also react (e.g. shake animation)
           throw err;
+        }
+      },
+
+      /** Refresh lại danh sách quyền của user (dùng khi admin vừa thay đổi quyền) */
+      loadPermissions: async () => {
+        const { user } = get();
+        if (!user) return;
+        try {
+          // axiosClient interceptor đã unwrap ApiResponse.data rồi → permRes là string[] trực tiếp
+          const permRes = await axiosClient.get<any, string[]>('/auth/me/permissions');
+          const permissions: string[] = Array.isArray(permRes) ? permRes : [];
+          set((state) => ({
+            user: state.user ? { ...state.user, permissions } : null,
+          }));
+        } catch {
+          // Giữ nguyên quyền cũ nếu lỗi mạng
         }
       },
 
@@ -131,3 +162,6 @@ export const useAuthUser = () => useAuthStore((s) => s.user);
 export const useIsAuthenticated = () => useAuthStore((s) => s.isAuthenticated);
 export const useAuthRole = (): RoleType | null =>
   useAuthStore((s) => s.user?.role ?? null);
+/** Trả về danh sách permissionCode thực của user hiện tại từ backend */
+export const useAuthPermissions = (): string[] =>
+  useAuthStore((s) => s.user?.permissions ?? []);

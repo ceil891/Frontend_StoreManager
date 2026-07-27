@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, Calendar, Star, User, ClipboardList, CheckCircle2, Award, AwardIcon, TrendingUp } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface SupplierEvaluationItem {
   id: string;
@@ -18,52 +20,50 @@ interface SupplierEvaluationItem {
   evaluatedBy: string;
 }
 
-const MOCK_DATA: SupplierEvaluationItem[] = [
-  {
-    id: '1',
-    evaluationId: 'DG-2026-001',
-    supplierName: 'Công ty Cổ phần Sữa Việt Nam (Vinamilk)',
-    evaluationDate: '2026-06-01',
-    deliveryDelayScore: 9.5,
-    defectRateScore: 9.8,
-    priceScore: 8.5,
-    finalScore: 9.3,
-    comments: 'Đối tác xuất sắc. Giao hàng cực kỳ đúng hẹn, tỷ lệ lỗi hỏng vỏ hộp dưới 0.1%. Giá bán bình ổn nhưng chiết khấu số lượng lớn cần cải thiện thêm.',
-    evaluatedBy: 'Nguyễn Thị Minh (Trưởng phòng mua sắm)'
-  },
-  {
-    id: '2',
-    evaluationId: 'DG-2026-002',
-    supplierName: 'Công ty TNHH Unilever Việt Nam',
-    evaluationDate: '2026-05-28',
-    deliveryDelayScore: 8.0,
-    defectRateScore: 9.0,
-    priceScore: 7.5,
-    finalScore: 8.2,
-    comments: 'Chất lượng hàng hóa rất đồng đều. Giao hàng thỉnh thoảng trễ 1 ngày do tắc nghẽn kho tổng. Chính sách giá cả ở mức trung bình cao.',
-    evaluatedBy: 'Trần Văn Hoàng (Quản lý thu mua)'
-  },
-  {
-    id: '3',
-    evaluationId: 'DG-2026-003',
-    supplierName: 'Nhà phân phối bia nước ngọt Hoàng Gia',
-    evaluationDate: '2026-05-15',
-    deliveryDelayScore: 6.0,
-    defectRateScore: 8.5,
-    priceScore: 9.0,
-    finalScore: 7.8,
-    comments: 'Giá sỉ cạnh tranh tốt nhất thị trường. Tuy nhiên giao hàng thường trễ và thiếu thùng carton đóng kèm. Đã nhắc nhở cải thiện dịch vụ logictics.',
-    evaluatedBy: 'Nguyễn Tuấn Anh (Nhân viên mua hàng)'
-  }
-];
-
 export function SupplierEvaluationsPage() {
-  const [data, setData] = useState<SupplierEvaluationItem[]>(MOCK_DATA);
+  const [data, setData] = useState<SupplierEvaluationItem[]>([]);
   const [search, setSearch] = useState('');
   const [scoreFilter, setScoreFilter] = useState<string>('Tất cả');
   const [selectedItem, setSelectedItem] = useState<SupplierEvaluationItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Partial<SupplierEvaluationItem>>({});
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fetchEvaluations = async () => {
+    try {
+      setIsLoading(true);
+      const res = await axiosClient.get('/purchase/evaluations?size=500');
+      const list = (res as any).content || res || [];
+      const mapped: SupplierEvaluationItem[] = (Array.isArray(list) ? list : []).map((item: any) => {
+        const delivery = item.deliveryScore || 0;
+        const quality = item.qualityScore || 0;
+        const price = item.priceScore || 0;
+        const overall = item.overallScore || (delivery + quality + price > 0 ? parseFloat(((delivery + quality + price) / 3).toFixed(1)) : 0);
+        return {
+          id: String(item.id),
+          evaluationId: `EV-${item.id}`,
+          supplierName: item.supplier?.name || '',
+          evaluationDate: item.evalDate || '',
+          deliveryDelayScore: delivery,
+          defectRateScore: quality,
+          priceScore: price,
+          finalScore: overall,
+          comments: item.remarks || '',
+          evaluatedBy: item.evaluatedBy?.username || '',
+        };
+      });
+      setData(mapped);
+    } catch (err) {
+      console.error('Lỗi tải danh sách đánh giá:', err);
+      toast.error('Không thể tải danh sách đánh giá nhà cung cấp');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchEvaluations();
+  }, []);
 
   const filtered = data.filter((item) => {
     const matchesSearch =
@@ -93,30 +93,32 @@ export function SupplierEvaluationsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.supplierName) return;
 
     const delay = Number(editingItem.deliveryDelayScore || 8);
     const defect = Number(editingItem.defectRateScore || 8);
     const price = Number(editingItem.priceScore || 8);
-    const final = parseFloat(((delay + defect + price) / 3).toFixed(1));
+    const overall = parseFloat(((delay + defect + price) / 3).toFixed(1));
 
-    const newItem: SupplierEvaluationItem = {
-      id: String(data.length + 1),
-      evaluationId: editingItem.evaluationId || `DG-2026-00${data.length + 1}`,
-      supplierName: editingItem.supplierName,
-      evaluationDate: editingItem.evaluationDate || new Date().toISOString().split('T')[0],
-      deliveryDelayScore: delay,
-      defectRateScore: defect,
-      priceScore: price,
-      finalScore: final,
-      comments: editingItem.comments || 'Không có nhận xét chi tiết.',
-      evaluatedBy: editingItem.evaluatedBy || 'Hệ thống tự động'
-    };
-
-    setData([newItem, ...data]);
-    setIsModalOpen(false);
+    try {
+      const payload = {
+        evalDate: editingItem.evaluationDate || new Date().toISOString().split('T')[0],
+        deliveryScore: delay,
+        qualityScore: defect,
+        priceScore: price,
+        overallScore: overall,
+        remarks: editingItem.comments || 'Không có nhận xét chi tiết.',
+      };
+      await axiosClient.post('/purchase/evaluations', payload);
+      toast.success('Tạo đánh giá nhà cung cấp thành công');
+      await fetchEvaluations();
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error('Lỗi tạo đánh giá:', err);
+      toast.error('Không thể tạo đánh giá nhà cung cấp');
+    }
   };
 
   const getScoreBadgeColor = (score: number) => {
@@ -127,7 +129,7 @@ export function SupplierEvaluationsPage() {
 
   const getScoreText = (score: number) => {
     if (score >= 9.0) return 'Xuất sắc';
-    if (score >= 8.0) return 'Khá / Tốt';
+    if (score >= 8.0) return 'Khá / tốt';
     return 'Trung bình / Cần cải thiện';
   };
 
@@ -135,7 +137,7 @@ export function SupplierEvaluationsPage() {
     () => [
       {
         accessorKey: 'evaluationId',
-        header: 'Mã Phiếu',
+        header: 'Mã phiếu',
         cell: (info) => (
           <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
             {info.getValue() as string}
@@ -144,12 +146,12 @@ export function SupplierEvaluationsPage() {
       },
       {
         accessorKey: 'supplierName',
-        header: 'Nhà Cung Cấp',
+        header: 'Nhà cung cấp',
         cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'evaluationDate',
-        header: 'Ngày Đánh Giá',
+        header: 'Ngày đánh giá',
         cell: (info) => (
           <span className="inline-flex items-center gap-1 text-sm text-gray-600 dark:text-gray-300">
             <Calendar className="w-3.5 h-3.5 text-gray-400" />
@@ -159,7 +161,7 @@ export function SupplierEvaluationsPage() {
       },
       {
         id: 'detailedScores',
-        header: 'Điểm Chi Tiết (Giao - Lỗi - Giá)',
+        header: 'Điểm chi tiết (giao - lỗi - giá)',
         cell: ({ row }) => (
           <div className="flex items-center gap-1.5 text-xs">
             <span className="px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border border-amber-200/50">
@@ -176,7 +178,7 @@ export function SupplierEvaluationsPage() {
       },
       {
         accessorKey: 'finalScore',
-        header: 'Điểm Tổng Kết',
+        header: 'Điểm tổng kết',
         cell: (info) => {
           const score = info.getValue() as number;
           return (
@@ -189,7 +191,7 @@ export function SupplierEvaluationsPage() {
       },
       {
         accessorKey: 'evaluatedBy',
-        header: 'Người Chấm',
+        header: 'Người chấm',
         cell: (info) => (
           <span className="inline-flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300">
             <User className="w-3.5 h-3.5 text-gray-400" />
@@ -199,7 +201,7 @@ export function SupplierEvaluationsPage() {
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <button
@@ -221,7 +223,7 @@ export function SupplierEvaluationsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Đánh Giá Nhà Cung Cấp (Vendor Evaluation)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Đánh giá nhà cung cấp (vendor evaluation)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Thực hiện xếp hạng, chấm điểm nhà cung cấp dựa trên các tiêu chí giao hàng trễ, chất lượng hàng hóa lỗi hỏng, và giá cả sản phẩm.
             </p>
@@ -261,13 +263,19 @@ export function SupplierEvaluationsPage() {
             >
               <option value="Tất cả">Tất cả xếp hạng</option>
               <option value="XUAT_SAC">Xuất sắc ( &gt;= 9.0 )</option>
-              <option value="KHA">Khá / Tốt ( 8.0 - 8.9 )</option>
+              <option value="KHA">Khá / tốt ( 8.0 - 8.9 )</option>
               <option value="TRUNG_BINH">Trung bình ( &lt; 8.0 )</option>
             </select>
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} />
+        {isLoading ? (
+          <div className="flex justify-center items-center py-20">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-500" />
+          </div>
+        ) : (
+          <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedItem(row)} />
+        )}
       </div>
 
       {/* Drawer Chi tiết tiêu chí chấm điểm */}

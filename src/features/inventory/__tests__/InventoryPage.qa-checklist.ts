@@ -342,7 +342,7 @@ export const QA_TESTER_CHECKLIST = {
       {
         case: "TC_07_003",
         title: "Browser locale support",
-        given: "Test trên Chrome (Việt Nam)",
+        given: "Test trên chrome (Việt Nam)",
         expected: "Date format tự động theo browser locale",
         actual: "Test on different browsers"
       }
@@ -396,7 +396,7 @@ export const QA_TESTER_CHECKLIST = {
         "Package2 icon",
         "Tiêu đề 'Không có sản phẩm'",
         "Mô tả phụ 'Hãy thêm sản phẩm...'",
-        "Nút CTA 'Thêm Sản Phẩm Mới'"
+        "Nút CTA 'thêm sản phẩm mới'"
       ]
     },
     test_cases: [
@@ -417,14 +417,14 @@ export const QA_TESTER_CHECKLIST = {
       {
         case: "TC_09_003",
         title: "CTA button hoạt động",
-        given: "Click 'Thêm Sản Phẩm Mới'",
+        given: "Click 'thêm sản phẩm mới'",
         expected: "Modal Add Product mở",
         actual: "Click & verify modal"
       },
       {
         case: "TC_09_004",
         title: "Empty state styling",
-        given: "Nhìn Empty State UI",
+        given: "Nhìn empty state UI",
         expected: "Có icon, centered, spacing đúng, responsive trên mobile",
         actual: "Visual & responsive check"
       }

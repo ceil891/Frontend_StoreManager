@@ -1,18 +1,39 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Eye, Layers, Building2, Calendar, FileText, AlertTriangle, ShieldCheck, Edit, Trash2, X } from 'lucide-react';
+import { Plus, Download, Search, Eye, Layers, Building2, Calendar, FileText, AlertTriangle, ShieldCheck, Edit, Trash2, X, SlidersHorizontal } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
+import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
+import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type ProductBatchRecord } from '../store/inventoryStore';
+import { toast } from 'sonner';
+
+import { usePurchaseStore } from '@/features/purchase/store/purchaseStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 
 export function ProductBatchesPage() {
-  const { productBatches: data, addProductBatch, updateProductBatch, deleteProductBatch, fetchProductBatches, fetchProducts } = useInventoryStore();
+  const {
+    productBatches: data,
+    addProductBatch,
+    updateProductBatch,
+    deleteProductBatch,
+    adjustProductBatch,
+    expireProductBatch,
+    fetchProductBatches,
+    fetchProducts,
+  } = useInventoryStore();
+
+  const { suppliers, fetchSuppliers } = usePurchaseStore();
+  const { branches, fetchBranches } = useBranchStore();
 
   useEffect(() => {
     fetchProductBatches();
     fetchProducts();
-  }, [fetchProductBatches, fetchProducts]);
+    fetchSuppliers();
+    fetchBranches();
+  }, [fetchProductBatches, fetchProducts, fetchSuppliers, fetchBranches]);
 
   const [search, setSearch] = useState('');
   const [selectedBatch, setSelectedBatch] = useState<ProductBatchRecord | null>(null);
@@ -24,6 +45,10 @@ export function ProductBatchesPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingBatch, setEditingBatch] = useState<Partial<ProductBatchRecord>>({});
   const [deletingBatch, setDeletingBatch] = useState<ProductBatchRecord | null>(null);
+  const [adjustingBatch, setAdjustingBatch] = useState<ProductBatchRecord | null>(null);
+  const [adjustQty, setAdjustQty] = useState(0);
+  const [adjustReason, setAdjustReason] = useState('');
+  const [expiringBatch, setExpiringBatch] = useState<ProductBatchRecord | null>(null);
 
   const filtered = data.filter((item) => {
     // 1. Text search
@@ -105,6 +130,41 @@ export function ProductBatchesPage() {
     if (!deletingBatch) return;
     deleteProductBatch(deletingBatch.id);
     setDeletingBatch(null);
+  };
+
+  const handleAdjustConfirm = async () => {
+    if (!adjustingBatch) return;
+    if (!adjustReason.trim()) {
+      toast.error('Vui lòng nhập lý do điều chỉnh');
+      return;
+    }
+    try {
+      await adjustProductBatch(adjustingBatch.id, adjustQty, adjustReason.trim());
+      toast.success(`Đã điều chỉnh lô ${adjustingBatch.batchNumber}`);
+      setAdjustingBatch(null);
+      setAdjustReason('');
+      setSelectedBatch(null);
+    } catch {
+      toast.error('Điều chỉnh lô hàng thất bại');
+    }
+  };
+
+  const handleExpireConfirm = async () => {
+    if (!expiringBatch) return;
+    try {
+      await expireProductBatch(expiringBatch.id);
+      toast.success(`Đã đánh dấu hết hạn lô ${expiringBatch.batchNumber}`);
+      setExpiringBatch(null);
+      setSelectedBatch(null);
+    } catch {
+      toast.error('Đánh dấu hết hạn lô thất bại');
+    }
+  };
+
+  const openAdjustModal = (batch: ProductBatchRecord) => {
+    setAdjustingBatch(batch);
+    setAdjustQty(batch.remainingUnits);
+    setAdjustReason('');
   };
 
   const columns = useMemo<ColumnDef<ProductBatchRecord>[]>(
@@ -192,6 +252,22 @@ export function ProductBatchesPage() {
             >
               <Edit className="w-4 h-4" />
             </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); openAdjustModal(row.original); }}
+              title="Điều chỉnh số lượng"
+              className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors shrink-0"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+            </button>
+            {row.original.qualityStatus !== 'EXPIRED' && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setExpiringBatch(row.original); }}
+                title="Đánh dấu hết hạn"
+                className="p-1.5 text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30 rounded-lg transition-colors shrink-0"
+              >
+                <AlertTriangle className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); setDeletingBatch(row.original); }}
               title="Xóa"
@@ -369,7 +445,23 @@ export function ProductBatchesPage() {
               )}
             </div>
 
-            <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
+            <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex flex-wrap gap-3">
+              {selectedBatch.qualityStatus !== 'EXPIRED' && (
+                <>
+                  <button
+                    onClick={() => openAdjustModal(selectedBatch)}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg shadow transition-colors text-sm min-w-[160px]"
+                  >
+                    <SlidersHorizontal className="w-4 h-4" /> Điều chỉnh SL
+                  </button>
+                  <button
+                    onClick={() => setExpiringBatch(selectedBatch)}
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                  >
+                    <AlertTriangle className="w-4 h-4" /> Đánh dấu hết hạn
+                  </button>
+                </>
+              )}
               {selectedBatch.qualityStatus === 'QUARANTINED' && (
                 <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
                   <ShieldCheck className="w-4 h-4" /> Release From Quarantine
@@ -392,7 +484,7 @@ export function ProductBatchesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Đăng Ký Lô Sản Phẩm Mới' : 'Cập Nhật Lô Sản Phẩm'}
+        title={modalMode === 'create' ? 'Đăng ký lô sản phẩm mới' : 'Cập nhật lô sản phẩm'}
         width="max-w-2xl"
       >
         <form onSubmit={handleSaveBatch} className="space-y-4">
@@ -408,31 +500,44 @@ export function ProductBatchesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã SKU Sản phẩm *</label>
-              <input
-                type="text"
-                value={editingBatch.sku || ''}
-                onChange={(e) => setEditingBatch({ ...editingBatch, sku: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-                required
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chọn Sản phẩm hệ thống (SKU) *</label>
+              <SearchLookupModal
+                title="Chọn Sản Phẩm"
+                iconType="package"
+                placeholder="Chọn sản phẩm..."
+                value={editingBatch.sku}
+                options={(useInventoryStore.getState().products || []).map((p) => ({
+                  id: p.sku,
+                  code: p.sku,
+                  name: p.name,
+                  subtitle: `Danh mục: ${p.categoryName || 'N/A'}`
+                }))}
+                onChange={(val, opt) => {
+                  setEditingBatch(prev => ({
+                    ...prev,
+                    sku: val,
+                    productName: opt ? opt.name : val,
+                  }));
+                }}
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên sản phẩm *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên sản phẩm đăng ký *</label>
             <input
               type="text"
               value={editingBatch.productName || ''}
               onChange={(e) => setEditingBatch({ ...editingBatch, productName: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              placeholder="Tên sản phẩm tự động điền theo SKU"
               required
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày sản xuất</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày sản xuất (NSX)</label>
               <input
                 type="date"
                 value={editingBatch.manufactureDate || ''}
@@ -441,7 +546,7 @@ export function ProductBatchesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày hết hạn (Expiry)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày hết hạn (HSD / Expiry Date)</label>
               <input
                 type="date"
                 value={editingBatch.expiryDate || ''}
@@ -453,7 +558,7 @@ export function ProductBatchesPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số lượng ban đầu</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số lượng lô ban đầu</label>
               <input
                 type="number"
                 value={editingBatch.initialUnits || 0}
@@ -462,7 +567,7 @@ export function ProductBatchesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 text-emerald-600">SL Tồn hiện tại</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 text-emerald-600 font-semibold">SL Tồn hiện tại</label>
               <input
                 type="number"
                 value={editingBatch.remainingUnits || 0}
@@ -471,35 +576,57 @@ export function ProductBatchesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn giá vốn ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={editingBatch.unitCost || 0}
-                onChange={(e) => setEditingBatch({ ...editingBatch, unitCost: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn giá vốn lô hàng</label>
+              <CurrencyInput
+                value={editingBatch.costPerUnitUsd || 0}
+                onChange={(val) => setEditingBatch(prev => ({ ...prev, costPerUnitUsd: val }))}
+                currencySymbol="₫"
+                placeholder="0"
               />
             </div>
           </div>
 
+          <div>
+            <FileDropzone
+              label="Chứng nhận kiểm nghiệm COA/CQ & Giấy phép ATTP đính kèm"
+            />
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhà cung cấp gốc</label>
-              <input
-                type="text"
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhà cung cấp gốc *</label>
+              <select
                 value={editingBatch.supplierName || ''}
                 onChange={(e) => setEditingBatch({ ...editingBatch, supplierName: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
+              >
+                <option value="">-- Chọn Nhà cung cấp --</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.supplierName}>
+                    {s.supplierName} ({s.code})
+                  </option>
+                ))}
+                <option value="Công ty TNHH Thực Phẩm Á Châu">Công ty TNHH Thực Phẩm Á Châu</option>
+                <option value="Tập đoàn Vinamilk Việt Nam">Tập đoàn Vinamilk Việt Nam</option>
+                <option value="Apple Authorized Distributor">Apple Authorized Distributor</option>
+              </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Vị trí lưu kho</label>
-              <input
-                type="text"
-                value={editingBatch.location || ''}
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Vị trí lưu kho *</label>
+              <select
+                value={editingBatch.location || 'Kho Tổng (Central Warehouse)'}
                 onChange={(e) => setEditingBatch({ ...editingBatch, location: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
+              >
+                <option value="Kho Tổng (Central Warehouse)">Kho Tổng (Central Warehouse)</option>
+                {branches.map((b: any) => (
+                  <option key={b.id} value={b.branchName || b.name}>
+                    {b.branchName || b.name} ({b.branchCode || b.code || b.id})
+                  </option>
+                ))}
+                <option value="Kho Quận 2 - TP.HCM">Kho Quận 2 - TP.HCM</option>
+                <option value="Kho Cầu Giấy - Hà Nội">Kho Cầu Giấy - Hà Nội</option>
+              </select>
             </div>
           </div>
 
@@ -583,6 +710,61 @@ export function ProductBatchesPage() {
             >
               Đồng ý xóa
             </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!adjustingBatch}
+        onClose={() => setAdjustingBatch(null)}
+        title={`Điều chỉnh lô: ${adjustingBatch?.batchNumber || ''}`}
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Gọi API <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">POST /batches/:id/adjust</code>. SL hiện tại: <strong>{adjustingBatch?.remainingUnits}</strong>
+          </p>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số lượng sau điều chỉnh *</label>
+            <input
+              type="number"
+              min={0}
+              value={adjustQty}
+              onChange={(e) => setAdjustQty(parseInt(e.target.value, 10) || 0)}
+              className="w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-900"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lý do *</label>
+            <textarea
+              rows={2}
+              value={adjustReason}
+              onChange={(e) => setAdjustReason(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-900 resize-none"
+              placeholder="Ví dụ: Hao hụt kiểm kê, hàng hỏng..."
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={() => setAdjustingBatch(null)} className="px-4 py-2 border rounded-lg text-sm">Hủy</button>
+            <button type="button" onClick={handleAdjustConfirm} className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-semibold">Xác nhận</button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!expiringBatch}
+        onClose={() => setExpiringBatch(null)}
+        title="Đánh dấu lô hết hạn"
+        isDestructive
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Đánh dấu lô <strong>{expiringBatch?.batchNumber}</strong> hết hạn qua API <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">POST /batches/:id/expire</code>?
+          </p>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={() => setExpiringBatch(null)} className="px-4 py-2 border rounded-lg text-sm">Hủy</button>
+            <button type="button" onClick={handleExpireConfirm} className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-semibold">Xác nhận hết hạn</button>
           </div>
         </div>
       </Modal>

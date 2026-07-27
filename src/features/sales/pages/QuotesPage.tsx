@@ -1,6 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
+import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Plus, Download, Search, Filter, Eye, FileText, User, Calendar, CheckCircle2, Edit, Trash2 } from 'lucide-react';
 import { useSalesStore, type QuoteItem, calcTotalAmount, formatMoney } from '../store/salesStore';
@@ -10,9 +12,28 @@ import { usePermission } from '@/shared/hooks/usePermission';
 import { OrderLinesEditor, sumOrderLines } from '@/shared/components/sales/OrderLinesEditor';
 import { CustomerSelect } from '@/shared/components/sales/CustomerSelect';
 import { OrderPricingFields } from '@/shared/components/sales/OrderPricingFields';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 export function QuotesPage() {
-  const { quotes: data, addQuote, updateQuote, deleteQuote } = useSalesStore();
+  const { quotes: data, addQuote, updateQuote, deleteQuote, fetchQuotes } = useSalesStore();
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        await fetchQuotes();
+      } catch (err) {
+        console.error(err);
+        toast.error('Không thể tải danh sách báo giá');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+  }, [fetchQuotes]);
+
   const customers = useCrmStore((s) => s.customers);
   const canManage = usePermission('sales:quotes:manage');
   const [search, setSearch] = useState('');
@@ -73,7 +94,7 @@ export function QuotesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveQuote = (e: React.FormEvent) => {
+  const handleSaveQuote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingQuote.customerId || !editingQuote.code) return;
 
@@ -92,29 +113,44 @@ export function QuotesPage() {
       itemsCount: lines.filter((l) => l.productName.trim()).length || Number(editingQuote.itemsCount) || 0,
     };
 
-    if (modalMode === 'create') {
-      const newQuote: Omit<QuoteItem, 'id'> = {
-        code: editingQuote.code,
-        customerId: editingQuote.customerId,
-        issueDate: editingQuote.issueDate || new Date().toISOString().split('T')[0],
-        revision: Number(editingQuote.revision) || 1,
-        validUntil: editingQuote.validUntil || new Date().toISOString().split('T')[0],
-        status: editingQuote.status as any || 'DRAFT',
-        salesRep: editingQuote.salesRep || 'System User',
-        notes: editingQuote.notes || '',
-        ...linePayload,
-      };
-      addQuote(newQuote);
-    } else if (editingQuote.id) {
-      updateQuote(editingQuote.id, { ...editingQuote, ...linePayload });
+    try {
+      if (modalMode === 'create') {
+        const newQuote: Omit<QuoteItem, 'id'> = {
+          code: editingQuote.code,
+          customerId: editingQuote.customerId,
+          issueDate: editingQuote.issueDate || new Date().toISOString().split('T')[0],
+          revision: Number(editingQuote.revision) || 1,
+          validUntil: editingQuote.validUntil || new Date().toISOString().split('T')[0],
+          status: editingQuote.status as any || 'DRAFT',
+          salesRep: editingQuote.salesRep || 'System User',
+          notes: editingQuote.notes || '',
+          ...linePayload,
+        };
+        await addQuote(newQuote);
+        toast.success('Tạo báo giá thành công!');
+      } else if (editingQuote.id) {
+        await updateQuote(editingQuote.id, { ...editingQuote, ...linePayload });
+        toast.success('Cập nhật báo giá thành công!');
+      }
+      setIsModalOpen(false);
+      fetchQuotes();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi lưu báo giá.');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingQuote) return;
-    deleteQuote(deletingQuote.id);
-    setDeletingQuote(null);
+    try {
+      await deleteQuote(deletingQuote.id);
+      toast.success('Đã xóa báo giá!');
+      setDeletingQuote(null);
+      fetchQuotes();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi xóa báo giá.');
+    }
   };
 
   const columns = useMemo<ColumnDef<QuoteItem>[]>(
@@ -212,12 +248,12 @@ export function QuotesPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Tạo, theo dõi và quản lý các bảng báo giá sản phẩm. Nhấp vào dòng để xem trước đề xuất.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0">
+            <button className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0">
               <Download className="w-4 h-4" /> Xuất dữ liệu
             </button>
             {canManage && (
-              <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm whitespace-nowrap shrink-0">
-                <Plus className="w-4 h-4" /> Tạo báo giá
+              <button onClick={handleOpenCreate} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0">
+                <Plus className="w-4 h-4" /> Tạo Báo Giá Mới
               </button>
             )}
           </div>
@@ -243,7 +279,14 @@ export function QuotesPage() {
         </div>
 
         {/* Table */}
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedQuote(row)} />
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-sm font-bold text-gray-500">Đang tải danh sách báo giá...</span>
+          </div>
+        ) : (
+          <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedQuote(row)} />
+        )}
       </div>
 
       {/* Drawer Details */}
@@ -330,8 +373,8 @@ export function QuotesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo Báo Giá Mới' : 'Cập Nhật Báo Giá'}
-        width="max-w-xl"
+        title={modalMode === 'create' ? '📋 Tạo báo giá bán hàng mới' : '⚙️ Cập nhật báo giá'}
+        width="max-w-4xl"
       >
         <form onSubmit={handleSaveQuote} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -346,12 +389,22 @@ export function QuotesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng (CRM) *</label>
-              <CustomerSelect
-                value={editingQuote.customerId || ''}
-                onChange={(customerId) => setEditingQuote({ ...editingQuote, customerId })}
-                allowWalkIn={false}
-                required
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng nhận báo giá (CRM) *</label>
+              <SearchLookupModal
+                title="Chọn Khách Hàng Báo Giá"
+                iconType="user"
+                placeholder="Chọn khách hàng CRM..."
+                value={editingQuote.customerId}
+                options={customers.length > 0 ? customers.map(c => ({
+                  id: String(c.id),
+                  code: (c as any).code || (c as any).customerCode || `CUST-${c.id}`,
+                  name: (c as any).fullName || (c as any).name || 'Khách hàng',
+                  subtitle: `SĐT: ${(c as any).phone || 'N/A'}`
+                })) : [
+                  { id: 'CUST-001', code: 'CUST-001', name: 'Nguyễn Văn An', subtitle: 'SĐT: 0901234567 - VIP Gold' },
+                  { id: 'CUST-002', code: 'CUST-002', name: 'Công ty TNHH Minh Phát', subtitle: 'MST: 0312456789 - Khách DN' },
+                ]}
+                onChange={(val) => setEditingQuote(prev => ({ ...prev, customerId: val }))}
               />
             </div>
           </div>
@@ -404,16 +457,6 @@ export function QuotesPage() {
             onChange={(patch) => setEditingQuote((prev) => ({ ...prev, ...patch }))}
           />
 
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số lượng mục</label>
-            <input
-              type="number"
-              readOnly
-              value={editingQuote.itemsCount || 0}
-              className="w-full max-w-[120px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 font-mono text-sm"
-            />
-          </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
@@ -422,27 +465,38 @@ export function QuotesPage() {
                 onChange={(e) => setEditingQuote({ ...editingQuote, status: e.target.value as any })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
               >
-                <option value="DRAFT">Nháp (Draft)</option>
+                <option value="DRAFT">Nháp (draft)</option>
                 <option value="SENT">Đã gửi (Sent)</option>
                 <option value="ACCEPTED">Đã chấp nhận (Accepted)</option>
                 <option value="EXPIRED">Hết hạn (Expired)</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhân viên phụ trách</label>
-              <input
-                type="text"
-                value={editingQuote.salesRep || ''}
-                onChange={(e) => setEditingQuote({ ...editingQuote, salesRep: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhân viên Sale phụ trách</label>
+              <SearchLookupModal
+                title="Chọn Nhân Viên Sales"
+                iconType="user"
+                placeholder="Chọn nhân viên..."
+                value={editingQuote.salesRep}
+                options={[
+                  { id: 'EMP-01', code: 'EMP-01', name: 'Nguyễn Thị Hoa', subtitle: 'Phòng kinh doanh 1' },
+                  { id: 'EMP-02', code: 'EMP-02', name: 'Trần Văn Nam', subtitle: 'Phòng kinh doanh 2' },
+                ]}
+                onChange={(val, opt) => setEditingQuote(prev => ({ ...prev, salesRep: opt ? opt.name : val }))}
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú / Điều khoản</label>
+            <FileDropzone
+              label="Bảng báo giá chính thức & Catalogue đính kèm gửi khách (PDF)"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú & Điều khoản thanh toán/bảo hành</label>
             <textarea
-              rows={3}
+              rows={2}
               value={editingQuote.notes || ''}
               onChange={(e) => setEditingQuote({ ...editingQuote, notes: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"

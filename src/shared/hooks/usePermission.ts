@@ -1,10 +1,10 @@
-import { useAuthRole } from '@/features/auth/store/authStore';
-import { useRoleStore } from '@/features/hr/store/roleStore';
+import { useAuthPermissions } from '@/features/auth/store/authStore';
 
-/** Kiểm tra quyền RBAC của user hiện tại (theo role trong auth + roleStore). */
+/**
+ * Kiểm tra xem user hiện tại có quyền `permissionKey` không.
+ * Dữ liệu lấy từ backend (qua authStore.user.permissions) sau khi login.
+ */
 export function usePermission(permissionKey: string): boolean {
-  const role = useAuthRole();
-  const checkPermission = useRoleStore((s) => s.checkPermission);
-  if (!role) return false;
-  return checkPermission(role, permissionKey);
+  const permissions = useAuthPermissions();
+  return permissions.includes(permissionKey);
 }

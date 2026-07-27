@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Plus, Download, Search, Eye, Users, Layers, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { toast } from 'sonner';
+import { useCrmStore } from '../store/crmStore';
 
 interface PartnerGroupItem {
   id: string;
@@ -16,16 +18,38 @@ interface PartnerGroupItem {
   createdAt: string;
 }
 
-const MOCK_DATA: PartnerGroupItem[] = [
-  { id: '1', groupCode: 'VIP_GOLD', name: 'Khách Hàng Thân Thiết Gold', type: 'KHÁCH_HÀNG', description: 'Nhóm khách hàng có tích lũy từ 50 triệu trở lên, hưởng ưu đãi chiết khấu 5% khi mua hàng', memberCount: 154, status: 'KÍCH_HOẠT', createdAt: '2026-01-15' },
-  { id: '2', groupCode: 'SUP_FMCG', name: 'Nhà Cung Cấp Hàng Tiêu Dùng', type: 'NHÀ_CUNG_CẤP', description: 'Các đối tác cung ứng nhóm sản phẩm tiêu dùng nhanh (FMCG), chu kỳ thanh toán công nợ 30 ngày', memberCount: 18, status: 'KÍCH_HOẠT', createdAt: '2026-02-10' },
-  { id: '3', groupCode: 'VIP_DIAMOND', name: 'Khách Hàng Kim Cương', type: 'KHÁCH_HÀNG', description: 'Khách hàng đặc biệt VIP có tích lũy từ 150 triệu trở lên, chiết khấu 10%', memberCount: 42, status: 'KÍCH_HOẠT', createdAt: '2026-01-20' },
-  { id: '4', groupCode: 'SUP_FRESH', name: 'Nhà Cung Cấp Thực Phẩm Tươi Sống', type: 'NHÀ_CUNG_CẤP', description: 'Các hộ nông trại và hợp tác xã cung cấp thực phẩm rau củ quả tươi sống, giao hàng hàng ngày', memberCount: 12, status: 'KHOÁ', createdAt: '2026-03-01' },
-  { id: '5', groupCode: 'WHOLESALE_CUST', name: 'Khách Hàng Mua Sỉ', type: 'KHÁCH_HÀNG', description: 'Nhóm khách hàng mua buôn với số lượng lớn, bảng giá chiết khấu riêng theo hợp đồng đại lý', memberCount: 88, status: 'KÍCH_HOẠT', createdAt: '2026-02-18' }
-];
+const MOCK_DATA: PartnerGroupItem[] = [];
+
+import { axiosClient } from '@/shared/lib/axiosClient';
 
 export function PartnerGroupsPage() {
-  const [data, setData] = useState<PartnerGroupItem[]>(MOCK_DATA);
+  const setData = (_fn: any) => {};
+  const {
+    partnerGroups: storeGroups,
+    fetchPartnerGroups,
+    addPartnerGroup,
+    updatePartnerGroup,
+    deletePartnerGroup,
+  } = useCrmStore();
+
+  useEffect(() => {
+    fetchPartnerGroups();
+  }, [fetchPartnerGroups]);
+
+  const data: PartnerGroupItem[] = useMemo(() => {
+    return storeGroups.map((g) => ({
+      id: g.id,
+      groupCode: g.groupCode,
+      name: g.groupName,
+      type: 'KHÁCH_HÀNG',
+      description: g.description,
+      memberCount: g.memberCount,
+      status: g.status === 'ACTIVE' ? 'KÍCH_HOẠT' : 'KHOÁ',
+      createdAt: '2026-01-15',
+    }));
+  }, [storeGroups]);
+
+  const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('Tất cả');
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
@@ -35,6 +59,11 @@ export function PartnerGroupsPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<PartnerGroupItem>>({});
   const [deletingItem, setDeletingItem] = useState<PartnerGroupItem | null>(null);
+
+
+  useEffect(() => {
+    fetchPartnerGroups();
+  }, [fetchPartnerGroups]);
 
   const filtered = useMemo(() => {
     return data.filter((item) => {
@@ -68,39 +97,52 @@ export function PartnerGroupsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.groupCode || !editingItem.name || !editingItem.type) return;
+    const payload = {
+      groupCode: editingItem.groupCode,
+      name: editingItem.name,
+      type: editingItem.type,
+      description: editingItem.description,
+      status: editingItem.status,
+    };
 
-    if (modalMode === 'create') {
-      const newItem: PartnerGroupItem = {
-        id: String(data.length + 1),
-        groupCode: editingItem.groupCode.toUpperCase(),
-        name: editingItem.name,
-        type: editingItem.type as any,
-        description: editingItem.description || '',
-        memberCount: Number(editingItem.memberCount) || 0,
-        status: editingItem.status || 'KÍCH_HOẠT',
-        createdAt: editingItem.createdAt || new Date().toISOString().split('T')[0],
-      };
-      setData([...data, newItem]);
-    } else if (editingItem.id) {
-      setData(data.map((item) => (item.id === editingItem.id ? (editingItem as PartnerGroupItem) : item)));
+    try {
+      if (modalMode === 'create') {
+        await axiosClient.post('/crm/partner-groups', payload);
+        toast.success(`Tạo nhóm đối tác ${editingItem.name} thành công!`);
+      } else if (editingItem.id) {
+        await axiosClient.put(`/crm/partner-groups/${editingItem.id}`, payload);
+        toast.success(`Cập nhật nhóm đối tác ${editingItem.name} thành công!`);
+      }
+      setIsModalOpen(false);
+      fetchPartnerGroups();
+    } catch (err) {
+      console.error('Error saving partner group:', err);
+      toast.error('Lỗi khi lưu nhóm đối tác');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deletingItem) return;
-    setData(data.filter((item) => item.id !== deletingItem.id));
-    setDeletingItem(null);
+    try {
+      await axiosClient.delete(`/crm/partner-groups/${deletingItem.id}`);
+      toast.success(`Đã xóa nhóm đối tác ${deletingItem.name}`);
+      setData((prev) => prev.filter((item) => item.id !== deletingItem.id));
+    } catch (err) {
+      console.error('Error deleting partner group:', err);
+      toast.error('Lỗi khi xóa nhóm đối tác');
+    } finally {
+      setDeletingItem(null);
+    }
   };
 
   const columns = useMemo<ColumnDef<PartnerGroupItem>[]>(
     () => [
       {
         accessorKey: 'groupCode',
-        header: 'Mã Nhóm',
+        header: 'Mã nhóm',
         cell: (info) => (
           <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
             {info.getValue() as string}
@@ -109,12 +151,12 @@ export function PartnerGroupsPage() {
       },
       {
         accessorKey: 'name',
-        header: 'Tên Nhóm Đối Tác',
+        header: 'Tên nhóm đối tác',
         cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'type',
-        header: 'Phân Loại',
+        header: 'Phân loại',
         cell: (info) => {
           const type = info.getValue() as string;
           return (
@@ -132,7 +174,7 @@ export function PartnerGroupsPage() {
       },
       {
         accessorKey: 'description',
-        header: 'Mô Tả',
+        header: 'Mô tả',
         cell: (info) => (
           <span className="text-gray-500 text-sm whitespace-normal max-w-xs block truncate" title={info.getValue() as string}>
             {info.getValue() as string}
@@ -141,7 +183,7 @@ export function PartnerGroupsPage() {
       },
       {
         accessorKey: 'memberCount',
-        header: 'Số Thành Viên',
+        header: 'Số thành viên',
         cell: (info) => (
           <span className="font-semibold text-gray-800 dark:text-gray-200">
             {(info.getValue() as number).toLocaleString()}
@@ -150,7 +192,7 @@ export function PartnerGroupsPage() {
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           return (
@@ -169,7 +211,7 @@ export function PartnerGroupsPage() {
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <button
@@ -264,7 +306,7 @@ export function PartnerGroupsPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelectedItem} />
+        <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row) => setSelectedItem(row)} />
       </div>
 
       {/* Drawer Chi tiết */}
@@ -325,11 +367,11 @@ export function PartnerGroupsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Nhóm Đối Tác Mới' : 'Cập Nhật Nhóm Đối Tác'}
+        title={modalMode === 'create' ? 'Thêm nhóm đối tác mới' : 'Cập nhật nhóm đối tác'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã Nhóm *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã nhóm *</label>
             <input
               type="text"
               value={editingItem.groupCode || ''}
@@ -342,7 +384,7 @@ export function PartnerGroupsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên Nhóm Đối Tác *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên nhóm đối tác *</label>
             <input
               type="text"
               value={editingItem.name || ''}
@@ -354,7 +396,7 @@ export function PartnerGroupsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phân Loại *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phân loại *</label>
             <select
               value={editingItem.type || 'KHÁCH_HÀNG'}
               onChange={(e) => setEditingItem({ ...editingItem, type: e.target.value as any })}
@@ -367,7 +409,7 @@ export function PartnerGroupsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số Thành Viên Ban Đầu</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số thành viên ban đầu</label>
               <input
                 type="number"
                 min="0"

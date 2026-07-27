@@ -1,11 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, Building2, CreditCard, Building, ShieldCheck, DollarSign, Lock, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
+import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type CorporateBankAccount } from '../store/financeStore';
 import { toast } from 'sonner';
+import { exportToCsv } from '@/shared/utils/exportCsv';
 
 const formatBalance = (amount: number, currency: string) => {
   if (currency === 'VND') {
@@ -46,6 +49,12 @@ export function BankAccountsPage() {
   const addBankAccount = useFinanceStore((s) => s.addBankAccount);
   const updateBankAccount = useFinanceStore((s) => s.updateBankAccount);
   const deleteBankAccount = useFinanceStore((s) => s.deleteBankAccount);
+  const fetchBankAccounts = useFinanceStore((s) => s.fetchBankAccounts);
+
+  useEffect(() => {
+    fetchBankAccounts();
+  }, [fetchBankAccounts]);
+
   const [search, setSearch] = useState('');
   const [selectedAccount, setSelectedAccount] = useState<CorporateBankAccount | null>(null);
 
@@ -219,12 +228,23 @@ export function BankAccountsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tài Khoản Ngân Hàng & Kho Bạc (Treasury Accounts)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tài khoản ngân hàng & kho bạc (treasury accounts)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý các tài khoản liên kết với các định chế tài chính, giám sát số dư vốn lưu động khả dụng, lịch trình giải ngân và người được ủy quyền ký quỹ. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => toast.success('Xuất dữ liệu số dư thành công!')}
+              onClick={() => {
+                exportToCsv('tai_khoan_ngan_hang', filtered, [
+                  { header: 'Tên tài khoản', accessor: r => r.accountName || '' },
+                  { header: 'Số tài khoản', accessor: r => r.accountNumber || r.accountNumberMasked },
+                  { header: 'Ngân hàng', accessor: r => `${r.bankName} - ${r.branchName}` },
+                  { header: 'Loại tài khoản', accessor: r => accountTypeMap[r.accountType] || r.accountType },
+                  { header: 'Số dư hiện tại', accessor: r => r.currentBalance },
+                  { header: 'Loại tiền', accessor: r => r.currency },
+                  { header: 'Trạng thái', accessor: r => statusMapFull[r.status] || r.status },
+                ]);
+                toast.success('Đã xuất danh sách tài khoản ngân hàng dạng CSV!');
+              }}
               className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
             >
               <Download className="w-4 h-4" /> Xuất dữ liệu số dư
@@ -262,7 +282,7 @@ export function BankAccountsPage() {
       <Drawer
         isOpen={!!selectedAccount}
         onClose={() => setSelectedAccount(null)}
-        title={selectedAccount ? `Chi Tiết Tài Khoản: ${selectedAccount.bankName}` : 'Chi Tiết Thông Tin'}
+        title={selectedAccount ? `Chi Tiết Tài Khoản: ${selectedAccount.bankName}` : 'Chi tiết thông tin'}
         width="max-w-lg"
       >
         {selectedAccount && (
@@ -401,146 +421,163 @@ export function BankAccountsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Liên Kết Tài Khoản Ngân Hàng Mới' : 'Chỉnh Sửa Thông Tin Tài Khoản'}
-        width="max-w-xl"
+        title={modalMode === 'create' ? 'Liên kết tài khoản ngân hàng mới' : 'Chỉnh sửa thông tin tài khoản'}
+        size="erp"
       >
-        <form onSubmit={handleSaveAccount} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên ngân hàng *</label>
-              <input
-                type="text"
-                value={editingAccount.bankName || ''}
-                onChange={(e) => setEditingAccount({ ...editingAccount, bankName: e.target.value })}
-                placeholder="JPMorgan Chase, Vietcombank..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-                required
-              />
+        <form onSubmit={handleSaveAccount}>
+          <div className="erp-form-body">
+            {/* Section 1: Định danh ngân hàng */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Định danh ngân hàng</h3>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên ngân hàng *</label>
+                <input
+                  type="text"
+                  value={editingAccount.bankName || ''}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, bankName: e.target.value })}
+                  placeholder="Vietcombank, BIDV, Techcombank..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên chi nhánh *</label>
+                <input
+                  type="text"
+                  value={editingAccount.branchName || ''}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, branchName: e.target.value })}
+                  placeholder="Chi nhánh TP.HCM, Hội sở chính..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tài khoản *</label>
+                <input
+                  type="text"
+                  value={editingAccount.accountNumberMasked || ''}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, accountNumberMasked: e.target.value })}
+                  placeholder="•••• •••• 8810 2450"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã SWIFT / BIC *</label>
+                <input
+                  type="text"
+                  value={editingAccount.swiftBic || ''}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, swiftBic: e.target.value })}
+                  placeholder="BFTVVNVX..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
+                  required
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên chi nhánh *</label>
-              <input
-                type="text"
-                value={editingAccount.branchName || ''}
-                onChange={(e) => setEditingAccount({ ...editingAccount, branchName: e.target.value })}
-                placeholder="Chi nhánh Hà Nội, London Flagship..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-                required
-              />
+
+            {/* Section 2: Hạch toán & Tiền tệ */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Hạch toán & Tiền tệ</h3>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn vị tiền tệ</label>
+                <select
+                  value={editingAccount.currency || 'VND'}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, currency: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                >
+                  <option value="VND">VND - Đồng Việt Nam</option>
+                  <option value="USD">USD - Đô la Mỹ</option>
+                  <option value="EUR">EUR - Đồng Euro</option>
+                  <option value="GBP">GBP - Bảng Anh</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng số dư sổ sách</label>
+                <CurrencyInput
+                  value={editingAccount.currentBalance ?? 0}
+                  onChange={(val) => setEditingAccount(prev => ({ ...prev, currentBalance: val }))}
+                  currencySymbol={editingAccount.currency === 'USD' ? '$' : editingAccount.currency === 'EUR' ? '€' : '₫'}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Vốn lưu động khả dụng</label>
+                <CurrencyInput
+                  value={editingAccount.availableWorkingCapital ?? 0}
+                  onChange={(val) => setEditingAccount(prev => ({ ...prev, availableWorkingCapital: val }))}
+                  currencySymbol={editingAccount.currency === 'USD' ? '$' : editingAccount.currency === 'EUR' ? '€' : '₫'}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mục đích sử dụng</label>
+                <select
+                  value={editingAccount.accountType || 'PRIMARY_OPERATING'}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, accountType: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                >
+                  <option value="PRIMARY_OPERATING">Hoạt động chính (Primary Operating)</option>
+                  <option value="PAYROLL_DISBURSEMENT">Quỹ chi lương (Payroll)</option>
+                  <option value="MERCHANT_SETTLEMENT">Quyết toán thanh toán (Merchant)</option>
+                  <option value="ESCROW_RESERVE">Quỹ ký quỹ (Escrow Reserve)</option>
+                </select>
+              </div>
+              <div>
+                <FileDropzone
+                  label="Giấy ủy quyền tài khoản & Đăng ký chủ tài khoản (PDF/Image)"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái tài khoản</label>
+                <select
+                  value={editingAccount.status || 'ACTIVE'}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, status: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                >
+                  <option value="ACTIVE">Đang hoạt động (Active)</option>
+                  <option value="RESTRICTED">Bị hạn chế (Restricted)</option>
+                  <option value="CLOSING">Đang đóng (Closing)</option>
+                  <option value="AUDIT_HOLD">Tạm khóa kiểm toán (Audit Hold)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Section 3: Ủy quyền & Quản trị */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Ủy quyền & Ghi chú</h3>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày mở tài khoản</label>
+                <input
+                  type="date"
+                  value={editingAccount.openedDate || ''}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, openedDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người ký ủy quyền (Phẩy để phân cách)</label>
+                <input
+                  type="text"
+                  value={editingAccount.authorizedSignatories?.join(', ') || ''}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, authorizedSignatories: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                  placeholder="CEO Johnathan Vance, CFO Sarah Jenkins..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú quản trị</label>
+                <textarea
+                  rows={3}
+                  value={editingAccount.notes || ''}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, notes: e.target.value })}
+                  placeholder="Ghi chú quy tắc sweep tự động, hạn mức giải ngân..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary resize-none"
+                />
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tài khoản (Masked) *</label>
-              <input
-                type="text"
-                value={editingAccount.accountNumberMasked || ''}
-                onChange={(e) => setEditingAccount({ ...editingAccount, accountNumberMasked: e.target.value })}
-                placeholder="•••• •••• 8810 2450"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã SWIFT / BIC *</label>
-              <input
-                type="text"
-                value={editingAccount.swiftBic || ''}
-                onChange={(e) => setEditingAccount({ ...editingAccount, swiftBic: e.target.value })}
-                placeholder="CHASUS33XXX"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn vị tiền tệ</label>
-              <select
-                value={editingAccount.currency || 'VND'}
-                onChange={(e) => setEditingAccount({ ...editingAccount, currency: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-              >
-                <option value="VND">VND - Đồng Việt Nam</option>
-                <option value="USD">USD - Đô la Mỹ</option>
-                <option value="EUR">EUR - Đồng Euro</option>
-                <option value="GBP">GBP - Bảng Anh</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng số dư sổ sách ({editingAccount.currency || 'VND'})</label>
-              <input
-                type="number"
-                value={editingAccount.currentBalance ?? 0}
-                onChange={(e) => setEditingAccount({ ...editingAccount, currentBalance: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Vốn lưu động khả dụng ({editingAccount.currency || 'VND'})</label>
-              <input
-                type="number"
-                value={editingAccount.availableWorkingCapital ?? 0}
-                onChange={(e) => setEditingAccount({ ...editingAccount, availableWorkingCapital: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mục đích sử dụng</label>
-              <select
-                value={editingAccount.accountType || 'PRIMARY_OPERATING'}
-                onChange={(e) => setEditingAccount({ ...editingAccount, accountType: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-              >
-                <option value="PRIMARY_OPERATING">Hoạt động chính (Primary Operating)</option>
-                <option value="PAYROLL_DISBURSEMENT">Quỹ chi lương (Payroll)</option>
-                <option value="MERCHANT_SETTLEMENT">Quyết toán thanh toán (Merchant)</option>
-                <option value="ESCROW_RESERVE">Quỹ ký quỹ (Escrow Reserve)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái tài khoản</label>
-              <select
-                value={editingAccount.status || 'ACTIVE'}
-                onChange={(e) => setEditingAccount({ ...editingAccount, status: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-              >
-                <option value="ACTIVE">Đang hoạt động (Active)</option>
-                <option value="RESTRICTED">Bị hạn chế (Restricted)</option>
-                <option value="CLOSING">Đang đóng (Closing)</option>
-                <option value="AUDIT_HOLD">Tạm khóa kiểm toán (Audit Hold)</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người ký ủy quyền (Cách nhau bằng dấu phẩy)</label>
-            <input
-              type="text"
-              value={editingAccount.authorizedSignatories?.join(', ') || ''}
-              onChange={(e) => setEditingAccount({ ...editingAccount, authorizedSignatories: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-              placeholder="CEO Johnathan Vance, CFO Sarah Jenkins..."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú quản trị</label>
-            <textarea
-              rows={2}
-              value={editingAccount.notes || ''}
-              onChange={(e) => setEditingAccount({ ...editingAccount, notes: e.target.value })}
-              placeholder="Ghi chú về các quy tắc tự động sweep, hạn mức chuyển khoản..."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary resize-none"
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="erp-form-footer border-t border-gray-200 dark:border-gray-700 pt-4">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}

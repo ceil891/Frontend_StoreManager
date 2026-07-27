@@ -41,7 +41,7 @@ export function InventorySettingsPanel() {
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Ngưỡng Tồn kho Thấp (Threshold)
+            Ngưỡng tồn kho thấp (threshold)
           </label>
           <div className="flex items-end gap-3">
             <div className="flex-1">

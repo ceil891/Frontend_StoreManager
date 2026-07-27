@@ -4,6 +4,7 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { exportToCsv } from '@/shared/utils/exportCsv';
 import { useInventoryStore, type CancelIssueRecord } from '../store/inventoryStore';
 
 export function CancelIssuePage() {
@@ -263,7 +264,21 @@ export function CancelIssuePage() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => { setIsLoading(true); fetchCancelIssues().finally(() => setIsLoading(false)); }}
+              onClick={() => {
+                exportToCsv('danh-sach-huy-hang', filtered, [
+                  { header: 'Mã phiếu', accessor: r => r.issueCode },
+                  { header: 'Mã SKU', accessor: r => r.sku },
+                  { header: 'Tên sản phẩm', accessor: r => r.productName },
+                  { header: 'Số lượng', accessor: r => r.quantity },
+                  { header: 'Tổng trị giá', accessor: r => r.totalValuation },
+                  { header: 'Lý do', accessor: r => r.reason },
+                  { header: 'Vị trí kho', accessor: r => r.locationHub },
+                  { header: 'Người báo cáo', accessor: r => r.reportedBy },
+                  { header: 'Người duyệt', accessor: r => r.authorizedBy || '' },
+                  { header: 'Trạng thái', accessor: r => r.status },
+                  { header: 'Ngày lập', accessor: r => r.loggedDate },
+                ]);
+              }}
               className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
             >
               <Download className="w-4 h-4" /> Xuất dữ liệu
@@ -460,14 +475,13 @@ export function CancelIssuePage() {
         )}
       </Drawer>
 
-      {/* Modal tạo / chỉnh sửa phiếu hủy hàng */}
       <Modal
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
-        title={formMode === 'create' ? 'Tạo Phiếu Hủy Hàng Mới' : 'Chỉnh Sửa Phiếu Hủy Hàng'}
+        title={formMode === 'create' ? '🗑️ Tạo phiếu hủy hàng mới' : '⚙️ Chỉnh sửa phiếu hủy hàng'}
         width="max-w-2xl"
       >
-        <form onSubmit={handleSaveForm} className="space-y-4">
+        <form onSubmit={handleSaveForm} className="space-y-4 text-xs">
           {saveError && (
             <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
               {saveError}
@@ -475,100 +489,169 @@ export function CancelIssuePage() {
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mã phiếu</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã phiếu hủy *</label>
+                {formMode === 'create' && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingIssue({ ...editingIssue, issueCode: `CI-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}` })}
+                    className="text-[10px] text-emerald-600 hover:underline font-bold"
+                  >
+                    ⚡ Sinh mã
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingIssue.issueCode || ''}
                 onChange={(e) => setEditingIssue({ ...editingIssue, issueCode: e.target.value })}
-                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 readOnly={formMode === 'edit'}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày ghi nhận *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày ghi nhận *</label>
               <input
                 type="date"
                 value={editingIssue.loggedDate || ''}
                 onChange={(e) => setEditingIssue({ ...editingIssue, loggedDate: e.target.value })}
-                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sản phẩm (SKU) *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chọn sản phẩm (SKU) *</label>
               <select
                 value={editingIssue.sku || ''}
                 onChange={(e) => {
-                  const p = products.find(p => p.sku === e.target.value);
-                  setEditingIssue({ ...editingIssue, sku: e.target.value, productName: p?.name || '' });
+                  const p = products.find(prod => prod.sku === e.target.value);
+                  const qty = editingIssue.quantity || 1;
+                  const price = p?.price || 0;
+                  setEditingIssue({
+                    ...editingIssue,
+                    sku: e.target.value,
+                    productName: p?.name || '',
+                    totalValuation: price * qty
+                  });
                 }}
-                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               >
-                <option value="">-- Chọn sản phẩm --</option>
+                <option value="">-- Chọn sản phẩm hủy --</option>
                 {products.map((p) => (
                   <option key={p.id} value={p.sku}>{p.sku} – {p.name}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Số lượng hủy *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Số lượng hủy *</label>
               <input
                 type="number"
                 min={1}
                 value={editingIssue.quantity || ''}
-                onChange={(e) => setEditingIssue({ ...editingIssue, quantity: Number(e.target.value) })}
-                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-emerald-500"
+                onChange={(e) => {
+                  const qty = Number(e.target.value) || 0;
+                  const p = products.find(prod => prod.sku === editingIssue.sku);
+                  const price = p?.price || 0;
+                  setEditingIssue({
+                    ...editingIssue,
+                    quantity: qty,
+                    totalValuation: price * qty
+                  });
+                }}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
                 required
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Lý do hủy *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tổng tổn thất dự tính (VND)</label>
+              <input
+                type="number"
+                value={editingIssue.totalValuation || 0}
+                onChange={(e) => setEditingIssue({ ...editingIssue, totalValuation: Number(e.target.value) })}
+                className="w-full p-2 border border-red-300 dark:border-red-700 rounded font-mono bg-red-50 dark:bg-red-950/30 text-red-600 font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Lý do hủy hàng *</label>
               <select
                 value={editingIssue.reason || ''}
                 onChange={(e) => setEditingIssue({ ...editingIssue, reason: e.target.value as any })}
-                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               >
-                <option value="DAMAGED">Hư hỏng</option>
-                <option value="EXPIRED">Hết hạn</option>
-                <option value="LOST">Thất lạc</option>
-                <option value="THEFT">Mất cắp</option>
-                <option value="QUALITY_DEFECT">Lỗi chất lượng</option>
+                <option value="DAMAGED">Hư hỏng vật lý / vỡ nát</option>
+                <option value="EXPIRED">Hết hạn sử dụng (Expired)</option>
+                <option value="QUALITY_DEFECT">Lỗi nhà sản xuất / Biến chất</option>
+                <option value="LOST">Thất lạc trong kho</option>
+                <option value="THEFT">Mất cắp / Thất thoát</option>
               </select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Vị trí kho</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Vị trí kho xuất hủy</label>
               <input
                 type="text"
                 value={editingIssue.locationHub || ''}
                 onChange={(e) => setEditingIssue({ ...editingIssue, locationHub: e.target.value })}
-                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
-                placeholder="Chi nhánh Quận 1, Kho Trung tâm..."
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Chi nhánh Q1..."
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Người báo cáo</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Người báo cáo *</label>
               <input
                 type="text"
                 value={editingIssue.reportedBy || ''}
                 onChange={(e) => setEditingIssue({ ...editingIssue, reportedBy: e.target.value })}
-                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Tên thủ kho báo cáo..."
+                required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
-              <select
-                value={editingIssue.status || 'PENDING_APPROVAL'}
-                onChange={(e) => setEditingIssue({ ...editingIssue, status: e.target.value as any })}
-                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="PENDING_APPROVAL">Chờ duyệt</option>
-                <option value="APPROVED">Đã duyệt</option>
-                <option value="REJECTED">Từ chối</option>
-                <option value="PROCESSED">Đã hạch toán</option>
-              </select>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Người duyệt (Quản lý)</label>
+              <input
+                type="text"
+                value={editingIssue.authorizedBy || ''}
+                onChange={(e) => setEditingIssue({ ...editingIssue, authorizedBy: e.target.value })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Tên quản lý duyệt..."
+              />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
+                <select
+                  value={editingIssue.status || 'PENDING_APPROVAL'}
+                  onChange={(e) => setEditingIssue({ ...editingIssue, status: e.target.value as any })}
+                  className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="PENDING_APPROVAL">Chờ duyệt</option>
+                  <option value="APPROVED">Đã duyệt</option>
+                  <option value="REJECTED">Từ chối</option>
+                  <option value="PROCESSED">Đã hạch toán</option>
+                </select>
+              </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hình ảnh đính kèm (URL ảnh minh chứng, phân cách bởi dấu phẩy)</label>
+            <input
+              type="text"
+              value={(editingIssue.proofImages || []).join(', ')}
+              onChange={(e) => setEditingIssue({ ...editingIssue, proofImages: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono"
+              placeholder="https://images.unsplash.com/... , https://..."
+            />
           </div>
 
           <div>

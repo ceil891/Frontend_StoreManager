@@ -1,58 +1,116 @@
-import { useMemo, useState } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Calendar, Tag, X } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
+import { Plus, Search, Eye, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-
-interface VoucherRecord {
-  id: string;
-  customerId: string;
-  customerName: string;
-  voucherCode: string;
-  issuedAt: string;
-  expiryDate: string;
-  status: 'ACTIVE' | 'EXPIRED' | 'USED' | 'REVOKED';
-  notes?: string;
-}
-
-const MOCK_VOUCHERS: VoucherRecord[] = [
-  {
-    id: '1',
-    customerId: 'C001',
-    customerName: 'Nguyễn Văn A',
-    voucherCode: 'WELCOME10',
-    issuedAt: '2024-01-15',
-    expiryDate: '2024-12-31',
-    status: 'ACTIVE',
-    notes: 'Mã chào mừng lần đầu mua hàng',
-  },
-  {
-    id: '2',
-    customerId: 'C002',
-    customerName: 'Trần Thị B',
-    voucherCode: 'VIP50',
-    issuedAt: '2024-03-01',
-    expiryDate: '2024-09-01',
-    status: 'USED',
-    notes: 'Ưu đãi VIP, đã sử dụng cho đơn 2024-04-10',
-  },
-  {
-    id: '3',
-    customerId: 'C003',
-    customerName: 'Lê Công C',
-    voucherCode: 'SUMMER25',
-    issuedAt: '2024-06-01',
-    expiryDate: '2024-08-31',
-    status: 'EXPIRED',
-  },
-];
+import { toast } from 'sonner';
+import { useCrmStore } from '../store/crmStore';
 
 export function CustomerVouchersPage() {
-  const [data] = useState<VoucherRecord[]>(MOCK_VOUCHERS);
+  const {
+    customerVouchers: storeVouchers,
+    fetchCustomerVouchers,
+    addCustomerVoucher,
+    updateCustomerVoucher,
+    deleteCustomerVoucher,
+  } = useCrmStore();
+
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    setIsLoading(true);
+    fetchCustomerVouchers().finally(() => setIsLoading(false));
+  }, [fetchCustomerVouchers]);
+
+  const data = useMemo(() => {
+    return storeVouchers.map((cv: any) => ({
+      id: cv.id,
+      customerId: cv.customerPhone || '1',
+      customerName: cv.customerName,
+      voucherCode: cv.voucherCode,
+      issuedAt: cv.issueDate,
+      expiryDate: '2026-12-31',
+      status: (cv.status === 'UNUSED' ? 'ACTIVE' : cv.status) as any,
+      notes: cv.voucherName,
+    }));
+  }, [storeVouchers]);
+
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<VoucherRecord | null>(null);
-  const [isCreateOpen, setCreateOpen] = useState(false);
+  const [selected, setSelected] = useState<any | null>(null);
+  
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [form, setForm] = useState({
+    customerName: '',
+    customerPhone: '',
+    voucherCode: '',
+    status: 'ACTIVE' as any,
+    notes: '',
+  });
+
+  const handleDelete = async (item: any) => {
+    if (!confirm(`Xóa voucher ${item.voucherCode} của khách ${item.customerName}?`)) return;
+    try {
+      await deleteCustomerVoucher(item.id);
+      toast.success(`Đã xóa voucher ${item.voucherCode}`);
+    } catch (err) {
+      toast.error('Lỗi khi xóa voucher');
+    }
+  };
+
+  const handleOpenCreate = () => {
+    setEditingItem(null);
+    setForm({
+      customerName: '',
+      customerPhone: '',
+      voucherCode: `VC-${Math.floor(1000 + Math.random() * 9000)}`,
+      status: 'ACTIVE',
+      notes: '',
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: any) => {
+    setEditingItem(item);
+    setForm({
+      customerName: item.customerName,
+      customerPhone: item.customerId,
+      voucherCode: item.voucherCode,
+      status: item.status,
+      notes: item.notes || '',
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (editingItem) {
+        await updateCustomerVoucher(editingItem.id, {
+          customerName: form.customerName,
+          voucherCode: form.voucherCode,
+          status: form.status === 'ACTIVE' ? 'UNUSED' : (form.status as any),
+        });
+        toast.success('Cập nhật voucher khách hàng thành công');
+      } else {
+        await addCustomerVoucher({
+          customerName: form.customerName || 'Khách vãng lai',
+          customerPhone: form.customerPhone || '0900000000',
+          voucherCode: form.voucherCode,
+          voucherName: form.notes || 'Voucher tặng',
+          discountValue: 50000,
+          issueDate: new Date().toISOString().split('T')[0],
+          status: 'UNUSED',
+        });
+        toast.success('Cấp voucher cho khách hàng thành công');
+      }
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error('Error saving customer voucher:', err);
+      toast.error('Không thể lưu voucher khách hàng');
+    }
+  };
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -121,7 +179,7 @@ export function CustomerVouchersPage() {
             REVOKED: 'Bị thu hồi',
           };
           return (
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${styleMap[status]}`}>{labelMap[status] || status}</span>
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${styleMap[status] || 'bg-gray-100 text-gray-800'}`}>{labelMap[status] || status}</span>
           );
         },
       },
@@ -138,14 +196,14 @@ export function CustomerVouchersPage() {
               <Eye className="w-4 h-4" />
             </button>
             <button
-              onClick={() => alert('Chỉnh sửa voucher: ' + row.original.voucherCode)}
+              onClick={() => handleOpenEdit(row.original)}
               title="Chỉnh sửa"
               className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => confirm('Xóa voucher ' + row.original.voucherCode + '?')}
+              onClick={() => handleDelete(row.original)}
               title="Xóa"
               className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
             >
@@ -162,11 +220,11 @@ export function CustomerVouchersPage() {
     <>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ví Voucher Khách Hàng</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ví voucher khách hàng</h1>
           <div className="flex items-center gap-3">
             <button
               className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-medium shadow-sm"
-              onClick={() => setCreateOpen(true)}
+              onClick={handleOpenCreate}
             >
               <Plus className="w-4 h-4" /> Tạo Voucher mới
             </button>
@@ -184,7 +242,7 @@ export function CustomerVouchersPage() {
             />
           </div>
         </div>
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+        <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row) => setSelected(row)} />
       </div>
 
       {/* Drawer chi tiết */}
@@ -225,13 +283,70 @@ export function CustomerVouchersPage() {
         )}
       </Drawer>
 
-      {/* Modal tạo mới (giao diện mẫu, chưa lưu) */}
-      <Modal isOpen={isCreateOpen} onClose={() => setCreateOpen(false)} title="Tạo Voucher mới" width="max-w-lg">
-        <div className="p-4">
-          <p className="text-gray-600 dark:text-gray-400">Form tạo voucher sẽ được xây dựng ở đây.</p>
-          <button className="mt-4 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded" onClick={() => alert('Chức năng lưu chưa triển khai')}>Lưu</button>
-        </div>
+      {/* Modal tạo / sửa voucher khách hàng */}
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Chỉnh sửa Voucher Khách Hàng' : 'Cấp Voucher cho Khách Hàng'} width="max-w-lg">
+        <form onSubmit={handleSave} className="p-4 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã Voucher</label>
+            <input
+              type="text"
+              required
+              value={form.voucherCode}
+              onChange={(e) => setForm({ ...form, voucherCode: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên khách hàng</label>
+            <input
+              type="text"
+              required
+              placeholder="Nhập tên khách hàng"
+              value={form.customerName}
+              onChange={(e) => setForm({ ...form, customerName: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
+            <select
+              value={form.status}
+              onChange={(e) => setForm({ ...form, status: e.target.value as any })}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+            >
+              <option value="ACTIVE">Hoạt động</option>
+              <option value="USED">Đã sử dụng</option>
+              <option value="EXPIRED">Hết hạn</option>
+              <option value="REVOKED">Bị thu hồi</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú</label>
+            <textarea
+              rows={3}
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+            />
+          </div>
+          <div className="pt-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium"
+            >
+              Lưu Voucher
+            </button>
+          </div>
+        </form>
       </Modal>
     </>
   );
 }
+

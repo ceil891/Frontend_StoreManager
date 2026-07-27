@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, Scale, MapPin, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useLogisticsStore } from '../store/logisticsStore';
 
 interface ShippingChargeRecord {
   id: string;
@@ -17,33 +18,33 @@ interface ShippingChargeRecord {
   notes?: string;
 }
 
-const MOCK_CHARGES: ShippingChargeRecord[] = [
-  {
-    id: '1',
-    chargeCode: 'SC-URBAN-STANDARD',
-    maxDistanceKm: 15,
-    maxWeightKg: 5,
-    pricePerUnit: 25000,
-    shippingMethod: 'Giao Hàng Tiêu Chuẩn',
-    oversizeSurcharge: 10000,
-    status: 'ACTIVE',
-    notes: 'Biểu phí chuẩn nội thành cho đơn hàng gọn nhẹ dưới 5kg',
-  },
-  {
-    id: '2',
-    chargeCode: 'SC-INTERPROVINCIAL',
-    maxDistanceKm: 300,
-    maxWeightKg: 20,
-    pricePerUnit: 80000,
-    shippingMethod: 'Giao Hàng Đường Bộ',
-    oversizeSurcharge: 30000,
-    status: 'ACTIVE',
-    notes: 'Phí giao hàng liên tỉnh bưu cục đường bộ',
-  },
-];
-
 export function ShippingChargesPage() {
-  const [data, setData] = useState<ShippingChargeRecord[]>(MOCK_CHARGES);
+  const {
+    shippingCharges: storeCharges,
+    fetchShippingCharges,
+    addShippingCharge,
+    updateShippingCharge,
+    deleteShippingCharge,
+  } = useLogisticsStore();
+
+  useEffect(() => {
+    fetchShippingCharges();
+  }, [fetchShippingCharges]);
+
+  const data: ShippingChargeRecord[] = useMemo(() => {
+    return storeCharges.map((s) => ({
+      id: s.id,
+      chargeCode: s.zoneCode,
+      maxDistanceKm: 50,
+      maxWeightKg: 10,
+      pricePerUnit: s.baseFee,
+      shippingMethod: `${s.carrierName} - ${s.zoneName}`,
+      oversizeSurcharge: s.perKgFee,
+      status: s.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
+      notes: `Thời gian dự kiến: ${s.estimatedHours}h`,
+    }));
+  }, [storeCharges]);
+
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ShippingChargeRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -81,32 +82,30 @@ export function ShippingChargesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.chargeCode || !editingItem.shippingMethod) return;
-
     if (modalMode === 'create') {
-      const newItem: ShippingChargeRecord = {
-        id: String(data.length + 1),
-        chargeCode: editingItem.chargeCode!.toUpperCase(),
-        maxDistanceKm: Number(editingItem.maxDistanceKm || 0),
-        maxWeightKg: Number(editingItem.maxWeightKg || 0),
-        pricePerUnit: Number(editingItem.pricePerUnit || 0),
-        shippingMethod: editingItem.shippingMethod!,
-        oversizeSurcharge: Number(editingItem.oversizeSurcharge || 0),
-        status: editingItem.status as any || 'ACTIVE',
-        notes: editingItem.notes,
-      };
-      setData([...data, newItem]);
-    } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as ShippingChargeRecord) : d)));
+      await addShippingCharge({
+        zoneCode: editingItem.chargeCode || 'ZONE-01',
+        zoneName: editingItem.shippingMethod || 'Khu vực mới',
+        carrierName: 'Đối tác giao hàng',
+        baseFee: Number(editingItem.pricePerUnit || 0),
+        perKgFee: Number(editingItem.oversizeSurcharge || 0),
+        estimatedHours: 24,
+        status: 'ACTIVE',
+      });
+    } else if (editingItem.id) {
+      await updateShippingCharge(editingItem.id, {
+        baseFee: Number(editingItem.pricePerUnit || 0),
+        perKgFee: Number(editingItem.oversizeSurcharge || 0),
+      });
     }
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa cấu hình phí vận chuyển này?')) {
-      setData(data.filter((d) => d.id !== id));
+      await deleteShippingCharge(id);
     }
   };
 
@@ -118,48 +117,48 @@ export function ShippingChargesPage() {
     () => [
       {
         accessorKey: 'chargeCode',
-        header: 'Mã Cấu Hình',
+        header: 'Mã cấu hình',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'shippingMethod',
-        header: 'Hình Thức',
+        header: 'Hình thức',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'maxDistanceKm',
-        header: 'Khoảng Cách Tối Đa',
+        header: 'Khoảng cách tối đa',
         cell: (info) => <span className="font-mono">{info.getValue() as number} km</span>,
       },
       {
         accessorKey: 'maxWeightKg',
-        header: 'Khối Lượng Tối Đa',
+        header: 'Khối lượng tối đa',
         cell: (info) => <span className="font-mono">{info.getValue() as number} kg</span>,
       },
       {
         accessorKey: 'pricePerUnit',
-        header: 'Đơn Giá Vận Chuyển',
+        header: 'Đơn giá vận chuyển',
         cell: (info) => <span className="font-mono text-emerald-600 font-bold">{formatCurrency(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           const badgeClass = status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800';
-          const label = status === 'ACTIVE' ? 'Đang Áp Dụng' : 'Tạm Ngưng';
+          const label = status === 'ACTIVE' ? 'Đang áp dụng' : 'Tạm ngưng';
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết"
+              title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -188,7 +187,7 @@ export function ShippingChargesPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Biểu Phí Cước Vận Chuyển (Shipping Charges)</h1>
+          <h1 className="text-2xl font-bold">Biểu phí cước vận chuyển (shipping charges)</h1>
           <p className="text-sm text-gray-500">
             Quản lý và cấu hình định mức cước phí giao hàng dựa trên các tiêu chí khoảng cách địa lý và trọng lượng của đơn hàng sỉ/lẻ.
           </p>
@@ -223,11 +222,11 @@ export function ShippingChargesPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã Cấu Hình:</span>
+                <span className="text-gray-500">Mã cấu hình:</span>
                 <p className="font-mono font-semibold">{selected.chargeCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Hình Thức Vận Chuyển:</span>
+                <span className="text-gray-500">Hình thức vận chuyển:</span>
                 <p className="font-semibold">{selected.shippingMethod}</p>
               </div>
             </div>
@@ -247,29 +246,29 @@ export function ShippingChargesPage() {
             </div>
             <div className="grid grid-cols-2 gap-4 border-t pt-2">
               <div>
-                <span className="text-gray-500">Đơn Giá Vận Chuyển:</span>
+                <span className="text-gray-500">Đơn giá vận chuyển:</span>
                 <p className="font-mono font-bold text-emerald-600 text-base">{formatCurrency(selected.pricePerUnit)}</p>
               </div>
               <div>
-                <span className="text-gray-500">Phụ Phí Cồng Kềnh:</span>
+                <span className="text-gray-500">Phụ phí cồng kềnh:</span>
                 <p className="font-mono text-red-500">{formatCurrency(selected.oversizeSurcharge)}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Trạng Thái:</span>
+              <span className="text-gray-500">Trạng thái:</span>
               <div>
                 <span
                   className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
                     selected.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
                   }`}
                 >
-                  {selected.status === 'ACTIVE' ? 'Đang Áp Dụng' : 'Tạm Ngưng'}
+                  {selected.status === 'ACTIVE' ? 'Đang áp dụng' : 'Tạm ngưng'}
                 </span>
               </div>
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi Chú Thêm:</span>
+                <span className="text-gray-500">Ghi chú thêm:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                   {selected.notes}
                 </p>
@@ -282,12 +281,12 @@ export function ShippingChargesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Cấu Hình Cước Mới' : 'Sửa Cấu Hình Cước'}
+        title={modalMode === 'create' ? 'Thêm cấu hình cước mới' : 'Sửa cấu hình cước'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Cấu Hình Cước *</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã cấu hình cước *</label>
               <input
                 type="text"
                 value={editingItem.chargeCode || ''}
@@ -299,7 +298,7 @@ export function ShippingChargesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Hình Thức Giao *</label>
+              <label className="block text-xs text-gray-500 mb-1">Hình thức giao *</label>
               <input
                 type="text"
                 value={editingItem.shippingMethod || ''}
@@ -312,7 +311,7 @@ export function ShippingChargesPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Khoảng Cách Tối Đa (km) *</label>
+              <label className="block text-xs text-gray-500 mb-1">Khoảng cách tối đa (km) *</label>
               <input
                 type="number"
                 value={editingItem.maxDistanceKm || 0}
@@ -322,7 +321,7 @@ export function ShippingChargesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Trọng Lượng Tối Đa (kg) *</label>
+              <label className="block text-xs text-gray-500 mb-1">Trọng lượng tối đa (kg) *</label>
               <input
                 type="number"
                 value={editingItem.maxWeightKg || 0}
@@ -334,7 +333,7 @@ export function ShippingChargesPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Đơn Giá Vận Chuyển *</label>
+              <label className="block text-xs text-gray-500 mb-1">Đơn giá vận chuyển *</label>
               <input
                 type="number"
                 value={editingItem.pricePerUnit || 0}
@@ -344,7 +343,7 @@ export function ShippingChargesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Phụ Phí Cồng Kềnh</label>
+              <label className="block text-xs text-gray-500 mb-1">Phụ phí cồng kềnh</label>
               <input
                 type="number"
                 value={editingItem.oversizeSurcharge || 0}
@@ -354,18 +353,18 @@ export function ShippingChargesPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Trạng Thái *</label>
+            <label className="block text-xs text-gray-500 mb-1">Trạng thái *</label>
             <select
               value={editingItem.status || 'ACTIVE'}
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
               className="w-full p-2 border rounded"
             >
-              <option value="ACTIVE">Hoạt Động / Đang Áp Dụng</option>
-              <option value="INACTIVE">Tạm Ngưng Áp Dụng</option>
+              <option value="ACTIVE">Hoạt động / đang áp dụng</option>
+              <option value="INACTIVE">Tạm ngưng áp dụng</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú</label>
+            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
@@ -383,7 +382,7 @@ export function ShippingChargesPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Cấu Hình
+              Lưu cấu hình
             </button>
           </div>
         </form>

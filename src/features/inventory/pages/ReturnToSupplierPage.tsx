@@ -3,7 +3,7 @@ import { Plus, Download, Search, Eye, Building2, Calendar, FileText, CheckCircle
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-import { usePurchaseStore, type ReturnToSupplierItem } from '../store/purchaseStore';
+import { useInventoryStore, type ReturnToSupplierItem } from '../store/inventoryStore';
 
 interface UiReturnItem extends ReturnToSupplierItem {
   returnNumber: string;
@@ -16,7 +16,15 @@ interface UiReturnItem extends ReturnToSupplierItem {
 }
 
 export function ReturnToSupplierPage() {
-  const { returnToSuppliers, fetchReturnToSuppliers, addReturnToSupplier, updateReturnToSupplier, deleteReturnToSupplier } = usePurchaseStore();
+  const { 
+    returnToSuppliers, 
+    fetchReturnToSuppliers, 
+    addReturnToSupplier, 
+    updateReturnToSupplier, 
+    deleteReturnToSupplier,
+    products,
+    fetchProducts
+  } = useInventoryStore();
   const [search, setSearch] = useState('');
   const [selectedRTV, setSelectedRTV] = useState<UiReturnItem | null>(null);
 
@@ -26,12 +34,71 @@ export function ReturnToSupplierPage() {
   const [editingRTV, setEditingRTV] = useState<Partial<UiReturnItem>>({});
   const [deletingRTV, setDeletingRTV] = useState<UiReturnItem | null>(null);
 
+  // Product Line Items state for Return form
+  const [returnItems, setReturnItems] = useState<{
+    id: string;
+    productName: string;
+    sku: string;
+    quantity: number;
+    unitPrice: number;
+    reason: string;
+  }[]>([
+    { id: '1', productName: 'Sữa tươi Vinamilk 1L', sku: 'SKU-MILK-01', quantity: 10, unitPrice: 32000, reason: 'Hết hạn bảo quản' }
+  ]);
+
   // Filter states
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   useEffect(() => {
     fetchReturnToSuppliers();
-  }, [fetchReturnToSuppliers]);
+    fetchProducts();
+  }, [fetchReturnToSuppliers, fetchProducts]);
+
+  // Auto calculate totals when returnItems changes
+  const updateReturnItemsAndRecalculate = (newItems: typeof returnItems) => {
+    setReturnItems(newItems);
+    const totalQty = newItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    const totalVal = newItems.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)), 0);
+    setEditingRTV(prev => ({
+      ...prev,
+      returnedItemsCount: totalQty,
+      claimValuation: totalVal
+    }));
+  };
+
+  const handleAddProductLine = () => {
+    const firstP = products[0];
+    const newItem = {
+      id: Date.now().toString(),
+      productName: firstP?.name || 'Sản phẩm mới',
+      sku: firstP?.sku || 'SKU-NEW',
+      quantity: 1,
+      unitPrice: firstP?.price || 50000,
+      reason: 'Lỗi chất lượng'
+    };
+    updateReturnItemsAndRecalculate([...returnItems, newItem]);
+  };
+
+  const handleRemoveProductLine = (id: string) => {
+    updateReturnItemsAndRecalculate(returnItems.filter(i => i.id !== id));
+  };
+
+  const handleUpdateProductLine = (id: string, field: string, value: any) => {
+    const updated = returnItems.map(item => {
+      if (item.id !== id) return item;
+      if (field === 'sku') {
+        const p = products.find(prod => prod.sku === value);
+        return {
+          ...item,
+          sku: value,
+          productName: p?.name || item.productName,
+          unitPrice: p?.price || item.unitPrice
+        };
+      }
+      return { ...item, [field]: value };
+    });
+    updateReturnItemsAndRecalculate(updated);
+  };
 
   const data = useMemo<UiReturnItem[]>(() => {
     return returnToSuppliers.map((r) => ({
@@ -394,104 +461,177 @@ export function ReturnToSupplierPage() {
         )}
       </Modal>
 
-      {/* FORM MODAL (ADD / EDIT) */}
       <Modal
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
-        title={formMode === 'create' ? 'Tạo Đơn Trả Hàng Cho NCC Mới' : 'Chỉnh Sửa Đơn Trả Hàng NCC'}
-        width="max-w-2xl"
+        title={formMode === 'create' ? '📦 Tạo đơn trả hàng cho NCC mới' : '⚙️ Chỉnh sửa đơn trả hàng NCC'}
+        width="max-w-4xl"
       >
-        <form onSubmit={handleSaveRTV} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <form onSubmit={handleSaveRTV} className="space-y-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Mã trả hàng (RTV Number) *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã trả hàng (RTV) *</label>
               <input
                 type="text"
                 value={editingRTV.returnNumber || ''}
                 onChange={(e) => setEditingRTV({ ...editingRTV, returnNumber: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Mã GRN gốc nhập hàng *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã GRN nhập hàng gốc *</label>
               <input
                 type="text"
                 value={editingRTV.grnRefNumber || ''}
                 onChange={(e) => setEditingRTV({ ...editingRTV, grnRefNumber: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Tên Nhà cung cấp *</label>
-              <input
-                type="text"
-                value={editingRTV.supplierName || ''}
-                onChange={(e) => setEditingRTV({ ...editingRTV, supplierName: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="GRN-2026-XXXX"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Kho / Chi nhánh xuất trả *</label>
-              <input
-                type="text"
-                value={editingRTV.dispatchingStore || ''}
-                onChange={(e) => setEditingRTV({ ...editingRTV, dispatchingStore: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Số lượng trả *</label>
-              <input
-                type="number"
-                value={editingRTV.returnedItemsCount ?? ''}
-                onChange={(e) => setEditingRTV({ ...editingRTV, returnedItemsCount: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Giá trị yêu cầu hoàn (đ) *</label>
-              <input
-                type="text"
-                value={(editingRTV.claimValuation ?? 0) === 0 ? '' : Math.round(editingRTV.claimValuation ?? 0).toLocaleString('vi-VN')}
-                onChange={(e) => {
-                  const digits = e.target.value.replace(/\D/g, '');
-                  const val = digits === '' ? 0 : parseInt(digits, 10);
-                  setEditingRTV({ ...editingRTV, claimValuation: val });
-                }}
-                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Ngày trả hàng *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày trả hàng *</label>
               <input
                 type="date"
                 value={editingRTV.returnDate || ''}
                 onChange={(e) => setEditingRTV({ ...editingRTV, returnDate: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Lý do trả hàng *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Nhà cung cấp nhận *</label>
+              <input
+                type="text"
+                value={editingRTV.supplierName || ''}
+                onChange={(e) => setEditingRTV({ ...editingRTV, supplierName: e.target.value })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Tên nhà cung cấp..."
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Kho xuất trả hàng *</label>
+              <input
+                type="text"
+                value={editingRTV.dispatchingStore || ''}
+                onChange={(e) => setEditingRTV({ ...editingRTV, dispatchingStore: e.target.value })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Kho phân phối Trung tâm, Kho Q1..."
+                required
+              />
+            </div>
+          </div>
+
+          {/* Section Bảng Sản Phẩm Trả NCC */}
+          <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider text-[11px] flex items-center gap-1">
+                📦 Danh sách sản phẩm xuất trả NCC ({returnItems.length})
+              </span>
+              <button
+                type="button"
+                onClick={handleAddProductLine}
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Thêm sản phẩm trả
+              </button>
+            </div>
+
+            <div className="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-lg bg-white dark:bg-gray-950">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-100 dark:bg-gray-900 text-gray-500 uppercase text-[10px]">
+                  <tr>
+                    <th className="p-2">Sản phẩm / SKU</th>
+                    <th className="p-2 w-24 text-center">Số lượng</th>
+                    <th className="p-2 w-32 text-right">Đơn giá nhập</th>
+                    <th className="p-2 w-44">Lý do lỗi / Trả</th>
+                    <th className="p-2 w-32 text-right">Thành tiền</th>
+                    <th className="p-2 w-10 text-center">Xóa</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                  {returnItems.map((item) => (
+                    <tr key={item.id}>
+                      <td className="p-2">
+                        <select
+                          value={item.sku}
+                          onChange={(e) => handleUpdateProductLine(item.id, 'sku', e.target.value)}
+                          className="w-full p-1 border rounded bg-white dark:bg-gray-900 text-xs font-medium"
+                        >
+                          {products.map(p => (
+                            <option key={p.id} value={p.sku}>{p.sku} - {p.name}</option>
+                          ))}
+                          {!products.some(p => p.sku === item.sku) && (
+                            <option value={item.sku}>{item.sku} - {item.productName}</option>
+                          )}
+                        </select>
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.quantity}
+                          onChange={(e) => handleUpdateProductLine(item.id, 'quantity', parseInt(e.target.value) || 0)}
+                          className="w-full p-1 border rounded text-center font-bold"
+                        />
+                      </td>
+                      <td className="p-2 text-right font-mono">
+                        <input
+                          type="number"
+                          value={item.unitPrice}
+                          onChange={(e) => handleUpdateProductLine(item.id, 'unitPrice', parseInt(e.target.value) || 0)}
+                          className="w-full p-1 border rounded text-right font-mono"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          value={item.reason}
+                          onChange={(e) => handleUpdateProductLine(item.id, 'reason', e.target.value)}
+                          className="w-full p-1 border rounded"
+                          placeholder="Nhập lý do trả..."
+                        />
+                      </td>
+                      <td className="p-2 text-right font-bold text-emerald-600 font-mono">
+                        {((item.quantity || 0) * (item.unitPrice || 0)).toLocaleString('vi-VN')} ₫
+                      </td>
+                      <td className="p-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveProductLine(item.id)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-950/30 p-2.5 rounded-lg border border-emerald-200 dark:border-emerald-900">
+              <span className="font-bold text-emerald-800 dark:text-emerald-300">
+                Tổng số lượng trả: <span className="font-mono text-base">{editingRTV.returnedItemsCount || 0}</span> đơn vị
+              </span>
+              <span className="font-bold text-emerald-800 dark:text-emerald-300">
+                Tổng giá trị hoàn tiền: <span className="font-mono text-base text-emerald-600 font-extrabold">{(editingRTV.claimValuation || 0).toLocaleString('vi-VN')} ₫</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Phân loại lý do trả *</label>
               <select
                 value={editingRTV.reason || 'DEFECTIVE_BATCH'}
                 onChange={(e) => setEditingRTV({ ...editingRTV, reason: e.target.value as any })}
-                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
               >
                 <option value="DEFECTIVE_BATCH">Lô hàng lỗi chất lượng</option>
                 <option value="WRONG_SPECIFICATION">Sai mẫu mã đặt hàng</option>
@@ -500,11 +640,11 @@ export function ReturnToSupplierPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Trạng thái xử lý *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Trạng thái xử lý *</label>
               <select
                 value={editingRTV.status || 'PENDING_SUPPLIER_APPROVAL'}
                 onChange={(e) => setEditingRTV({ ...editingRTV, status: e.target.value as any })}
-                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
               >
                 <option value="PENDING_SUPPLIER_APPROVAL">Chờ nhà cung cấp phản hồi</option>
                 <option value="APPROVED_CREDIT_NOTE">Đã duyệt bồi hoàn</option>
@@ -512,49 +652,46 @@ export function ReturnToSupplierPage() {
                 <option value="REJECTED">Từ chối yêu cầu</option>
               </select>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Đơn vị vận chuyển</label>
-              <input
-                type="text"
-                value={editingRTV.logisticsCarrier || ''}
-                onChange={(e) => setEditingRTV({ ...editingRTV, logisticsCarrier: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Mã vận đơn tracking</label>
-              <input
-                type="text"
-                value={editingRTV.trackingNumber || ''}
-                onChange={(e) => setEditingRTV({ ...editingRTV, trackingNumber: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nhân viên phụ trách *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Nhân viên phụ trách *</label>
               <input
                 type="text"
                 value={editingRTV.filedBy || ''}
                 onChange={(e) => setEditingRTV({ ...editingRTV, filedBy: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Đơn vị vận chuyển</label>
+              <input
+                type="text"
+                value={editingRTV.logisticsCarrier || ''}
+                onChange={(e) => setEditingRTV({ ...editingRTV, logisticsCarrier: e.target.value })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã vận đơn tracking</label>
+              <input
+                type="text"
+                value={editingRTV.trackingNumber || ''}
+                onChange={(e) => setEditingRTV({ ...editingRTV, trackingNumber: e.target.value })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              />
+            </div>
+          </div>
+
           <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Ghi chú & thỏa thuận bồi hoàn</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ghi chú & thỏa thuận bồi hoàn</label>
             <textarea
               rows={2}
               value={editingRTV.notes || ''}
               onChange={(e) => setEditingRTV({ ...editingRTV, notes: e.target.value })}
-              className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
             />
           </div>
 
@@ -580,7 +717,7 @@ export function ReturnToSupplierPage() {
       <Modal
         isOpen={!!deletingRTV}
         onClose={() => setDeletingRTV(null)}
-        title="Xóa Đơn Trả Hàng Nhà Cung Cấp"
+        title="Xóa đơn trả hàng nhà cung cấp"
         isDestructive
         width="max-w-md"
       >

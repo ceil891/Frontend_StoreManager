@@ -139,7 +139,7 @@ export function sumOrderLines(lines: OrderLineItem[]): number {
                 <button
                   type="button"
                   onClick={() => removeRow(line.id)}
-                  className="p-1 text-gray-400 hover:text-red-650 rounded shrink-0"
+                  className="p-1 text-gray-400 hover:text-red-600 rounded shrink-0"
                   title="Xóa dòng"
                 >
                   <Trash2 className="w-3.5 h-3.5" />

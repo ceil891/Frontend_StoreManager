@@ -1,58 +1,183 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Ticket, Calendar, CheckCircle2, Clock, Tag, Copy, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
+import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { toast } from 'sonner';
+import { useCrmStore } from '../store/crmStore';
 
-interface RewardVoucherRecord {
+import { useCallback } from 'react';
+import { axiosClient } from '@/shared/lib/axiosClient';
+
+export interface RewardVoucherRecord {
   id: string;
   voucherCode: string;
   campaignName: string;
-  type: 'PERCENTAGE' | 'FIXED_AMOUNT' | 'FREE_SHIPPING' | 'FREE_ITEM';
-  discountValue: number; // e.g., 15 for 15% or 50 for $50
+  type: 'PERCENTAGE' | 'FIXED_AMOUNT' | 'FREE_SHIPPING';
+  discountValue: number;
   minOrderValue: number;
   maxDiscount?: number;
   startDate: string;
   expiryDate: string;
   totalIssued: number;
   totalRedeemed: number;
-  status: 'ACTIVE' | 'SCHEDULED' | 'EXPIRED' | 'PAUSED' | 'DEPLETED';
-  applicableScope: 'ALL_PRODUCTS' | 'SPECIFIC_CATEGORY' | 'VIP_TIER_ONLY' | 'FIRST_TIME_BUYER';
+  status: 'ACTIVE' | 'EXPIRED' | 'PAUSED';
+  applicableScope: 'ALL_PRODUCTS' | 'SPECIFIC_CATEGORY' | 'SPECIFIC_PRODUCTS';
   notes?: string;
 }
 
-const MOCK_VOUCHERS: RewardVoucherRecord[] = [
-  { id: '1', voucherCode: 'SUMMERPROMO15', campaignName: 'Omnichannel Q2 Summer Blowout', type: 'PERCENTAGE', discountValue: 15, minOrderValue: 100.00, maxDiscount: 75.00, startDate: '2024-05-01', expiryDate: '2024-08-31', totalIssued: 5000, totalRedeemed: 1420, status: 'ACTIVE', applicableScope: 'ALL_PRODUCTS', notes: 'Blanket omnichannel summer promotion promoted across POS terminals and B2B eCommerce portal.' },
-  { id: '2', voucherCode: 'VIPGOLD50', campaignName: 'Gold Member Quarterly Reward', type: 'FIXED_AMOUNT', discountValue: 50, minOrderValue: 250.00, startDate: '2024-05-15', expiryDate: '2024-06-15', totalIssued: 1200, totalRedeemed: 310, status: 'ACTIVE', applicableScope: 'VIP_TIER_ONLY', notes: 'Exclusive $50 credit issued to Gold and Diamond loyalty accounts.' },
-  { id: '3', voucherCode: 'FREESHIPB2B', campaignName: 'Wholesale Pallet Ground Dispatch', type: 'FREE_SHIPPING', discountValue: 0, minOrderValue: 1000.00, startDate: '2024-04-01', expiryDate: '2024-05-15', totalIssued: 800, totalRedeemed: 795, status: 'EXPIRED', applicableScope: 'SPECIFIC_CATEGORY', notes: 'Promotional waiver of freight carrier fees for wholesale beverage pallets.' },
-  { id: '4', voucherCode: 'NEWRETAIL10', campaignName: 'First Time Store Activation', type: 'PERCENTAGE', discountValue: 10, minOrderValue: 50.00, maxDiscount: 25.00, startDate: '2024-05-20', expiryDate: '2024-12-31', totalIssued: 10000, totalRedeemed: 0, status: 'SCHEDULED', applicableScope: 'FIRST_TIME_BUYER', notes: 'Automated welcome voucher printed on receipt during first customer loyalty registration.' },
-];
-
-const scopeBadgeStyles = {
+const scopeBadgeStyles: Record<string, string> = {
   ALL_PRODUCTS: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
   SPECIFIC_CATEGORY: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
-  VIP_TIER_ONLY: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
-  FIRST_TIME_BUYER: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  SPECIFIC_PRODUCTS: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
 };
 
 const scopeMap: Record<string, string> = {
   ALL_PRODUCTS: 'Tất cả sản phẩm',
-  SPECIFIC_CATEGORY: 'Danh mục cụ thể',
-  VIP_TIER_ONLY: 'Chỉ dành cho VIP',
-  FIRST_TIME_BUYER: 'Khách hàng mới',
+  SPECIFIC_CATEGORY: 'Theo danh mục',
+  SPECIFIC_PRODUCTS: 'Sản phẩm chỉ định',
 };
 
 export function VouchersPage() {
-  const [data] = useState<RewardVoucherRecord[]>(MOCK_VOUCHERS);
+  const setData = (_fn: any) => {};
+  const {
+    vouchers: storeVouchers,
+    fetchVouchers,
+    addVoucher,
+    updateVoucher,
+    deleteVoucher,
+  } = useCrmStore();
+
+  useEffect(() => {
+    fetchVouchers();
+  }, [fetchVouchers]);
+
+  const data: RewardVoucherRecord[] = useMemo(() => {
+    return storeVouchers.map((v) => ({
+      id: v.id,
+      voucherCode: v.code,
+      campaignName: v.name,
+      type: v.discountType === 'PERCENT' ? 'PERCENTAGE' : 'FIXED_AMOUNT',
+      discountValue: v.value,
+      minOrderValue: v.minOrderValue,
+      maxDiscount: v.maxDiscount,
+      startDate: v.startDate,
+      expiryDate: v.endDate,
+      totalIssued: v.quantity,
+      totalRedeemed: v.usedCount,
+      status: v.status === 'ACTIVE' ? 'ACTIVE' : 'EXPIRED',
+      applicableScope: 'ALL_PRODUCTS',
+      notes: v.name,
+    }));
+  }, [storeVouchers]);
+  const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedVoucher, setSelectedVoucher] = useState<RewardVoucherRecord | null>(null);
+
+  // Modal create/edit states
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<RewardVoucherRecord | null>(null);
+  const [formData, setFormData] = useState({
+    voucherCode: '',
+    campaignName: '',
+    type: 'PERCENTAGE' as RewardVoucherRecord['type'],
+    discountValue: 10,
+    minOrderValue: 0,
+    maxDiscount: 0,
+    startDate: '',
+    expiryDate: '',
+    totalIssued: 100,
+    status: 'ACTIVE' as RewardVoucherRecord['status'],
+    applicableScope: 'ALL_PRODUCTS' as RewardVoucherRecord['applicableScope'],
+    notes: '',
+  });
 
   // Filter states
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
+  const handleDelete = async (voucher: RewardVoucherRecord) => {
+    if (!confirm(`Bạn có chắc muốn xóa voucher ${voucher.voucherCode}?`)) return;
+    try {
+      await axiosClient.delete(`/crm/vouchers/${voucher.id}`);
+      toast.success(`Đã xóa voucher ${voucher.voucherCode}`);
+      setData((prev) => prev.filter((v) => v.id !== voucher.id));
+    } catch (err) {
+      console.error('Error deleting voucher:', err);
+      toast.error('Không thể xóa voucher trên máy chủ');
+    }
+  };
+
+  const handleOpenCreate = () => {
+    setEditingItem(null);
+    setFormData({
+      voucherCode: `VC-${Math.floor(1000 + Math.random() * 9000)}`,
+      campaignName: '',
+      type: 'PERCENTAGE',
+      discountValue: 10,
+      minOrderValue: 100,
+      maxDiscount: 50,
+      startDate: new Date().toISOString().split('T')[0],
+      expiryDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+      totalIssued: 500,
+      status: 'ACTIVE',
+      applicableScope: 'ALL_PRODUCTS',
+      notes: '',
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (voucher: RewardVoucherRecord) => {
+    setEditingItem(voucher);
+    setFormData({
+      voucherCode: voucher.voucherCode,
+      campaignName: voucher.campaignName,
+      type: voucher.type,
+      discountValue: voucher.discountValue,
+      minOrderValue: voucher.minOrderValue,
+      maxDiscount: voucher.maxDiscount || 0,
+      startDate: voucher.startDate,
+      expiryDate: voucher.expiryDate,
+      totalIssued: voucher.totalIssued,
+      status: voucher.status,
+      applicableScope: voucher.applicableScope,
+      notes: voucher.notes || '',
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const payload = {
+      voucherCode: formData.voucherCode,
+      voucherName: formData.campaignName,
+      type: formData.type,
+      value: formData.discountValue,
+      minOrderAmount: formData.minOrderValue,
+      maxDiscountAmount: formData.maxDiscount,
+      maxUsage: formData.totalIssued,
+      status: formData.status,
+      description: formData.notes,
+    };
+
+    try {
+      if (editingItem) {
+        await axiosClient.put(`/crm/vouchers/${editingItem.id}`, payload);
+        toast.success(`Cập nhật voucher ${formData.voucherCode} thành công!`);
+      } else {
+        await axiosClient.post('/crm/vouchers', payload);
+        toast.success(`Tạo mới voucher ${formData.voucherCode} thành công!`);
+      }
+      setIsModalOpen(false);
+      fetchVouchers();
+    } catch (err) {
+      console.error('Error saving voucher:', err);
+      toast.error('Lỗi khi lưu voucher!');
+    }
+  };
+
   const filtered = data.filter((item) => {
-    // 1. Text search
     let matchesSearch = true;
     const q = search.toLowerCase();
     if (q) {
@@ -62,13 +187,8 @@ export function VouchersPage() {
         item.applicableScope.toLowerCase().includes(q)
       );
     }
-
-    // 2. Status filter
     const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-
-    // 3. Type filter
     const matchesType = typeFilter === 'all' || item.type === typeFilter;
-
     return matchesSearch && matchesStatus && matchesType;
   });
 
@@ -116,7 +236,7 @@ export function VouchersPage() {
         cell: (info) => {
           const scope = info.getValue() as keyof typeof scopeBadgeStyles;
           return (
-            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${scopeBadgeStyles[scope]}`}>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${scopeBadgeStyles[scope] || 'bg-gray-100 text-gray-800'}`}>
               {scopeMap[scope] || scope}
             </span>
           );
@@ -174,14 +294,14 @@ export function VouchersPage() {
               <Eye className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); alert(`Chỉnh sửa voucher: ${row.original.voucherCode}`); }}
+              onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
               title="Chỉnh sửa"
               className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); confirm(`Bạn có chắc muốn xóa voucher ${row.original.voucherCode}?`); }}
+              onClick={(e) => { e.stopPropagation(); handleDelete(row.original); }}
               title="Xóa"
               className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
             >
@@ -207,14 +327,17 @@ export function VouchersPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mã Khuyến Mãi & Chiến Dịch Ưu Đãi (Vouchers)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mã khuyến mãi & chiến dịch ưu đãi (vouchers)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý và tạo mã giảm giá, thiết lập điều kiện áp dụng và theo dõi hiệu quả khuyến mãi trên toàn hệ thống. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
               <Download className="w-4 h-4" /> Xuất danh sách voucher
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
+            <button
+              onClick={handleOpenCreate}
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
+            >
               <Plus className="w-4 h-4" /> Tạo mã khuyến mãi mới
             </button>
           </div>
@@ -236,7 +359,6 @@ export function VouchersPage() {
             </div>
           </div>
 
-          {/* Quick Filters Row */}
           <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700/60">
             <div className="flex items-center gap-1.5 text-xs">
               <span className="text-gray-500 font-medium">Lọc Trạng thái:</span>
@@ -280,13 +402,14 @@ export function VouchersPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedVoucher(row)} />
+        <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row) => setSelectedVoucher(row)} />
       </div>
 
+      {/* Detail Drawer */}
       <Drawer
         isOpen={!!selectedVoucher}
         onClose={() => setSelectedVoucher(null)}
-        title={selectedVoucher ? `Chiến Dịch: ${selectedVoucher.voucherCode}` : 'Chi Tiết Mã Khuyến Mãi'}
+        title={selectedVoucher ? `Chiến Dịch: ${selectedVoucher.voucherCode}` : 'Chi tiết mã khuyến mãi'}
         width="max-w-lg"
       >
         {selectedVoucher && (
@@ -339,7 +462,7 @@ export function VouchersPage() {
               <div className="border-b border-gray-200 dark:border-gray-700 pb-3">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Tên chương trình khuyến mãi</span>
                 <h3 className="text-base font-bold text-gray-900 dark:text-white">{selectedVoucher.campaignName}</h3>
-                <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded font-mono font-semibold ${scopeBadgeStyles[selectedVoucher.applicableScope]}`}>
+                <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded font-mono font-semibold ${scopeBadgeStyles[selectedVoucher.applicableScope] || 'bg-gray-100 text-gray-800'}`}>
                   Phạm vi: {scopeMap[selectedVoucher.applicableScope] || selectedVoucher.applicableScope}
                 </span>
               </div>
@@ -374,18 +497,134 @@ export function VouchersPage() {
                 </button>
               )}
               <button
-                onClick={() => { navigator.clipboard.writeText(selectedVoucher.voucherCode); alert('Đã sao chép mã khuyến mãi!'); }}
+                onClick={() => { navigator.clipboard.writeText(selectedVoucher.voucherCode); toast.success('Đã sao chép mã khuyến mãi!'); }}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg shadow transition-colors text-sm"
               >
                 <Copy className="w-4 h-4" /> Sao chép mã khuyến mãi
-              </button>
-              <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
-                <Tag className="w-4 h-4 inline mr-1" /> Xem hóa đơn đã dùng
               </button>
             </div>
           </div>
         )}
       </Drawer>
+
+      {/* Create / Edit Modal */}
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Chỉnh sửa Voucher' : 'Tạo mới Voucher'} width="max-w-lg">
+        <form onSubmit={handleSave} className="p-4 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã Voucher</label>
+            <input
+              type="text"
+              required
+              value={formData.voucherCode}
+              onChange={(e) => setFormData({ ...formData, voucherCode: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên chiến dịch / Tên Voucher</label>
+            <input
+              type="text"
+              required
+              value={formData.campaignName}
+              onChange={(e) => setFormData({ ...formData, campaignName: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại ưu đãi</label>
+              <select
+                value={formData.type}
+                onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              >
+                <option value="PERCENTAGE">Phần trăm (%)</option>
+                <option value="FIXED_AMOUNT">Số tiền cố định ($)</option>
+                <option value="FREE_SHIPPING">Miễn phí vận chuyển</option>
+                <option value="FREE_ITEM">Tặng quà</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá trị giảm</label>
+              <input
+                type="number"
+                value={formData.discountValue}
+                onChange={(e) => setFormData({ ...formData, discountValue: Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn tối thiểu ($)</label>
+              <input
+                type="number"
+                value={formData.minOrderValue}
+                onChange={(e) => setFormData({ ...formData, minOrderValue: Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giảm tối đa ($)</label>
+              <input
+                type="number"
+                value={formData.maxDiscount}
+                onChange={(e) => setFormData({ ...formData, maxDiscount: Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              >
+                <option value="ACTIVE">Hoạt động</option>
+                <option value="SCHEDULED">Đã lên lịch</option>
+                <option value="PAUSED">Tạm dừng</option>
+                <option value="EXPIRED">Đã hết hạn</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng số lượt phát hành</label>
+              <input
+                type="number"
+                value={formData.totalIssued}
+                onChange={(e) => setFormData({ ...formData, totalIssued: Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú</label>
+            <textarea
+              rows={2}
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+            />
+          </div>
+          <div className="pt-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium"
+            >
+              Lưu Voucher
+            </button>
+          </div>
+        </form>
+      </Modal>
     </>
   );
 }
+

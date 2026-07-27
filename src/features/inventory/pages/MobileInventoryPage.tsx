@@ -17,7 +17,8 @@ import {
   Smartphone,
   Maximize2,
   Minimize2,
-  X
+  X,
+  Image as ImageIcon
 } from 'lucide-react';
 import { useInventoryStore, type MobileProduct } from '../store/inventoryStore';
 
@@ -335,7 +336,7 @@ export function MobileInventoryPage() {
                       
                       {/* Pricing and Stock */}
                       <div className="flex items-baseline justify-between mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-700/50">
-                        <span className="text-xs font-black text-slate-900 dark:text-white">${prod.price.toFixed(2)}</span>
+                        <span className="text-xs font-black text-slate-900 dark:text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(prod.price)}</span>
                         <span className={`text-[10px] font-extrabold flex items-center gap-0.5 ${
                           isLowStock(prod) ? 'text-red-500' :
                           prod.onHand > 10 ? 'text-emerald-600 dark:text-emerald-400' :
@@ -435,11 +436,11 @@ export function MobileInventoryPage() {
                     </div>
                     <div className="flex-1 grid grid-cols-2 gap-2.5">
                       <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                        <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Giá Bán</span>
-                        <p className="text-base font-black text-slate-800 dark:text-white mt-0.5">${selectedProduct.price.toFixed(2)}</p>
+                        <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Giá bán</span>
+                        <p className="text-base font-black text-slate-800 dark:text-white mt-0.5">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(selectedProduct.price)}</p>
                       </div>
                       <div className={`p-2.5 rounded-xl border ${isLowStock(selectedProduct) ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800'}`}>
-                        <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Tồn Kho</span>
+                        <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Tồn kho</span>
                         <p className={`text-base font-black mt-0.5 ${isLowStock(selectedProduct) ? 'text-red-600' : 'text-slate-800 dark:text-white'}`}>
                           {selectedProduct.onHand} {selectedProduct.unit}
                           {isLowStock(selectedProduct) && <span className="text-[9px] block">Dưới định mức ({selectedProduct.reorderPoint})</span>}
@@ -467,7 +468,7 @@ export function MobileInventoryPage() {
                         </div>
                         <div>
                           <p className="text-[9px] text-slate-400 font-bold">Giá vốn</p>
-                          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">${selectedProduct.costPrice.toFixed(2)}</p>
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(selectedProduct.costPrice)}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -671,16 +672,59 @@ export function MobileInventoryPage() {
                       </div>
                     </div>
 
-                    {/* Image URL */}
-                    <div>
-                      <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Đường dẫn ảnh sản phẩm</label>
-                      <input 
-                        type="text"
-                        value={formData.imageUrl || ''}
-                        onChange={(e) => setFormData(p => ({ ...p, imageUrl: e.target.value }))}
-                        placeholder="https://unsplash..."
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:outline-none text-slate-800 dark:text-white"
-                      />
+                    {/* Image Upload/Preview */}
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Ảnh sản phẩm</label>
+                      <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+                        {formData.imageUrl ? (
+                          <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                            <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => setFormData(p => ({ ...p, imageUrl: '' }))}
+                              className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition-colors"
+                            >
+                              <X className="w-2 h-2" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center">
+                            <ImageIcon className="w-5 h-5 text-slate-400" />
+                          </div>
+                        )}
+                        <div className="flex-1 flex gap-2">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            id="mobile-image-input"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = () => {
+                                  setFormData(p => ({ ...p, imageUrl: reader.result as string }));
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => document.getElementById('mobile-image-input')?.click()}
+                            className="px-3 py-1.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-[10px] font-bold rounded-lg text-slate-700 dark:text-slate-200 shadow-sm"
+                          >
+                            Tải ảnh lên
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFormData(p => ({ ...p, imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&q=80' }))}
+                            className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline"
+                          >
+                            Mẫu
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Status */}

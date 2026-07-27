@@ -1,65 +1,37 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, FileText, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useInventoryStore, type StockOutRecord } from '@/features/inventory/store/inventoryStore';
 
-interface StockOutRecord {
-  id: string;
-  stockOutCode: string;
-  outType: 'BAN_HANG' | 'TRA_NCC' | 'HUY_HANG_HONG' | 'CHUYEN_KHO';
-  issuedDate: string;
-  totalItems: number;
-  totalValue: number;
-  creator: string;
-  status: 'CHO_XU-LY' | 'DA_XUAT' | 'DA_HUY';
-  notes?: string;
-}
+const TYPE_MAP: Record<string, string> = {
+  BAN_HANG: 'Bán hàng',
+  TRA_NCC: 'Trả nhà cung cấp',
+  HUY_HANG_HONG: 'Xuất hủy hàng hỏng',
+  CHUYEN_KHO: 'Chuyển kho',
+};
 
-const MOCK_STOCK_OUTS: StockOutRecord[] = [
-  {
-    id: '1',
-    stockOutCode: 'SOUT-2026-001',
-    outType: 'BAN_HANG',
-    issuedDate: '2026-06-04',
-    totalItems: 12,
-    totalValue: 5400000,
-    creator: 'Lưu Hữu Phước',
-    status: 'DA_XUAT',
-    notes: 'Xuất kho cho đơn hàng SO-2026-001 gửi GHTK',
-  },
-  {
-    id: '2',
-    stockOutCode: 'SOUT-2026-002',
-    outType: 'TRA_NCC',
-    issuedDate: '2026-06-03',
-    totalItems: 100,
-    totalValue: 12000000,
-    creator: 'Nguyễn Văn Thủ Kho',
-    status: 'DA_XUAT',
-    notes: 'Xuất trả lô nước ngọt hết hạn cho Nhà Cung Cấp Toàn Cầu',
-  },
-  {
-    id: '3',
-    stockOutCode: 'SOUT-2026-003',
-    outType: 'HUY_HANG_HONG',
-    issuedDate: '2026-06-02',
-    totalItems: 5,
-    totalValue: 250000,
-    creator: 'Trần Thị Kiểm Kho',
-    status: 'CHO_XU-LY',
-    notes: 'Yêu cầu xuất hủy 5 hộp sữa bị hỏng móp do chuột cắn',
-  },
-];
+const STATUS_MAP: Record<string, { label: string; cls: string }> = {
+  CHO_XU_LY: { label: 'Chờ xử lý', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
+  DA_XUAT: { label: 'Đã xuất kho', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
+  DA_HUY: { label: 'Đã hủy', cls: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' },
+};
 
 export function StockOutsPage() {
-  const [data, setData] = useState<StockOutRecord[]>(MOCK_STOCK_OUTS);
+  const { stockOuts: data, fetchStockOuts, addStockOut, updateStockOut, deleteStockOut } = useInventoryStore();
+
+  useEffect(() => {
+    fetchStockOuts();
+  }, [fetchStockOuts]);
+
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<StockOutRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<StockOutRecord>>({});
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -68,7 +40,7 @@ export function StockOutsPage() {
       (d) =>
         d.stockOutCode.toLowerCase().includes(q) ||
         d.creator.toLowerCase().includes(q) ||
-        d.outType.toLowerCase().includes(q)
+        (d.notes && d.notes.toLowerCase().includes(q))
     );
   }, [search, data]);
 
@@ -78,10 +50,10 @@ export function StockOutsPage() {
       stockOutCode: `SOUT-2026-${Date.now().toString().slice(-4)}`,
       outType: 'BAN_HANG',
       issuedDate: new Date().toISOString().split('T')[0],
-      totalItems: 0,
+      totalItems: 1,
       totalValue: 0,
       creator: '',
-      status: 'CHO_XU-LY',
+      status: 'CHO_XU_LY',
       notes: '',
     });
     setIsModalOpen(true);
@@ -93,32 +65,34 @@ export function StockOutsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.stockOutCode || !editingItem.creator) return;
 
+    const payload: Omit<StockOutRecord, 'id'> = {
+      stockOutCode: editingItem.stockOutCode,
+      outType: editingItem.outType || 'BAN_HANG',
+      issuedDate: editingItem.issuedDate || new Date().toISOString().split('T')[0],
+      totalItems: Number(editingItem.totalItems || 0),
+      totalValue: Number(editingItem.totalValue || 0),
+      creator: editingItem.creator,
+      status: editingItem.status || 'CHO_XU_LY',
+      notes: editingItem.notes || '',
+    };
+
     if (modalMode === 'create') {
-      const newItem: StockOutRecord = {
-        id: String(data.length + 1),
-        stockOutCode: editingItem.stockOutCode!,
-        outType: editingItem.outType as any || 'BAN_HANG',
-        issuedDate: editingItem.issuedDate!,
-        totalItems: Number(editingItem.totalItems || 0),
-        totalValue: Number(editingItem.totalValue || 0),
-        creator: editingItem.creator!,
-        status: editingItem.status as any || 'CHO_XU-LY',
-        notes: editingItem.notes,
-      };
-      setData([...data, newItem]);
-    } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as StockOutRecord) : d)));
+      await addStockOut(payload);
+    } else if (editingItem.id) {
+      await updateStockOut(editingItem.id, payload);
     }
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa phiếu xuất kho này?')) {
-      setData(data.filter((d) => d.id !== id));
+  const handleDeleteConfirm = async () => {
+    if (deletingId) {
+      await deleteStockOut(deletingId);
+      setDeletingId(null);
+      if (selected?.id === deletingId) setSelected(null);
     }
   };
 
@@ -130,87 +104,54 @@ export function StockOutsPage() {
     () => [
       {
         accessorKey: 'stockOutCode',
-        header: 'Mã Phiếu Xuất',
-        cell: (info) => <span className="font-mono font-bold text-red-600">{info.getValue() as string}</span>,
-      },
-      {
-        accessorKey: 'outType',
-        header: 'Loại Xuất Kho',
-        cell: (info) => {
-          const val = info.getValue() as string;
-          let label = 'Bán Hàng';
-          let color = 'text-blue-600 bg-blue-50 dark:bg-blue-900/30';
-          if (val === 'TRA_NCC') {
-            label = 'Trả Nhà CC';
-            color = 'text-purple-600 bg-purple-50 dark:bg-purple-900/30';
-          } else if (val === 'HUY_HANG_HONG') {
-            label = 'Hủy Hàng Hỏng';
-            color = 'text-red-600 bg-red-50 dark:bg-red-900/30';
-          } else if (val === 'CHUYEN_KHO') {
-            label = 'Chuyển Kho';
-            color = 'text-amber-600 bg-amber-50 dark:bg-amber-900/30';
-          }
-          return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${color}`}>{label}</span>;
-        },
+        header: 'Mã xuất kho',
+        cell: (info) => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'issuedDate',
-        header: 'Ngày Xuất',
-        cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
+        header: 'Ngày xuất',
+        cell: (info) => <span>{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'outType',
+        header: 'Loại xuất',
+        cell: (info) => {
+          const type = info.getValue() as string;
+          return <span className="font-semibold text-gray-700 dark:text-gray-300">{TYPE_MAP[type] || type}</span>;
+        },
       },
       {
         accessorKey: 'totalItems',
-        header: 'Số Lượng',
-        cell: (info) => <span className="font-mono">{info.getValue() as number} mã</span>,
+        header: 'Số lượng',
+        cell: (info) => <span className="font-mono font-bold">{info.getValue() as number}</span>,
       },
       {
         accessorKey: 'totalValue',
-        header: 'Giá Trị Xuất',
-        cell: (info) => <span className="font-mono font-bold text-red-600">{formatCurrency(info.getValue() as number)}</span>,
+        header: 'Tổng giá trị',
+        cell: (info) => <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">{formatCurrency(info.getValue() as number)}</span>,
+      },
+      {
+        accessorKey: 'creator',
+        header: 'Người lập phiếu',
+        cell: (info) => <span className="font-medium">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
-          let badgeClass = 'bg-amber-100 text-amber-800';
-          let label = 'Chờ Xử Lý';
-          if (status === 'DA_XUAT') {
-            badgeClass = 'bg-emerald-100 text-emerald-800';
-            label = 'Đã Xuất Kho';
-          } else if (status === 'DA_HUY') {
-            badgeClass = 'bg-red-100 text-red-800';
-            label = 'Đã Hủy';
-          }
-          return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
+          const cfg = STATUS_MAP[status] || { label: status, cls: 'bg-gray-100 text-gray-800' };
+          return <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${cfg.cls}`}>{cfg.label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setSelected(row.original)}
-              className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết Phiếu"
-            >
-              <Eye className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleOpenEdit(row.original)}
-              className="p-1 text-gray-500 hover:text-blue-600 rounded"
-              title="Sửa"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(row.original.id)}
-              className="p-1 text-gray-500 hover:text-red-600 rounded"
-              title="Xóa"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            <button onClick={() => setSelected(row.original)} className="p-1 text-gray-500 hover:text-emerald-600 rounded"><Eye className="w-4 h-4" /></button>
+            <button onClick={() => handleOpenEdit(row.original)} className="p-1 text-gray-500 hover:text-blue-600 rounded"><Edit className="w-4 h-4" /></button>
+            <button onClick={() => setDeletingId(row.original.id)} className="p-1 text-gray-500 hover:text-red-600 rounded"><Trash2 className="w-4 h-4" /></button>
           </div>
         ),
       },
@@ -222,217 +163,201 @@ export function StockOutsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Phiếu Xuất Kho (Stock Outs)</h1>
-          <p className="text-sm text-gray-500">
-            Xem danh sách, quản lý xuất kho hàng hóa phục vụ bán lẻ, trả nhà cung cấp, hoặc tiêu hủy hàng hỏng.
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu xuất kho (Stock Outs)</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Xem danh sách, quản lý xuất kho hàng hóa.</p>
         </div>
-        <button
-          onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition"
-        >
+        <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-semibold transition text-sm shadow">
           <Plus className="w-4 h-4" /> Lập Phiếu Xuất Kho
         </button>
       </div>
 
-      <div className="p-4 bg-white dark:bg-gray-800 rounded shadow flex items-center gap-4">
+      <div className="p-4 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 flex items-center gap-3">
         <Search className="w-5 h-5 text-gray-400" />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm kiếm mã phiếu xuất, người lập, loại xuất kho..."
-          className="w-full bg-transparent outline-none text-sm"
+          placeholder="Tìm kiếm mã phiếu xuất, người lập, ghi chú..."
+          className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-white"
         />
       </div>
 
       <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
 
-      <Drawer
-        isOpen={!!selected}
-        onClose={() => setSelected(null)}
-        title={`Chi tiết phiếu xuất: ${selected?.stockOutCode}`}
-      >
+      <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title={`Chi tiết xuất kho: ${selected?.stockOutCode}`}>
         {selected && (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã Phiếu Xuất:</span>
-                <p className="font-mono font-semibold text-red-600">{selected.stockOutCode}</p>
+                <span className="text-gray-500">Mã phiếu xuất:</span>
+                <p className="font-mono font-semibold text-emerald-600">{selected.stockOutCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Loại Xuất Kho:</span>
-                <p className="font-semibold">
-                  {selected.outType === 'BAN_HANG'
-                    ? 'Bán Hàng'
-                    : selected.outType === 'TRA_NCC'
-                    ? 'Trả Nhà Cung Cấp'
-                    : selected.outType === 'HUY_HANG_HONG'
-                    ? 'Hủy Hàng Hỏng'
-                    : 'Chuyển Kho'}
-                </p>
+                <span className="text-gray-500">Loại xuất kho:</span>
+                <p className="font-semibold">{TYPE_MAP[selected.outType] || selected.outType}</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Ngày Xuất Kho:</span>
-                <p className="font-mono">{selected.issuedDate}</p>
+                <span className="text-gray-500">Người lập:</span>
+                <p className="font-medium">{selected.creator}</p>
               </div>
               <div>
-                <span className="text-gray-500">Người Lập Phiếu:</span>
-                <p>{selected.creator}</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 border-t pt-2">
-              <div>
-                <span className="text-gray-500">Tổng Số Mặt Hàng:</span>
-                <p className="font-mono font-bold">{selected.totalItems} món</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Giá Trị Xuất Kho:</span>
-                <p className="font-mono font-bold text-red-600 text-lg">{formatCurrency(selected.totalValue)}</p>
+                <span className="text-gray-500">Ngày xuất:</span>
+                <p>{selected.issuedDate}</p>
               </div>
             </div>
-            <div>
-              <span className="text-gray-500">Trạng Thái Phiếu:</span>
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <span
-                  className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
-                    selected.status === 'DA_XUAT'
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : selected.status === 'CHO_XU-LY'
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}
-                >
-                  {selected.status === 'DA_XUAT' ? 'Đã Xuất Kho' : selected.status === 'CHO_XU-LY' ? 'Chờ Xử Lý' : 'Đã Hủy'}
-                </span>
+                <span className="text-gray-500">Số lượng:</span>
+                <p className="font-mono font-bold text-base">{selected.totalItems} sản phẩm</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Giá trị xuất kho:</span>
+                <p className="font-mono font-bold text-base text-emerald-600">{formatCurrency(selected.totalValue)}</p>
               </div>
             </div>
             {selected.notes && (
-              <div>
-                <span className="text-gray-500">Ghi Chú Chi Tiết:</span>
-                <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
-                  {selected.notes}
-                </p>
+              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg border">
+                <p className="text-xs text-gray-500 mb-1">Ghi chú</p>
+                <p className="italic text-gray-700 dark:text-gray-300">{selected.notes}</p>
               </div>
             )}
           </div>
         )}
       </Drawer>
 
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Lập Phiếu Xuất Kho Mới' : 'Sửa Thông Tin Phiếu Xuất'}
-      >
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalMode === 'create' ? 'Lập phiếu xuất kho mới' : 'Sửa phiếu xuất kho'}>
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Phiếu Xuất *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã phiếu xuất *</label>
               <input
                 type="text"
                 value={editingItem.stockOutCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, stockOutCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono bg-gray-50"
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm"
                 required
-                disabled
+                disabled={modalMode === 'edit'}
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Loại Xuất Kho *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại xuất kho *</label>
               <select
                 value={editingItem.outType || 'BAN_HANG'}
                 onChange={(e) => setEditingItem({ ...editingItem, outType: e.target.value as any })}
-                className="w-full p-2 border rounded"
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               >
-                <option value="BAN_HANG">Xuất Bán Hàng (SO/POS)</option>
-                <option value="TRA_NCC">Xuất Trả Hàng Nhà Cung Cấp</option>
-                <option value="HUY_HANG_HONG">Xuất Tiêu Hủy Hàng Hỏng</option>
-                <option value="CHUYEN_KHO">Xuất Điều Chuyển Nội Bộ</option>
+                <option value="BAN_HANG">Bán hàng</option>
+                <option value="TRA_NCC">Trả nhà cung cấp</option>
+                <option value="HUY_HANG_HONG">Xuất hủy hàng hỏng</option>
+                <option value="CHUYEN_KHO">Chuyển kho</option>
               </select>
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày Lập Phiếu *</label>
-              <input
-                type="date"
-                value={editingItem.issuedDate || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, issuedDate: e.target.value })}
-                className="w-full p-2 border rounded"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Người Lập Phiếu *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người lập phiếu *</label>
               <input
                 type="text"
                 value={editingItem.creator || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, creator: e.target.value })}
-                className="w-full p-2 border rounded"
-                placeholder="Tên nhân viên lập"
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                placeholder="Nhập tên người lập..."
                 required
               />
             </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày xuất kho</label>
+              <input
+                type="date"
+                value={editingItem.issuedDate || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, issuedDate: e.target.value })}
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              />
+            </div>
           </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Số Lượng Mặt Hàng *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số lượng mặt hàng *</label>
               <input
                 type="number"
-                value={editingItem.totalItems || 0}
+                min={1}
+                value={editingItem.totalItems || 1}
                 onChange={(e) => setEditingItem({ ...editingItem, totalItems: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tổng Giá Trị Xuất (VND) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng giá trị xuất (VNĐ) *</label>
               <input
                 type="number"
+                min={0}
                 value={editingItem.totalValue || 0}
                 onChange={(e) => setEditingItem({ ...editingItem, totalValue: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm"
                 required
               />
             </div>
           </div>
+
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Trạng Thái Xử Lý *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái xử lý</label>
             <select
-              value={editingItem.status || 'CHO_XU-LY'}
+              value={editingItem.status || 'CHO_XU_LY'}
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-              className="w-full p-2 border rounded"
+              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
             >
-              <option value="CHO_XU-LY">Chờ Xử Lý (Soạn hàng/Đóng gói)</option>
-              <option value="DA_XUAT">Đã Xác Nhận Xuất Hàng Khỏi Kho</option>
-              <option value="DA_HUY">Đã Hủy Phiếu</option>
+              <option value="CHO_XU_LY">Chờ xử lý</option>
+              <option value="DA_XUAT">Đã xuất kho</option>
+              <option value="DA_HUY">Đã hủy</option>
             </select>
           </div>
+
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border rounded"
+              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm resize-none"
               rows={3}
-              placeholder="Chi tiết sản phẩm..."
+              placeholder="Chi tiết đơn hàng hoặc lý do xuất kho..."
             />
           </div>
-          <div className="flex justify-end gap-2 pt-2 border-t">
+
+          <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-800">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded hover:bg-gray-100"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               Hủy
             </button>
-            <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Phiếu
+            <button type="submit" className="px-5 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-semibold text-sm shadow">
+              Lưu phiếu xuất
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete confirmation modal */}
+      <Modal isOpen={!!deletingId} onClose={() => setDeletingId(null)} title="Xác nhận xóa phiếu xuất" isDestructive width="max-w-md">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            Bạn có chắc chắn muốn xóa phiếu xuất kho này? Hành động này không thể hoàn tác.
+          </p>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={() => setDeletingId(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm">
+              Hủy
+            </button>
+            <button type="button" onClick={handleDeleteConfirm} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700">
+              Xóa
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

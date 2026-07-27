@@ -296,7 +296,7 @@ export function LoyaltyTiersPage() {
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center shadow">
                 <Crown className="w-5 h-5 text-white" />
               </div>
-              Quản lý Hạng Thành Viên
+              Quản lý hạng thành viên
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5">
               Cấu hình ngưỡng chi tiêu, quyền lợi và tỷ lệ tích điểm cho từng hạng thành viên.

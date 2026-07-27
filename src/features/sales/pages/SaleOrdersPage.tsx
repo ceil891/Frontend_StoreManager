@@ -2,6 +2,9 @@ import { useState, useMemo, useEffect } from 'react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { exportToCsv } from '@/shared/utils/exportCsv';
 import { Modal } from '@/shared/components/ui/Modal';
+import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
+import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
+import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Download, Eye, ShoppingBag, CreditCard, Clock, CheckCircle2, FileText, User, Plus, Edit, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -31,9 +34,10 @@ function formatOrderTotal(o: SaleOrder): string {
 }
 
 export function SaleOrdersPage() {
-  const { saleOrders: data, addSaleOrder, updateSaleOrder, deleteSaleOrder } = useSalesStore();
+  const { saleOrders: data, addSaleOrder, updateSaleOrder, deleteSaleOrder, fetchSaleOrders } = useSalesStore();
+
   const customers = useCrmStore((s) => s.customers);
-  const customerLabel = (id: string) => resolveCustomerName(id, customers);
+  const customerLabel = (id: string, name?: string) => resolveCustomerName(id, customers, name);
   const canManage = usePermission('sales:orders:create');
   const storeOrders = useMemo(
     () => data.filter((o) => o.origin !== 'ONLINE'),
@@ -54,12 +58,21 @@ export function SaleOrdersPage() {
   const [deletingOrder, setDeletingOrder] = useState<SaleOrder | null>(null);
   const [deletingBulkOrders, setDeletingBulkOrders] = useState<{ rows: SaleOrder[], clear: () => void } | null>(null);
 
-  // Simulate loading state
+  // Fetch real data & manage loading state
   const [isLoading, setIsLoading] = useState(true);
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 800);
-    return () => clearTimeout(timer);
-  }, []);
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        await fetchSaleOrders();
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, [fetchSaleOrders]);
 
   const filtered = useMemo(() => {
     return storeOrders.filter((item) => {
@@ -263,7 +276,7 @@ export function SaleOrdersPage() {
       {
         id: 'customerId',
         header: 'Khách hàng',
-        cell: ({ row }) => <span className="text-sm font-medium">{customerLabel(row.original.customerId)}</span>,
+        cell: ({ row }) => <span className="text-sm font-medium">{customerLabel(row.original.customerId, row.original.customerName)}</span>,
       },
       {
         accessorKey: 'createdByName',
@@ -367,15 +380,15 @@ export function SaleOrdersPage() {
           <div className="flex items-center gap-3">
             <button 
               onClick={handleExportCsv}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0"
+              className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0"
             >
               <Download className="w-4 h-4" />
               Xuất dữ liệu
             </button>
             {canManage && (
-              <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm whitespace-nowrap shrink-0">
+              <button onClick={handleOpenCreate} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0">
                 <Plus className="w-4 h-4" />
-                Tạo đơn mới
+                Tạo Đơn Hàng Mới
               </button>
             )}
           </div>
@@ -499,7 +512,7 @@ export function SaleOrdersPage() {
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Khách hàng
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{customerLabel(selectedOrder.customerId)}</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{customerLabel(selectedOrder.customerId, selectedOrder.customerName)}</p>
                 <p className="text-[10px] font-mono text-gray-400">ID: {selectedOrder.customerId}</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
@@ -536,7 +549,7 @@ export function SaleOrdersPage() {
 
             <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 space-y-1 text-sm">
               <div className="flex justify-between"><span className="text-gray-500">Tiền hàng</span><span className="font-mono">{formatMoney(selectedOrder.subTotal, 'VND')}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Thuế / Giảm</span><span className="font-mono">+{formatMoney(selectedOrder.taxAmount, 'VND')} / −{formatMoney(selectedOrder.discountAmount, 'VND')}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Thuế / giảm</span><span className="font-mono">+{formatMoney(selectedOrder.taxAmount, 'VND')} / −{formatMoney(selectedOrder.discountAmount, 'VND')}</span></div>
               {selectedOrder.origin === 'POS' && selectedOrder.shiftId && (
                 <div className="flex justify-between"><span className="text-gray-500">Ca làm việc</span><span className="font-mono text-xs">{selectedOrder.shiftId}</span></div>
               )}
@@ -605,140 +618,183 @@ export function SaleOrdersPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo Đơn Hàng Mới' : 'Cập Nhật Đơn Hàng'}
-        width="max-w-xl"
+        title={modalMode === 'create' ? 'Tạo đơn hàng mới' : 'Cập nhật đơn hàng'}
+        size="erp"
       >
-        <form onSubmit={handleSaveOrder} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã đơn hàng *</label>
-              <input
-                type="text"
-                value={editingOrder.code || ''}
-                onChange={(e) => setEditingOrder({ ...editingOrder, code: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng (CRM) *</label>
-              <CustomerSelect
-                value={editingOrder.customerId || ''}
-                onChange={(customerId) => setEditingOrder({ ...editingOrder, customerId })}
-                required
-              />
-            </div>
-          </div>
+        <form onSubmit={handleSaveOrder}>
+          <div className="erp-form-body">
+            {/* Section 1: Thông tin chung & Sản phẩm */}
+            <div className="erp-form-section space-y-4" style={{ gridColumn: 'span 2' }}>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Thông tin chung đơn hàng</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã đơn hàng (SO) *</label>
+                  <input
+                    type="text"
+                    value={editingOrder.code || ''}
+                    onChange={(e) => setEditingOrder({ ...editingOrder, code: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng (CRM) *</label>
+                  <SearchLookupModal
+                    title="Chọn Khách Hàng"
+                    iconType="user"
+                    placeholder="Chọn khách hàng..."
+                    value={editingOrder.customerId}
+                    options={[
+                      { id: 'CUST-001', code: 'CUST-001', name: 'Nguyễn Văn An', subtitle: 'SĐT: 0901234567 - VIP Gold' },
+                      { id: 'CUST-002', code: 'CUST-002', name: 'Công ty TNHH Minh Phát', subtitle: 'MST: 0312456789 - Khách DN' },
+                      { id: 'CUST-003', code: 'CUST-003', name: 'Trần Thị Bình', subtitle: 'SĐT: 0918889999 - Thường' },
+                    ]}
+                    onChange={(val) => setEditingOrder(prev => ({ ...prev, customerId: val }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chi nhánh / Quầy xuất hàng *</label>
+                  <SearchLookupModal
+                    title="Chọn Chi Nhánh Xuất Hàng"
+                    iconType="location"
+                    placeholder="Chọn chi nhánh..."
+                    value={String(editingOrder.branchId || '')}
+                    options={[
+                      { id: '1', code: 'STORE-HQ', name: 'Chi nhánh Flagship Q1 (TP.HCM)' },
+                      { id: '2', code: 'STORE-HN', name: 'Chi nhánh Cầu Giấy (Hà Nội)' },
+                      { id: '3', code: 'STORE-DN', name: 'Chi nhánh Hải Châu (Đà Nẵng)' },
+                    ]}
+                    onChange={(val) => setEditingOrder(prev => ({ ...prev, branchId: val }))}
+                  />
+                </div>
+              </div>
 
-          <OrderLinesEditor
-            lines={editingOrder.orderLines ?? []}
-            currency="VND"
-            onChange={applyOrderLines}
-          />
-
-          <OrderPricingFields
-            currency="VND"
-            values={{
-              subTotal: editingOrder.subTotal ?? 0,
-              taxAmount: editingOrder.taxAmount ?? 0,
-              discountAmount: editingOrder.discountAmount ?? 0,
-              totalAmount: editingOrder.totalAmount ?? 0,
-            }}
-            onChange={(patch) => setEditingOrder((prev) => ({ ...prev, ...patch }))}
-          />
-
-          {editingOrder.origin === 'POS' && (
-            <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách đưa (Tendered)</label>
-                <input
-                  type="text"
-                  value={(editingOrder.amountTendered ?? 0) === 0 ? '' : Math.round(editingOrder.amountTendered ?? 0).toLocaleString('vi-VN')}
-                  onChange={(e) => {
-                    const digits = e.target.value.replace(/\D/g, '');
-                    const parsed = digits === '' ? 0 : parseInt(digits, 10);
-                    setEditingOrder({ ...editingOrder, amountTendered: parsed });
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                <AddressCascadeSelect
+                  label="Địa chỉ giao hàng (Delivery Address)"
                 />
               </div>
+
+              <OrderLinesEditor
+                lines={editingOrder.orderLines ?? []}
+                currency="VND"
+                onChange={applyOrderLines}
+              />
+
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tiền thối</label>
-                <input
-                  type="text"
-                  value={(editingOrder.changeAmount ?? 0) === 0 ? '' : Math.round(editingOrder.changeAmount ?? 0).toLocaleString('vi-VN')}
-                  onChange={(e) => {
-                    const digits = e.target.value.replace(/\D/g, '');
-                    const parsed = digits === '' ? 0 : parseInt(digits, 10);
-                    setEditingOrder({ ...editingOrder, changeAmount: parsed });
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Shift ID</label>
-                <input
-                  type="text"
-                  value={editingOrder.shiftId ?? ''}
-                  onChange={(e) => setEditingOrder({ ...editingOrder, shiftId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                <FileDropzone
+                  label="Tệp đính kèm Đơn đặt hàng / Hợp đồng mua bán (PO/DOC)"
                 />
               </div>
             </div>
-          )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày tạo</label>
-              <input
-                type="text"
-                value={editingOrder.date || ''}
-                onChange={(e) => setEditingOrder({ ...editingOrder, date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+            {/* Section 2: Giá trị, Thanh toán & Trạng thái */}
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Thanh toán & Trạng thái</h3>
+              
+              <OrderPricingFields
+                currency="VND"
+                values={{
+                  subTotal: editingOrder.subTotal ?? 0,
+                  taxAmount: editingOrder.taxAmount ?? 0,
+                  discountAmount: editingOrder.discountAmount ?? 0,
+                  totalAmount: editingOrder.totalAmount ?? 0,
+                }}
+                onChange={(patch) => setEditingOrder((prev) => ({ ...prev, ...patch }))}
               />
+
+              {editingOrder.origin === 'POS' && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách đưa (Tendered)</label>
+                    <input
+                      type="text"
+                      value={(editingOrder.amountTendered ?? 0) === 0 ? '' : Math.round(editingOrder.amountTendered ?? 0).toLocaleString('vi-VN')}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, '');
+                        const parsed = digits === '' ? 0 : parseInt(digits, 10);
+                        setEditingOrder({ ...editingOrder, amountTendered: parsed });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tiền thối</label>
+                    <input
+                      type="text"
+                      value={(editingOrder.changeAmount ?? 0) === 0 ? '' : Math.round(editingOrder.changeAmount ?? 0).toLocaleString('vi-VN')}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, '');
+                        const parsed = digits === '' ? 0 : parseInt(digits, 10);
+                        setEditingOrder({ ...editingOrder, changeAmount: parsed });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Shift ID</label>
+                    <input
+                      type="text"
+                      value={editingOrder.shiftId ?? ''}
+                      onChange={(e) => setEditingOrder({ ...editingOrder, shiftId: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày tạo</label>
+                <input
+                  type="text"
+                  value={editingOrder.date || ''}
+                  onChange={(e) => setEditingOrder({ ...editingOrder, date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái đơn</label>
+                  <select
+                    value={editingOrder.status || 'PENDING'}
+                    onChange={(e) => setEditingOrder({ ...editingOrder, status: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="PENDING">Đang xử lý</option>
+                    <option value="COMPLETED">Hoàn thành</option>
+                    <option value="CANCELLED">Đã hủy</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thanh toán</label>
+                  <select
+                    value={editingOrder.paymentStatus || 'UNPAID'}
+                    onChange={(e) => setEditingOrder({ ...editingOrder, paymentStatus: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="UNPAID">Chưa thanh toán</option>
+                    <option value="PAID">Đã thanh toán</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phương thức</label>
+                  <select
+                    value={editingOrder.paymentMethod || 'Cash'}
+                    onChange={(e) => setEditingOrder({ ...editingOrder, paymentMethod: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="Cash">Tiền mặt</option>
+                    <option value="Credit Card">Thẻ tín dụng</option>
+                    <option value="Bank Transfer">Chuyển khoản</option>
+                    <option value="Apple Pay">Ví điện tử</option>
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái đơn</label>
-              <select
-                value={editingOrder.status || 'PENDING'}
-                onChange={(e) => setEditingOrder({ ...editingOrder, status: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="PENDING">Đang xử lý</option>
-                <option value="COMPLETED">Hoàn thành</option>
-                <option value="CANCELLED">Đã hủy</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thanh toán</label>
-              <select
-                value={editingOrder.paymentStatus || 'UNPAID'}
-                onChange={(e) => setEditingOrder({ ...editingOrder, paymentStatus: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="UNPAID">Chưa thanh toán</option>
-                <option value="PAID">Đã thanh toán</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phương thức</label>
-              <select
-                value={editingOrder.paymentMethod || 'Cash'}
-                onChange={(e) => setEditingOrder({ ...editingOrder, paymentMethod: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="Cash">Tiền mặt</option>
-                <option value="Credit Card">Thẻ tín dụng</option>
-                <option value="Bank Transfer">Chuyển khoản</option>
-                <option value="Apple Pay">Ví điện tử</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="erp-form-footer">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}

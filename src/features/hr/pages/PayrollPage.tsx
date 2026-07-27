@@ -1,28 +1,54 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Download, Eye, Edit, DollarSign, CheckCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useHrStore } from '../store/hrStore';
 
-interface PayrollItem {
-  id: string; userId: string; userName: string; department: string;
-  periodMonth: number; periodYear: number;
-  baseSalary: number; allowance: number; deduction: number; netSalary: number;
-  status: 'CHƯA_CHI_TRẢ' | 'ĐÃ_CHI_TRẢ';
+export interface PayrollItem {
+  id: string;
+  userId: string;
+  userName: string;
+  department: string;
+  periodMonth: number;
+  periodYear: number;
+  baseSalary: number;
+  allowance: number;
+  deduction: number;
+  netSalary: number;
+  status: string;
 }
 
-const fmt = (n: number) => n.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' });
-
-const MOCK: PayrollItem[] = [
-  { id:'1', userId:'U001', userName:'Nguyễn Văn An', department:'Kinh doanh', periodMonth:5, periodYear:2026, baseSalary:15000000, allowance:2000000, deduction:500000, netSalary:16500000, status:'ĐÃ_CHI_TRẢ' },
-  { id:'2', userId:'U002', userName:'Trần Thị Bích', department:'Kho vận', periodMonth:5, periodYear:2026, baseSalary:10000000, allowance:1000000, deduction:300000, netSalary:10700000, status:'CHƯA_CHI_TRẢ' },
-  { id:'3', userId:'U003', userName:'Lê Hoàng Nam', department:'Kế toán', periodMonth:5, periodYear:2026, baseSalary:12000000, allowance:1500000, deduction:400000, netSalary:13100000, status:'CHƯA_CHI_TRẢ' },
-  { id:'4', userId:'U004', userName:'Phạm Thị Lan', department:'Lễ tân', periodMonth:5, periodYear:2026, baseSalary:8000000, allowance:500000, deduction:200000, netSalary:8300000, status:'ĐÃ_CHI_TRẢ' },
-];
-
 export function PayrollPage() {
-  const [data, setData] = useState<PayrollItem[]>(MOCK);
+  const setData = (_fn: any) => {};
+  const {
+    payrolls: storePayrolls,
+    fetchPayrolls,
+    addPayroll,
+    updatePayroll,
+    deletePayroll,
+  } = useHrStore();
+
+  useEffect(() => {
+    fetchPayrolls();
+  }, [fetchPayrolls]);
+
+  const data: PayrollItem[] = useMemo(() => {
+    return storePayrolls.map((p) => ({
+      id: p.id,
+      userId: 'U001',
+      userName: p.employeeName,
+      department: 'Phòng ban',
+      periodMonth: Number(p.payrollMonth.split('-')[1] || 6),
+      periodYear: Number(p.payrollMonth.split('-')[0] || 2026),
+      baseSalary: p.baseSalary,
+      allowance: p.allowances + p.kpiBonus,
+      deduction: p.deductions,
+      netSalary: p.netSalary,
+      status: p.status === 'PAID' ? 'ĐÃ_CHI_TRẢ' : 'CHƯA_CHI_TRẢ',
+    }));
+  }, [storePayrolls]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Tất cả');
   const [selected, setSelected] = useState<PayrollItem|null>(null);
@@ -52,17 +78,17 @@ export function PayrollPage() {
   const markPaid = (id: string) => setData(data.map(d => d.id===id ? {...d, status:'ĐÃ_CHI_TRẢ' as const} : d));
 
   const columns = useMemo<ColumnDef<PayrollItem>[]>(() => [
-    { accessorKey:'userName', header:'Nhân Viên', cell:({row}) => <div><p className="font-medium text-gray-900 dark:text-white">{row.original.userName}</p><p className="text-xs text-gray-400">{row.original.department}</p></div> },
-    { id:'period', header:'Kỳ Lương', cell:({row}) => <span className="text-sm font-mono text-gray-700 dark:text-gray-300">Tháng {row.original.periodMonth}/{row.original.periodYear}</span> },
-    { accessorKey:'baseSalary', header:'Lương Cơ Bản', cell:info => <span className="text-sm text-gray-700 dark:text-gray-300">{fmt(info.getValue() as number)}</span> },
-    { accessorKey:'allowance', header:'Phụ Cấp', cell:info => <span className="text-sm text-emerald-600 dark:text-emerald-400">+{fmt(info.getValue() as number)}</span> },
-    { accessorKey:'deduction', header:'Giảm Trừ', cell:info => <span className="text-sm text-red-500">-{fmt(info.getValue() as number)}</span> },
-    { accessorKey:'netSalary', header:'Thực Lĩnh', cell:info => <span className="font-bold text-gray-900 dark:text-white">{fmt(info.getValue() as number)}</span> },
-    { accessorKey:'status', header:'Trạng Thái', cell:info => {
+    { accessorKey:'userName', header:'Nhân viên', cell:({row}) => <div><p className="font-medium text-gray-900 dark:text-white">{row.original.userName}</p><p className="text-xs text-gray-400">{row.original.department}</p></div> },
+    { id:'period', header:'Kỳ lương', cell:({row}) => <span className="text-sm font-mono text-gray-700 dark:text-gray-300">Tháng {row.original.periodMonth}/{row.original.periodYear}</span> },
+    { accessorKey:'baseSalary', header:'Lương cơ bản', cell:info => <span className="text-sm text-gray-700 dark:text-gray-300">{fmt(info.getValue() as number)}</span> },
+    { accessorKey:'allowance', header:'Phụ cấp', cell:info => <span className="text-sm text-emerald-600 dark:text-emerald-400">+{fmt(info.getValue() as number)}</span> },
+    { accessorKey:'deduction', header:'Giảm trừ', cell:info => <span className="text-sm text-red-500">-{fmt(info.getValue() as number)}</span> },
+    { accessorKey:'netSalary', header:'Thực lĩnh', cell:info => <span className="font-bold text-gray-900 dark:text-white">{fmt(info.getValue() as number)}</span> },
+    { accessorKey:'status', header:'Trạng thái', cell:info => {
       const paid = info.getValue() === 'ĐÃ_CHI_TRẢ';
       return <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${paid?'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300':'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'}`}>{paid?'Đã chi trả':'Chưa chi trả'}</span>;
     }},
-    { id:'actions', header:'Thao Tác', cell:({row}) => (
+    { id:'actions', header:'Thao tác', cell:({row}) => (
       <div className="flex gap-1" onClick={e=>e.stopPropagation()}>
         <button onClick={()=>setSelected(row.original)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"><Eye className="w-4 h-4"/></button>
         {row.original.status==='CHƯA_CHI_TRẢ' && (
@@ -77,27 +103,27 @@ export function PayrollPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bảng Lương Nhân Viên</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bảng lương nhân viên</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Lập và phê duyệt bảng lương hàng tháng cho toàn bộ nhân sự công ty.</p>
           </div>
           <div className="flex gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium shadow-sm"><Download className="w-4 h-4"/>Xuất bảng lương</button>
-            <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm"><Plus className="w-4 h-4"/>Lập Lương Mới</button>
+            <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm"><Plus className="w-4 h-4"/>Lập lương mới</button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
             <p className="text-xs text-gray-500 mb-1">Tổng quỹ lương kỳ này</p>
-            <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(MOCK.reduce((s,d)=>s+d.netSalary,0))}</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(data.reduce((s,d)=>s+d.netSalary,0))}</p>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
             <p className="text-xs text-gray-500 mb-1">Đã chi trả</p>
-            <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{fmt(MOCK.filter(d=>d.status==='ĐÃ_CHI_TRẢ').reduce((s,d)=>s+d.netSalary,0))}</p>
+            <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{fmt(data.filter(d=>d.status==='ĐÃ_CHI_TRẢ').reduce((s,d)=>s+d.netSalary,0))}</p>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
             <p className="text-xs text-gray-500 mb-1">Còn phải chi</p>
-            <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{fmt(MOCK.filter(d=>d.status==='CHƯA_CHI_TRẢ').reduce((s,d)=>s+d.netSalary,0))}</p>
+            <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{fmt(data.filter(d=>d.status==='CHƯA_CHI_TRẢ').reduce((s,d)=>s+d.netSalary,0))}</p>
           </div>
         </div>
 
@@ -112,7 +138,7 @@ export function PayrollPage() {
             <option value="ĐÃ_CHI_TRẢ">Đã chi trả</option>
           </select>
         </div>
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={setSelected}/>
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)}/>
       </div>
 
       <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Phiếu lương: ${selected.userName}`:''} width="max-w-lg">
@@ -135,20 +161,20 @@ export function PayrollPage() {
         )}
       </Drawer>
 
-      <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title="Lập Phiếu Lương Mới" width="max-w-lg">
+      <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title="Lập phiếu lương mới" width="max-w-lg">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên Nhân Viên *</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên nhân viên *</label>
               <input required value={form.userName||''} onChange={e=>setForm({...form,userName:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phòng Ban</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phòng ban</label>
               <input value={form.department||''} onChange={e=>setForm({...form,department:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
           </div>
           <div className="grid grid-cols-3 gap-4">
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lương Cơ Bản</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lương cơ bản</label>
               <input type="number" value={form.baseSalary||0} onChange={e=>setForm({...form,baseSalary:+e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phụ Cấp</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phụ cấp</label>
               <input type="number" value={form.allowance||0} onChange={e=>setForm({...form,allowance:+e.target.value})} className="w-full px-3 py-2 border border-emerald-300 dark:border-emerald-700 rounded-lg bg-emerald-50 dark:bg-emerald-900/10 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giảm Trừ</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giảm trừ</label>
               <input type="number" value={form.deduction||0} onChange={e=>setForm({...form,deduction:+e.target.value})} className="w-full px-3 py-2 border border-red-300 dark:border-red-700 rounded-lg bg-red-50 dark:bg-red-900/10 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
           </div>
           <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800 text-center">

@@ -5,6 +5,8 @@ import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useHrStore, type JobPositionRecord } from '../store/hrStore';
+import { toast } from 'sonner';
+import { exportToCsv } from '@/shared/utils/exportCsv';
 
 const tierStyles = {
   EXECUTIVE_L6: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200',
@@ -256,7 +258,23 @@ export function PositionsPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý vị trí việc làm, đánh giá bậc lương, xem hạn mức nhân sự và kiểm soát quy tắc làm thêm giờ.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
+            <button
+              onClick={() => {
+                exportToCsv('danh_sach_vi_tri_cong_viec', filtered, [
+                  { header: 'Mã vị trí', accessor: r => r.positionCode },
+                  { header: 'Tên vị trí', accessor: r => r.positionTitle },
+                  { header: 'Phòng ban', accessor: r => r.departmentName },
+                  { header: 'Bậc lương', accessor: r => r.jobGradeTier },
+                  { header: 'Mức lương tối thiểu ($)', accessor: r => r.salaryRangeMin },
+                  { header: 'Mức lương tối đa ($)', accessor: r => r.salaryRangeMax },
+                  { header: 'Đang làm việc', accessor: r => r.activeHeadcount },
+                  { header: 'Hạn mức (Quota)', accessor: r => r.approvedHeadcountQuota },
+                  { header: 'Trạng thái', accessor: r => r.status },
+                ]);
+                toast.success('Đã xuất danh sách vị trí công việc dạng CSV!');
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+            >
               <Download className="w-4 h-4" /> Xuất bảng
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
@@ -340,13 +358,13 @@ export function PositionsPage() {
             <div className={`flex items-center justify-between p-4 rounded-xl border ${
               selectedPos.status === 'OPEN_HIRING'
                 ? 'bg-emerald-50 border-emerald-200'
-                : selectedPos.status === 'FROZEN'
+                : selectedPos.status === 'FROZEN_BUDGET'
                 ? 'bg-amber-50 border-amber-200'
                 : 'bg-blue-50 border-blue-200'
             }`}>
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold ${
-                  selectedPos.status === 'OPEN_HIRING' ? 'bg-emerald-600' : selectedPos.status === 'FROZEN' ? 'bg-amber-600' : 'bg-blue-600'
+                  selectedPos.status === 'OPEN_HIRING' ? 'bg-emerald-600' : selectedPos.status === 'FROZEN_BUDGET' ? 'bg-amber-600' : 'bg-blue-600'
                 }`}>
                   <Briefcase className="w-5 h-5" />
                 </div>
@@ -359,7 +377,7 @@ export function PositionsPage() {
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
                 selectedPos.status === 'OPEN_HIRING' ? 'bg-emerald-200 text-emerald-900' :
-                selectedPos.status === 'FROZEN' ? 'bg-amber-200 text-amber-900' :
+                selectedPos.status === 'FROZEN_BUDGET' ? 'bg-amber-200 text-amber-900' :
                 'bg-blue-200 text-blue-900'
               }`}>
                 {selectedPos.status.replace('_', ' ')}
@@ -418,13 +436,13 @@ export function PositionsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Định Nghĩa Chức Vụ Mới' : 'Cập Nhật Chức Vụ'}
+        title={modalMode === 'create' ? 'Định nghĩa chức vụ mới' : 'Cập nhật chức vụ'}
         width="max-w-2xl"
       >
         <form onSubmit={handleSavePos} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Mã Chức vụ (Position Code) *</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Mã chức vụ (position code) *</label>
               <input
                 type="text" required
                 value={editingPos.positionCode || ''}
@@ -474,7 +492,7 @@ export function PositionsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="flex gap-2">
               <div className="w-1/2">
-                <label className="block text-[10px] font-medium text-gray-700 mb-1">Lương Min ($)</label>
+                <label className="block text-[10px] font-medium text-gray-700 mb-1">Lương min ($)</label>
                 <input
                   type="number"
                   value={editingPos.salaryRangeMin || 0}
@@ -483,7 +501,7 @@ export function PositionsPage() {
                 />
               </div>
               <div className="w-1/2">
-                <label className="block text-[10px] font-medium text-gray-700 mb-1">Lương Max ($)</label>
+                <label className="block text-[10px] font-medium text-gray-700 mb-1">Lương max ($)</label>
                 <input
                   type="number"
                   value={editingPos.salaryRangeMax || 0}
@@ -552,7 +570,7 @@ export function PositionsPage() {
               type="submit"
               className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold"
             >
-              Lưu Thông Tin
+              Lưu thông tin
             </button>
           </div>
         </form>
@@ -561,7 +579,7 @@ export function PositionsPage() {
       <Modal
         isOpen={!!deletingPos}
         onClose={() => setDeletingPos(null)}
-        title="Xóa Chức Vụ"
+        title="Xóa chức vụ"
         isDestructive
         width="max-w-md"
       >

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Shield, Key, Users, CheckCircle2, Lock, Trash2, X, Edit, AlertOctagon } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
@@ -18,7 +18,11 @@ const scopeBadgeStyles = {
 type SearchField = 'all' | 'roleCode' | 'roleTitle' | 'description' | 'permissionScope';
 
 export function RolesPage() {
-  const { roles, addRole, updateRole, deleteRole } = useRoleStore();
+  const { roles, fetchRoles, addRole, updateRole, deleteRole } = useRoleStore();
+
+  useEffect(() => {
+    fetchRoles();
+  }, [fetchRoles]);
 
   const [search, setSearch] = useState('');
   const [searchField, setSearchField] = useState<SearchField>('all');
@@ -749,7 +753,7 @@ export function RolesPage() {
       <Modal
         isOpen={!!deletingRole}
         onClose={() => setDeletingRole(null)}
-        title="Xóa Vai Trò Phân Quyền"
+        title="Xóa vai trò phân quyền"
         isDestructive
         width="max-w-md"
       >
@@ -765,7 +769,7 @@ export function RolesPage() {
       <Modal
         isOpen={!!errorNotice}
         onClose={() => setErrorNotice(null)}
-        title="Thông Báo"
+        title="Thông báo"
         width="max-w-md"
       >
         <div className="space-y-4">

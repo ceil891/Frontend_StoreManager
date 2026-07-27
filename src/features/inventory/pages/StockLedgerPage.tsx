@@ -56,8 +56,8 @@ export function StockLedgerPage() {
       unitPrice: firstProduct?.price || 0,
       totalValuation: (firstProduct?.price || 0) * 10,
       runningBalance: (firstProduct?.onHand || 0) + 10,
-      location: firstProduct?.location || 'Kho Quận 1',
-      loggedBy: 'Nguyễn Minh Châu',
+      location: firstProduct?.location || 'Kho quận 1',
+      loggedBy: 'Nguyễn minh châu',
       referenceDoc: `REF-${Math.floor(1000 + Math.random() * 9000)}`,
       notes: ''
     });
@@ -396,7 +396,7 @@ export function StockLedgerPage() {
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedEntry.productName}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Mã SKU / Barcode:</span>
+                <span className="text-gray-500 dark:text-gray-400">Mã SKU / barcode:</span>
                 <span className="font-mono font-semibold text-gray-900 dark:text-white">{selectedEntry.sku}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
@@ -415,7 +415,7 @@ export function StockLedgerPage() {
               )}
               {selectedEntry.batchLotRef && (
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">Lô / Batch:</span>
+                  <span className="text-gray-500 dark:text-gray-400">Lô / batch:</span>
                   <span className="font-mono font-semibold">{selectedEntry.batchLotRef}</span>
                 </div>
               )}
@@ -458,7 +458,7 @@ export function StockLedgerPage() {
       <Modal
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
-        title={formMode === 'create' ? 'Tạo Bút Toán Điều Chỉnh Tồn Kho' : 'Chỉnh Sửa Bút Toán Sổ Kho'}
+        title={formMode === 'create' ? 'Tạo bút toán điều chỉnh tồn kho' : 'Chỉnh sửa bút toán sổ kho'}
         width="max-w-2xl"
       >
         <form onSubmit={handleSaveEntry} className="space-y-4">
@@ -674,7 +674,7 @@ export function StockLedgerPage() {
       <Modal
         isOpen={!!deletingEntry}
         onClose={() => setDeletingEntry(null)}
-        title="Xóa Bút Toán Sổ Kho"
+        title="Xóa bút toán sổ kho"
         isDestructive
         width="max-w-md"
       >

@@ -28,14 +28,32 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
   failedQueue = [];
 };
 
+// Fast In-Memory API Cache
+const apiCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL_MS = 10000; // 10 seconds TTL for fast repeated GET calls
+
 // Request Interceptor
 axiosClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
+  (config: InternalAxiosRequestConfig & { _cacheKey?: string }) => {
     // In production, we'd get this from a secure storage or Zustand store
     const token = localStorage.getItem('access_token');
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Invalidate cache on mutations (POST, PUT, DELETE)
+    const method = (config.method || 'get').toLowerCase();
+    if (method !== 'get') {
+      apiCache.clear();
+    } else {
+      // Check cache for GET calls
+      const cacheKey = `${config.url}?${JSON.stringify(config.params || {})}`;
+      const cached = apiCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+        config._cacheKey = cacheKey;
+      }
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
@@ -45,10 +63,14 @@ axiosClient.interceptors.request.use(
 axiosClient.interceptors.response.use(
   (response) => {
     const res = response.data;
+    const config = response.config as InternalAxiosRequestConfig & { _cacheKey?: string };
+    const cacheKey = config._cacheKey || `${config.url}?${JSON.stringify(config.params || {})}`;
+
+    let resultData = res;
     // Spring Boot wrapped response: { success: boolean, status: number, message: string, data: any }
     if (res && typeof res === 'object' && 'success' in res) {
       if (res.success) {
-        return res.data;
+        resultData = res.data;
       } else {
         const apiError = {
           code: res.errorCode || 'API_ERROR',
@@ -57,7 +79,12 @@ axiosClient.interceptors.response.use(
         return Promise.reject(apiError);
       }
     }
-    return res;
+
+    if ((config.method || 'get').toLowerCase() === 'get' && config.url) {
+      apiCache.set(cacheKey, { data: resultData, timestamp: Date.now() });
+    }
+
+    return resultData;
   },
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };

@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, Calendar, Building, FileText, ArrowUpRight, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type PaymentVoucher } from '../store/financeStore';
 import { toast } from 'sonner';
+import { exportToCsv } from '@/shared/utils/exportCsv';
 
 const categoryMap: Record<string, string> = {
   SUPPLIER_PAYMENT: 'Thanh toán nhà cung cấp',
@@ -25,11 +26,18 @@ export function PaymentVouchersPage() {
   const addPayment = useFinanceStore((s) => s.addPayment);
   const updatePayment = useFinanceStore((s) => s.updatePayment);
   const deletePayment = useFinanceStore((s) => s.deletePayment);
+  const fetchPayments = useFinanceStore((s) => s.fetchPayments);
+
+  useEffect(() => {
+    fetchPayments();
+  }, [fetchPayments]);
+
   const [search, setSearch] = useState('');
   const [selectedVoucher, setSelectedVoucher] = useState<PaymentVoucher | null>(null);
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAutoCode, setIsAutoCode] = useState(true);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingVoucher, setEditingVoucher] = useState<Partial<PaymentVoucher>>({});
   const [deletingVoucher, setDeletingVoucher] = useState<PaymentVoucher | null>(null);
@@ -42,6 +50,7 @@ export function PaymentVouchersPage() {
 
   const handleOpenCreate = () => {
     setModalMode('create');
+    setIsAutoCode(true);
     setEditingVoucher({
       voucherNumber: `PAY-2024-${Math.floor(100 + Math.random() * 900)}`,
       payeeName: '',
@@ -60,6 +69,7 @@ export function PaymentVouchersPage() {
 
   const handleOpenEdit = (voucher: PaymentVoucher) => {
     setModalMode('edit');
+    setIsAutoCode(false);
     setEditingVoucher(voucher);
     setIsModalOpen(true);
   };
@@ -178,12 +188,23 @@ export function PaymentVouchersPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu Chi (Payment Vouchers)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu chi (payment vouchers)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Lập và quản lý các phiếu giải ngân thanh toán cho nhà cung cấp, chi phí điện nước và các khoản thanh toán qua hệ thống ngân hàng.</p>
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => toast.success('Xuất sổ nhật ký chi thành công!')}
+              onClick={() => {
+                exportToCsv('danh_sach_phieu_chi', filtered, [
+                  { header: 'Số phiếu chi', accessor: r => r.voucherNumber },
+                  { header: 'Đơn vị nhận', accessor: r => r.payeeName },
+                  { header: 'Hạng mục chi', accessor: r => categoryMap[r.category] || r.category },
+                  { header: 'Số tiền (VND)', accessor: r => r.amount },
+                  { header: 'Ngày chi', accessor: r => r.paymentDate },
+                  { header: 'Người duyệt', accessor: r => r.approver || '' },
+                  { header: 'Trạng thái', accessor: r => statusMapFull[r.status] || r.status },
+                ]);
+                toast.success('Đã xuất sổ nhật ký chi dạng CSV!');
+              }}
               className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
             >
               <Download className="w-4 h-4" /> Xuất sổ nhật ký chi
@@ -221,7 +242,7 @@ export function PaymentVouchersPage() {
       <Modal
         isOpen={!!selectedVoucher}
         onClose={() => setSelectedVoucher(null)}
-        title={selectedVoucher ? `Hồ Sơ Phiếu Chi: ${selectedVoucher.voucherNumber}` : 'Chi Tiết Phiếu Chi'}
+        title={selectedVoucher ? `Hồ Sơ Phiếu Chi: ${selectedVoucher.voucherNumber}` : 'Chi tiết phiếu chi'}
         width="max-w-lg"
       >
         {selectedVoucher && (
@@ -331,18 +352,40 @@ export function PaymentVouchersPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Lập Phiếu Chi Mới' : 'Chỉnh Sửa Phiếu Chi'}
+        title={modalMode === 'create' ? 'Lập phiếu chi mới' : 'Chỉnh sửa phiếu chi'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveVoucher} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số phiếu chi *</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Số phiếu chi *</label>
+                {modalMode === 'create' && (
+                  <label className="flex items-center gap-1 text-[10px] text-red-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isAutoCode}
+                      onChange={(e) => {
+                        setIsAutoCode(e.target.checked);
+                        if (e.target.checked) {
+                          setEditingVoucher(prev => ({
+                            ...prev,
+                            voucherNumber: `PAY-2024-${Math.floor(100 + Math.random() * 900)}`
+                          }));
+                        }
+                      }}
+                      className="rounded text-red-600 focus:ring-red-550 w-3 h-3"
+                    />
+                    <span>Tự động sinh</span>
+                  </label>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingVoucher.voucherNumber || ''}
                 onChange={(e) => setEditingVoucher({ ...editingVoucher, voucherNumber: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                disabled={modalMode === 'create' && isAutoCode}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 disabled:opacity-60"
                 required
               />
             </div>

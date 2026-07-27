@@ -18,6 +18,8 @@ export interface User {
   role: RoleType;
   branchId?: string | null;
   avatar: string;
+  /** Danh sách permissionCode thực từ backend (được load sau khi login) */
+  permissions: string[];
 }
 
 export interface LoginCredentials {

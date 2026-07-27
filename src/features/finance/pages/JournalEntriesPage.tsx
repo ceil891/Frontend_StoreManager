@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Plus, Save, Send, Trash2, AlertCircle } from 'lucide-react';
 import { Modal } from '@/shared/components/ui/Modal';
 import { useFinanceStore, type JournalEntry, type JournalLine } from '../store/financeStore';
+import { toast } from 'sonner';
 
 const ACCOUNT_OPTIONS = [
   { code: '111', name: 'Tiền mặt' },
@@ -30,6 +31,7 @@ export function JournalEntriesPage() {
   const saveDraft = () => {
     if (!entry) return;
     updateJournalEntry(entry.id, entry);
+    toast.success('Đã lưu nháp bút toán thành công!');
   };
 
   const totals = useMemo(() => {

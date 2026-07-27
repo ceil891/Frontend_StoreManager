@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, Calendar, User, TrendingUp, AlertCircle, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type DebtRecord } from '../store/financeStore';
+import { toast } from 'sonner';
+import { exportToCsv } from '@/shared/utils/exportCsv';
 
 const entityTypeMap: Record<string, string> = {
   CUSTOMER: 'Khách hàng',
@@ -23,6 +25,12 @@ export function DebtLedgerPage() {
   const addDebt = useFinanceStore((s) => s.addDebt);
   const updateDebt = useFinanceStore((s) => s.updateDebt);
   const deleteDebt = useFinanceStore((s) => s.deleteDebt);
+  const fetchDebts = useFinanceStore((s) => s.fetchDebts);
+
+  useEffect(() => {
+    fetchDebts();
+  }, [fetchDebts]);
+
   const [search, setSearch] = useState('');
   const [selectedDebt, setSelectedDebt] = useState<DebtRecord | null>(null);
 
@@ -192,11 +200,26 @@ export function DebtLedgerPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sổ Công Nợ (Receivable / Payable Ledger)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sổ công nợ (receivable / payable ledger)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý và giám sát công nợ phải thu của khách hàng và công nợ phải trả nhà cung cấp. Số dương: Khách hàng nợ doanh nghiệp. Số âm: Doanh nghiệp nợ đối tác.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
+            <button
+              onClick={() => {
+                exportToCsv('so_cong_no', filtered, [
+                  { header: 'Mã công nợ', accessor: r => r.debtCode },
+                  { header: 'Tên đối tác', accessor: r => r.entityName },
+                  { header: 'Loại đối tác', accessor: r => entityTypeMap[r.entityType] || r.entityType },
+                  { header: 'Tổng công nợ (VND)', accessor: r => r.totalDebt },
+                  { header: 'Đến hạn (VND)', accessor: r => r.dueAmount },
+                  { header: 'Hạn thanh toán', accessor: r => r.dueDate },
+                  { header: 'Trạng thái', accessor: r => statusMapFull[r.status] || r.status },
+                  { header: 'Phụ trách', accessor: r => r.accountManager },
+                ]);
+                toast.success('Đã xuất sổ công nợ dạng CSV!');
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+            >
               <Download className="w-4 h-4" /> Xuất sổ công nợ
             </button>
             <button
@@ -232,7 +255,7 @@ export function DebtLedgerPage() {
       <Modal
         isOpen={!!selectedDebt}
         onClose={() => setSelectedDebt(null)}
-        title={selectedDebt ? `Hồ Sơ Công Nợ: ${selectedDebt.debtCode}` : 'Chi Tiết Công Nợ'}
+        title={selectedDebt ? `Hồ Sơ Công Nợ: ${selectedDebt.debtCode}` : 'Chi tiết công nợ'}
         width="max-w-lg"
       >
         {selectedDebt && (
@@ -249,7 +272,7 @@ export function DebtLedgerPage() {
                 <div>
                   <p className={`text-xs font-semibold uppercase tracking-wider ${
                     selectedDebt.totalDebt >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-red-800 dark:text-red-400'
-                  }`}>{selectedDebt.totalDebt >= 0 ? 'Khoản Phải Thu (Receivable)' : 'Khoản Phải Trả (Payable)'}</p>
+                  }`}>{selectedDebt.totalDebt >= 0 ? 'Khoản phải thu (receivable)' : 'Khoản phải trả (payable)'}</p>
                   <p className={`text-xl font-bold font-mono mt-0.5 ${
                     selectedDebt.totalDebt >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
                   }`}>
@@ -340,7 +363,7 @@ export function DebtLedgerPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Ghi Nhận Công Nợ Mới' : 'Chỉnh Sửa Thông Tin Công Nợ'}
+        title={modalMode === 'create' ? 'Ghi nhận công nợ mới' : 'Chỉnh sửa thông tin công nợ'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveDebt} className="space-y-4">

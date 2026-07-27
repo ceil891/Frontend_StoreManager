@@ -8,9 +8,18 @@ interface DrawerProps {
   title: string;
   children: React.ReactNode;
   width?: string;
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'erp';
 }
 
-export function Drawer({ isOpen, onClose, title, children, width = 'max-w-md' }: DrawerProps) {
+const SIZE_CLASSES: Record<string, string> = {
+  sm: 'max-w-sm',
+  md: 'max-w-md',
+  lg: 'max-w-lg',
+  xl: 'max-w-xl',
+  erp: 'erp-form erp-drawer',
+};
+
+export function Drawer({ isOpen, onClose, title, children, width = 'max-w-md', size }: DrawerProps) {
   // Prevent body scroll when drawer is open
   useEffect(() => {
     if (isOpen) {
@@ -32,6 +41,8 @@ export function Drawer({ isOpen, onClose, title, children, width = 'max-w-md' }:
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose]);
 
+  const sizeClass = size ? SIZE_CLASSES[size] : width;
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -51,7 +62,7 @@ export function Drawer({ isOpen, onClose, title, children, width = 'max-w-md' }:
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-            className={`fixed inset-y-0 right-0 z-50 w-full ${width} bg-white dark:bg-gray-800 shadow-2xl flex flex-col border-l border-gray-200 dark:border-gray-700`}
+            className={`fixed inset-y-0 right-0 z-50 w-full ${sizeClass} bg-white dark:bg-gray-800 shadow-2xl flex flex-col border-l border-gray-200 dark:border-gray-700`}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">

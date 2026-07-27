@@ -261,7 +261,7 @@ export function SystemConfigPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cấu hình Tham Số & Hệ Thống Kiến Trúc</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cấu hình tham số & hệ thống kiến trúc</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Thiết lập các hằng số vận hành cốt lõi, cơ chế mã hóa keystore, giới hạn API gateway và chính sách đồng bộ hóa cache Redis đa phân hệ.</p>
           </div>
           <div className="flex items-center gap-3">

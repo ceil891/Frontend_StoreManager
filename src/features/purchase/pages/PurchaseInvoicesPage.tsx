@@ -1,9 +1,13 @@
-import { useMemo, useState } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, Receipt } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, Receipt, Printer } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { PrintInvoiceModal, type PrintInvoiceData } from '@/shared/components/ui/PrintInvoiceModal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface PurchaseInvoiceRecord {
   id: string;
@@ -19,55 +23,114 @@ interface PurchaseInvoiceRecord {
   notes?: string;
 }
 
-const MOCK_INVOICES: PurchaseInvoiceRecord[] = [
-  {
-    id: '1',
-    invoiceCode: 'INV-PUR-2026-001',
-    poCode: 'PO-2026-881',
-    supplierName: 'Nhà Cung Cấp Toàn Cầu',
-    invoiceDate: '2026-06-01',
-    dueDate: '2026-06-15',
-    subTotal: 50000000,
-    vatAmount: 5000000,
-    totalAmount: 55000000,
-    status: 'CHO_THANH_TOAN',
-    notes: 'Hóa đơn tiền nước ngọt lô hàng ngày 01/06',
-  },
-  {
-    id: '2',
-    invoiceCode: 'INV-PUR-2026-002',
-    poCode: 'PO-2026-882',
-    supplierName: 'Công Ty Nhập Khẩu Á Châu',
-    invoiceDate: '2026-05-20',
-    dueDate: '2026-06-03',
-    subTotal: 120000000,
-    vatAmount: 12000000,
-    totalAmount: 132000000,
-    status: 'DA_THANH_TOAN',
-    notes: 'Đã chuyển khoản thanh toán qua Vietcombank',
-  },
-  {
-    id: '3',
-    invoiceCode: 'INV-PUR-2026-003',
-    poCode: 'PO-2026-883',
-    supplierName: 'Tổng Kho Thực Phẩm HN',
-    invoiceDate: '2026-05-15',
-    dueDate: '2026-05-30',
-    subTotal: 15000000,
-    vatAmount: 1500000,
-    totalAmount: 16500000,
-    status: 'DA_HUY',
-    notes: 'Hủy xuất hóa đơn do sai thông tin số PO',
-  },
-];
-
 export function PurchaseInvoicesPage() {
-  const [data, setData] = useState<PurchaseInvoiceRecord[]>(MOCK_INVOICES);
+  const { products, fetchProducts } = useInventoryStore();
+  const [data, setData] = useState<PurchaseInvoiceRecord[]>([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<PurchaseInvoiceRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<PurchaseInvoiceRecord>>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [printData, setPrintData] = useState<PrintInvoiceData | null>(null);
+
+  // Purchase Invoice Items State
+  const [purItems, setPurItems] = useState<{
+    id: string;
+    sku: string;
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    vatPercent: number;
+  }>([
+    { id: '1', sku: 'SKU-MILK-01', productName: 'Sữa tươi tiệt trùng Vinamilk 1L', quantity: 100, unitPrice: 28000, vatPercent: 8 }
+  ]);
+
+  const updatePurItemsAndTotals = (newItems: typeof purItems) => {
+    setPurItems(newItems);
+    const subTotal = newItems.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)), 0);
+    const vatAmount = newItems.reduce((sum, item) => sum + Math.round(((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0) * (Number(item.vatPercent) || 0)) / 100), 0);
+    const totalAmount = subTotal + vatAmount;
+    setEditingItem(prev => ({
+      ...prev,
+      subTotal,
+      vatAmount,
+      totalAmount
+    }));
+  };
+
+  const handleAddPurItem = () => {
+    const p = products[0];
+    const newItem = {
+      id: Date.now().toString(),
+      sku: p?.sku || 'SKU-NEW',
+      productName: p?.name || 'Sản phẩm mới',
+      quantity: 10,
+      unitPrice: p?.price || 40000,
+      vatPercent: 8
+    };
+    updatePurItemsAndTotals([...purItems, newItem]);
+  };
+
+  const handleRemovePurItem = (id: string) => {
+    updatePurItemsAndTotals(purItems.filter(i => i.id !== id));
+  };
+
+  const handleUpdatePurItem = (id: string, field: string, value: any) => {
+    const updated = purItems.map(item => {
+      if (item.id !== id) return item;
+      if (field === 'sku') {
+        const p = products.find(prod => prod.sku === value);
+        return {
+          ...item,
+          sku: value,
+          productName: p?.name || item.productName,
+          unitPrice: p?.price || item.unitPrice
+        };
+      }
+      return { ...item, [field]: value };
+    });
+    updatePurItemsAndTotals(updated);
+  };
+
+  const fetchInvoices = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await axiosClient.get('/purchase/orders');
+      const list = Array.isArray(res) ? res : (res as any)?.content || [];
+      const mapped: PurchaseInvoiceRecord[] = list.map((item: any) => {
+        const status: PurchaseInvoiceRecord['status'] =
+          item.status === 'DELIVERED' || item.status === 'COMPLETED'
+            ? 'DA_THANH_TOAN'
+            : item.status === 'CANCELLED'
+              ? 'DA_HUY'
+              : 'CHO_THANH_TOAN';
+        return {
+          id: String(item.id),
+          invoiceCode: `INV-MH-${item.id}`,
+          poCode: item.poNumber || '',
+          supplierName: item.supplierName || item.supplier?.name || '',
+          invoiceDate: item.orderDate ? String(item.orderDate).substring(0, 10) : '',
+          dueDate: item.estDeliveryDate ? String(item.estDeliveryDate).substring(0, 10) : '',
+          subTotal: Math.round((item.totalAmount || 0) * 0.9),
+          vatAmount: Math.round((item.totalAmount || 0) * 0.1),
+          totalAmount: item.totalAmount || 0,
+          status,
+        };
+      });
+      setData(mapped);
+    } catch (err) {
+      console.error(err);
+      toast.error('Không thể tải danh sách hóa đơn mua hàng');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchInvoices();
+    fetchProducts();
+  }, [fetchInvoices, fetchProducts]);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -103,7 +166,7 @@ export function PurchaseInvoicesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.invoiceCode || !editingItem.poCode || !editingItem.supplierName) return;
 
@@ -111,36 +174,46 @@ export function PurchaseInvoicesPage() {
     const vat = Number(editingItem.vatAmount || 0);
     const total = sub + vat;
 
-    if (modalMode === 'create') {
-      const newItem: PurchaseInvoiceRecord = {
-        id: String(data.length + 1),
-        invoiceCode: editingItem.invoiceCode!,
-        poCode: editingItem.poCode!,
-        supplierName: editingItem.supplierName!,
-        invoiceDate: editingItem.invoiceDate!,
-        dueDate: editingItem.dueDate || editingItem.invoiceDate!,
-        subTotal: sub,
-        vatAmount: vat,
-        totalAmount: total,
-        status: editingItem.status as any || 'CHO_THANH_TOAN',
-        notes: editingItem.notes,
-      };
-      setData([...data, newItem]);
-    } else {
-      const updated = {
-        ...editingItem,
-        subTotal: sub,
-        vatAmount: vat,
-        totalAmount: total,
-      } as PurchaseInvoiceRecord;
-      setData(data.map((d) => (d.id === editingItem.id ? updated : d)));
+    try {
+      if (modalMode === 'create') {
+        await axiosClient.post('/purchase/orders', {
+          poNumber: editingItem.poCode,
+          supplierName: editingItem.supplierName,
+          orderDate: editingItem.invoiceDate,
+          estDeliveryDate: editingItem.dueDate || editingItem.invoiceDate,
+          totalAmount: total,
+          notes: editingItem.notes,
+        });
+        toast.success('Tạo hóa đơn mua hàng thành công');
+      } else {
+        await axiosClient.put(`/purchase/orders/${editingItem.id}`, {
+          poNumber: editingItem.poCode,
+          supplierName: editingItem.supplierName,
+          orderDate: editingItem.invoiceDate,
+          estDeliveryDate: editingItem.dueDate,
+          totalAmount: total,
+          notes: editingItem.notes,
+        });
+        toast.success('Cập nhật hóa đơn mua hàng thành công');
+      }
+      setIsModalOpen(false);
+      await fetchInvoices();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lưu hóa đơn thất bại');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa hóa đơn này?')) {
-      setData(data.filter((d) => d.id !== id));
+      try {
+        await axiosClient.delete(`/purchase/orders/${id}`);
+        toast.success('Đã xóa hóa đơn mua hàng');
+        await fetchInvoices();
+      } catch (err) {
+        console.error(err);
+        toast.error('Xóa hóa đơn thất bại');
+      }
     }
   };
 
@@ -148,11 +221,36 @@ export function PurchaseInvoicesPage() {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
   };
 
+  const handlePrintPurchaseInvoice = (record: PurchaseInvoiceRecord) => {
+    setPrintData({
+      documentTitle: 'HÓA ĐƠN MUA HÀNG - NGUỒN VÀO',
+      code: record.invoiceCode,
+      date: record.invoiceDate,
+      dueDate: record.dueDate,
+      customerOrSupplierName: record.supplierName,
+      branchName: 'Kho tổng RetailHub Central Logistics',
+      createdByName: 'Bộ phận Mua Hàng & Kho',
+      notes: record.notes || 'Hóa đơn mua hàng ghi nhận đầu vào sản phẩm.',
+      items: purItems.map(i => ({
+        sku: i.sku,
+        name: i.productName,
+        quantity: i.quantity,
+        price: i.unitPrice,
+        discount: 0,
+        total: i.quantity * i.unitPrice
+      })),
+      subTotal: record.subTotal || record.totalAmount,
+      taxAmount: record.vatAmount || 0,
+      totalAmount: record.totalAmount,
+      statusLabel: record.status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : record.status === 'CHO_THANH_TOAN' ? 'Chờ thanh toán' : 'Đã hủy'
+    });
+  };
+
   const columns = useMemo<ColumnDef<PurchaseInvoiceRecord>[]>(
     () => [
       {
         accessorKey: 'invoiceCode',
-        header: 'Mã Hóa Đơn',
+        header: 'Mã hóa đơn',
         cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
       },
       {
@@ -162,22 +260,22 @@ export function PurchaseInvoicesPage() {
       },
       {
         accessorKey: 'supplierName',
-        header: 'Nhà Cung Cấp',
+        header: 'Nhà cung cấp',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'invoiceDate',
-        header: 'Ngày Hóa Đơn',
+        header: 'Ngày hóa đơn',
         cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'totalAmount',
-        header: 'Tổng Thanh Toán',
+        header: 'Tổng thanh toán',
         cell: (info) => <span className="font-mono font-bold text-blue-600">{formatCurrency(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           const badgeClass =
@@ -186,19 +284,26 @@ export function PurchaseInvoicesPage() {
               : status === 'CHO_THANH_TOAN'
               ? 'bg-amber-100 text-amber-800'
               : 'bg-red-100 text-red-800';
-          const label = status === 'DA_THANH_TOAN' ? 'Đã Thanh Toán' : status === 'CHO_THANH_TOAN' ? 'Chờ Thanh Toán' : 'Đã Hủy';
+          const label = status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : status === 'CHO_THANH_TOAN' ? 'Chờ thanh toán' : 'Đã hủy';
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
+              onClick={() => handlePrintPurchaseInvoice(row.original)}
+              className="p-1 text-gray-500 hover:text-emerald-600 rounded"
+              title="In hóa đơn / Tải PDF"
+            >
+              <Printer className="w-4 h-4 text-emerald-600" />
+            </button>
+            <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết"
+              title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -227,7 +332,7 @@ export function PurchaseInvoicesPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Hóa Đơn Mua Hàng (Nguồn Vào)</h1>
+          <h1 className="text-2xl font-bold">Hóa đơn mua hàng (nguồn vào)</h1>
           <p className="text-sm text-gray-500">
             Quản lý hóa đơn VAT đầu vào từ các nhà cung cấp nhằm đối chiếu công nợ và kế toán tài chính.
           </p>
@@ -251,7 +356,13 @@ export function PurchaseInvoicesPage() {
         />
       </div>
 
-      <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      {isLoading ? (
+        <div className="flex justify-center items-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        </div>
+      ) : (
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      )}
 
       <Drawer
         isOpen={!!selected}
@@ -262,25 +373,25 @@ export function PurchaseInvoicesPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã Hóa Đơn:</span>
+                <span className="text-gray-500">Mã hóa đơn:</span>
                 <p className="font-mono font-semibold">{selected.invoiceCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Mã PO Đơn Mua:</span>
+                <span className="text-gray-500">Mã PO đơn mua:</span>
                 <p className="font-mono font-semibold">{selected.poCode}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Nhà Cung Cấp:</span>
+              <span className="text-gray-500">Nhà cung cấp:</span>
               <p className="font-semibold">{selected.supplierName}</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Ngày Hóa Đơn:</span>
+                <span className="text-gray-500">Ngày hóa đơn:</span>
                 <p className="font-mono">{selected.invoiceDate}</p>
               </div>
               <div>
-                <span className="text-gray-500">Ngày Đến Hạn:</span>
+                <span className="text-gray-500">Ngày đến hạn:</span>
                 <p className="font-mono">{selected.dueDate}</p>
               </div>
             </div>
@@ -299,7 +410,7 @@ export function PurchaseInvoicesPage() {
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Trạng Thái:</span>
+              <span className="text-gray-500">Trạng thái:</span>
               <div>
                 <span
                   className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
@@ -310,13 +421,13 @@ export function PurchaseInvoicesPage() {
                       : 'bg-red-100 text-red-800'
                   }`}
                 >
-                  {selected.status === 'DA_THANH_TOAN' ? 'Đã Thanh Toán' : selected.status === 'CHO_THANH_TOAN' ? 'Chờ Thanh Toán' : 'Đã Hủy'}
+                  {selected.status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : selected.status === 'CHO_THANH_TOAN' ? 'Chờ thanh toán' : 'Đã hủy'}
                 </span>
               </div>
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi Chú:</span>
+                <span className="text-gray-500">Ghi chú:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                   {selected.notes}
                 </p>
@@ -329,106 +440,228 @@ export function PurchaseInvoicesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Ghi Nhận Hóa Đơn Mới' : 'Sửa Thông Tin Hóa Đơn'}
+        title={modalMode === 'create' ? '🧾 Ghi nhận Hóa đơn mua hàng (Nguồn vào) mới' : '⚙️ Sửa thông tin hóa đơn mua hàng'}
+        width="max-w-4xl"
       >
-        <form onSubmit={handleSave} className="space-y-4">
+        <form onSubmit={handleSave} className="space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Hóa Đơn *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã hóa đơn mua *</label>
+                {modalMode === 'create' && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem({ ...editingItem, invoiceCode: `INV-PUR-${Date.now().toString().slice(-4)}` })}
+                    className="text-[10px] text-emerald-600 hover:underline font-bold"
+                  >
+                    ⚡ Sinh mã
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingItem.invoiceCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, invoiceCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã PO Đơn Mua *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã PO Đơn mua hàng gốc *</label>
               <input
                 type="text"
                 value={editingItem.poCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, poCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 placeholder="PO-2026-XXX"
                 required
               />
             </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Nhà Cung Cấp *</label>
-            <input
-              type="text"
-              value={editingItem.supplierName || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, supplierName: e.target.value })}
-              className="w-full p-2 border rounded"
-              placeholder="Tên nhà cung cấp"
-              required
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Nhà cung cấp xuất hóa đơn *</label>
+              <input
+                type="text"
+                value={editingItem.supplierName || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, supplierName: e.target.value })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Tên công ty nhà cung cấp..."
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã số thuế NCC</label>
+              <input
+                type="text"
+                value={(editingItem as any).supplierTaxCode || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, supplierTaxCode: e.target.value } as any)}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="0101234567"
+              />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày Hóa Đơn *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày phát hành hóa đơn *</label>
               <input
                 type="date"
                 value={editingItem.invoiceDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, invoiceDate: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày Đến Hạn *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Hạn thanh toán công nợ *</label>
               <input
                 type="date"
                 value={editingItem.dueDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, dueDate: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+
+          {/* SECTION BẢNG CHỌN SẢN PHẨM HÓA ĐƠN MUA HÀNG */}
+          <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider text-[11px] flex items-center gap-1">
+                📦 Danh sách mặt hàng mua vào trên hóa đơn ({purItems.length})
+              </span>
+              <button
+                type="button"
+                onClick={handleAddPurItem}
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Thêm mặt hàng
+              </button>
+            </div>
+
+            <div className="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-lg bg-white dark:bg-gray-950">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-100 dark:bg-gray-900 text-gray-500 uppercase text-[10px]">
+                  <tr>
+                    <th className="p-2">Sản phẩm / SKU</th>
+                    <th className="p-2 w-24 text-center">Số lượng</th>
+                    <th className="p-2 w-32 text-right">Đơn giá nhập</th>
+                    <th className="p-2 w-24 text-center">VAT %</th>
+                    <th className="p-2 w-32 text-right">Thành tiền</th>
+                    <th className="p-2 w-10 text-center">Xóa</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                  {purItems.map((item) => (
+                    <tr key={item.id}>
+                      <td className="p-2">
+                        <select
+                          value={item.sku}
+                          onChange={(e) => handleUpdatePurItem(item.id, 'sku', e.target.value)}
+                          className="w-full p-1 border rounded bg-white dark:bg-gray-900 text-xs font-medium"
+                        >
+                          {products.map(p => (
+                            <option key={p.id} value={p.sku}>{p.sku} - {p.name}</option>
+                          ))}
+                          {!products.some(p => p.sku === item.sku) && (
+                            <option value={item.sku}>{item.sku} - {item.productName}</option>
+                          )}
+                        </select>
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.quantity}
+                          onChange={(e) => handleUpdatePurItem(item.id, 'quantity', parseInt(e.target.value) || 0)}
+                          className="w-full p-1 border rounded text-center font-bold"
+                        />
+                      </td>
+                      <td className="p-2 text-right font-mono">
+                        <input
+                          type="number"
+                          value={item.unitPrice}
+                          onChange={(e) => handleUpdatePurItem(item.id, 'unitPrice', parseInt(e.target.value) || 0)}
+                          className="w-full p-1 border rounded text-right font-mono"
+                        />
+                      </td>
+                      <td className="p-2 text-center font-mono">
+                        <input
+                          type="number"
+                          value={item.vatPercent}
+                          onChange={(e) => handleUpdatePurItem(item.id, 'vatPercent', parseInt(e.target.value) || 0)}
+                          className="w-full p-1 border rounded text-center font-mono"
+                        />
+                      </td>
+                      <td className="p-2 text-right font-bold text-emerald-600 font-mono">
+                        {Math.round((item.quantity || 0) * (item.unitPrice || 0) * (1 + (item.vatPercent || 0)/100)).toLocaleString('vi-VN')} ₫
+                      </td>
+                      <td className="p-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePurItem(item.id)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tiền Hàng (Subtotal) *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiền hàng trước thuế (Subtotal)</label>
               <input
                 type="number"
                 value={editingItem.subTotal || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, subTotal: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
-                required
+                readOnly
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-gray-100 dark:bg-gray-800 font-bold"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tiền Thuế VAT</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tổng thuế VAT (VND)</label>
               <input
                 type="number"
                 value={editingItem.vatAmount || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, vatAmount: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                readOnly
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-gray-100 dark:bg-gray-800 font-bold text-blue-600"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tổng tiền hóa đơn thanh toán</label>
+              <input
+                type="number"
+                value={editingItem.totalAmount || 0}
+                readOnly
+                className="w-full p-2 border border-emerald-300 dark:border-emerald-700 rounded font-mono bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 font-bold text-sm"
               />
             </div>
           </div>
+
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Trạng Thái</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Trạng thái thanh toán công nợ</label>
             <select
               value={editingItem.status || 'CHO_THANH_TOAN'}
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-              className="w-full p-2 border rounded"
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
             >
-              <option value="CHO_THANH_TOAN">Chờ Thanh Toán</option>
-              <option value="DA_THANH_TOAN">Đã Thanh Toán</option>
-              <option value="DA_HUY">Đã Hủy</option>
+              <option value="CHO_THANH_TOAN">⏳ Chờ thanh toán NCC</option>
+              <option value="DA_THANH_TOAN">🟢 Đã thanh toán xong</option>
+              <option value="DA_HUY">🔴 Đã hủy hóa đơn</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ghi chú & Số hóa đơn VAT điện tử gốc</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border rounded"
-              rows={3}
-              placeholder="Ghi chú chi tiết..."
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              rows={2}
+              placeholder="Số hóa đơn điện tử CQT, mẫu số, ký hiệu..."
             />
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t">
@@ -440,11 +673,17 @@ export function PurchaseInvoicesPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Hóa Đơn
+              Lưu hóa đơn
             </button>
           </div>
         </form>
       </Modal>
+
+      <PrintInvoiceModal
+        isOpen={!!printData}
+        onClose={() => setPrintData(null)}
+        data={printData}
+      />
     </div>
   );
 }

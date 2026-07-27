@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, CreditCard, CheckCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface PurchasePaymentRecord {
   id: string;
@@ -18,40 +20,51 @@ interface PurchasePaymentRecord {
   notes?: string;
 }
 
-const MOCK_PAYMENTS: PurchasePaymentRecord[] = [
-  {
-    id: '1',
-    paymentCode: 'PAY-PUR-2026-001',
-    invoiceCode: 'INV-PUR-2026-002',
-    supplierName: 'Công Ty Nhập Khẩu Á Châu',
-    paymentMethod: 'CHUYEN_KHOAN',
-    paymentDate: '2026-06-03',
-    amount: 132000000,
-    handler: 'Nguyễn Thị Thuế',
-    status: 'DA_THANH_TOAN',
-    notes: 'Thanh toán trọn gói hóa đơn mua hàng lô máy lạnh nhập khẩu',
-  },
-  {
-    id: '2',
-    paymentCode: 'PAY-PUR-2026-002',
-    invoiceCode: 'INV-PUR-2026-001',
-    supplierName: 'Nhà Cung Cấp Toàn Cầu',
-    paymentMethod: 'TIEN_MAT',
-    paymentDate: '2026-06-04',
-    amount: 55000000,
-    handler: 'Trần Văn Thủ Quỹ',
-    status: 'CHO_DUYET',
-    notes: 'Chi tiền mặt tạm ứng 55 triệu đồng',
-  },
-];
-
 export function PurchasePaymentsPage() {
-  const [data, setData] = useState<PurchasePaymentRecord[]>(MOCK_PAYMENTS);
+  const [data, setData] = useState<PurchasePaymentRecord[]>([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<PurchasePaymentRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<PurchasePaymentRecord>>({});
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fetchPayments = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await axiosClient.get('/finance/payment-vouchers');
+      const list = Array.isArray(res) ? res : (res as any)?.content || [];
+      const mapped: PurchasePaymentRecord[] = list.map((item: any) => {
+        const status: PurchasePaymentRecord['status'] =
+          item.status === 'COMPLETED'
+            ? 'DA_THANH_TOAN'
+            : item.status === 'CANCELLED'
+              ? 'DA_HUY'
+              : 'CHO_DUYET';
+        return {
+          id: String(item.id),
+          paymentCode: item.voucherCode || '',
+          invoiceCode: `INV-${item.id}`,
+          supplierName: item.payerName || 'NCC',
+          paymentMethod: 'CHUYEN_KHOAN' as const,
+          paymentDate: item.voucherDate ? String(item.voucherDate).substring(0, 10) : '',
+          amount: item.amount || 0,
+          handler: 'Kế toán',
+          status,
+        };
+      });
+      setData(mapped);
+    } catch (err) {
+      console.error(err);
+      toast.error('Không thể tải danh sách phiếu chi');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPayments();
+  }, [fetchPayments]);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -87,33 +100,48 @@ export function PurchasePaymentsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.paymentCode || !editingItem.invoiceCode || !editingItem.supplierName) return;
 
-    if (modalMode === 'create') {
-      const newItem: PurchasePaymentRecord = {
-        id: String(data.length + 1),
-        paymentCode: editingItem.paymentCode!,
-        invoiceCode: editingItem.invoiceCode!,
-        supplierName: editingItem.supplierName!,
-        paymentMethod: editingItem.paymentMethod as any || 'CHUYEN_KHOAN',
-        paymentDate: editingItem.paymentDate!,
-        amount: Number(editingItem.amount || 0),
-        handler: editingItem.handler || '',
-        status: editingItem.status as any || 'CHO_DUYET',
-        notes: editingItem.notes,
-      };
-      setData([...data, newItem]);
-    } else {
-      setData(data.map((d) => (d.id === editingItem.id ? (editingItem as PurchasePaymentRecord) : d)));
+    try {
+      if (modalMode === 'create') {
+        await axiosClient.post('/finance/payment-vouchers', {
+          voucherCode: editingItem.paymentCode,
+          payerName: editingItem.supplierName,
+          voucherDate: editingItem.paymentDate,
+          amount: Number(editingItem.amount || 0),
+          reason: editingItem.notes || '',
+        });
+        toast.success('Tạo phiếu chi thành công');
+      } else {
+        await axiosClient.put(`/finance/payment-vouchers/${editingItem.id}`, {
+          voucherCode: editingItem.paymentCode,
+          payerName: editingItem.supplierName,
+          voucherDate: editingItem.paymentDate,
+          amount: Number(editingItem.amount || 0),
+          reason: editingItem.notes || '',
+        });
+        toast.success('Cập nhật phiếu chi thành công');
+      }
+      setIsModalOpen(false);
+      await fetchPayments();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lưu phiếu chi thất bại');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa phiếu chi này?')) {
-      setData(data.filter((d) => d.id !== id));
+      try {
+        await axiosClient.delete(`/finance/payment-vouchers/${id}`);
+        toast.success('Đã xóa phiếu chi');
+        await fetchPayments();
+      } catch (err) {
+        console.error(err);
+        toast.error('Xóa phiếu chi thất bại');
+      }
     }
   };
 
@@ -125,36 +153,36 @@ export function PurchasePaymentsPage() {
     () => [
       {
         accessorKey: 'paymentCode',
-        header: 'Mã Phiếu Chi',
+        header: 'Mã phiếu chi',
         cell: (info) => <span className="font-mono font-bold text-red-600">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'invoiceCode',
-        header: 'Mã Hóa Đơn',
+        header: 'Mã hóa đơn',
         cell: (info) => <span className="font-mono font-medium">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'supplierName',
-        header: 'Nhà Cung Cấp',
+        header: 'Nhà cung cấp',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'amount',
-        header: 'Số Tiền Chi',
+        header: 'Số tiền chi',
         cell: (info) => <span className="font-mono font-bold text-red-600">{formatCurrency(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'paymentMethod',
-        header: 'Hình Thức',
+        header: 'Hình thức',
         cell: (info) => {
           const val = info.getValue() as string;
-          const label = val === 'CHUYEN_KHOAN' ? 'Chuyển Khoản' : val === 'TIEN_MAT' ? 'Tiền Mặt' : val === 'THE' ? 'Thẻ' : 'Công Nợ';
+          const label = val === 'CHUYEN_KHOAN' ? 'Chuyển khoản' : val === 'TIEN_MAT' ? 'Tiền mặt' : val === 'THE' ? 'Thẻ' : 'Công nợ';
           return <span className="text-gray-700 dark:text-gray-300">{label}</span>;
         },
       },
       {
         accessorKey: 'status',
-        header: 'Trạng Thái',
+        header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
           const badgeClass =
@@ -163,19 +191,19 @@ export function PurchasePaymentsPage() {
               : status === 'CHO_DUYET'
               ? 'bg-amber-100 text-amber-800'
               : 'bg-red-100 text-red-800';
-          const label = status === 'DA_THANH_TOAN' ? 'Đã Thanh Toán' : status === 'CHO_DUYET' ? 'Chờ Duyệt' : 'Đã Hủy';
+          const label = status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : status === 'CHO_DUYET' ? 'Chờ Duyệt' : 'Đã hủy';
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao Tác',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem Chi Tiết"
+              title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -204,7 +232,7 @@ export function PurchasePaymentsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Thanh Toán Đơn Mua Hàng (Phiếu Chi)</h1>
+          <h1 className="text-2xl font-bold">Thanh toán đơn mua hàng (phiếu chi)</h1>
           <p className="text-sm text-gray-500">
             Quản lý chi tiết giao dịch chi tiền thanh toán cho nhà cung cấp để ghi nhận giảm công nợ đầu vào.
           </p>
@@ -228,7 +256,13 @@ export function PurchasePaymentsPage() {
         />
       </div>
 
-      <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      {isLoading ? (
+        <div className="flex justify-center items-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        </div>
+      ) : (
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      )}
 
       <Drawer
         isOpen={!!selected}
@@ -239,48 +273,48 @@ export function PurchasePaymentsPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã Phiếu Chi:</span>
+                <span className="text-gray-500">Mã phiếu chi:</span>
                 <p className="font-mono font-semibold text-red-600">{selected.paymentCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Mã Hóa Đơn:</span>
+                <span className="text-gray-500">Mã hóa đơn:</span>
                 <p className="font-mono font-semibold">{selected.invoiceCode}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Nhà Cung Cấp:</span>
+              <span className="text-gray-500">Nhà cung cấp:</span>
               <p className="font-semibold">{selected.supplierName}</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Số Tiền Thanh Toán:</span>
+                <span className="text-gray-500">Số tiền thanh toán:</span>
                 <p className="font-mono font-bold text-red-600">{formatCurrency(selected.amount)}</p>
               </div>
               <div>
-                <span className="text-gray-500">Phương Thức:</span>
+                <span className="text-gray-500">Phương thức:</span>
                 <p>
                   {selected.paymentMethod === 'CHUYEN_KHOAN'
-                    ? 'Chuyển Khoản'
+                    ? 'Chuyển khoản'
                     : selected.paymentMethod === 'TIEN_MAT'
-                    ? 'Tiền Mặt'
+                    ? 'Tiền mặt'
                     : selected.paymentMethod === 'THE'
                     ? 'Thẻ'
-                    : 'Công Nợ'}
+                    : 'Công nợ'}
                 </p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Ngày Thanh Toán:</span>
+                <span className="text-gray-500">Ngày thanh toán:</span>
                 <p className="font-mono">{selected.paymentDate}</p>
               </div>
               <div>
-                <span className="text-gray-500">Người Thực Hiện:</span>
+                <span className="text-gray-500">Người thực hiện:</span>
                 <p>{selected.handler || 'Hệ thống'}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Trạng Thái:</span>
+              <span className="text-gray-500">Trạng thái:</span>
               <div>
                 <span
                   className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
@@ -291,13 +325,13 @@ export function PurchasePaymentsPage() {
                       : 'bg-red-100 text-red-800'
                   }`}
                 >
-                  {selected.status === 'DA_THANH_TOAN' ? 'Đã Thanh Toán' : selected.status === 'CHO_DUYET' ? 'Chờ Duyệt' : 'Đã Hủy'}
+                  {selected.status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : selected.status === 'CHO_DUYET' ? 'Chờ Duyệt' : 'Đã hủy'}
                 </span>
               </div>
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi Chú:</span>
+                <span className="text-gray-500">Ghi chú:</span>
                 <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
                   {selected.notes}
                 </p>
@@ -310,12 +344,12 @@ export function PurchasePaymentsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Lập Phiếu Chi Mới' : 'Sửa Thông Tin Phiếu Chi'}
+        title={modalMode === 'create' ? 'Lập phiếu chi mới' : 'Sửa thông tin phiếu chi'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Phiếu Chi *</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã phiếu chi *</label>
               <input
                 type="text"
                 value={editingItem.paymentCode || ''}
@@ -326,7 +360,7 @@ export function PurchasePaymentsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã Hóa Đơn *</label>
+              <label className="block text-xs text-gray-500 mb-1">Mã hóa đơn *</label>
               <input
                 type="text"
                 value={editingItem.invoiceCode || ''}
@@ -338,7 +372,7 @@ export function PurchasePaymentsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Nhà Cung Cấp *</label>
+            <label className="block text-xs text-gray-500 mb-1">Nhà cung cấp *</label>
             <input
               type="text"
               value={editingItem.supplierName || ''}
@@ -350,7 +384,7 @@ export function PurchasePaymentsPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Số Tiền Thanh Toán *</label>
+              <label className="block text-xs text-gray-500 mb-1">Số tiền thanh toán *</label>
               <input
                 type="number"
                 value={editingItem.amount || 0}
@@ -360,22 +394,22 @@ export function PurchasePaymentsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Hình Thức Chi *</label>
+              <label className="block text-xs text-gray-500 mb-1">Hình thức chi *</label>
               <select
                 value={editingItem.paymentMethod || 'CHUYEN_KHOAN'}
                 onChange={(e) => setEditingItem({ ...editingItem, paymentMethod: e.target.value as any })}
                 className="w-full p-2 border rounded"
               >
-                <option value="CHUYEN_KHOAN">Chuyển Khoản</option>
-                <option value="TIEN_MAT">Tiền Mặt</option>
+                <option value="CHUYEN_KHOAN">Chuyển khoản</option>
+                <option value="TIEN_MAT">Tiền mặt</option>
                 <option value="THE">Thẻ</option>
-                <option value="CONG_NO">Công Nợ</option>
+                <option value="CONG_NO">Công nợ</option>
               </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày Thanh Toán *</label>
+              <label className="block text-xs text-gray-500 mb-1">Ngày thanh toán *</label>
               <input
                 type="date"
                 value={editingItem.paymentDate || ''}
@@ -385,7 +419,7 @@ export function PurchasePaymentsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Người Thực Hiện</label>
+              <label className="block text-xs text-gray-500 mb-1">Người thực hiện</label>
               <input
                 type="text"
                 value={editingItem.handler || ''}
@@ -396,19 +430,19 @@ export function PurchasePaymentsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Trạng Trái *</label>
+            <label className="block text-xs text-gray-500 mb-1">Trạng trái *</label>
             <select
               value={editingItem.status || 'CHO_DUYET'}
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
               className="w-full p-2 border rounded"
             >
               <option value="CHO_DUYET">Chờ Duyệt</option>
-              <option value="DA_THANH_TOAN">Đã Chi Trả (Thành Công)</option>
-              <option value="DA_HUY">Đã Hủy</option>
+              <option value="DA_THANH_TOAN">Đã chi trả (thành công)</option>
+              <option value="DA_HUY">Đã hủy</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi Chú</label>
+            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
@@ -426,7 +460,7 @@ export function PurchasePaymentsPage() {
               Hủy
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu Phiếu Chi
+              Lưu phiếu chi
             </button>
           </div>
         </form>
