@@ -86,6 +86,7 @@ interface PurchaseState {
   fetchPurchaseOrders: () => Promise<void>;
   addPurchaseOrder: (po: Omit<PurchaseOrderItem, 'id'>) => Promise<void>;
   updatePurchaseOrder: (id: string, data: Partial<PurchaseOrderItem>) => Promise<void>;
+  updatePurchaseOrderStatus: (id: string, status: string) => Promise<void>;
   deletePurchaseOrder: (id: string) => Promise<void>;
 }
 
@@ -205,6 +206,15 @@ export const usePurchaseStore = create<PurchaseState>()(
       updatePurchaseOrder: async (id, data) => {
         try {
           await axiosClient.put(`/purchase/orders/${id}`, data);
+          await get().fetchPurchaseOrders();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+
+      updatePurchaseOrderStatus: async (id, status) => {
+        try {
+          await axiosClient.put(`/purchase/orders/${id}/status?status=${status}`);
           await get().fetchPurchaseOrders();
         } catch (e) {
           console.error(e);

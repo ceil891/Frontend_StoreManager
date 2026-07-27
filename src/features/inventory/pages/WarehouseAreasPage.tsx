@@ -501,7 +501,18 @@ export function WarehouseAreasPage() {
                 <select
                   value={editingItem.branchId || ''}
                   onChange={(e) => setEditingItem({ ...editingItem, branchId: e.target.value, zoneId: '', areaId: '' })}
-                              <div>
+                  className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded text-xs bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                >
+                  <option value="">-- Tất cả Chi nhánh --</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={String(b.id)}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-[10px] font-bold text-gray-550 uppercase mb-1">Thuộc Phân khu (Zone) *</label>
                 <SearchLookupModal
                   title="Chọn Phân Khu Kho (Zone)"

@@ -33,20 +33,50 @@ export function StockTransferRequestsPage() {
     fetchStockTransfers,
     addStockTransfer,
     updateStockTransfer,
-    deleteStockTransfer
+    deleteStockTransfer,
+    products,
+    fetchProducts
   } = useInventoryStore();
   const user = useAuthStore((s) => s.user);
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   useEffect(() => {
     fetchStockTransfers();
-  }, [fetchStockTransfers]);
+    fetchProducts();
+  }, [fetchStockTransfers, fetchProducts]);
 
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<any>({});
+
+  const [transferItems, setTransferItems] = useState<{ id: string; sku: string; productName: string; quantity: number; unit: string }[]>([
+    { id: '1', sku: 'SKU-001', productName: 'Cà phê hạt Gu Chốt 500g', quantity: 50, unit: 'Gói' }
+  ]);
+
+  const handleAddTransferItem = () => {
+    const p = products[0];
+    setTransferItems(prev => [
+      ...prev,
+      { id: Date.now().toString(), sku: p?.sku || 'SKU-NEW', productName: p?.name || 'Sản phẩm mới', quantity: 10, unit: 'Hộp' }
+    ]);
+  };
+
+  const handleRemoveTransferItem = (id: string) => {
+    setTransferItems(prev => prev.filter(i => i.id !== id));
+  };
+
+  const handleUpdateTransferItem = (id: string, field: string, value: any) => {
+    setTransferItems(prev => prev.map(item => {
+      if (item.id !== id) return item;
+      if (field === 'sku') {
+        const p = products.find(prod => prod.sku === value);
+        return { ...item, sku: value, productName: p?.name || item.productName };
+      }
+      return { ...item, [field]: value };
+    }));
+  };
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -303,78 +333,157 @@ export function StockTransferRequestsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo đề xuất chuyển kho mới' : 'Cập nhật & phê Duyệt phiếu chuyển'}
+        title={modalMode === 'create' ? '🔄 Tạo đề xuất chuyển kho mới' : '⚙️ Cập nhật & phê duyệt phiếu chuyển kho'}
+        width="max-w-3xl"
       >
-        <form onSubmit={handleSave} className="space-y-4 text-sm">
+        <form onSubmit={handleSave} className="space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã yêu cầu *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã yêu cầu chuyển *</label>
               <input
                 type="text"
                 value={editingItem.transferNumber || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, transferNumber: e.target.value })}
-                className="w-full p-2 border rounded font-mono bg-gray-50 dark:bg-gray-900 dark:border-gray-700"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 placeholder="STR-XXXX"
                 required
                 disabled={modalMode === 'edit'}
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày đề xuất *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày đề xuất chuyển *</label>
               <input
                 type="date"
                 value={editingItem.dispatchDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, dispatchDate: e.target.value })}
-                className="w-full p-2 border rounded dark:bg-gray-950 dark:border-gray-700"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Kho xuất (nguồn) *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Kho xuất (nguồn) *</label>
               <input
                 type="text"
                 value={editingItem.sourceHub || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, sourceHub: e.target.value })}
-                className="w-full p-2 border rounded dark:bg-gray-950 dark:border-gray-700"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Tổng kho Thủ Đức..."
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Kho nhận (đích) *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Kho nhận (đích) *</label>
               <input
                 type="text"
                 value={editingItem.destinationHub || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, destinationHub: e.target.value })}
-                className="w-full p-2 border rounded dark:bg-gray-950 dark:border-gray-700"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Chi nhánh Quận 1..."
                 required
               />
             </div>
           </div>
+
+          {/* Product Items Table for Stock Transfer */}
+          <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider text-[11px] flex items-center gap-1">
+                📦 Danh sách mặt hàng chuyển kho ({transferItems.length})
+              </span>
+              <button
+                type="button"
+                onClick={handleAddTransferItem}
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Thêm mặt hàng
+              </button>
+            </div>
+
+            <div className="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-lg bg-white dark:bg-gray-950">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-100 dark:bg-gray-900 text-gray-500 uppercase text-[10px]">
+                  <tr>
+                    <th className="p-2">Sản phẩm / SKU</th>
+                    <th className="p-2 w-28 text-center">Số lượng chuyển</th>
+                    <th className="p-2 w-24">Đơn vị</th>
+                    <th className="p-2 w-10 text-center">Xóa</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                  {transferItems.map((item) => (
+                    <tr key={item.id}>
+                      <td className="p-2">
+                        <select
+                          value={item.sku}
+                          onChange={(e) => handleUpdateTransferItem(item.id, 'sku', e.target.value)}
+                          className="w-full p-1 border rounded bg-white dark:bg-gray-900 text-xs font-medium"
+                        >
+                          {products.map(p => (
+                            <option key={p.id} value={p.sku}>{p.sku} - {p.name}</option>
+                          ))}
+                          {!products.some(p => p.sku === item.sku) && (
+                            <option value={item.sku}>{item.sku} - {item.productName}</option>
+                          )}
+                        </select>
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.quantity}
+                          onChange={(e) => handleUpdateTransferItem(item.id, 'quantity', parseInt(e.target.value) || 0)}
+                          className="w-full p-1 border rounded text-center font-bold"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          value={item.unit}
+                          onChange={(e) => handleUpdateTransferItem(item.id, 'unit', e.target.value)}
+                          className="w-full p-1 border rounded text-center"
+                        />
+                      </td>
+                      <td className="p-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTransferItem(item.id)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Người yêu cầu *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Người đề xuất *</label>
               <input
                 type="text"
                 value={editingItem.requestedBy || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, requestedBy: e.target.value })}
-                className="w-full p-2 border rounded dark:bg-gray-950 dark:border-gray-700"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Trạng thái xử lý</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Trạng thái xử lý</label>
               <select
                 value={editingItem.status || 'PENDING_APPROVAL'}
                 onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-                className="w-full p-2 border rounded dark:bg-gray-950 dark:border-gray-700 disabled:bg-gray-100 dark:disabled:bg-gray-900 disabled:cursor-not-allowed"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-900 disabled:cursor-not-allowed"
                 disabled={!isSuperAdmin}
               >
-                <option value="PENDING_APPROVAL">Chờ phê Duyệt</option>
-                <option value="APPROVED">Đã phê Duyệt (Chỉ Admin)</option>
-                <option value="REJECTED">Bị từ chối (Chỉ Admin)</option>
-                <option value="CANCELLED">Hủy</option>
+                <option value="PENDING_APPROVAL">⏳ Chờ phê Duyệt</option>
+                <option value="APPROVED">🟢 Đã phê Duyệt (Chỉ Admin)</option>
+                <option value="REJECTED">🔴 Bị từ chối (Chỉ Admin)</option>
+                <option value="CANCELLED">⚪ Hủy phiếu</option>
               </select>
               {!isSuperAdmin && (
                 <p className="text-[10px] text-red-500 mt-1">Chỉ Super Admin mới có quyền duyệt/từ chối.</p>
@@ -382,11 +491,11 @@ export function StockTransferRequestsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Lý do đề xuất chuyển kho</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Lý do đề xuất chuyển kho</label>
             <textarea
               value={editingItem.reason || ''}
               onChange={(e) => setEditingItem({ ...editingItem, reason: e.target.value })}
-              className="w-full p-2 border rounded dark:bg-gray-950 dark:border-gray-700"
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
               rows={2}
               placeholder="Ghi rõ lý do như bù tồn kho, sự kiện khuyến mãi..."
             />

@@ -37,7 +37,7 @@ export function SaleOrdersPage() {
   const { saleOrders: data, addSaleOrder, updateSaleOrder, deleteSaleOrder, fetchSaleOrders } = useSalesStore();
 
   const customers = useCrmStore((s) => s.customers);
-  const customerLabel = (id: string) => resolveCustomerName(id, customers);
+  const customerLabel = (id: string, name?: string) => resolveCustomerName(id, customers, name);
   const canManage = usePermission('sales:orders:create');
   const storeOrders = useMemo(
     () => data.filter((o) => o.origin !== 'ONLINE'),
@@ -276,7 +276,7 @@ export function SaleOrdersPage() {
       {
         id: 'customerId',
         header: 'Khách hàng',
-        cell: ({ row }) => <span className="text-sm font-medium">{customerLabel(row.original.customerId)}</span>,
+        cell: ({ row }) => <span className="text-sm font-medium">{customerLabel(row.original.customerId, row.original.customerName)}</span>,
       },
       {
         accessorKey: 'createdByName',
@@ -512,7 +512,7 @@ export function SaleOrdersPage() {
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Khách hàng
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{customerLabel(selectedOrder.customerId)}</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{customerLabel(selectedOrder.customerId, selectedOrder.customerName)}</p>
                 <p className="text-[10px] font-mono text-gray-400">ID: {selectedOrder.customerId}</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">

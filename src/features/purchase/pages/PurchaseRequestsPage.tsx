@@ -29,6 +29,31 @@ export function PurchaseRequestsPage() {
   const [editingItem, setEditingItem] = useState<Partial<PurchaseRequestItem>>({});
   const [isLoading, setIsLoading] = useState(false);
 
+  // RFQ Product Line Items State
+  const [rfqItems, setRfqItems] = useState<{ id: string; itemName: string; qty: number; unit: string; estimatedPrice: number }[]>([
+    { id: '1', itemName: 'Máy in hóa đơn nhiệt Xprinter Q200', qty: 2, unit: 'Cái', estimatedPrice: 1850000 }
+  ]);
+
+  const updateRfqItemsAndTotal = (newItems: typeof rfqItems) => {
+    setRfqItems(newItems);
+    const total = newItems.reduce((sum, i) => sum + ((Number(i.qty) || 0) * (Number(i.estimatedPrice) || 0)), 0);
+    setEditingItem(prev => ({ ...prev, estimatedTotal: total }));
+  };
+
+  const handleAddRfqItem = () => {
+    const newItem = { id: Date.now().toString(), itemName: 'Thiết bị / Vật tư mới', qty: 1, unit: 'Cái', estimatedPrice: 500000 };
+    updateRfqItemsAndTotal([...rfqItems, newItem]);
+  };
+
+  const handleRemoveRfqItem = (id: string) => {
+    updateRfqItemsAndTotal(rfqItems.filter(i => i.id !== id));
+  };
+
+  const handleUpdateRfqItem = (id: string, field: string, value: any) => {
+    const updated = rfqItems.map(item => item.id === id ? { ...item, [field]: value } : item);
+    updateRfqItemsAndTotal(updated);
+  };
+
   const fetchRequests = async () => {
     try {
       setIsLoading(true);
@@ -370,30 +395,30 @@ export function PurchaseRequestsPage() {
         )}
       </Drawer>
 
-      {/* Modal tạo phiếu yêu cầu mua hàng */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Tạo phiếu yêu cầu mua hàng mới"
+        title="📑 Tạo phiếu gửi yêu cầu báo giá RFQ / Yêu cầu mua hàng"
+        width="max-w-3xl"
       >
-        <form onSubmit={handleSave} className="space-y-4">
+        <form onSubmit={handleSave} className="space-y-4 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã yêu cầu (Hệ thống) *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã yêu cầu (RF/PR) *</label>
               <input
                 type="text"
                 value={editingItem.requestCode || ''}
                 readOnly
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-mono text-sm"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày lập đề xuất *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày lập đề xuất *</label>
               <input
                 type="date"
                 value={editingItem.requestDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, requestDate: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
@@ -401,11 +426,11 @@ export function PurchaseRequestsPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Bộ phận đề xuất *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bộ phận đề xuất *</label>
               <select
                 value={editingItem.department || 'Bộ phận Kho vận'}
                 onChange={(e) => setEditingItem({ ...editingItem, department: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
               >
                 <option value="Bộ phận Kho vận">Bộ phận Kho vận</option>
                 <option value="Bộ phận Hành chính nhân sự">Bộ phận Hành chính nhân sự</option>
@@ -415,37 +440,117 @@ export function PurchaseRequestsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người đề xuất *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Người đề xuất *</label>
               <input
                 type="text"
                 value={editingItem.proposedBy || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, proposedBy: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                placeholder="Nhập tên người đề cử..."
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Nhập tên người đề xuất..."
                 required
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng kinh phí dự toán (VND) *</label>
-            <input
-              type="number"
-              value={editingItem.estimatedTotal || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, estimatedTotal: Number(e.target.value) })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              placeholder="Nhập tổng giá trị dự kiến..."
-              required
-            />
+          {/* Section Bảng Vật tư / Sản phẩm đề xuất RFQ */}
+          <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider text-[11px] flex items-center gap-1">
+                📦 Danh sách thiết bị / vật tư cần báo giá ({rfqItems.length})
+              </span>
+              <button
+                type="button"
+                onClick={handleAddRfqItem}
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Thêm vật tư
+              </button>
+            </div>
+
+            <div className="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-lg bg-white dark:bg-gray-950">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-100 dark:bg-gray-900 text-gray-500 uppercase text-[10px]">
+                  <tr>
+                    <th className="p-2">Tên sản phẩm / Thiết bị</th>
+                    <th className="p-2 w-24 text-center">Số lượng</th>
+                    <th className="p-2 w-24">Đơn vị</th>
+                    <th className="p-2 w-32 text-right">Đơn giá dự kiến</th>
+                    <th className="p-2 w-32 text-right">Thành tiền</th>
+                    <th className="p-2 w-10 text-center">Xóa</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                  {rfqItems.map((item) => (
+                    <tr key={item.id}>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          value={item.itemName}
+                          onChange={(e) => handleUpdateRfqItem(item.id, 'itemName', e.target.value)}
+                          className="w-full p-1 border rounded bg-white dark:bg-gray-900 text-xs"
+                          placeholder="Tên mặt hàng..."
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.qty}
+                          onChange={(e) => handleUpdateRfqItem(item.id, 'qty', parseInt(e.target.value) || 0)}
+                          className="w-full p-1 border rounded text-center font-bold"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          value={item.unit}
+                          onChange={(e) => handleUpdateRfqItem(item.id, 'unit', e.target.value)}
+                          className="w-full p-1 border rounded text-center"
+                        />
+                      </td>
+                      <td className="p-2 text-right font-mono">
+                        <input
+                          type="number"
+                          value={item.estimatedPrice}
+                          onChange={(e) => handleUpdateRfqItem(item.id, 'estimatedPrice', parseInt(e.target.value) || 0)}
+                          className="w-full p-1 border rounded text-right font-mono"
+                        />
+                      </td>
+                      <td className="p-2 text-right font-bold text-emerald-600 font-mono">
+                        {((item.qty || 0) * (item.estimatedPrice || 0)).toLocaleString('vi-VN')} ₫
+                      </td>
+                      <td className="p-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRfqItem(item.id)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-950/30 p-2.5 rounded-lg border border-emerald-200 dark:border-emerald-900">
+              <span className="font-bold text-emerald-800 dark:text-emerald-300">
+                Kinh phí dự toán tự động:
+              </span>
+              <span className="font-bold text-emerald-800 dark:text-emerald-300">
+                <span className="font-mono text-base text-emerald-600 font-extrabold">{(editingItem.estimatedTotal || 0).toLocaleString('vi-VN')} ₫</span>
+              </span>
+            </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lý do & mục đích đề xuất mua hàng *</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Lý do & mục đích đề xuất mua hàng *</label>
             <textarea
-              rows={3}
+              rows={2}
               value={editingItem.reason || ''}
               onChange={(e) => setEditingItem({ ...editingItem, reason: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
               placeholder="Giải trình cụ thể nhu cầu sử dụng..."
               required
             />

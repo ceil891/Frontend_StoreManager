@@ -6,9 +6,15 @@ export type RefundMethod = 'CASH' | 'BANK_TRANSFER' | 'STORE_CREDIT' | 'ORIGINAL
 
 export function resolveCustomerName(
   customerId?: any,
-  customers?: CustomerProfile[]
+  customers?: CustomerProfile[],
+  customerName?: string
 ): string {
-  if (!customerId) return 'Khách lẻ';
+  if (customerName && customerName !== 'Khách lẻ' && !customerName.startsWith('CUST-POS-')) {
+    return customerName;
+  }
+  if (!customerId || customerId === WALK_IN_CUSTOMER_ID || customerId === 'walk-in') {
+    return customerName || 'Khách vãng lai';
+  }
 
   if (typeof customerId === 'object' && customerId !== null) {
     if (customerId.name && typeof customerId.name === 'string') {
@@ -19,18 +25,18 @@ export function resolveCustomerName(
     }
     if (customerId.id) customerId = String(customerId.id);
     else if (customerId._id) customerId = String(customerId._id);
-    else return 'Khách lẻ';
+    else return 'Khách vãng lai';
   }
 
   const idStr = String(customerId);
-  if (idStr === WALK_IN_CUSTOMER_ID) return 'Khách lẻ';
+  if (idStr === WALK_IN_CUSTOMER_ID) return 'Khách vãng lai';
 
   if (Array.isArray(customers)) {
-    const found = customers.find((c) => c && String(c.id) === idStr);
+    const found = customers.find((c) => c && (String(c.id) === idStr || c.customerCode === idStr));
     if (found?.name) return String(found.name);
   }
 
-  return idStr;
+  return customerName || idStr;
 }
 
 export function calcTotalAmount(parts: {

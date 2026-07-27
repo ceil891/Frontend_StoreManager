@@ -317,9 +317,7 @@ export function SalesPaymentsPage() {
             {selected.notes && (
               <div>
                 <span className="text-gray-500">Ghi chú:</span>
-                <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
-                  {selected.notes}
-                </p>
+                <p className="mt-1 font-mono text-gray-800 dark:text-gray-200">{selected.notes}</p>
               </div>
             )}
           </div>
@@ -329,111 +327,136 @@ export function SalesPaymentsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Lập phiếu thu mới' : 'Sửa thông tin phiếu thu'}
+        title={modalMode === 'create' ? '💵 Tạo phiếu thu thanh toán đơn bán mới' : '⚙️ Sửa phiếu thu thanh toán'}
+        width="max-w-2xl"
       >
-        <form onSubmit={handleSave} className="space-y-4">
+        <form onSubmit={handleSave} className="space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã phiếu thu *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã phiếu thu *</label>
+                {modalMode === 'create' && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem({ ...editingItem, paymentCode: `PAY-SO-${Date.now().toString().slice(-4)}` })}
+                    className="text-[10px] text-emerald-600 hover:underline font-bold"
+                  >
+                    ⚡ Sinh mã
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingItem.paymentCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, paymentCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono bg-gray-50"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
-                disabled
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã hóa đơn *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã Hóa đơn / Đơn SO liên kết *</label>
               <input
                 type="text"
                 value={editingItem.invoiceCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, invoiceCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
-                placeholder="INV-2026-XXX"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="INV-2026-XXX hoặc SO-XXX"
                 required
               />
             </div>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Tên khách hàng *</label>
-            <input
-              type="text"
-              value={editingItem.customerName || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, customerName: e.target.value })}
-              className="w-full p-2 border rounded"
-              placeholder="Khách thanh toán"
-              required
-            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Số tiền thu *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tên khách hàng nộp tiền *</label>
               <input
-                type="number"
-                value={editingItem.amount || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, amount: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                type="text"
+                value={editingItem.customerName || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, customerName: e.target.value })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Nguyễn Văn A / Công ty X..."
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Phương thức thanh toán *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Phân loại khoản thu *</label>
               <select
-                value={editingItem.paymentMethod || 'CHUYEN_KHOAN'}
-                onChange={(e) => setEditingItem({ ...editingItem, paymentMethod: e.target.value as any })}
-                className="w-full p-2 border rounded"
+                value={(editingItem as any).receiptCategory || 'SALES_REVENUE'}
+                onChange={(e) => setEditingItem({ ...editingItem, receiptCategory: e.target.value } as any)}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
               >
-                <option value="CHUYEN_KHOAN">Chuyển khoản</option>
-                <option value="TIEN_MAT">Tiền mặt</option>
-                <option value="THE">Thẻ (Visa/Master)</option>
-                <option value="VI_DIEN_TU">Ví điện tử (Momo/VNPay)</option>
+                <option value="SALES_REVENUE">Doanh thu bán hàng</option>
+                <option value="DEBT_COLLECTION">Thu hồi công nợ khách hàng</option>
+                <option value="DEPOSIT">Tiền đặt cọc đơn hàng</option>
+                <option value="OTHER">Khoản thu khác</option>
               </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày thu *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Số tiền thu (VND) *</label>
               <input
-                type="date"
-                value={editingItem.paymentDate || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, paymentDate: e.target.value })}
-                className="w-full p-2 border rounded"
+                type="number"
+                value={editingItem.amount || 0}
+                onChange={(e) => setEditingItem({ ...editingItem, amount: Number(e.target.value) })}
+                className="w-full p-2 border border-emerald-300 dark:border-emerald-700 rounded font-mono bg-white dark:bg-gray-900 font-bold text-emerald-600 text-sm"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Người thu / nhân viên</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Phương thức thanh toán *</label>
+              <select
+                value={editingItem.paymentMethod || 'CHUYEN_KHOAN'}
+                onChange={(e) => setEditingItem({ ...editingItem, paymentMethod: e.target.value as any })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              >
+                <option value="CHUYEN_KHOAN">🏦 Chuyển khoản ngân hàng</option>
+                <option value="TIEN_MAT">💵 Tiền mặt tại quầy</option>
+                <option value="THE">💳 Thẻ (Visa/Master/ATM)</option>
+                <option value="VI_DIEN_TU">📲 Ví điện tử (Momo/VNPay/ZaloPay)</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày hạch toán thu *</label>
+              <input
+                type="date"
+                value={editingItem.paymentDate || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, paymentDate: e.target.value })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Thủ quỹ / Nhân viên thu tiền</label>
               <input
                 type="text"
                 value={editingItem.receiver || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, receiver: e.target.value })}
-                className="w-full p-2 border rounded"
-                placeholder="Tên nhân viên lập phiếu"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Tên nhân viên thu tiền..."
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Trạng thái *</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Trạng thái hạch toán *</label>
             <select
               value={editingItem.status || 'CHO_DUYET'}
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-              className="w-full p-2 border rounded"
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
             >
-              <option value="CHO_DUYET">Chờ Duyệt</option>
-              <option value="DA_THU">Đã Thu (Xác nhận tài khoản)</option>
-              <option value="DA_HUY">Đã hủy</option>
+              <option value="CHO_DUYET">⏳ Chờ Kế toán duyệt</option>
+              <option value="DA_THU">🟢 Đã Thu (Tiền đã vào tài khoản/quỹ)</option>
+              <option value="DA_HUY">🔴 Đã hủy phiếu thu</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ghi chú & chứng từ kèm theo</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border rounded"
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
               rows={3}
-              placeholder="Chi tiết giao dịch..."
             />
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t">

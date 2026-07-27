@@ -224,30 +224,42 @@ export function StorageAreasPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm bãi kho mới' : 'Sửa bãi kho'}
+        title={modalMode === 'create' ? '📦 Thêm bãi kho (Storage Area) mới' : '⚙️ Sửa thông tin bãi kho'}
+        width="max-w-xl"
       >
-        <form onSubmit={handleSave} className="space-y-4">
+        <form onSubmit={handleSave} className="space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã bãi kho *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã bãi kho *</label>
+                {modalMode === 'create' && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem({ ...editingItem, areaCode: `AREA-${Math.floor(100 + Math.random() * 900)}` })}
+                    className="text-[10px] text-emerald-600 hover:underline font-bold"
+                  >
+                    ⚡ Sinh mã
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingItem.areaCode || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, areaCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
-                placeholder="A1, A2, B1..."
+                onChange={(e) => setEditingItem({ ...editingItem, areaCode: e.target.value.toUpperCase() })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Ví dụ: AREA-A1, AREA-B2..."
                 required
                 disabled={modalMode === 'edit'}
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tên bãi kho *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tên bãi kho *</label>
               <input
                 type="text"
                 value={editingItem.areaName || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, areaName: e.target.value })}
-                className="w-full p-2 border rounded"
-                placeholder="Ví dụ: Bãi A1, Khu B..."
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Ví dụ: Bãi hàng khô A1, Khu nguyên liệu B..."
                 required
               />
             </div>
@@ -255,11 +267,11 @@ export function StorageAreasPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Phân khu (zone) *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Phân khu (zone) *</label>
               <select
                 value={editingItem.zoneId || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, zoneId: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               >
                 <option value="">-- Chọn zone --</option>
@@ -271,26 +283,52 @@ export function StorageAreasPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Trạng thái *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Trạng thái *</label>
               <select
                 value={editingItem.isActive === false ? 'false' : 'true'}
                 onChange={(e) => setEditingItem({ ...editingItem, isActive: e.target.value === 'true' })}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
               >
-                <option value="true">Hoạt động</option>
-                <option value="false">Tạm khóa</option>
+                <option value="true">🟢 Hoạt động</option>
+                <option value="false">🔴 Tạm khóa</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Diện tích bãi (m²)</label>
+              <input
+                type="number"
+                value={(editingItem as any).areaSizeM2 || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, areaSizeM2: Number(e.target.value) } as any)}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Ví dụ: 150"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Điều kiện bảo quản</label>
+              <select
+                value={(editingItem as any).storageCondition || 'NORMAL'}
+                onChange={(e) => setEditingItem({ ...editingItem, storageCondition: e.target.value } as any)}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              >
+                <option value="NORMAL">Nhiệt độ thường (15 - 25°C)</option>
+                <option value="COLD">Kho lạnh (0 - 5°C)</option>
+                <option value="FROZEN">Kho đông (-18°C)</option>
+                <option value="HAZMAT">Hóa chất / Hàng nguy hiểm</option>
               </select>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Mô tả / Ghi Chú</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mô tả / Ghi Chú vận hành</label>
             <textarea
               value={editingItem.description || ''}
               onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
-              className="w-full p-2 border rounded"
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
               rows={3}
-              placeholder="Ghi chú vận hành, mặt hàng lưu trữ chính..."
+              placeholder="Ghi chú vận hành, loại hàng hóa lưu trữ tối ưu..."
             />
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t">

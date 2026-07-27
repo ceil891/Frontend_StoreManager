@@ -324,9 +324,7 @@ export function DeliveryListsPage() {
             {selected.notes && (
               <div>
                 <span className="text-gray-500">Ghi chú hành trình:</span>
-                <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
-                  {selected.notes}
-                </p>
+                <p className="mt-1 font-mono text-gray-800 dark:text-gray-200">{selected.notes}</p>
               </div>
             )}
           </div>
@@ -336,111 +334,162 @@ export function DeliveryListsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo vận đơn mới' : 'Sửa thông tin vận đơn'}
+        title={modalMode === 'create' ? '🚚 Tạo vận đơn giao hàng mới' : '⚙️ Cấu hình thông tin vận đơn'}
+        width="max-w-2xl"
       >
-        <form onSubmit={handleSave} className="space-y-4">
+        <form onSubmit={handleSave} className="space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã vận đơn *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã vận đơn *</label>
+                {modalMode === 'create' && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem({ ...editingItem, waybillCode: `WB-${Date.now().toString().slice(-6)}` })}
+                    className="text-[10px] text-emerald-600 hover:underline font-bold"
+                  >
+                    ⚡ Sinh mã
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingItem.waybillCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, waybillCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono bg-gray-50"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
-                disabled
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã đơn hàng SO *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã đơn hàng (SO) *</label>
               <input
                 type="text"
                 value={editingItem.orderCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, orderCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 placeholder="SO-2026-XXX"
                 required
               />
             </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Tên khách hàng *</label>
-            <input
-              type="text"
-              value={editingItem.customerName || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, customerName: e.target.value })}
-              className="w-full p-2 border rounded"
-              placeholder="Khách mua hàng"
-              required
-            />
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tên người nhận *</label>
+              <input
+                type="text"
+                value={editingItem.customerName || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, customerName: e.target.value })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Họ tên người nhận"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Số điện thoại nhận hàng</label>
+              <input
+                type="text"
+                value={(editingItem as any).recipientPhone || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, recipientPhone: e.target.value } as any)}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="0912345678"
+              />
+            </div>
           </div>
+
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Địa chỉ nhận hàng *</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Địa chỉ giao hàng đầy đủ *</label>
             <input
               type="text"
               value={editingItem.shippingAddress || ''}
               onChange={(e) => setEditingItem({ ...editingItem, shippingAddress: e.target.value })}
-              className="w-full p-2 border rounded"
-              placeholder="Địa chỉ giao hàng đầy đủ"
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              placeholder="Số nhà, Đường, Phường/Xã, Quận/Huyện, Tỉnh/TP..."
               required
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+
+          <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Đơn vị vận chuyển *</label>
-              <input
-                type="text"
-                value={editingItem.carrierName || ''}
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Đơn vị vận chuyển *</label>
+              <select
+                value={editingItem.carrierName || 'Giao Hàng Tiết Kiệm (GHTK)'}
                 onChange={(e) => setEditingItem({ ...editingItem, carrierName: e.target.value })}
-                className="w-full p-2 border rounded"
-                placeholder="GHTK, GHN, Viettel Post, v.v."
-                required
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              >
+                <option value="Giao Hàng Tiết Kiệm (GHTK)">Giao Hàng Tiết Kiệm (GHTK)</option>
+                <option value="Giao Hàng Nhanh (GHN)">Giao Hàng Nhanh (GHN)</option>
+                <option value="Viettel Post">Viettel Post</option>
+                <option value="Shopee Express (SPX)">Shopee Express (SPX)</option>
+                <option value="Vận chuyển nội bộ">Vận chuyển nội bộ (Shipper riêng)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Trọng lượng (kg)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={(editingItem as any).weightKg || 1}
+                onChange={(e) => setEditingItem({ ...editingItem, weightKg: Number(e.target.value) } as any)}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày tạo vận đơn *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiền thu hộ COD (VND)</label>
+              <input
+                type="number"
+                value={(editingItem as any).codAmount || 0}
+                onChange={(e) => setEditingItem({ ...editingItem, codAmount: Number(e.target.value) } as any)}
+                className="w-full p-2 border border-emerald-300 dark:border-emerald-700 rounded font-mono bg-white dark:bg-gray-900 text-emerald-600 font-bold"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày tạo vận đơn *</label>
               <input
                 type="date"
                 value={editingItem.createdDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, createdDate: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày giao dự kiến *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày giao dự kiến *</label>
               <input
                 type="date"
                 value={editingItem.expectedDeliveryDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, expectedDeliveryDate: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Trạng thái *</label>
-              <select
-                value={editingItem.status || 'CHO_GIAO'}
-                onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-                className="w-full p-2 border rounded"
-              >
-                <option value="CHO_GIAO">Chờ giao</option>
-                <option value="DANG_GIAO">Đang giao</option>
-                <option value="DA_GIAO">Đã giao</option>
-                <option value="THAT_BAI">Giao thất bại</option>
-              </select>
-            </div>
           </div>
+
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi chú hành trình</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Trạng thái vận chuyển *</label>
+            <select
+              value={editingItem.status || 'CHO_GIAO'}
+              onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+            >
+              <option value="CHO_GIAO">📦 Chờ giao hàng cho ĐVVC</option>
+              <option value="DANG_GIAO">🚚 Đang vận chuyển trên đường</option>
+              <option value="DA_GIAO">🟢 Giao hàng thành công</option>
+              <option value="THAT_BAI">🔴 Giao hàng thất bại / Chờ chuyển hoàn</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ghi chú vận tải</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border rounded"
-              rows={3}
-              placeholder="Ghi chú chi tiết..."
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              rows={2}
+              placeholder="Yêu cầu giao giờ hành chính, cho xem hàng trước..."
             />
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t">

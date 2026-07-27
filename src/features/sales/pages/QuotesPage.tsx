@@ -373,8 +373,8 @@ export function QuotesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo báo giá mới' : 'Cập nhật báo giá'}
-        width="max-w-xl"
+        title={modalMode === 'create' ? '📋 Tạo báo giá bán hàng mới' : '⚙️ Cập nhật báo giá'}
+        width="max-w-4xl"
       >
         <form onSubmit={handleSaveQuote} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -393,12 +393,16 @@ export function QuotesPage() {
               <SearchLookupModal
                 title="Chọn Khách Hàng Báo Giá"
                 iconType="user"
-                placeholder="Chọn khách hàng..."
+                placeholder="Chọn khách hàng CRM..."
                 value={editingQuote.customerId}
-                options={[
+                options={customers.length > 0 ? customers.map(c => ({
+                  id: String(c.id),
+                  code: (c as any).code || (c as any).customerCode || `CUST-${c.id}`,
+                  name: (c as any).fullName || (c as any).name || 'Khách hàng',
+                  subtitle: `SĐT: ${(c as any).phone || 'N/A'}`
+                })) : [
                   { id: 'CUST-001', code: 'CUST-001', name: 'Nguyễn Văn An', subtitle: 'SĐT: 0901234567 - VIP Gold' },
                   { id: 'CUST-002', code: 'CUST-002', name: 'Công ty TNHH Minh Phát', subtitle: 'MST: 0312456789 - Khách DN' },
-                  { id: 'CUST-003', code: 'CUST-003', name: 'Trần Thị Bình', subtitle: 'SĐT: 0918889999 - Thường' },
                 ]}
                 onChange={(val) => setEditingQuote(prev => ({ ...prev, customerId: val }))}
               />

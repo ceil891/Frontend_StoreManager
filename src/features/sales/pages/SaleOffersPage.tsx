@@ -1,10 +1,12 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, Clock } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, Clock, Printer } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { PrintInvoiceModal, type PrintInvoiceData } from '@/shared/components/ui/PrintInvoiceModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useSalesStore } from '@/features/sales/store/salesStore';
+import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 
@@ -22,18 +24,32 @@ interface SaleOfferRecord {
 
 export function SaleOffersPage() {
   const { quotes, fetchQuotes, addQuote, updateQuote, deleteQuote } = useSalesStore();
+  const { products, fetchProducts } = useInventoryStore();
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<SaleOfferRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<SaleOfferRecord>>({});
+  const [printData, setPrintData] = useState<PrintInvoiceData | null>(null);
+
+  // Product Line Items for Offer Creation Modal
+  const [offerItems, setOfferItems] = useState<{
+    id: string;
+    sku: string;
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    discount: number;
+  }>([
+    { id: '1', sku: 'SKU-COFFEE-01', productName: 'Cà Phê Arabica Rang Xay 250g', quantity: 10, unitPrice: 120000, discount: 50000 }
+  ]);
 
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       try {
-        await fetchQuotes();
+        await Promise.all([fetchQuotes(), fetchProducts()]);
       } catch (err) {
         console.error(err);
         toast.error('Không thể tải danh sách báo giá');
@@ -42,7 +58,50 @@ export function SaleOffersPage() {
       }
     };
     load();
-  }, [fetchQuotes]);
+  }, [fetchQuotes, fetchProducts]);
+
+  const updateOfferItemsAndTotal = (newItems: typeof offerItems) => {
+    setOfferItems(newItems);
+    const totalAmount = newItems.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0) - (Number(item.discount) || 0)), 0);
+    setEditingItem(prev => ({
+      ...prev,
+      totalAmount: Math.max(0, totalAmount)
+    }));
+  };
+
+  const handleAddOfferItem = () => {
+    const p = products[0];
+    const newItem = {
+      id: Date.now().toString(),
+      sku: p?.sku || 'SKU-NEW',
+      productName: p?.name || 'Sản phẩm mới',
+      quantity: 1,
+      unitPrice: p?.price || 100000,
+      discount: 0
+    };
+    updateOfferItemsAndTotal([...offerItems, newItem]);
+  };
+
+  const handleRemoveOfferItem = (id: string) => {
+    updateOfferItemsAndTotal(offerItems.filter(i => i.id !== id));
+  };
+
+  const handleUpdateOfferItem = (id: string, field: string, value: any) => {
+    const updated = offerItems.map(item => {
+      if (item.id !== id) return item;
+      if (field === 'sku') {
+        const p = products.find(prod => prod.sku === value);
+        return {
+          ...item,
+          sku: value,
+          productName: p?.name || item.productName,
+          unitPrice: p?.price || item.unitPrice
+        };
+      }
+      return { ...item, [field]: value };
+    });
+    updateOfferItemsAndTotal(updated);
+  };
 
   const data = useMemo<SaleOfferRecord[]>(() => {
     return quotes.map((q) => ({
@@ -111,7 +170,15 @@ export function SaleOffersPage() {
         status: apiStatus as any,
         salesRep: editingItem.salesperson || '',
         notes: editingItem.notes || '',
-        itemsCount: 1,
+        itemsCount: offerItems.length,
+        orderLines: offerItems.map(i => ({
+          id: i.id,
+          sku: i.sku,
+          productName: i.productName,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          lineTotal: (i.quantity * i.unitPrice) - i.discount
+        }))
       };
 
       if (modalMode === 'create') {
@@ -144,6 +211,30 @@ export function SaleOffersPage() {
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
+  };
+
+  const handlePrintOffer = (record: SaleOfferRecord) => {
+    setPrintData({
+      documentTitle: 'BẢNG BÁO GIÁ SẢN PHẨM & DỊCH VỤ',
+      code: record.offerCode,
+      date: record.offerDate,
+      dueDate: record.expiryDate,
+      customerOrSupplierName: record.customerName,
+      branchName: 'Phòng Kinh Doanh - RetailHub HQ',
+      createdByName: record.salesperson || 'Nhân viên kinh doanh',
+      notes: record.notes || 'Báo giá có hiệu lực trong vòng 14 ngày kể từ ngày ban hành.',
+      items: offerItems.map(i => ({
+        sku: i.sku,
+        name: i.productName,
+        quantity: i.quantity,
+        price: i.unitPrice,
+        discount: i.discount,
+        total: (i.quantity * i.unitPrice) - i.discount
+      })),
+      subTotal: record.totalAmount,
+      totalAmount: record.totalAmount,
+      statusLabel: record.status === 'DA_CHAP_NHAN' ? 'Đã chấp nhận' : record.status === 'HET_HAN' ? 'Hết hạn' : 'Chờ duyệt'
+    });
   };
 
   const columns = useMemo<ColumnDef<SaleOfferRecord>[]>(
@@ -198,6 +289,13 @@ export function SaleOffersPage() {
         header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => handlePrintOffer(row.original)}
+              className="p-1 text-gray-500 hover:text-emerald-600 rounded"
+              title="In báo giá / Tải PDF"
+            >
+              <Printer className="w-4 h-4 text-emerald-600" />
+            </button>
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
@@ -337,97 +435,198 @@ export function SaleOffersPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo báo giá bán hàng mới' : 'Sửa báo giá'}
+        title={modalMode === 'create' ? '📋 Tạo báo giá bán hàng mới' : '⚙️ Chỉnh sửa báo giá bán hàng'}
+        width="max-w-4xl"
       >
-        <form onSubmit={handleSave} className="space-y-4">
+        <form onSubmit={handleSave} className="space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã báo giá *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã báo giá *</label>
+                {modalMode === 'create' && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem({ ...editingItem, offerCode: `OF-2026-${Date.now().toString().slice(-4)}` })}
+                    className="text-[10px] text-emerald-600 hover:underline font-bold"
+                  >
+                    ⚡ Sinh mã
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingItem.offerCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, offerCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono bg-gray-50"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
-                disabled
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Nhân viên kinh doanh *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Nhân viên kinh doanh phụ trách *</label>
               <input
                 type="text"
                 value={editingItem.salesperson || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, salesperson: e.target.value })}
-                className="w-full p-2 border rounded"
-                placeholder="Tên nhân viên"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Nhập tên nhân viên Sale..."
                 required
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Tên khách hàng *</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tên khách hàng / Công ty *</label>
             <input
               type="text"
               value={editingItem.customerName || ''}
               onChange={(e) => setEditingItem({ ...editingItem, customerName: e.target.value })}
-              className="w-full p-2 border rounded"
-              placeholder="Công ty, tổ chức hoặc khách mua sỉ"
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              placeholder="Công ty, tổ chức hoặc khách mua sỉ..."
               required
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày báo giá *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày lập báo giá *</label>
               <input
                 type="date"
                 value={editingItem.offerDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, offerDate: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Hạn hiệu lực báo giá *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Hạn hiệu lực báo giá *</label>
               <input
                 type="date"
                 value={editingItem.expiryDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, expiryDate: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Tổng giá trị dự kiến (VND) *</label>
-            <input
-              type="number"
-              value={editingItem.totalAmount || 0}
-              onChange={(e) => setEditingItem({ ...editingItem, totalAmount: Number(e.target.value) })}
-              className="w-full p-2 border rounded font-mono"
-              required
-            />
+
+          {/* SECTION BẢNG CHỌN SẢN PHẨM BÁO GIÁ */}
+          <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider text-[11px] flex items-center gap-1">
+                📦 Danh sách sản phẩm báo giá ({offerItems.length})
+              </span>
+              <button
+                type="button"
+                onClick={handleAddOfferItem}
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Thêm sản phẩm
+              </button>
+            </div>
+
+            <div className="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-lg bg-white dark:bg-gray-950">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-100 dark:bg-gray-900 text-gray-500 uppercase text-[10px]">
+                  <tr>
+                    <th className="p-2">Sản phẩm / SKU</th>
+                    <th className="p-2 w-24 text-center">Số lượng</th>
+                    <th className="p-2 w-32 text-right">Đơn giá chào</th>
+                    <th className="p-2 w-28 text-right">Chiết khấu</th>
+                    <th className="p-2 w-32 text-right">Thành tiền</th>
+                    <th className="p-2 w-10 text-center">Xóa</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                  {offerItems.map((item) => (
+                    <tr key={item.id}>
+                      <td className="p-2">
+                        <select
+                          value={item.sku}
+                          onChange={(e) => handleUpdateOfferItem(item.id, 'sku', e.target.value)}
+                          className="w-full p-1 border rounded bg-white dark:bg-gray-900 text-xs font-medium"
+                        >
+                          {products.map(p => (
+                            <option key={p.id} value={p.sku}>{p.sku} - {p.name}</option>
+                          ))}
+                          {!products.some(p => p.sku === item.sku) && (
+                            <option value={item.sku}>{item.sku} - {item.productName}</option>
+                          )}
+                        </select>
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.quantity}
+                          onChange={(e) => handleUpdateOfferItem(item.id, 'quantity', parseInt(e.target.value) || 0)}
+                          className="w-full p-1 border rounded text-center font-bold"
+                        />
+                      </td>
+                      <td className="p-2 text-right font-mono">
+                        <input
+                          type="number"
+                          value={item.unitPrice}
+                          onChange={(e) => handleUpdateOfferItem(item.id, 'unitPrice', parseInt(e.target.value) || 0)}
+                          className="w-full p-1 border rounded text-right font-mono"
+                        />
+                      </td>
+                      <td className="p-2 text-right font-mono">
+                        <input
+                          type="number"
+                          value={item.discount}
+                          onChange={(e) => handleUpdateOfferItem(item.id, 'discount', parseInt(e.target.value) || 0)}
+                          className="w-full p-1 border rounded text-right font-mono text-red-500"
+                        />
+                      </td>
+                      <td className="p-2 text-right font-bold text-emerald-600 font-mono">
+                        {((item.quantity || 0) * (item.unitPrice || 0) - (item.discount || 0)).toLocaleString('vi-VN')} ₫
+                      </td>
+                      <td className="p-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveOfferItem(item.id)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tổng giá trị báo giá dự kiến (VND tự động) *</label>
+              <input
+                type="number"
+                value={editingItem.totalAmount || 0}
+                readOnly
+                className="w-full p-2 border border-emerald-300 dark:border-emerald-700 rounded font-mono bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 font-bold text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Trạng thái phê duyệt *</label>
+              <select
+                value={editingItem.status || 'CHO_DUYET'}
+                onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              >
+                <option value="CHO_DUYET">⏳ Chờ Duyệt</option>
+                <option value="DA_CHAP_NHAN">✅ Đã chấp nhận</option>
+                <option value="DA_TU_CHOI">❌ Đã từ chối</option>
+                <option value="HET_HAN">⚪ Hết hiệu lực</option>
+              </select>
+            </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Trạng thái *</label>
-            <select
-              value={editingItem.status || 'CHO_DUYET'}
-              onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-              className="w-full p-2 border rounded"
-            >
-              <option value="CHO_DUYET">Chờ Duyệt</option>
-              <option value="DA_CHAP_NHAN">Đã chấp nhận</option>
-              <option value="DA_TU_CHOI">Đã từ chối</option>
-              <option value="HET_HAN">Hết hiệu lực</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi chú chi tiết</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ghi chú chi tiết & Điều khoản báo giá</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border rounded"
-              rows={3}
-              placeholder="Chi tiết sản phẩm, mức chiết khấu..."
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              rows={2}
+              placeholder="Chi tiết sản phẩm, mức chiết khấu, điều kiện thanh toán..."
             />
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t">
@@ -444,6 +643,12 @@ export function SaleOffersPage() {
           </div>
         </form>
       </Modal>
+
+      <PrintInvoiceModal
+        isOpen={!!printData}
+        onClose={() => setPrintData(null)}
+        data={printData}
+      />
     </div>
   );
 }

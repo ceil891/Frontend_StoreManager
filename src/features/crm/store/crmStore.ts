@@ -294,7 +294,18 @@ export const useCrmStore = create<CRMState>()(
 
       addCustomer: async (customer) => {
         try {
-          await axiosClient.post('/partnerarea/customers', customer);
+          const form = toFormData({
+            name: customer.name,
+            phone: customer.phone,
+            email: customer.email,
+            address: customer.address,
+            customerCode: customer.customerCode,
+            notes: customer.notes,
+            isActive: true,
+          });
+          await axiosClient.post('/partnerarea/customers', form, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
           await get().fetchCustomers();
         } catch (e) {
           console.error(e);
@@ -303,7 +314,18 @@ export const useCrmStore = create<CRMState>()(
 
       updateCustomer: async (id, data) => {
         try {
-          await axiosClient.put(`/partnerarea/customers/${id}`, data);
+          const form = toFormData({
+            name: data.name,
+            phone: data.phone,
+            email: data.email,
+            address: data.address,
+            customerCode: data.customerCode,
+            notes: data.notes,
+            isActive: data.status ? data.status === 'ACTIVE' : true,
+          });
+          await axiosClient.put(`/partnerarea/customers/${id}`, form, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
           await get().fetchCustomers();
         } catch (e) {
           console.error(e);

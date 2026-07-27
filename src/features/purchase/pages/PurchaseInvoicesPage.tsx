@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, Receipt } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, Receipt, Printer } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { PrintInvoiceModal, type PrintInvoiceData } from '@/shared/components/ui/PrintInvoiceModal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 
@@ -22,6 +24,7 @@ interface PurchaseInvoiceRecord {
 }
 
 export function PurchaseInvoicesPage() {
+  const { products, fetchProducts } = useInventoryStore();
   const [data, setData] = useState<PurchaseInvoiceRecord[]>([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<PurchaseInvoiceRecord | null>(null);
@@ -29,6 +32,66 @@ export function PurchaseInvoicesPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<PurchaseInvoiceRecord>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [printData, setPrintData] = useState<PrintInvoiceData | null>(null);
+
+  // Purchase Invoice Items State
+  const [purItems, setPurItems] = useState<{
+    id: string;
+    sku: string;
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    vatPercent: number;
+  }>([
+    { id: '1', sku: 'SKU-MILK-01', productName: 'Sữa tươi tiệt trùng Vinamilk 1L', quantity: 100, unitPrice: 28000, vatPercent: 8 }
+  ]);
+
+  const updatePurItemsAndTotals = (newItems: typeof purItems) => {
+    setPurItems(newItems);
+    const subTotal = newItems.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)), 0);
+    const vatAmount = newItems.reduce((sum, item) => sum + Math.round(((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0) * (Number(item.vatPercent) || 0)) / 100), 0);
+    const totalAmount = subTotal + vatAmount;
+    setEditingItem(prev => ({
+      ...prev,
+      subTotal,
+      vatAmount,
+      totalAmount
+    }));
+  };
+
+  const handleAddPurItem = () => {
+    const p = products[0];
+    const newItem = {
+      id: Date.now().toString(),
+      sku: p?.sku || 'SKU-NEW',
+      productName: p?.name || 'Sản phẩm mới',
+      quantity: 10,
+      unitPrice: p?.price || 40000,
+      vatPercent: 8
+    };
+    updatePurItemsAndTotals([...purItems, newItem]);
+  };
+
+  const handleRemovePurItem = (id: string) => {
+    updatePurItemsAndTotals(purItems.filter(i => i.id !== id));
+  };
+
+  const handleUpdatePurItem = (id: string, field: string, value: any) => {
+    const updated = purItems.map(item => {
+      if (item.id !== id) return item;
+      if (field === 'sku') {
+        const p = products.find(prod => prod.sku === value);
+        return {
+          ...item,
+          sku: value,
+          productName: p?.name || item.productName,
+          unitPrice: p?.price || item.unitPrice
+        };
+      }
+      return { ...item, [field]: value };
+    });
+    updatePurItemsAndTotals(updated);
+  };
 
   const fetchInvoices = useCallback(async () => {
     setIsLoading(true);
@@ -66,7 +129,8 @@ export function PurchaseInvoicesPage() {
 
   useEffect(() => {
     fetchInvoices();
-  }, [fetchInvoices]);
+    fetchProducts();
+  }, [fetchInvoices, fetchProducts]);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -157,6 +221,31 @@ export function PurchaseInvoicesPage() {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
   };
 
+  const handlePrintPurchaseInvoice = (record: PurchaseInvoiceRecord) => {
+    setPrintData({
+      documentTitle: 'HÓA ĐƠN MUA HÀNG - NGUỒN VÀO',
+      code: record.invoiceCode,
+      date: record.invoiceDate,
+      dueDate: record.dueDate,
+      customerOrSupplierName: record.supplierName,
+      branchName: 'Kho tổng RetailHub Central Logistics',
+      createdByName: 'Bộ phận Mua Hàng & Kho',
+      notes: record.notes || 'Hóa đơn mua hàng ghi nhận đầu vào sản phẩm.',
+      items: purItems.map(i => ({
+        sku: i.sku,
+        name: i.productName,
+        quantity: i.quantity,
+        price: i.unitPrice,
+        discount: 0,
+        total: i.quantity * i.unitPrice
+      })),
+      subTotal: record.subTotal || record.totalAmount,
+      taxAmount: record.vatAmount || 0,
+      totalAmount: record.totalAmount,
+      statusLabel: record.status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : record.status === 'CHO_THANH_TOAN' ? 'Chờ thanh toán' : 'Đã hủy'
+    });
+  };
+
   const columns = useMemo<ColumnDef<PurchaseInvoiceRecord>[]>(
     () => [
       {
@@ -204,6 +293,13 @@ export function PurchaseInvoicesPage() {
         header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => handlePrintPurchaseInvoice(row.original)}
+              className="p-1 text-gray-500 hover:text-emerald-600 rounded"
+              title="In hóa đơn / Tải PDF"
+            >
+              <Printer className="w-4 h-4 text-emerald-600" />
+            </button>
             <button
               onClick={() => setSelected(row.original)}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
@@ -344,106 +440,228 @@ export function PurchaseInvoicesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Ghi nhận hóa đơn mới' : 'Sửa thông tin hóa đơn'}
+        title={modalMode === 'create' ? '🧾 Ghi nhận Hóa đơn mua hàng (Nguồn vào) mới' : '⚙️ Sửa thông tin hóa đơn mua hàng'}
+        width="max-w-4xl"
       >
-        <form onSubmit={handleSave} className="space-y-4">
+        <form onSubmit={handleSave} className="space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã hóa đơn *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã hóa đơn mua *</label>
+                {modalMode === 'create' && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem({ ...editingItem, invoiceCode: `INV-PUR-${Date.now().toString().slice(-4)}` })}
+                    className="text-[10px] text-emerald-600 hover:underline font-bold"
+                  >
+                    ⚡ Sinh mã
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 value={editingItem.invoiceCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, invoiceCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã PO đơn mua *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã PO Đơn mua hàng gốc *</label>
               <input
                 type="text"
                 value={editingItem.poCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, poCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 placeholder="PO-2026-XXX"
                 required
               />
             </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Nhà cung cấp *</label>
-            <input
-              type="text"
-              value={editingItem.supplierName || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, supplierName: e.target.value })}
-              className="w-full p-2 border rounded"
-              placeholder="Tên nhà cung cấp"
-              required
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Nhà cung cấp xuất hóa đơn *</label>
+              <input
+                type="text"
+                value={editingItem.supplierName || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, supplierName: e.target.value })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Tên công ty nhà cung cấp..."
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã số thuế NCC</label>
+              <input
+                type="text"
+                value={(editingItem as any).supplierTaxCode || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, supplierTaxCode: e.target.value } as any)}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="0101234567"
+              />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày hóa đơn *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày phát hành hóa đơn *</label>
               <input
                 type="date"
                 value={editingItem.invoiceDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, invoiceDate: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ngày đến hạn *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Hạn thanh toán công nợ *</label>
               <input
                 type="date"
                 value={editingItem.dueDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, dueDate: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+
+          {/* SECTION BẢNG CHỌN SẢN PHẨM HÓA ĐƠN MUA HÀNG */}
+          <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider text-[11px] flex items-center gap-1">
+                📦 Danh sách mặt hàng mua vào trên hóa đơn ({purItems.length})
+              </span>
+              <button
+                type="button"
+                onClick={handleAddPurItem}
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Thêm mặt hàng
+              </button>
+            </div>
+
+            <div className="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-lg bg-white dark:bg-gray-950">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-100 dark:bg-gray-900 text-gray-500 uppercase text-[10px]">
+                  <tr>
+                    <th className="p-2">Sản phẩm / SKU</th>
+                    <th className="p-2 w-24 text-center">Số lượng</th>
+                    <th className="p-2 w-32 text-right">Đơn giá nhập</th>
+                    <th className="p-2 w-24 text-center">VAT %</th>
+                    <th className="p-2 w-32 text-right">Thành tiền</th>
+                    <th className="p-2 w-10 text-center">Xóa</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                  {purItems.map((item) => (
+                    <tr key={item.id}>
+                      <td className="p-2">
+                        <select
+                          value={item.sku}
+                          onChange={(e) => handleUpdatePurItem(item.id, 'sku', e.target.value)}
+                          className="w-full p-1 border rounded bg-white dark:bg-gray-900 text-xs font-medium"
+                        >
+                          {products.map(p => (
+                            <option key={p.id} value={p.sku}>{p.sku} - {p.name}</option>
+                          ))}
+                          {!products.some(p => p.sku === item.sku) && (
+                            <option value={item.sku}>{item.sku} - {item.productName}</option>
+                          )}
+                        </select>
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.quantity}
+                          onChange={(e) => handleUpdatePurItem(item.id, 'quantity', parseInt(e.target.value) || 0)}
+                          className="w-full p-1 border rounded text-center font-bold"
+                        />
+                      </td>
+                      <td className="p-2 text-right font-mono">
+                        <input
+                          type="number"
+                          value={item.unitPrice}
+                          onChange={(e) => handleUpdatePurItem(item.id, 'unitPrice', parseInt(e.target.value) || 0)}
+                          className="w-full p-1 border rounded text-right font-mono"
+                        />
+                      </td>
+                      <td className="p-2 text-center font-mono">
+                        <input
+                          type="number"
+                          value={item.vatPercent}
+                          onChange={(e) => handleUpdatePurItem(item.id, 'vatPercent', parseInt(e.target.value) || 0)}
+                          className="w-full p-1 border rounded text-center font-mono"
+                        />
+                      </td>
+                      <td className="p-2 text-right font-bold text-emerald-600 font-mono">
+                        {Math.round((item.quantity || 0) * (item.unitPrice || 0) * (1 + (item.vatPercent || 0)/100)).toLocaleString('vi-VN')} ₫
+                      </td>
+                      <td className="p-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePurItem(item.id)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tiền hàng (subtotal) *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiền hàng trước thuế (Subtotal)</label>
               <input
                 type="number"
                 value={editingItem.subTotal || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, subTotal: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
-                required
+                readOnly
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-gray-100 dark:bg-gray-800 font-bold"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tiền thuế VAT</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tổng thuế VAT (VND)</label>
               <input
                 type="number"
                 value={editingItem.vatAmount || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, vatAmount: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                readOnly
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-gray-100 dark:bg-gray-800 font-bold text-blue-600"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tổng tiền hóa đơn thanh toán</label>
+              <input
+                type="number"
+                value={editingItem.totalAmount || 0}
+                readOnly
+                className="w-full p-2 border border-emerald-300 dark:border-emerald-700 rounded font-mono bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 font-bold text-sm"
               />
             </div>
           </div>
+
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Trạng thái</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Trạng thái thanh toán công nợ</label>
             <select
               value={editingItem.status || 'CHO_THANH_TOAN'}
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-              className="w-full p-2 border rounded"
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
             >
-              <option value="CHO_THANH_TOAN">Chờ thanh toán</option>
-              <option value="DA_THANH_TOAN">Đã thanh toán</option>
-              <option value="DA_HUY">Đã hủy</option>
+              <option value="CHO_THANH_TOAN">⏳ Chờ thanh toán NCC</option>
+              <option value="DA_THANH_TOAN">🟢 Đã thanh toán xong</option>
+              <option value="DA_HUY">🔴 Đã hủy hóa đơn</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ghi chú & Số hóa đơn VAT điện tử gốc</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border rounded"
-              rows={3}
-              placeholder="Ghi chú chi tiết..."
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              rows={2}
+              placeholder="Số hóa đơn điện tử CQT, mẫu số, ký hiệu..."
             />
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t">
@@ -460,6 +678,12 @@ export function PurchaseInvoicesPage() {
           </div>
         </form>
       </Modal>
+
+      <PrintInvoiceModal
+        isOpen={!!printData}
+        onClose={() => setPrintData(null)}
+        data={printData}
+      />
     </div>
   );
 }
