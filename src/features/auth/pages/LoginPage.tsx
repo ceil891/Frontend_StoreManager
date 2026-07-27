@@ -175,17 +175,6 @@ export function LoginPage() {
             </p>
           </motion.div>
 
-          {/* Demo credentials hint */}
-          <div className="mb-6 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl">
-            <p className="text-xs font-medium text-amber-800 dark:text-amber-400 mb-1">Tài khoản trải nghiệm (Demo)</p>
-            <div className="space-y-0.5 text-xs text-amber-700 dark:text-amber-500 font-mono">
-              <p>admin@system.com → SUPER_ADMIN</p>
-              <p>manager@store.com → STORE_MANAGER</p>
-              <p>staff@store.com → STAFF (POS)</p>
-              <p>inventory@retailhub.vn → INVENTORY_STAFF</p>
-              <p className="mt-1 font-sans text-amber-600">Mật khẩu: <strong>123456</strong></p>
-            </div>
-          </div>
 
           {/* Form */}
           <motion.form
