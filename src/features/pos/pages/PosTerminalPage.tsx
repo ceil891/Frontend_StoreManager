@@ -19,23 +19,7 @@ import { useCrmStore } from '@/features/crm/store/crmStore';
 import { useDebounce } from '@/shared/hooks/useDebounce';
 import { toast } from 'sonner';
 
-// ─── Products (Sản phẩm Việt Nam) ─────────────────────────────────────────────
-const ALL_PRODUCTS: (PosProduct & { category: string; unit: string; stock: number })[] = [
-  { id: 'P01', name: 'Sữa Vinamilk 1L', price: 29000, image: 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=200&q=80', sku: 'SV-001', category: 'Đồ uống', unit: 'Hộp', stock: 120 },
-  { id: 'P02', name: 'Bia Heineken Lon 330ml', price: 14000, image: 'https://images.unsplash.com/photo-1618183479302-1e0aa382c36b?w=200&q=80', sku: 'BH-002', category: 'Đồ uống', unit: 'Lon', stock: 200 },
-  { id: 'P03', name: 'Gạo ST25 5kg', price: 155000, image: 'https://images.unsplash.com/photo-1536304929831-ee1ca9d44906?w=200&q=80', sku: 'GS-003', category: 'Thực phẩm khô', unit: 'Túi', stock: 45 },
-  { id: 'P04', name: 'Nước mắm Chinsu 500ml', price: 22000, image: 'https://images.unsplash.com/photo-1547592180-85f173990554?w=200&q=80', sku: 'NM-004', category: 'Gia vị', unit: 'Chai', stock: 88 },
-  { id: 'P05', name: 'Mì gói Hảo Hảo', price: 5500, image: 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=200&q=80', sku: 'MG-005', category: 'Thực phẩm khô', unit: 'Gói', stock: 500 },
-  { id: 'P06', name: 'Nước ngọt Coca-Cola 1.5L', price: 22000, image: 'https://images.unsplash.com/photo-1554866585-cd94860890b7?w=200&q=80', sku: 'CC-006', category: 'Đồ uống', unit: 'Chai', stock: 96 },
-  { id: 'P07', name: 'Bột giặt OMO 3kg', price: 125000, image: 'https://images.unsplash.com/photo-1585412727339-54e4bae3bbf9?w=200&q=80', sku: 'OM-007', category: 'Gia dụng', unit: 'Túi', stock: 32 },
-  { id: 'P08', name: 'Sữa chua Vinamilk 100g', price: 8000, image: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=200&q=80', sku: 'SC-008', category: 'Đồ uống', unit: 'Hộp', stock: 150 },
-  { id: 'P09', name: 'Cà phê G7 3in1 (hộp)', price: 52000, image: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=200&q=80', sku: 'CF-009', category: 'Đồ uống', unit: 'Hộp', stock: 60 },
-  { id: 'P10', name: 'Dầu ăn Tường An 2L', price: 68000, image: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=200&q=80', sku: 'DA-010', category: 'Gia vị', unit: 'Chai', stock: 27 },
-  { id: 'P11', name: 'Khăn giấy Pulppy', price: 37000, image: 'https://images.unsplash.com/photo-1583947215259-38e31be8751f?w=200&q=80', sku: 'KG-011', category: 'Gia dụng', unit: 'Gói', stock: 70 },
-  { id: 'P12', name: 'Snack Oishi Tôm 32g', price: 8000, image: 'https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=200&q=80', sku: 'SN-012', category: 'Bánh kẹo', unit: 'Gói', stock: 300 },
-];
-
-const CATEGORIES = ['Tất cả', 'Đồ uống', 'Thực phẩm khô', 'Gia vị', 'Gia dụng', 'Bánh kẹo'];
+// ─── POS Vouchers ─────────────────────────────────────────────
 
 const VOUCHERS: Record<string, { type: 'PERCENT' | 'FLAT'; value: number }> = {
   'HELLOSUMMER': { type: 'PERCENT', value: 15 },
@@ -126,6 +110,15 @@ export function PosTerminalPage() {
       };
     });
   }, [products, categories]);
+
+  const categoryTabs = useMemo(() => {
+    const dbCats = (categories || []).map((c) => c.categoryName).filter(Boolean);
+    if (dbCats.length > 0) {
+      return Array.from(new Set(['Tất cả', ...dbCats]));
+    }
+    const productCats = productsList.map((p) => p.category).filter((c) => Boolean(c) && c !== 'Tất cả');
+    return Array.from(new Set(['Tất cả', ...productCats]));
+  }, [categories, productsList]);
 
   const displayPayments = useMemo<DisplayPayment[]>(() => {
     const active = paymentMethodsFromConfig.filter((m) => m.status === 'ACTIVE');
@@ -530,7 +523,7 @@ export function PosTerminalPage() {
 
         {/* Category Tabs */}
         <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2 flex gap-2 overflow-x-auto shrink-0">
-          {CATEGORIES.map(cat => (
+          {categoryTabs.map(cat => (
             <button
               key={cat}
               onClick={() => setActiveCategory(cat)}

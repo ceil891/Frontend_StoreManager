@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, memo } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -34,7 +34,6 @@ interface DataTableProps<TData, TValue> {
 }
 
 import { useDebounce } from '@/shared/hooks/useDebounce';
-import { useEffect } from 'react';
 
 const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
   columns,

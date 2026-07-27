@@ -912,7 +912,7 @@ export const useInventoryStore = create<InventoryState>()(
         try {
           // 1. Lấy danh sách sản phẩm từ catalog API
           const res = await axiosClient.get<any, any>('/products');
-          const content: any[] = Array.isArray(res) ? res : (res?.content || []);
+          const content: any[] = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : (res?.content || []));
           const mapped = content.map((item: any) => ({
             id: String(item.id),
             sku: item.productCode || '',
@@ -953,13 +953,12 @@ export const useInventoryStore = create<InventoryState>()(
             // Nếu stock API lỗi, giữ onHand = 0 (không ảnh hưởng danh sách sản phẩm)
           }
 
-          // 3. Merge tồn kho vào danh sách sản phẩm (có fallback tồn kho mặc định nếu mới khởi tạo)
-          const withStock = mapped.map((p, idx) => {
+          // 3. Merge tồn kho thực tế từ backend database vào sản phẩm
+          const withStock = mapped.map((p) => {
             const realQty = stockMap[p.id];
-            const fallbackQty = ((idx * 47 + 65) % 180) + 20; // Tạo số lượng tồn sinh động (20 -> 200)
             return {
               ...p,
-              onHand: (realQty !== undefined && realQty > 0) ? realQty : fallbackQty,
+              onHand: realQty !== undefined ? realQty : 0,
             };
           });
 
