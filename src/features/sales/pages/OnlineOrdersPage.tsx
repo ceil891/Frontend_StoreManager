@@ -8,6 +8,9 @@ import { Drawer } from '@/shared/components/ui/Drawer';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 
+import { useSalesStore } from '../store/salesStore';
+import { useEffect } from 'react';
+
 export interface OnlineOrder {
   id: string;
   orderCode: string;
@@ -25,102 +28,48 @@ export interface OnlineOrder {
   items: { productName: string; sku: string; quantity: number; price: number }[];
 }
 
-const MOCK_ONLINE_ORDERS: OnlineOrder[] = [
-  {
-    id: '1',
-    orderCode: 'ONL-2026-0089',
-    customerName: 'Nguyễn Văn Minh',
-    customerPhone: '0988 123 456',
-    shippingAddress: '123 Nguyễn Trãi, Phường 2, Quận 5, TP. Hồ Chí Minh',
-    totalAmount: 1250000,
-    paymentMethod: 'Chuyển khoản',
-    paymentStatus: 'Đã thanh toán',
-    fulfillmentStatus: 'CHO_XAC_NHAN',
-    carrier: 'Viettel Post',
-    trackingCode: 'VTP-VN-8839210',
-    createdDate: '2026-07-26 19:30',
-    itemsCount: 2,
-    items: [
-      { productName: 'Áo Nam Cotton Co Giãn Premium (Size M)', sku: 'AN-M-BLK', quantity: 2, price: 625000 }
-    ]
-  },
-  {
-    id: '2',
-    orderCode: 'ONL-2026-0088',
-    customerName: 'Trần Thị Thu Thủy',
-    customerPhone: '0912 345 678',
-    shippingAddress: '45 Lê Lợi, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
-    totalAmount: 890000,
-    paymentMethod: 'COD',
-    paymentStatus: 'Chờ thanh toán COD',
-    fulfillmentStatus: 'DANG_DONG_GOI',
-    carrier: 'GHTK',
-    trackingCode: 'GHTK882910293',
-    createdDate: '2026-07-26 18:15',
-    itemsCount: 1,
-    items: [
-      { productName: 'Quần Jeans Slimfit Co Giãn Cao Cấp (Size 32)', sku: 'QJ-32-BLU', quantity: 1, price: 890000 }
-    ]
-  },
-  {
-    id: '3',
-    orderCode: 'ONL-2026-0087',
-    customerName: 'Phạm Hoàng Nam',
-    customerPhone: '0903 888 999',
-    shippingAddress: '78 Phố Huế, Quận Hai Bà Trưng, Hà Nội',
-    totalAmount: 2450000,
-    paymentMethod: 'VietQR',
-    paymentStatus: 'Đã thanh toán',
-    fulfillmentStatus: 'DA_GIAO_NTVC',
-    carrier: 'Viettel Post',
-    trackingCode: 'VTP-88291039',
-    createdDate: '2026-07-26 16:40',
-    itemsCount: 3,
-    items: [
-      { productName: 'Áo Sơ Mi Lụa Tay Dài (Size L)', sku: 'SM-L-WHT', quantity: 1, price: 850000 },
-      { productName: 'Quần Tây Âu Công Sở (Size 31)', sku: 'QT-31-BLK', quantity: 2, price: 800000 }
-    ]
-  },
-  {
-    id: '4',
-    orderCode: 'ONL-2026-0086',
-    customerName: 'Lê Hoàng Anh',
-    customerPhone: '0977 654 321',
-    shippingAddress: '12 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
-    totalAmount: 550000,
-    paymentMethod: 'VietQR',
-    paymentStatus: 'Đã thanh toán',
-    fulfillmentStatus: 'GIAO_THANH_CONG',
-    carrier: 'GHN',
-    trackingCode: 'GHN-991823-VN',
-    createdDate: '2026-07-25 14:20',
-    itemsCount: 1,
-    items: [
-      { productName: 'Thắt Lưng Da Thật Khóa Tự Động', sku: 'TL-DA-BLK', quantity: 1, price: 550000 }
-    ]
-  },
-  {
-    id: '5',
-    orderCode: 'ONL-2026-0085',
-    customerName: 'Đặng Ngọc Hương',
-    customerPhone: '0933 222 111',
-    shippingAddress: '99 Điện Biên Phủ, Quận Bình Thạnh, TP. Hồ Chí Minh',
-    totalAmount: 1800000,
-    paymentMethod: 'Chuyển khoản',
-    paymentStatus: 'Đã hoàn tiền',
-    fulfillmentStatus: 'DA_HUY',
-    carrier: 'Viettel Post',
-    trackingCode: 'VTP-VN-1192039',
-    createdDate: '2026-07-25 10:05',
-    itemsCount: 2,
-    items: [
-      { productName: 'Áo Khoác Bomber Chống Nước', sku: 'AK-BM-XL', quantity: 2, price: 900000 }
-    ]
-  }
-];
+const MOCK_ONLINE_ORDERS: OnlineOrder[] = [];
 
 export function OnlineOrdersPage() {
-  const [orders, setOrders] = useState<OnlineOrder[]>(MOCK_ONLINE_ORDERS);
+  const { saleOrders, fetchSaleOrders } = useSalesStore();
+
+  useEffect(() => {
+    fetchSaleOrders();
+  }, [fetchSaleOrders]);
+
+  const orders = useMemo<OnlineOrder[]>(() => {
+    const onlineOrders = (saleOrders || []).filter(o => o.origin === 'ONLINE' || o.onlineChannel);
+    const sourceList = onlineOrders.length > 0 ? onlineOrders : (saleOrders || []);
+    return sourceList.map((o) => ({
+      id: String(o.id),
+      orderCode: o.code || `ONL-${o.id}`,
+      customerName: o.customerName || o.recipientName || 'Khách hàng',
+      customerPhone: o.recipientPhone || 'N/A',
+      shippingAddress: o.shippingAddress || 'Chi nhánh POS',
+      totalAmount: Number(o.totalAmount || 0),
+      paymentMethod: (o.paymentMethod || 'Chuyển khoản') as any,
+      paymentStatus: o.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chờ thanh toán COD',
+      fulfillmentStatus: (o.deliveryStatus === 'DELIVERED'
+        ? 'GIAO_THANH_CONG'
+        : o.deliveryStatus === 'SHIPPED'
+        ? 'DA_GIAO_NTVC'
+        : o.deliveryStatus === 'PICKING'
+        ? 'DANG_DONG_GOI'
+        : o.deliveryStatus === 'CANCELLED'
+        ? 'DA_HUY'
+        : 'CHO_XAC_NHAN') as any,
+      carrier: (o.shippingProvider || 'GHTK') as any,
+      trackingCode: o.trackingCode || `TRK-${o.id}`,
+      createdDate: o.date || '',
+      itemsCount: o.orderLines?.length || 1,
+      items: (o.orderLines || []).map((l) => ({
+        productName: l.productName || '',
+        sku: l.sku || '',
+        quantity: l.quantity || 1,
+        price: l.unitPrice || 0,
+      })),
+    }));
+  }, [saleOrders]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
   const [selectedOrder, setSelectedOrder] = useState<OnlineOrder | null>(null);
@@ -148,9 +97,6 @@ export function OnlineOrdersPage() {
   }, [orders]);
 
   const handleUpdateStatus = (orderId: string, newStatus: OnlineOrder['fulfillmentStatus']) => {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, fulfillmentStatus: newStatus } : o))
-    );
     if (selectedOrder && selectedOrder.id === orderId) {
       setSelectedOrder((prev) => (prev ? { ...prev, fulfillmentStatus: newStatus } : null));
     }
