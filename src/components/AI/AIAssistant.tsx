@@ -99,8 +99,9 @@ export function AIAssistant() {
           };
         });
 
-      // Gọi API AI Agent cục bộ (trả về JSON dạng n8n)
-      const response = await fetch('http://localhost:8000/api/chat', {
+      // Gọi API AI Agent (trả về JSON dạng n8n)
+      const aiApiUrl = import.meta.env.VITE_AI_API_URL || 'http://localhost:8000/api/chat';
+      const response = await fetch(aiApiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
