@@ -941,8 +941,8 @@ export const useInventoryStore = create<InventoryState>()(
           // 2. Fetch tồn kho thực tế từ size_inventory (đã được cộng qua completeImportReceipt)
           let stockMap: Record<string, number> = {};
           try {
-            const stockRes = await axiosClient.get<any, any>('/inventory/stock');
-            const stockList: any[] = Array.isArray(stockRes) ? stockRes : (stockRes?.data || stockRes || []);
+            const stockRes = await axiosClient.get<any, any>('/inventories');
+            const stockList: any[] = Array.isArray(stockRes) ? stockRes : (stockRes?.data || stockRes?.content || stockRes || []);
             // Gộp quantityPhysical theo productId (tổng tất cả khu vực/zone)
             stockList.forEach((s: any) => {
               const pid = String(s.productId);
@@ -2639,10 +2639,10 @@ export const useInventoryStore = create<InventoryState>()(
     }),
     {
       name: 'retailhub-inventory-storage',
-      version: 5,
+      version: 7,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as InventoryState;
-        if (version < 5) {
+        if (version < 7) {
           return {
             ...state,
             cancelIssues: [],
