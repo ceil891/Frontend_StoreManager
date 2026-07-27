@@ -16,6 +16,7 @@ import { useAuthStore } from '@/features/auth/store/authStore';
 import { Link } from 'react-router';
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 import { useCrmStore } from '@/features/crm/store/crmStore';
+import { useDebounce } from '@/shared/hooks/useDebounce';
 import { toast } from 'sonner';
 
 // ─── Products (Sản phẩm Việt Nam) ─────────────────────────────────────────────
@@ -70,6 +71,26 @@ const FALLBACK_PAYMENTS: DisplayPayment[] = [
 ];
 
 const fmt = (n: number) => n.toLocaleString('vi-VN') + 'đ';
+
+function SafeProductImage({ src, alt, className, iconClassName }: { src?: string; alt?: string; className?: string; iconClassName?: string }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  if (!src || failed) {
+    return <ImageIcon className={iconClassName || "w-8 h-8 text-gray-300"} />;
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      onError={() => setFailed(true)}
+      className={className}
+    />
+  );
+}
 
 export function PosTerminalPage() {
   const { items, addItem, removeItem, updateQuantity, getTotal, clearCart } = usePosCartStore();
@@ -276,15 +297,17 @@ export function PosTerminalPage() {
   };
 
   // ── Filtered products ───────────────────────────────────────────────────────
+  const debouncedSearchQuery = useDebounce(searchQuery, 200);
+
   const filteredProducts = useMemo(() => {
     return productsList.filter(p => {
       const matchCat = activeCategory === 'Tất cả' || p.category === activeCategory;
       const matchQ =
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.sku.toLowerCase().includes(searchQuery.toLowerCase());
+        p.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        p.sku.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
       return matchCat && matchQ;
     });
-  }, [productsList, activeCategory, searchQuery]);
+  }, [productsList, activeCategory, debouncedSearchQuery]);
 
   // ── Customer ────────────────────────────────────────────────────────────────
   const handleSearchCustomer = (e: React.FormEvent) => {
@@ -566,11 +589,7 @@ export function PosTerminalPage() {
                       </div>
                     )}
                     <div className="h-20 bg-gray-50 dark:bg-gray-900/40 flex items-center justify-center p-2 shrink-0">
-                      {product.image ? (
-                        <img src={product.image} alt={product.name} className="h-full object-contain rounded" />
-                      ) : (
-                        <ImageIcon className="w-8 h-8 text-gray-300" />
-                      )}
+                      <SafeProductImage src={product.image} alt={product.name} className="h-full object-contain rounded" />
                     </div>
                     <div className="p-2 flex-1 flex flex-col justify-between">
                       <h3 className="text-xs font-bold text-gray-900 dark:text-white line-clamp-2 mb-1 group-hover:text-emerald-600 transition-colors">
@@ -675,10 +694,7 @@ export function PosTerminalPage() {
           ) : items.map(item => (
             <div key={item.id} className="flex gap-2.5 bg-gray-50 dark:bg-gray-700/40 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700">
               <div className="w-10 h-10 shrink-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden flex items-center justify-center">
-                {item.image
-                  ? <img src={item.image} alt={item.name} className="w-full h-full object-contain" />
-                  : <ImageIcon className="w-4 h-4 text-gray-300" />
-                }
+                <SafeProductImage src={item.image} alt={item.name} className="w-full h-full object-contain" iconClassName="w-4 h-4 text-gray-300" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start gap-1 mb-1">
