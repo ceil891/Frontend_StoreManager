@@ -217,7 +217,7 @@ export function SupplierContractsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hợp đồng nhà cung cấp (supplier contract)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hợp đồng nhà cung cấp (Supplier Contract)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Lưu trữ hợp đồng pháp lý, điều khoản thanh toán, hạn mức nợ và sản lượng chiết khấu cam kết với đối tác phân phối.
             </p>

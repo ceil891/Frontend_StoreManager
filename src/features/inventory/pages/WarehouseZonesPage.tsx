@@ -78,12 +78,14 @@ export function WarehouseZonesPage() {
 
   const handleOpenCreate = () => {
     setModalMode('create');
+    const firstBranch = branches[0];
     setEditingItem({
       zoneCode: '',
       zoneName: '',
       condition: 'Nhiệt độ thường (25-30°C)',
       capacity: 100,
-      branchName: branches[0]?.name || 'Main Flagship / HQ',
+      branchId: firstBranch?.id ? String(firstBranch.id) : undefined,
+      branchName: firstBranch?.name || '',
       status: 'ACTIVE',
       description: '',
       zoneType: 'STORAGE_RACK',
@@ -107,8 +109,11 @@ export function WarehouseZonesPage() {
       englishStatus = 'MAINTENANCE';
     }
 
+    const matchedBranch = branches.find((b) => b.name === item.branchName || String(b.id) === item.branchId);
+
     setEditingItem({
       ...item,
+      branchId: item.branchId || (matchedBranch ? String(matchedBranch.id) : undefined),
       status: englishStatus,
       zoneType: item.zoneType || 'STORAGE_RACK',
       priority: item.priority || 'MEDIUM',
@@ -121,7 +126,18 @@ export function WarehouseZonesPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.zoneCode || !editingItem.zoneName) return;
+    if (!editingItem.zoneCode?.trim()) {
+      toast.error('Vui lòng nhập Mã phân khu kho!');
+      return;
+    }
+    if (!editingItem.zoneName?.trim()) {
+      toast.error('Vui lòng nhập Tên phân khu kho!');
+      return;
+    }
+    if (Number(editingItem.capacity) <= 0) {
+      toast.error('Sức chứa tối đa (Pallet) phải lớn hơn 0!');
+      return;
+    }
     if (codeStatus === 'duplicate') {
       toast.error('Mã phân khu đã tồn tại, vui lòng thay đổi!');
       return;
@@ -135,7 +151,8 @@ export function WarehouseZonesPage() {
           zoneName: editingItem.zoneName!,
           condition: editingItem.condition || 'Nhiệt độ thường',
           capacity: Number(editingItem.capacity || 0),
-          branchName: editingItem.branchName || 'Main Flagship / HQ',
+          branchId: editingItem.branchId,
+          branchName: editingItem.branchName || '',
           status: editingItem.status || 'ACTIVE',
           description: editingItem.description,
           zoneType: editingItem.zoneType || 'STORAGE_RACK',
@@ -151,6 +168,7 @@ export function WarehouseZonesPage() {
           zoneName: editingItem.zoneName,
           condition: editingItem.condition,
           capacity: Number(editingItem.capacity || 0),
+          branchId: editingItem.branchId,
           branchName: editingItem.branchName,
           status: editingItem.status,
           description: editingItem.description,
@@ -526,8 +544,13 @@ export function WarehouseZonesPage() {
               </label>
               <input
                 type="number"
-                value={editingItem.capacity || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, capacity: Number(e.target.value) })}
+                value={editingItem.capacity === 0 ? '' : (editingItem.capacity ?? '')}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/^0+(?=\d)/, '');
+                  setEditingItem({ ...editingItem, capacity: val === '' ? 0 : Number(val) });
+                }}
+                onFocus={(e) => e.target.select()}
+                placeholder="0"
                 className="w-full p-2 border rounded font-mono dark:bg-gray-950 dark:border-gray-700"
                 required
                 min={1}
@@ -595,15 +618,23 @@ export function WarehouseZonesPage() {
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Chi nhánh sở hữu *</label>
               <select
-                value={editingItem.branchName || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, branchName: e.target.value })}
+                value={editingItem.branchId || (branches.find(b => b.name === editingItem.branchName)?.id) || ''}
+                onChange={(e) => {
+                  const bId = e.target.value;
+                  const bObj = branches.find((b) => String(b.id) === bId);
+                  setEditingItem({
+                    ...editingItem,
+                    branchId: bId,
+                    branchName: bObj?.name || '',
+                  });
+                }}
                 className="w-full p-2 border rounded dark:bg-gray-950 dark:border-gray-700 text-sm"
                 required
                 disabled={isSaving}
               >
                 <option value="">-- Chọn chi nhánh --</option>
                 {branches.map((b) => (
-                  <option key={b.id} value={b.name}>
+                  <option key={b.id} value={b.id}>
                     {b.name}
                   </option>
                 ))}

@@ -349,6 +349,11 @@ export const useSalesStore = create<SalesState>()(
       },
 
       addSaleOrder: async (order) => {
+        const newOrder = migrateLegacyOrder(order);
+        set((state) => ({
+          saleOrders: [newOrder, ...state.saleOrders.filter(o => o.code !== newOrder.code)],
+        }));
+
         try {
           const payload = {
             orderCode: order.code,
@@ -366,7 +371,7 @@ export const useSalesStore = create<SalesState>()(
           await axiosClient.post('/sales/orders', payload);
           await get().fetchSaleOrders();
         } catch (e) {
-          console.error(e);
+          console.error('API call failed for order, but order retained in local saleOrders:', e);
         }
       },
 

@@ -202,7 +202,7 @@ export function AreasPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Khu vực địa lý (địa bàn kinh doanh)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Khu vực địa lý</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Quản lý phân cấp địa lý hành chính phục vụ định tuyến giao hàng, phân công nhân sự và phân tích doanh thu khu vực.
             </p>

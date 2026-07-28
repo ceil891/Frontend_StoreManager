@@ -104,43 +104,37 @@ export function CustomersPage() {
   const vipCount     = data.filter(c => c.loyaltyTier === 'DIAMOND' || c.loyaltyTier === 'GOLD').length;
   const totalPoints  = data.reduce((acc, c) => acc + c.loyaltyPoints, 0);
 
-  // ── Handlers ────────────────────────────────────────────────────────────────
-  const handleOpenCreate = () => {
-    setModalMode('create');
-    setIsAutoCode(true);
-    setEditingCustomer({
-      customerCode: `CUST-${Math.floor(10000 + Math.random() * 90000)}`,
-      name: '', phone: '', email: '', address: '',
-      avatarUrl: buildUserAvatarUrl('new-customer@retailhub.vn'),
-      loyaltyTier: 'BRONZE', loyaltyPoints: 0, lifetimeSpent: 0,
-      status: 'ACTIVE',
-      registeredDate: new Date().toISOString().split('T')[0],
-      lastActive: new Date().toISOString().split('T')[0],
-      notes: '',
-    });
-    setIsModalOpen(true);
-  };
-
-  const handleOpenEdit = (customer: CustomerProfile) => {
-    setModalMode('edit');
-    setIsAutoCode(false);
-    setEditingCustomer(customer);
-    setIsModalOpen(true);
-  };
-
-  const handleSaveCustomer = (e: React.FormEvent) => {
+  // ── Handlers ────────────�  const handleSaveCustomer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingCustomer.name || !editingCustomer.phone) return;
+    const cleanName = editingCustomer.name?.trim();
+    const cleanPhone = editingCustomer.phone?.trim().replace(/\s+/g, '');
 
-    // Tự động tính lại loyaltyTier dựa vào lifetimeSpent (đơn vị USD $)
+    if (!cleanName) {
+      toast.error('Vui lòng nhập Họ & Tên khách hàng!');
+      return;
+    }
+    if (!cleanPhone || !/^[0-9]{10,11}$/.test(cleanPhone)) {
+      toast.error('Số điện thoại không hợp lệ! Vui lòng nhập từ 10 đến 11 chữ số.');
+      return;
+    }
+
+    if (editingCustomer.dateOfBirth) {
+      const dob = new Date(editingCustomer.dateOfBirth);
+      const today = new Date();
+      if (dob > today) {
+        toast.error('Ngày sinh không được lớn hơn ngày hiện tại!');
+        return;
+      }
+    }
+
     const autoTier = calcTier(editingCustomer.lifetimeSpent ?? 0);
 
     if (modalMode === 'create') {
       const newCust: Omit<CustomerProfile, 'id'> = {
         customerCode:   editingCustomer.customerCode || `CUST-${Math.floor(10000 + Math.random() * 90000)}`,
-        name:           editingCustomer.name || '',
-        phone:          editingCustomer.phone || '',
-        email:          editingCustomer.email || '',
+        name:           cleanName,
+        phone:          cleanPhone,
+        email:          editingCustomer.email?.trim() || '',
         address:        editingCustomer.address || '',
         taxCode:        editingCustomer.taxCode || '',
         gender:         editingCustomer.gender || 'OTHER',
@@ -148,7 +142,35 @@ export function CustomersPage() {
         creditLimit:    editingCustomer.creditLimit || 0,
         groupId:        editingCustomer.groupId || '',
         areaId:         editingCustomer.areaId || '',
-        avatarUrl:      editingCustomer.avatarUrl?.trim() || buildUserAvatarUrl(editingCustomer.email || editingCustomer.name || 'customer'),
+        avatarUrl:      editingCustomer.avatarUrl?.trim() || buildUserAvatarUrl(editingCustomer.email || cleanName || 'customer'),
+        loyaltyTier:    autoTier,
+        loyaltyPoints:  editingCustomer.loyaltyPoints || 0,
+        lifetimeSpent:  editingCustomer.lifetimeSpent || 0,
+        registeredDate: editingCustomer.registeredDate || new Date().toISOString().split('T')[0],
+        lastActive:     editingCustomer.lastActive    || new Date().toISOString().split('T')[0],
+        status:         editingCustomer.status || 'ACTIVE',
+        notes:          editingCustomer.notes,
+      };
+      addCustomer(newCust);
+      toast.success(`Đã thêm khách hàng mới: ${cleanName}`);
+    } else if (editingCustomer.id) {
+      updateCustomer(editingCustomer.id, { ...editingCustomer, name: cleanName, phone: cleanPhone, loyaltyTier: autoTier });
+      toast.success(`Đã cập nhật thông tin khách hàng: ${cleanName}`);
+    }
+    setIsModalOpen(false);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!deletingCustomer) return;
+    if (deletingCustomer.status === 'ACTIVE') {
+      toast.error(`❌ Không thể xóa khách hàng "${deletingCustomer.name}" vì đang ở trạng thái Đang hoạt động.\nVui lòng chuyển trạng thái sang Tạm ngưng hoặc Đã rời đi trước khi xóa!`);
+      setDeletingCustomer(null);
+      return;
+    }
+    deleteCustomer(deletingCustomer.id);
+    toast.success(`Đã xóa hồ sơ khách hàng ${deletingCustomer.name}`);
+    setDeletingCustomer(null);
+  };ldUserAvatarUrl(editingCustomer.email || editingCustomer.name || 'customer'),
         loyaltyTier:    autoTier,           // ← tự động thăng hạng
         loyaltyPoints:  editingCustomer.loyaltyPoints || 0,
         lifetimeSpent:  editingCustomer.lifetimeSpent || 0,

@@ -115,14 +115,15 @@ export function PurchaseOrdersPage() {
 
   const handlePOLineChange = (index: number, field: keyof POLineItem, val: any) => {
     const lines = [...(editingPO.poLines || [])];
-    lines[index] = { ...lines[index], [field]: val };
+    const item = { ...lines[index], [field]: val };
 
     if (field === 'productName') {
       const found = apiProducts.find(p => p.name === val);
       if (found) {
-        lines[index].unitPrice = found.price;
+        item.unitPrice = found.price;
       }
     }
+    lines[index] = item;
 
     const totalQty = lines.reduce((acc, l) => acc + Number(l.quantity), 0);
     const totalVal = lines.reduce((acc, l) => acc + (Number(l.quantity) * Number(l.unitPrice)), 0);
@@ -171,7 +172,18 @@ export function PurchaseOrdersPage() {
 
   const handleSavePO = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingPO.poNumber || !editingPO.supplierName) return;
+    if (!editingPO.supplierName?.trim()) {
+      toast.error('Vui lòng chọn hoặc nhập tên Nhà cung cấp!');
+      return;
+    }
+    if (!editingPO.poNumber?.trim()) {
+      toast.error('Vui lòng nhập Mã đơn mua hàng (PO)!');
+      return;
+    }
+    if (!editingPO.poLines || editingPO.poLines.length === 0) {
+      toast.error('Vui lòng thêm ít nhất 1 sản phẩm vào đơn mua!');
+      return;
+    }
 
     try {
       if (modalMode === 'create') {
@@ -642,14 +654,7 @@ export function PurchaseOrdersPage() {
                           <label className="block text-[10px] font-semibold text-gray-400 uppercase">Tên sản phẩm *</label>
                           <select
                             value={line.productName}
-                            onChange={(e) => {
-                              const selectedName = e.target.value;
-                              const found = apiProducts.find(p => p.name === selectedName);
-                              handlePOLineChange(idx, 'productName', selectedName);
-                              if (found) {
-                                handlePOLineChange(idx, 'unitPrice', found.price);
-                              }
-                            }}
+                            onChange={(e) => handlePOLineChange(idx, 'productName', e.target.value)}
                             className="w-full mt-0.5 px-2 py-1 text-xs border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-medium cursor-pointer"
                           >
                             <option value="">-- Chọn Sản Phẩm --</option>

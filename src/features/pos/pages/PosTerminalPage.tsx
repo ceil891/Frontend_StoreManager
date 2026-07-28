@@ -16,6 +16,7 @@ import { useAuthStore } from '@/features/auth/store/authStore';
 import { Link } from 'react-router';
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 import { useCrmStore } from '@/features/crm/store/crmStore';
+import { useLoyaltyConfigStore } from '@/features/crm/store/loyaltyConfigStore';
 import { useDebounce } from '@/shared/hooks/useDebounce';
 import { toast } from 'sonner';
 
@@ -77,7 +78,7 @@ function SafeProductImage({ src, alt, className, iconClassName }: { src?: string
 }
 
 export function PosTerminalPage() {
-  const { items, addItem, removeItem, updateQuantity, getTotal, clearCart } = usePosCartStore();
+  const { items, addItem, removeItem, updateQuantity, getTotal, clearCart, tabs, activeTabId, createTab, switchTab, closeTab } = usePosCartStore();
   const paymentMethodsFromConfig = usePosConfigStore((s) => s.paymentMethods);
   const addSaleOrder = useSalesStore((s) => s.addSaleOrder);
   const { products, fetchProducts, categories, fetchCategories } = useInventoryStore();
@@ -101,7 +102,7 @@ export function PosTerminalPage() {
         id: String(p.id),
         name: p.name || '',
         price: Number(p.price || 0),
-        image: p.mainImage || 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=200&q=80',
+        image: p.mainImage || (p as any).mainImageUrl || 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=200&q=80',
         sku: p.sku || '',
         category: p.category || 'Tất cả',
         unit: p.unit || 'Cái',
@@ -156,23 +157,38 @@ export function PosTerminalPage() {
 
   const handleQuickCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCustomerName.trim() || !newCustomerPhoneInput.trim()) {
-      toast.error('Vui lòng nhập Tên và Số điện thoại khách hàng!');
+    const cleanName = newCustomerName.trim();
+    const cleanPhone = newCustomerPhoneInput.trim().replace(/\s+/g, '');
+
+    if (!cleanName) {
+      toast.error('Vui lòng nhập Họ & Tên khách hàng!');
       return;
     }
 
-    const fullAddress = [
-      newCustomerAddress.addressDetail,
-      newCustomerAddress.ward,
-      newCustomerAddress.district,
-      newCustomerAddress.province,
-    ].filter(Boolean).join(', ');
+    if (!/^[0-9]{10,11}$/.test(cleanPhone)) {
+      toast.error('Số điện thoại không hợp lệ! Vui lòng nhập từ 10 đến 11 chữ số.');
+      return;
+    }
+
+    // Nếu SĐT đã tồn tại -> Chọn ngay khách hàng đó
+    const existing = customers.find(c => c.phone === cleanPhone);
+    if (existing) {
+      setActiveCustomer({
+        id: existing.id,
+        name: existing.name,
+        phone: existing.phone,
+        points: existing.loyaltyPoints || 0,
+      });
+      setIsQuickCustomerOpen(false);
+      toast.info(`SĐT đã tồn tại trong hệ thống! Đã chọn khách hàng: ${existing.name}`);
+      return;
+    }
 
     const customerId = 'CUST-POS-' + Math.floor(10000 + Math.random() * 90000);
     const newCust = {
       id: customerId,
-      name: newCustomerName.trim(),
-      phone: newCustomerPhoneInput.trim(),
+      name: cleanName,
+      phone: cleanPhone,
       points: 100, // Điểm thưởng tặng khi mở thẻ mới tại POS
     };
 
@@ -341,8 +357,9 @@ export function PosTerminalPage() {
   };
 
   // ── Calculations ─────────────────────────────────────────────────────────────
+  const loyaltyConfig = useLoyaltyConfigStore((s) => s.config);
   const subtotal = getTotal();
-  const pointsDiscount = usedPoints * 10; // 1 điểm = 10đ
+  const pointsDiscount = usedPoints * (loyaltyConfig?.redeemRateValue || 100);
   let voucherDiscount = 0;
   if (appliedVoucher) {
     voucherDiscount = appliedVoucher.type === 'PERCENT'
@@ -424,6 +441,24 @@ export function PosTerminalPage() {
         shiftId: deriveShiftId(now),
         promoCodeApplied: appliedVoucher?.code,
       });
+
+      // Tự động trừ tồn kho hiển thị (onHand) trên POS ngay lập tức
+      try {
+        const { products } = useInventoryStore.getState();
+        const updatedProducts = products.map((p) => {
+          const itemInOrder = items.find((it) => String(it.id) === String(p.id));
+          if (itemInOrder) {
+            return {
+              ...p,
+              onHand: Math.max(0, (p.onHand || 0) - itemInOrder.quantity),
+            };
+          }
+          return p;
+        });
+        useInventoryStore.setState({ products: updatedProducts });
+      } catch (err) {
+        console.error('Failed to deduct local POS inventory state:', err);
+      }
 
       const printInvoicePayload: PrintInvoiceData = {
         documentTitle: 'HÓA ĐƠN BÁN LẺ (VAT)',
@@ -606,6 +641,56 @@ export function PosTerminalPage() {
 
       {/* ═══ RIGHT PANEL: Cart & Customer ═══ */}
       <div className="flex flex-col w-[32%] h-full bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700">
+        {/* Multi-Tab Order Holding Bar (Lưu tạm đơn bán dở) */}
+        <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 overflow-x-auto shrink-0">
+          {tabs.map((t) => {
+            const isActive = t.id === activeTabId;
+            return (
+              <div
+                key={t.id}
+                onClick={() => switchTab(t.id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                  isActive
+                    ? 'bg-emerald-600 text-white shadow'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 border border-gray-200 dark:border-gray-700'
+                }`}
+              >
+                <span>{t.name}</span>
+                {t.items.length > 0 && (
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                      isActive ? 'bg-white text-emerald-700' : 'bg-emerald-100 text-emerald-800'
+                    }`}
+                  >
+                    {t.items.length}
+                  </span>
+                )}
+                {tabs.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeTab(t.id);
+                    }}
+                    className="opacity-60 hover:opacity-100 p-0.5 rounded hover:bg-black/10 transition-opacity"
+                    title="Hủy đơn tạm này"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => createTab()}
+            className="flex items-center gap-1 px-2 py-1 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 border border-emerald-300 dark:border-emerald-800 rounded-lg text-xs font-bold whitespace-nowrap transition-colors"
+            title="⚡ Mở giỏ/đơn bán dở mới"
+          >
+            <Plus className="w-3.5 h-3.5" /> Mở đơn
+          </button>
+        </div>
+
         {/* Customer Section */}
         <div className="p-3 border-b border-gray-200 dark:border-gray-700 shrink-0 space-y-2 bg-gray-50 dark:bg-gray-900/20">
           {!activeCustomer ? (
@@ -650,27 +735,56 @@ export function PosTerminalPage() {
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-                  <Gift className="w-3.5 h-3.5" />
-                  <span>{activeCustomer.points} điểm khả dụng</span>
+              <div className="space-y-1.5 mt-1.5">
+                <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                  <span className="flex items-center gap-1">
+                    <Gift className="w-3.5 h-3.5" />
+                    {activeCustomer.points} điểm khả dụng
+                  </span>
+                  <span className="text-[11px] font-mono text-gray-500 dark:text-gray-400">
+                    (~{fmt(activeCustomer.points * (loyaltyConfig?.redeemRateValue || 100))})
+                  </span>
                 </div>
-                <div className="flex-1 flex gap-1">
-                  <input
-                    type="text"
-                    value={usedPoints === 0 ? '' : usedPoints}
-                    onChange={e => {
-                      const val = e.target.value.replace(/\D/g, '');
-                      const num = val === '' ? 0 : parseInt(val, 10);
-                      setUsedPoints(Math.min(num, activeCustomer.points));
-                    }}
-                    placeholder="Điểm dùng..."
-                    className="flex-1 px-2 py-1 border border-emerald-200 dark:border-emerald-800/50 rounded-lg text-xs bg-emerald-50 dark:bg-emerald-900/10 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none"
-                  />
-                </div>
+                {activeCustomer.points > 0 ? (
+                  <div className="flex gap-1.5 items-center">
+                    <input
+                      type="text"
+                      value={usedPoints === 0 ? '' : usedPoints}
+                      onChange={e => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        const num = val === '' ? 0 : parseInt(val, 10);
+                        const maxAllowedPoints = Math.min(
+                          activeCustomer.points,
+                          Math.floor((subtotal * ((loyaltyConfig?.maxDiscountPercent || 50) / 100)) / (loyaltyConfig?.redeemRateValue || 100))
+                        );
+                        setUsedPoints(Math.min(num, maxAllowedPoints));
+                      }}
+                      placeholder="Gõ số điểm muốn đổi..."
+                      className="flex-1 px-2.5 py-1 border border-emerald-300 dark:border-emerald-800 rounded-lg text-xs bg-emerald-50 dark:bg-emerald-900/10 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const maxAllowedPoints = Math.min(
+                          activeCustomer.points,
+                          Math.floor((subtotal * ((loyaltyConfig?.maxDiscountPercent || 50) / 100)) / (loyaltyConfig?.redeemRateValue || 100))
+                        );
+                        setUsedPoints(maxAllowedPoints);
+                      }}
+                      className="px-2 py-1 bg-emerald-600 text-white text-[11px] font-bold rounded-lg hover:bg-emerald-700 transition-colors shadow-sm shrink-0"
+                    >
+                      Dùng hết
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[11px] italic text-gray-400 mt-1">Chưa có điểm khả dụng (Sẽ tự động tích điểm sau khi hoàn tất đơn hàng)</p>
+                )}
               </div>
               {usedPoints > 0 && (
-                <p className="text-[10px] text-emerald-600 font-semibold mt-1">-{fmt(usedPoints * 10)} từ điểm thưởng</p>
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold mt-1.5 flex justify-between items-center bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded border border-emerald-200 dark:border-emerald-900/40">
+                  <span>Trừ điểm thưởng ({usedPoints} điểm):</span>
+                  <span>-{fmt(pointsDiscount)}</span>
+                </p>
               )}
             </div>
           )}
@@ -800,104 +914,40 @@ export function PosTerminalPage() {
         </div>
       </div>
 
-      {/* Quick Create Customer Modal for POS */}
+      {/* Quick Create Customer Modal for POS (Tối ưu siêu nhanh: Chỉ cần SĐT & Tên) */}
       <Modal
         isOpen={isQuickCustomerOpen}
         onClose={() => setIsQuickCustomerOpen(false)}
-        title="Tạo Nhanh Khách Hàng Tại Quầy POS"
-        width="max-w-xl"
+        title="⚡ Đăng ký Nhanh Khách Hàng Tại Quầy POS"
+        width="max-w-md"
       >
         <form onSubmit={handleQuickCreateCustomer} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại khách hàng *</label>
-              <select
-                value={newCustomerType}
-                onChange={(e) => setNewCustomerType(e.target.value as any)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="INDIVIDUAL">Cá nhân (Hộ gia đình)</option>
-                <option value="BUSINESS">Doanh nghiệp (Công ty)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại liên hệ *</label>
-              <input
-                type="text"
-                required
-                value={newCustomerPhoneInput}
-                onChange={(e) => setNewCustomerPhoneInput(e.target.value)}
-                placeholder="0901234567..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Họ & Tên khách hàng *</label>
-              <input
-                type="text"
-                required
-                value={newCustomerName}
-                onChange={(e) => setNewCustomerName(e.target.value)}
-                placeholder="Nguyễn Văn A..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên ngắn / Gọi tắt</label>
-              <input
-                type="text"
-                value={newCustomerShortName}
-                onChange={(e) => setNewCustomerShortName(e.target.value)}
-                placeholder="Anh A..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
-              <input
-                type="email"
-                value={newCustomerEmail}
-                onChange={(e) => setNewCustomerEmail(e.target.value)}
-                placeholder="khachhang@gmail.com"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã số thuế (Xuất HĐ GTGT)</label>
-              <input
-                type="text"
-                value={newCustomerTaxCode}
-                onChange={(e) => setNewCustomerTaxCode(e.target.value)}
-                placeholder="MST Doanh nghiệp..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
           <div>
-            <AddressCascadeSelect
-              province={newCustomerAddress.province}
-              district={newCustomerAddress.district}
-              ward={newCustomerAddress.ward}
-              addressDetail={newCustomerAddress.addressDetail}
-              onChange={(addr) => setNewCustomerAddress(addr)}
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+              Số điện thoại liên hệ <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="tel"
+              required
+              autoFocus
+              value={newCustomerPhoneInput}
+              onChange={(e) => setNewCustomerPhoneInput(e.target.value)}
+              placeholder="0901234567..."
+              className="w-full px-3 py-2 border-2 border-emerald-300 dark:border-emerald-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-base focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú sở thích / Yêu cầu xuất hóa đơn</label>
-            <textarea
-              rows={2}
-              value={newCustomerNotes}
-              onChange={(e) => setNewCustomerNotes(e.target.value)}
-              placeholder="Nhập lưu ý của khách..."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+              Họ & Tên khách hàng <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={newCustomerName}
+              onChange={(e) => setNewCustomerName(e.target.value)}
+              placeholder="Nguyễn Văn A..."
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
             />
           </div>
 
@@ -905,15 +955,15 @@ export function PosTerminalPage() {
             <button
               type="button"
               onClick={() => setIsQuickCustomerOpen(false)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               Hủy
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold shadow transition-colors"
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-md transition-all active:scale-95 flex items-center gap-1.5"
             >
-              ✓ Tạo & Áp dụng ngay
+              <UserPlus className="w-4 h-4" /> ✓ Đăng ký & Chọn ngay
             </button>
           </div>
         </form>
@@ -1056,9 +1106,17 @@ export function PosTerminalPage() {
                       />
                       <div className="flex gap-2 mt-2">
                         {QUICK_CASH.map(q => (
-                          <button key={q} onClick={() => setCashGiven(q.toLocaleString('vi-VN'))}
-                            className="flex-1 py-1.5 text-xs font-semibold bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-650 rounded-lg text-gray-700 dark:text-gray-300 transition-colors">
-                            {fmt(q)}
+                          <button
+                            key={q}
+                            type="button"
+                            onClick={() => {
+                              const currentNum = cashGivenNum || 0;
+                              const newTotal = currentNum + q;
+                              setCashGiven(newTotal.toLocaleString('vi-VN'));
+                            }}
+                            className="flex-1 py-1.5 text-xs font-semibold bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-650 rounded-lg text-gray-700 dark:text-gray-300 transition-colors"
+                          >
+                            + {fmt(q)}
                           </button>
                         ))}
                       </div>

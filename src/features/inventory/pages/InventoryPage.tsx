@@ -17,6 +17,8 @@ import { axiosClient } from '@/shared/lib/axiosClient';
 import { useColorStore } from '../store/colorStore';
 import { useSizeStore } from '../store/sizeStore';
 
+import { compressImage } from '@/shared/utils/imageCompressor';
+
 export function InventoryPage() {
   const navigate = useNavigate();
   const [isWizardModalOpen, setIsWizardModalOpen] = useState(false);
@@ -144,8 +146,10 @@ export function InventoryPage() {
   const handleOpenCreate = () => {
     setModalMode('create');
     setActiveModalTab('basic');
+    const autoSku = `SKU-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const autoBarcode = `89385${Math.floor(1000000 + Math.random() * 9000000)}`;
     setEditingProduct({
-      sku: `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
+      sku: autoSku,
       name: '',
       category: categories.length > 0 ? categories[0].categoryName : 'General',
       price: 0,
@@ -159,6 +163,7 @@ export function InventoryPage() {
       description: '',
       mainImage: '',
       galleryImages: [],
+      barcodes: [autoBarcode],
       units: [],
       variants: []
     });
@@ -188,7 +193,22 @@ export function InventoryPage() {
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingProduct.sku || !editingProduct.name) return;
+    if (!editingProduct.sku?.trim()) {
+      toast.error('Vui lòng nhập Mã sản phẩm (SKU)!');
+      return;
+    }
+    if (!editingProduct.name?.trim()) {
+      toast.error('Vui lòng nhập Tên sản phẩm!');
+      return;
+    }
+    if (Number(editingProduct.price) < 0) {
+      toast.error('Giá bán lẻ không được là số âm!');
+      return;
+    }
+    if (Number(editingProduct.costPrice) < 0) {
+      toast.error('Giá vốn không được là số âm!');
+      return;
+    }
 
     const payload: Omit<ProductInventory, 'id'> = {
       sku: editingProduct.sku,
@@ -288,6 +308,11 @@ export function InventoryPage() {
 
   const handleDeleteConfirm = () => {
     if (!deletingProduct) return;
+    if (deletingProduct.status === 'ACTIVE') {
+      toast.error(`❌ Không thể xóa "${deletingProduct.name}" vì đang ĐANG KINH DOANH.\nVui lòng chuyển trạng thái sang Ngừng kinh doanh trước khi xóa.`);
+      setDeletingProduct(null);
+      return;
+    }
     deleteProduct(deletingProduct.id);
     toast.success(`Đã xóa sản phẩm ${deletingProduct.name}`);
     setDeletingProduct(null);
@@ -322,11 +347,18 @@ export function InventoryPage() {
 
   const uploadToCloudinary = async (file: File) => {
     setIsUploading(true);
-    const toastId = toast.loading('Đang tải ảnh lên máy chủ...');
+    // Xem trước ngay lập tức 0ms bằng URL tạm thời (Optimistic Preview)
+    const instantPreviewUrl = URL.createObjectURL(file);
+    setEditingProduct(prev => ({ ...prev, mainImage: instantPreviewUrl }));
+
+    const toastId = toast.loading('Đang tối ưu & tải ảnh...');
     
     try {
+      // Nén ảnh trên trình duyệt siêu tốc (giảm dung lượng ~90-95%)
+      const compressedFile = await compressImage(file, { maxWidth: 1400, quality: 0.82 });
+
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', compressedFile);
       formData.append('folder', 'products');
       
       const response: any = await axiosClient.post('/uploads/image', formData, {
@@ -337,15 +369,12 @@ export function InventoryPage() {
       
       if (response && response.imageUrl) {
         setEditingProduct(prev => ({ ...prev, mainImage: response.imageUrl }));
-        toast.success('Tải ảnh lên thành công!', { id: toastId });
+        toast.success('Đã tải ảnh lên máy chủ!', { id: toastId });
       } else {
         throw new Error('Lỗi không xác định khi tải ảnh');
       }
     } catch (error: any) {
       toast.error(`Tải ảnh thất bại: ${error.message || 'Lỗi kết nối'}`, { id: toastId });
-      // Fallback: show local preview if upload fails
-      const objectUrl = URL.createObjectURL(file);
-      setEditingProduct(prev => ({ ...prev, mainImage: objectUrl }));
     } finally {
       setIsUploading(false);
     }
