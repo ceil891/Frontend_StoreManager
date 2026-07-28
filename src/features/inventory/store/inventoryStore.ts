@@ -927,7 +927,7 @@ export const useInventoryStore = create<InventoryState>()(
             onHand: 0, // sẽ được cập nhật từ inventory stock bên dưới
             status: (item.isActive ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE',
             description: item.description || '',
-            mainImage: item.mainImageUrl || '',
+            mainImage: item.mainImageUrl || item.mainImage || item.imageUrl || '',
             galleryImages: [],
             barcodes: item.barcode ? [item.barcode] : [],
             reorderPoint: 0,
@@ -1134,6 +1134,12 @@ export const useInventoryStore = create<InventoryState>()(
       },
 
       addCategory: async (category) => {
+        const tempId = String(Date.now());
+        const newRecord: ProductCategory = {
+          id: tempId,
+          ...category,
+        };
+        set((state) => ({ categories: [newRecord, ...state.categories] }));
         try {
           const payload = {
             categoryName: category.categoryName,
@@ -1149,10 +1155,13 @@ export const useInventoryStore = create<InventoryState>()(
           await axiosClient.post('/categories', payload);
           get().fetchCategories();
         } catch (error) {
-          console.error('Failed to add category:', error);
+          console.error('Failed to add category on API, kept local:', error);
         }
       },
       updateCategory: async (id, data) => {
+        set((state) => ({
+          categories: state.categories.map((c) => (c.id === id ? { ...c, ...data } : c)),
+        }));
         try {
           const payload = {
             categoryName: data.categoryName,
@@ -1166,17 +1175,18 @@ export const useInventoryStore = create<InventoryState>()(
             taxClass: data.taxClass,
           };
           await axiosClient.put(`/categories/${id}`, payload);
-          get().fetchCategories();
         } catch (error) {
-          console.error('Failed to update category:', error);
+          console.error('Failed to update category on API:', error);
         }
       },
       deleteCategory: async (id) => {
+        set((state) => ({
+          categories: state.categories.filter((c) => c.id !== id),
+        }));
         try {
           await axiosClient.delete(`/categories/${id}`);
-          get().fetchCategories();
         } catch (error) {
-          console.error('Failed to delete category:', error);
+          console.error('Failed to delete category on API:', error);
         }
       },
 
@@ -1405,7 +1415,7 @@ export const useInventoryStore = create<InventoryState>()(
             categoryId: categoryId,
             baseUnitId: baseUnitId,
             brand: product.brand,
-            mainImageUrl: product.mainImage,
+            mainImageUrl: product.mainImage || (product as any).mainImageUrl || '',
             weight: product.weight ? parseFloat(product.weight) || 0 : 0,
             reorderPoint: product.reorderPoint || 0,
             minStock: product.minStock || 0,
@@ -1453,7 +1463,7 @@ export const useInventoryStore = create<InventoryState>()(
             categoryId: categoryId,
             baseUnitId: baseUnitId,
             brand: data.brand,
-            mainImageUrl: data.mainImage,
+            mainImageUrl: data.mainImage || (data as any).mainImageUrl,
             weight: data.weight ? parseFloat(data.weight) || 0 : undefined,
             reorderPoint: data.reorderPoint,
             minStock: data.minStock,
@@ -2043,10 +2053,13 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
       updateUnit: async (id, data) => {
+        set((state) => ({
+          unitsList: state.unitsList.map((u) => (u.id === id ? { ...u, ...data } : u)),
+        }));
         try {
           const payload = {
             unitName: data.unitName,
-            unitCode: data.code,           // BẮT BUỘC gửi để backend validate
+            unitCode: data.code,
             description: data.notes,
             isActive: data.status === undefined ? undefined : data.status === 'ACTIVE',
             unitType: data.type,
@@ -2055,25 +2068,18 @@ export const useInventoryStore = create<InventoryState>()(
             precisionDecimals: data.precisionDecimals,
           };
           await axiosClient.put(`/units/${id}`, payload);
-          await get().fetchUnits();
         } catch (error) {
-          console.error('Failed to update unit:', error);
-          throw error;
+          console.error('Failed to update unit on API:', error);
         }
       },
       deleteUnit: async (id) => {
+        set((state) => ({
+          unitsList: state.unitsList.filter((u) => u.id !== id),
+        }));
         try {
           await axiosClient.delete(`/units/${id}`);
-          await get().fetchUnits();
         } catch (error: any) {
-          // Backend trả về 409 Conflict khi đơn vị vẫn đang HOẠT ĐỘNG
-          const message =
-            error?.response?.data?.message ||
-            error?.response?.data?.error ||
-            'Không thể xóa đơn vị này. Vui lòng tắt hoạt động trước.';
-          alert(message); // hoặc dùng toast nếu có
-          console.error('Failed to delete unit:', error);
-          throw error;
+          console.error('Failed to delete unit on API:', error);
         }
       },
 
@@ -2084,11 +2090,13 @@ export const useInventoryStore = create<InventoryState>()(
             id: String(z.id),
             zoneCode: z.zoneCode || '',
             zoneName: z.zoneName || '',
-            condition: z.conditions || '',
-            capacity: 500,
-            branchName: z.branchName || 'Chi nhánh Quận 1',
-            status: 'HOẠT_ĐỘNG' as const,
-            description: '',
+            condition: z.conditions || z.condition || '',
+            conditions: z.conditions || z.condition || '',
+            capacity: z.capacity ? Number(z.capacity) : 100,
+            branchId: z.branchId ? String(z.branchId) : (z.branch?.id ? String(z.branch.id) : undefined),
+            branchName: z.branchName || z.branch?.branchName || 'Chi nhánh mặc định',
+            status: z.status || 'ACTIVE',
+            description: z.description || '',
           }));
           set({ warehouseZones: zones });
         } catch (error) {
@@ -2100,13 +2108,17 @@ export const useInventoryStore = create<InventoryState>()(
           const payload = {
             zoneCode: zone.zoneCode,
             zoneName: zone.zoneName,
-            conditions: zone.condition,
-            branchId: resolveBranchId(zone.branchName),
+            conditions: zone.condition || zone.conditions,
+            capacity: zone.capacity,
+            status: zone.status || 'ACTIVE',
+            description: zone.description,
+            branchId: zone.branchId ? Number(zone.branchId) : resolveBranchId(zone.branchName),
           };
           await axiosClient.post('/warehouses/zones', payload);
           await get().fetchWarehouseZones();
         } catch (error) {
           console.error('Failed to add warehouse zone:', error);
+          throw error;
         }
       },
       updateWarehouseZone: async (id, data) => {
@@ -2114,13 +2126,17 @@ export const useInventoryStore = create<InventoryState>()(
           const payload = {
             zoneCode: data.zoneCode,
             zoneName: data.zoneName,
-            conditions: data.condition,
-            branchId: data.branchName ? resolveBranchId(data.branchName) : undefined,
+            conditions: data.condition || data.conditions,
+            capacity: data.capacity,
+            status: data.status,
+            description: data.description,
+            branchId: data.branchId ? Number(data.branchId) : (data.branchName ? resolveBranchId(data.branchName) : undefined),
           };
           await axiosClient.put(`/warehouses/zones/${id}`, payload);
           await get().fetchWarehouseZones();
         } catch (error) {
           console.error('Failed to update warehouse zone:', error);
+          throw error;
         }
       },
       deleteWarehouseZone: async (id) => {
@@ -2129,6 +2145,7 @@ export const useInventoryStore = create<InventoryState>()(
           await get().fetchWarehouseZones();
         } catch (error) {
           console.error('Failed to delete warehouse zone:', error);
+          throw error;
         }
       },
 
@@ -2139,56 +2156,72 @@ export const useInventoryStore = create<InventoryState>()(
             id: String(b.id),
             binCode: b.binCode || '',
             barcode: b.barcode || '',
-            areaCode: b.zoneCode || '',
-            areaName: b.zoneName || '',
-            maxWeightKg: b.maxCapacity ? Number(b.maxCapacity) : 500,
-            maxVolumeM3: 2.5,
-            status: 'EMPTY' as const,
-            notes: '',
+            rackId: b.rackId ? String(b.rackId) : undefined,
+            rackCode: b.rackCode || '',
+            rackName: b.rackName || '',
+            areaId: b.areaId ? String(b.areaId) : undefined,
+            areaCode: b.areaCode || b.zoneCode || '',
+            areaName: b.areaName || b.zoneName || '',
+            zoneId: b.zoneId ? String(b.zoneId) : undefined,
+            zoneCode: b.zoneCode || '',
+            branchId: b.branchId ? String(b.branchId) : undefined,
+            branchName: b.branchName || '',
+            maxWeightKg: b.maxWeightKg != null ? Number(b.maxWeightKg) : (b.maxCapacity != null ? Number(b.maxCapacity) : 500),
+            maxVolumeM3: b.maxVolumeM3 != null ? Number(b.maxVolumeM3) : 2.5,
+            maxPallet: b.maxPallet != null ? Number(b.maxPallet) : 4,
+            status: b.status || 'EMPTY',
+            description: b.description || '',
           }));
           set({ warehouseBins: bins });
         } catch (error) {
           console.error('Failed to fetch warehouse bins:', error);
         }
       },
-      addWarehouseBin: async (bin) => {
+      addWarehouseBin: async (bin: any) => {
         try {
-          const zone = get().warehouseZones.find(z => z.zoneCode === bin.areaCode);
-          const zoneId = zone ? Number(zone.id) : 1;
           const payload = {
             binCode: bin.binCode,
             barcode: bin.barcode,
-            maxCapacity: bin.maxWeightKg,
-            zoneId: zoneId,
+            rackId: bin.rackId ? Number(bin.rackId) : undefined,
+            maxWeightKg: bin.maxWeightKg,
+            maxVolumeM3: bin.maxVolumeM3,
+            maxPallet: bin.maxPallet,
+            status: bin.status || 'EMPTY',
+            description: bin.description || '',
           };
           await axiosClient.post('/warehouses/bins', payload);
           await get().fetchWarehouseBins();
         } catch (error) {
           console.error('Failed to add warehouse bin:', error);
+          throw error;
         }
       },
-      updateWarehouseBin: async (id, data) => {
+      updateWarehouseBin: async (id, data: any) => {
         try {
-          const zone = data.areaCode ? get().warehouseZones.find(z => z.zoneCode === data.areaCode) : undefined;
-          const zoneId = zone ? Number(zone.id) : undefined;
           const payload = {
             binCode: data.binCode,
             barcode: data.barcode,
-            maxCapacity: data.maxWeightKg,
-            zoneId: zoneId,
+            rackId: data.rackId ? Number(data.rackId) : undefined,
+            maxWeightKg: data.maxWeightKg,
+            maxVolumeM3: data.maxVolumeM3,
+            maxPallet: data.maxPallet,
+            status: data.status,
+            description: data.description,
           };
           await axiosClient.put(`/warehouses/bins/${id}`, payload);
           await get().fetchWarehouseBins();
         } catch (error) {
           console.error('Failed to update warehouse bin:', error);
+          throw error;
         }
       },
       deleteWarehouseBin: async (id) => {
         try {
-          await axiosClient.delete(`/warehouses/bins/${id}`); // Note: path changed from /warehouse/bins to /warehouses/bins to match backend @RequestMapping("/api/v1/warehouses")
+          await axiosClient.delete(`/warehouses/bins/${id}`);
           await get().fetchWarehouseBins();
         } catch (error) {
           console.error('Failed to delete warehouse bin:', error);
+          throw error;
         }
       },
 

@@ -51,6 +51,7 @@ export function PosSessionsPage() {
   const {
     sessions: storeSessions,
     fetchSessions,
+    addSession,
   } = usePosSessionStore();
 
   useEffect(() => {
@@ -222,35 +223,22 @@ export function PosSessionsPage() {
     const sessionCode = `SESS-${todayStr}-${nextSessionNum}`;
     
     try {
-      await axiosClient.post('/pos/sessions', {
+      await addSession({
         sessionCode,
         terminalCode: newTerminalId,
         cashierName: newCashierName,
-        openingCash: openingCash,
-        expectedClosingCash: openingCash,
-        totalTxCount: 0,
-        totalRevenue: 0,
+        openingTime: new Date().toISOString().replace('T', ' ').slice(0, 19),
+        openingCash,
+        expectedCash: openingCash,
+        actualCash: 0,
+        cashDifference: 0,
+        status: 'OPEN',
       });
+      setIsCreateModalOpen(false);
+      toast.success(`Đã mở thành công ca làm việc mới: ${sessionCode} tại quầy ${newTerminalId}!`);
     } catch (err) {
       console.error('Failed to create POS session:', err);
     }
-
-    const newRecord: PosSessionRecord = {
-      id: String(data.length + 100),
-      sessionCode,
-      terminalId: newTerminalId,
-      cashierName: newCashierName,
-      openedTimestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
-      openingCashFloatVnd: openingCash,
-      expectedClosingCashVnd: openingCash, // initializes expected to opening float
-      totalTransactionsCount: 0,
-      totalGrossRevenueVnd: 0,
-      status: 'IN_PROGRESS'
-    };
-    
-    setData([newRecord, ...data]);
-    setIsCreateModalOpen(false);
-    toast.success(`Đã mở thành công ca làm việc mới: ${newRecord.sessionCode} tại quầy ${newTerminalId}!`);
   };
 
   // 4. Edit Session handlers

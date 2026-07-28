@@ -160,7 +160,7 @@ export const NAV_GROUPS: NavGroup[] = [
         name: 'Xuất nhập & Điều chuyển',
         icon: Truck,
         children: [
-          { name: 'Phiếu Nhập kho', href: '/inventory/imports', icon: Layers, permission: 'catalog:inventory:adjust' },
+          { name: 'Phiếu nhập kho', href: '/inventory/imports', icon: Layers, permission: 'catalog:inventory:adjust' },
           { name: 'Yêu cầu xuất kho', href: '/inventory/stock-outs', icon: Truck, permission: 'catalog:inventory:adjust' },
           { name: 'Chuyển kho', href: '/inventory/transfers', icon: Truck, permission: 'catalog:inventory:adjust' },
           { name: 'Phiếu chuyển kho', href: '/inventory/transfers-list', icon: Truck, permission: 'catalog:inventory:adjust' },
@@ -252,7 +252,7 @@ export const NAV_GROUPS: NavGroup[] = [
     group: 'Khách hàng (CRM)',
     items: [
       {
-        name: 'Khách hàng & Khai báo',
+        name: 'Khách hàng & Thẻ thành viên',
         icon: Users,
         children: [
           { name: 'Khách hàng', href: '/crm', icon: Users, permission: 'catalog:product:view' },

@@ -110,8 +110,16 @@ export const usePurchaseStore = create<PurchaseState>()(
       },
 
       addSupplier: async (supplier) => {
+        const tempId = String(Date.now());
+        const newRecord: SupplierRecord = {
+          id: tempId,
+          ...supplier,
+        };
+        set((state) => ({ suppliers: [newRecord, ...state.suppliers] }));
+
         try {
           const form = toFormData({
+            supplierCode: supplier.code,
             name: supplier.supplierName,
             category: supplier.category,
             contactPerson: supplier.contactPerson,
@@ -127,7 +135,7 @@ export const usePurchaseStore = create<PurchaseState>()(
           });
           await get().fetchSuppliers();
         } catch (err) {
-          console.error('Failed to add supplier:', err);
+          console.error('Failed to add supplier to API, kept in local state:', err);
         }
       },
 
@@ -173,33 +181,50 @@ export const usePurchaseStore = create<PurchaseState>()(
       fetchPurchaseOrders: async () => {
         try {
           const res = await axiosClient.get<any, any>('/purchase/orders');
-          const data = res.content || res || [];
-          set({ purchaseOrders: Array.isArray(data) ? data.map((item: any) => ({
-            id: String(item.id),
-            poNumber: item.poNumber || `PO-${item.id}`,
-            supplierName: item.supplierName || '',
-            destinationStore: item.destinationStore || 'Main Branch',
-            orderDate: item.orderDate ? item.orderDate.split('T')[0] : '',
-            estDeliveryDate: item.estDeliveryDate ? item.estDeliveryDate.split('T')[0] : '',
-            totalCost: Number(item.totalCost || 0),
-            status: item.status || 'DRAFT',
-            paymentStatus: item.paymentStatus || 'UNPAID',
-            orderedBy: item.orderedBy || '',
-            itemsCount: Number(item.itemsCount || 0),
-            notes: item.notes || '',
-          })) : [] });
+          const data = extractPageContent<any>(res);
+          if (Array.isArray(data) && data.length > 0) {
+            const apiOrders = data.map((item: any) => ({
+              id: String(item.id),
+              poNumber: item.poNumber || `PO-${item.id}`,
+              supplierName: item.supplierName || '',
+              destinationStore: item.destinationStore || 'Main Branch',
+              orderDate: item.orderDate ? item.orderDate.split('T')[0] : '',
+              estDeliveryDate: item.estDeliveryDate ? item.estDeliveryDate.split('T')[0] : '',
+              totalCost: Number(item.totalCost || 0),
+              status: item.status || 'DRAFT',
+              paymentStatus: item.paymentStatus || 'UNPAID',
+              orderedBy: item.orderedBy || '',
+              itemsCount: Number(item.itemsCount || 0),
+              notes: item.notes || '',
+            }));
+            const currentLocal = get().purchaseOrders || [];
+            const merged = [...apiOrders];
+            currentLocal.forEach(loc => {
+              if (!merged.some(m => String(m.id) === String(loc.id) || m.poNumber === loc.poNumber)) {
+                merged.push(loc);
+              }
+            });
+            set({ purchaseOrders: merged });
+          }
         } catch (e) {
           console.error('Failed to fetch purchase orders:', e);
-          set({ purchaseOrders: [] });
         }
       },
 
       addPurchaseOrder: async (po) => {
+        const tempId = `po_${Date.now()}`;
+        const newRecord: PurchaseOrderItem = {
+          id: tempId,
+          ...po,
+        };
+        set((state) => ({
+          purchaseOrders: [newRecord, ...state.purchaseOrders.filter(p => p.poNumber !== po.poNumber)],
+        }));
         try {
           await axiosClient.post('/purchase/orders', po);
           await get().fetchPurchaseOrders();
         } catch (e) {
-          console.error(e);
+          console.error('Failed to post PO to API, kept in local state:', e);
         }
       },
 

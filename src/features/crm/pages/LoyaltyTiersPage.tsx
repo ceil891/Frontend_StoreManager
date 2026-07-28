@@ -188,9 +188,40 @@ const TIER_THEMES = [
   },
 ];
 
+import { useLoyaltyConfigStore } from '../store/loyaltyConfigStore';
+import { toast } from 'sonner';
+
 // ─────────────────────────────────────────────────────────────────────────────
 export function LoyaltyTiersPage() {
-  const [tiers, setTiers] = useState<LoyaltyTier[]>(INITIAL_TIERS);
+  const { config, updateConfig } = useLoyaltyConfigStore();
+  const [localConfig, setLocalConfig] = useState(config);
+  const [isConfigSaving, setIsConfigSaving] = useState(false);
+
+  const handleSaveLoyaltyConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsConfigSaving(true);
+    updateConfig(localConfig);
+    setTimeout(() => {
+      setIsConfigSaving(false);
+      toast.success('Đã cập nhật cấu hình quy tắc tích & đổi điểm thành công!');
+    }, 400);
+  };
+  const [tiers, setTiers] = useState<LoyaltyTier[]>(() => {
+    try {
+      const saved = localStorage.getItem('retailhub-loyalty-tiers');
+      return saved ? JSON.parse(saved) : INITIAL_TIERS;
+    } catch {
+      return INITIAL_TIERS;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('retailhub-loyalty-tiers', JSON.stringify(tiers));
+    } catch (e) {
+      console.error('Failed to save loyalty tiers to localStorage', e);
+    }
+  }, [tiers]);
   const [editingTier, setEditingTier] = useState<LoyaltyTier | null>(null);
   const [deletingTier, setDeletingTier] = useState<LoyaltyTier | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -315,6 +346,97 @@ export function LoyaltyTiersPage() {
             Tạo hạng thành viên
           </button>
         </div>
+
+        {/* ── ⚙️ Point Configuration Card ─────────────────────────────────────── */}
+        <form onSubmit={handleSaveLoyaltyConfig} className="bg-white dark:bg-gray-800 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 shadow-sm p-6 space-y-4">
+          <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700/60 pb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                ⚙️
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-gray-900 dark:text-white">Cấu Hình Quy Tắc Tích & Đổi Điểm POS/CRM</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Thiết lập tỷ lệ quy đổi số tiền chi tiêu ra điểm thưởng và giá trị giảm giá khi tiêu điểm.</p>
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={isConfigSaving}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow transition-all active:scale-95 disabled:opacity-50"
+            >
+              {isConfigSaving ? 'Đang lưu...' : '✓ Lưu cấu hình điểm'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
+            <div className="bg-gray-50 dark:bg-gray-900/30 p-3 rounded-xl border border-gray-200 dark:border-gray-700">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                Chi tiêu tích 1 điểm (VNĐ)
+              </label>
+              <input
+                type="number"
+                min={100}
+                step={100}
+                value={localConfig.earnRateAmount}
+                onChange={(e) => setLocalConfig({ ...localConfig, earnRateAmount: Math.max(100, Number(e.target.value)) })}
+                className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono font-bold bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+              />
+              <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
+                Khách mua {localConfig.earnRateAmount.toLocaleString('vi-VN')}đ = +1 điểm
+              </p>
+            </div>
+
+            <div className="bg-gray-50 dark:bg-gray-900/30 p-3 rounded-xl border border-gray-200 dark:border-gray-700">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                Giá trị giảm giá của 1 điểm (VNĐ)
+              </label>
+              <input
+                type="number"
+                min={1}
+                step={10}
+                value={localConfig.redeemRateValue}
+                onChange={(e) => setLocalConfig({ ...localConfig, redeemRateValue: Math.max(1, Number(e.target.value)) })}
+                className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono font-bold bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+              />
+              <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
+                1 điểm = {localConfig.redeemRateValue.toLocaleString('vi-VN')}đ giảm vào hóa đơn
+              </p>
+            </div>
+
+            <div className="bg-gray-50 dark:bg-gray-900/30 p-3 rounded-xl border border-gray-200 dark:border-gray-700">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                Giảm tối đa bằng điểm (% hóa đơn)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={localConfig.maxDiscountPercent}
+                onChange={(e) => setLocalConfig({ ...localConfig, maxDiscountPercent: Math.min(100, Math.max(1, Number(e.target.value))) })}
+                className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono font-bold bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+              />
+              <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
+                Được trừ tối đa {localConfig.maxDiscountPercent}% giá trị hóa đơn
+              </p>
+            </div>
+
+            <div className="bg-gray-50 dark:bg-gray-900/30 p-3 rounded-xl border border-gray-200 dark:border-gray-700">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                Hạn sử dụng điểm (Ngày)
+              </label>
+              <input
+                type="number"
+                min={30}
+                value={localConfig.pointExpiryDays}
+                onChange={(e) => setLocalConfig({ ...localConfig, pointExpiryDays: Math.max(1, Number(e.target.value)) })}
+                className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono font-bold bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+              />
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                Điểm hết hạn sau {localConfig.pointExpiryDays} ngày
+              </p>
+            </div>
+          </div>
+        </form>
 
         {/* ── Summary bar ──────────────────────────────────────────────────────── */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">

@@ -436,7 +436,7 @@ export function ImportReceiptsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu Nhập kho (GRN)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu nhập kho (GRN)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Ghi nhận và kiểm duyệt các đợt hàng nhập kho từ nhà cung cấp. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">

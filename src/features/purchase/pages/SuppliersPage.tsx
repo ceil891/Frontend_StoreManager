@@ -209,7 +209,7 @@ export function SuppliersPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Danh mục Nhà cung cấp</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Danh mục nhà cung cấp</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý đối tác nhà cung cấp, chỉ số hiệu suất và điều khoản hợp tác. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
@@ -471,34 +471,54 @@ export function SuppliersPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục hàng hóa chính</label>
-                  <select
-                    value={editingSupplier.category || 'GENERAL'}
-                    onChange={(e) => setEditingSupplier({ ...editingSupplier, category: e.target.value as any })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="GENERAL">Hàng hóa chung (General)</option>
-                    <option value="ELECTRONICS">Thiết bị điện tử</option>
-                    <option value="APPAREL">Thời trang & Phụ kiện</option>
-                    <option value="FOOD_BEVERAGE">Thực phẩm & Đồ uống</option>
-                    <option value="HARDWARE">Công cụ & Phần cứng</option>
-                    <option value="PACKAGING">Bao bì & Đóng gói</option>
-                  </select>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">Danh mục hàng hóa chính (Chọn nhiều)</label>
+                <div className="grid grid-cols-2 gap-2 bg-gray-50 dark:bg-gray-900/40 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700">
+                  {[
+                    { id: 'GENERAL', label: 'Hàng hóa chung' },
+                    { id: 'ELECTRONICS', label: 'Thiết bị điện tử' },
+                    { id: 'APPAREL', label: 'Thời trang & Phụ kiện' },
+                    { id: 'FOOD_BEVERAGE', label: 'Thực phẩm & Đồ uống' },
+                    { id: 'HARDWARE', label: 'Công cụ & Phần cứng' },
+                    { id: 'PACKAGING', label: 'Bao bì & Đóng gói' },
+                  ].map((cat) => {
+                    const currentCats = (editingSupplier.category || 'GENERAL').split(',').map(c => c.trim());
+                    const isChecked = currentCats.includes(cat.id);
+                    return (
+                      <label key={cat.id} className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            let updated: string[];
+                            if (e.target.checked) {
+                              updated = [...currentCats, cat.id].filter(Boolean);
+                            } else {
+                              updated = currentCats.filter(c => c !== cat.id);
+                            }
+                            if (updated.length === 0) updated = ['GENERAL'];
+                            setEditingSupplier({ ...editingSupplier, category: Array.from(new Set(updated)).join(',') });
+                          }}
+                          className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                        />
+                        {cat.label}
+                      </label>
+                    );
+                  })}
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái giao dịch</label>
-                  <select
-                    value={editingSupplier.status || 'ACTIVE'}
-                    onChange={(e) => setEditingSupplier({ ...editingSupplier, status: e.target.value as any })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="ACTIVE">Đang giao dịch (Active)</option>
-                    <option value="ON_HOLD">Tạm ngưng (On Hold)</option>
-                    <option value="INACTIVE">Ngừng giao dịch (Inactive)</option>
-                  </select>
-                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái giao dịch</label>
+                <select
+                  value={editingSupplier.status || 'ACTIVE'}
+                  onChange={(e) => setEditingSupplier({ ...editingSupplier, status: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="ACTIVE">Đang giao dịch (Active)</option>
+                  <option value="ON_HOLD">Tạm ngưng (On Hold)</option>
+                  <option value="INACTIVE">Ngừng giao dịch (Inactive)</option>
+                </select>
               </div>
             </div>
 
@@ -595,25 +615,17 @@ export function SuppliersPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tài khoản</label>
-                  <input
-                    type="text"
-                    value={editingSupplier.bankAccount || ''}
-                    onChange={(e) => setEditingSupplier({ ...editingSupplier, bankAccount: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chủ tài khoản</label>
-                  <input
-                    type="text"
-                    value={editingSupplier.accountHolder || ''}
-                    onChange={(e) => setEditingSupplier({ ...editingSupplier, accountHolder: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  Thông tin các Tài khoản Ngân hàng (Cho phép nhập 2-3+ TK)
+                </label>
+                <textarea
+                  rows={2}
+                  value={editingSupplier.bankAccount || ''}
+                  onChange={(e) => setEditingSupplier({ ...editingSupplier, bankAccount: e.target.value })}
+                  placeholder="Ví dụ:&#10;TK 1: 1902838392 - Vietcombank (Chủ TK: CTY VINAMILK)&#10;TK 2: 0918273645 - Techcombank (Chủ TK: CTY VINAMILK)..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-xs focus:ring-2 focus:ring-emerald-500 resize-none"
+                />
               </div>
 
               <div>
