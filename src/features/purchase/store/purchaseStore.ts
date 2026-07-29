@@ -221,7 +221,34 @@ export const usePurchaseStore = create<PurchaseState>()(
           purchaseOrders: [newRecord, ...state.purchaseOrders.filter(p => p.poNumber !== po.poNumber)],
         }));
         try {
-          await axiosClient.post('/purchase/orders', po);
+          const nowIso = new Date().toISOString();
+          const details = (po.poLines || []).map((line, idx) => ({
+            productId: (line as any).productId ? Number((line as any).productId) : idx + 1,
+            productVariantId: (line as any).productVariantId ? Number((line as any).productVariantId) : null,
+            orderQuantity: Number(line.quantity || 1),
+            unitPrice: Number(line.unitPrice || 0),
+            note: line.productName || '',
+          }));
+
+          const validDetails = details.length > 0 ? details : [{
+            productId: 1,
+            productVariantId: null,
+            orderQuantity: po.itemsCount || 1,
+            unitPrice: po.totalCost || 0,
+            note: 'Sản phẩm đặt mua',
+          }];
+
+          const payload = {
+            poCode: po.poNumber || `PO-${Date.now()}`,
+            poDate: po.orderDate ? `${po.orderDate}T00:00:00` : nowIso,
+            expectedDate: po.estDeliveryDate ? `${po.estDeliveryDate}T00:00:00` : null,
+            supplierId: (po as any).supplierId ? Number((po as any).supplierId) : 1,
+            branchId: (po as any).branchId ? Number((po as any).branchId) : 1,
+            status: po.status || 'DRAFT',
+            note: po.notes || '',
+            details: validDetails,
+          };
+          await axiosClient.post('/purchase/orders', payload);
           await get().fetchPurchaseOrders();
         } catch (e) {
           console.error('Failed to post PO to API, kept in local state:', e);
