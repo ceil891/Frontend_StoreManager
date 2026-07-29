@@ -968,6 +968,22 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
 
+      deductProductStock: (deductions: { productId: string; qty: number }[]) => {
+        set((state) => {
+          const updatedProducts = state.products.map((p) => {
+            const found = deductions.find((d) => String(d.productId) === String(p.id) || d.productId === p.sku);
+            if (found) {
+              return {
+                ...p,
+                onHand: Math.max(0, (p.onHand || 0) - found.qty),
+              };
+            }
+            return p;
+          });
+          return { products: updatedProducts };
+        });
+      },
+
       fetchProductUnits: async (productId) => {
 
         const data = await axiosClient.get<any, any[]>(`/products/${productId}/units`);

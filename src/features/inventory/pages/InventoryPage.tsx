@@ -500,17 +500,37 @@ export function InventoryPage() {
       },
       {
         accessorKey: 'onHand',
-        header: 'Tồn kho',
+        header: 'Tồn kho & Cảnh báo',
         cell: ({ row }) => {
-          const threshold = getLowStockThreshold();
-          const isLowStock = row.original.onHand <= threshold;
-          return (
-            <div className="text-right">
-              <span className={`font-bold inline-flex items-center gap-1 ${isLowStock ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
-                {isLowStock && <AlertTriangle className="w-3.5 h-3.5" />}
-                {row.original.onHand}
+          const onHand = Number(row.original.onHand || 0);
+          const isActive = row.original.status === 'ACTIVE';
+
+          let statusBadge = (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200">
+              🟢 Còn hàng ({onHand})
+            </span>
+          );
+
+          if (!isActive || onHand <= 0) {
+            statusBadge = (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200">
+                🔴 Hết hàng
               </span>
-              <span className="text-gray-500 ml-1 text-xs">{row.original.unit}</span>
+            );
+          } else if (onHand <= 10) {
+            statusBadge = (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200">
+                🟡 Sắp hết ({onHand})
+              </span>
+            );
+          }
+
+          return (
+            <div className="flex flex-col items-end gap-1">
+              <span className="font-bold text-gray-900 dark:text-white">
+                {onHand} {row.original.unit}
+              </span>
+              {statusBadge}
             </div>
           );
         },

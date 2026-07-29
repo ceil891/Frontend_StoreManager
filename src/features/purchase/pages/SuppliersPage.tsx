@@ -4,6 +4,7 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePurchaseStore, type SupplierRecord } from '../store/purchaseStore';
+import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 import { toast } from 'sonner';
 import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
@@ -12,10 +13,26 @@ import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 
 export function SuppliersPage() {
   const { suppliers: data, addSupplier, updateSupplier, deleteSupplier, fetchSuppliers, isLoadingSuppliers } = usePurchaseStore();
+  const { categories, fetchCategories } = useInventoryStore();
   
   useEffect(() => {
     fetchSuppliers();
-  }, [fetchSuppliers]);
+    fetchCategories();
+  }, [fetchSuppliers, fetchCategories]);
+
+  const displayCategories = useMemo(() => {
+    if (categories && categories.length > 0) {
+      return categories.map(c => ({ id: c.categoryName, label: c.categoryName }));
+    }
+    return [
+      { id: 'Hàng hóa chung', label: 'Hàng hóa chung' },
+      { id: 'Thiết bị điện tử', label: 'Thiết bị điện tử' },
+      { id: 'Thời trang & Phụ kiện', label: 'Thời trang & Phụ kiện' },
+      { id: 'Thực phẩm & Đồ uống', label: 'Thực phẩm & Đồ uống' },
+      { id: 'Công cụ & Phần cứng', label: 'Công cụ & Phần cứng' },
+      { id: 'Bao bì & Đóng gói', label: 'Bao bì & Đóng gói' },
+    ];
+  }, [categories]);
   const [search, setSearch] = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierRecord | null>(null);
 
@@ -474,15 +491,8 @@ export function SuppliersPage() {
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">Danh mục hàng hóa chính (Chọn nhiều)</label>
                 <div className="grid grid-cols-2 gap-2 bg-gray-50 dark:bg-gray-900/40 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700">
-                  {[
-                    { id: 'GENERAL', label: 'Hàng hóa chung' },
-                    { id: 'ELECTRONICS', label: 'Thiết bị điện tử' },
-                    { id: 'APPAREL', label: 'Thời trang & Phụ kiện' },
-                    { id: 'FOOD_BEVERAGE', label: 'Thực phẩm & Đồ uống' },
-                    { id: 'HARDWARE', label: 'Công cụ & Phần cứng' },
-                    { id: 'PACKAGING', label: 'Bao bì & Đóng gói' },
-                  ].map((cat) => {
-                    const currentCats = (editingSupplier.category || 'GENERAL').split(',').map(c => c.trim());
+                  {displayCategories.map((cat) => {
+                    const currentCats = (editingSupplier.category || '').split(',').map(c => c.trim());
                     const isChecked = currentCats.includes(cat.id);
                     return (
                       <label key={cat.id} className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-300 cursor-pointer select-none">
@@ -496,7 +506,6 @@ export function SuppliersPage() {
                             } else {
                               updated = currentCats.filter(c => c !== cat.id);
                             }
-                            if (updated.length === 0) updated = ['GENERAL'];
                             setEditingSupplier({ ...editingSupplier, category: Array.from(new Set(updated)).join(',') });
                           }}
                           className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"

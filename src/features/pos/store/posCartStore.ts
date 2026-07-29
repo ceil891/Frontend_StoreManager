@@ -191,7 +191,31 @@ export const usePosCartStore = create<PosCartState>()(
       },
     }),
     {
-      name: 'pos-cart-storage-v2',
+      name: 'pos-cart-storage-session',
+      storage: {
+        getItem: (name) => {
+          try {
+            const item = sessionStorage.getItem(name);
+            return item ? JSON.parse(item) : null;
+          } catch {
+            return null;
+          }
+        },
+        setItem: (name, value) => {
+          try {
+            sessionStorage.setItem(name, JSON.stringify(value));
+          } catch (e) {
+            console.error(e);
+          }
+        },
+        removeItem: (name) => {
+          try {
+            sessionStorage.removeItem(name);
+          } catch (e) {
+            console.error(e);
+          }
+        },
+      },
       partialize: (state) => ({
         tabs: state.tabs,
         activeTabId: state.activeTabId,

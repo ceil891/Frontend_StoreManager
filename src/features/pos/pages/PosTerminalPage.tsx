@@ -147,6 +147,7 @@ export function PosTerminalPage() {
   const [newCustomerEmail, setNewCustomerEmail] = useState('');
   const [newCustomerTaxCode, setNewCustomerTaxCode] = useState('');
   const [newCustomerType, setNewCustomerType] = useState<'INDIVIDUAL' | 'BUSINESS'>('INDIVIDUAL');
+  const [isSubmittingQuickCustomer, setIsSubmittingQuickCustomer] = useState(false);
   const [newCustomerNotes, setNewCustomerNotes] = useState('');
   const [newCustomerAddress, setNewCustomerAddress] = useState({
     province: '',
@@ -157,8 +158,11 @@ export function PosTerminalPage() {
 
   const handleQuickCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanName = newCustomerName.trim();
-    const cleanPhone = newCustomerPhoneInput.trim().replace(/\s+/g, '');
+    if (isSubmittingQuickCustomer) return;
+    setIsSubmittingQuickCustomer(true);
+    try {
+      const cleanName = newCustomerName.trim();
+      const cleanPhone = newCustomerPhoneInput.trim().replace(/\s+/g, '');
 
     if (!cleanName) {
       toast.error('Vui lòng nhập Họ & Tên khách hàng!');
@@ -225,6 +229,9 @@ export function PosTerminalPage() {
     setNewCustomerTaxCode('');
     setNewCustomerNotes('');
     setNewCustomerAddress({ province: '', district: '', ward: '', addressDetail: '' });
+    } finally {
+      setIsSubmittingQuickCustomer(false);
+    }
   };
 
   // Voucher
@@ -442,20 +449,10 @@ export function PosTerminalPage() {
         promoCodeApplied: appliedVoucher?.code,
       });
 
-      // Tự động trừ tồn kho hiển thị (onHand) trên POS ngay lập tức
+      // Tự động trừ tồn kho hiển thị (onHand) trên POS ngay lập tức & đồng bộ toàn hệ thống
       try {
-        const { products } = useInventoryStore.getState();
-        const updatedProducts = products.map((p) => {
-          const itemInOrder = items.find((it) => String(it.id) === String(p.id));
-          if (itemInOrder) {
-            return {
-              ...p,
-              onHand: Math.max(0, (p.onHand || 0) - itemInOrder.quantity),
-            };
-          }
-          return p;
-        });
-        useInventoryStore.setState({ products: updatedProducts });
+        const deductions = items.map((it) => ({ productId: String(it.id), qty: it.quantity }));
+        (useInventoryStore.getState() as any).deductProductStock(deductions);
       } catch (err) {
         console.error('Failed to deduct local POS inventory state:', err);
       }
@@ -550,9 +547,14 @@ export function PosTerminalPage() {
               <Clock className="w-3.5 h-3.5" />
               <span>{currentTime.toLocaleDateString('vi-VN')} {currentTime.toLocaleTimeString('vi-VN')}</span>
             </div>
-            <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded border border-emerald-100 dark:border-emerald-800">
-              {getShift(currentTime)}
-            </p>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1" title="Phiên làm việc giỏ hàng của máy POS này được cô lập độc lập">
+                💻 Máy POS 01 (Độc lập)
+              </span>
+              <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded border border-emerald-100 dark:border-emerald-800">
+                {getShift(currentTime)}
+              </p>
+            </div>
           </div>
         </header>
 
@@ -961,8 +963,10 @@ export function PosTerminalPage() {
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-md transition-all active:scale-95 flex items-center gap-1.5"
+              disabled={isSubmittingQuickCustomer}
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-md transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
+              {isSubmittingQuickCustomer && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               <UserPlus className="w-4 h-4" /> ✓ Đăng ký & Chọn ngay
             </button>
           </div>
