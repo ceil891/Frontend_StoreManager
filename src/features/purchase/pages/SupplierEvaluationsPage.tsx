@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, Calendar, Star, User, ClipboardList, CheckCircle2, Award, AwardIcon, TrendingUp } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -279,7 +280,7 @@ export function SupplierEvaluationsPage() {
       </div>
 
       {/* Drawer Chi tiết tiêu chí chấm điểm */}
-      <Drawer
+      <Modal
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
         title={selectedItem ? `Chi tiết Đánh giá: ${selectedItem.supplierName}` : 'Thông tin chi tiết'}
@@ -345,7 +346,7 @@ export function SupplierEvaluationsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal lập phiếu đánh giá nhà cung cấp */}
       <Modal

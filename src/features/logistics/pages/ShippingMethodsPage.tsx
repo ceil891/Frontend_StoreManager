@@ -12,11 +12,28 @@ interface ShippingMethodRecord {
   methodCode: string;
   methodName: string;
   description: string;
-  estimatedHours: number;
+  estimatedMin: number;
+  estimatedMax: number;
+  timeUnit: 'HOURS' | 'DAYS';
+  fulfilledBy: 'INTERNAL' | 'GHN' | 'GHTK' | 'VIETTELPOST' | 'SHOPEE_EXPRESS';
+  baseWeightKg: number;
+  surchargePerKg: number;
+  freeshippingThreshold: number;
+  allowCod: boolean;
+  maxWeightKg: number;
   baseFee: number;
   status: 'ACTIVE' | 'INACTIVE';
   notes?: string;
 }
+
+const generateShippingCode = () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let randomPart = '';
+  for (let i = 0; i < 4; i++) {
+    randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `SHIP-${randomPart}`;
+};
 
 export function ShippingMethodsPage() {
   const [data, setData] = useState<ShippingMethodRecord[]>([]);
@@ -37,7 +54,15 @@ export function ShippingMethodsPage() {
           methodCode: item.methodCode || `SM-${item.id}`,
           methodName: item.methodName || 'Phương thức giao hàng',
           description: item.description || '',
-          estimatedHours: Number(item.estimatedHours || 24),
+          estimatedMin: Number(item.estimatedMin || 1),
+          estimatedMax: Number(item.estimatedMax || 3),
+          timeUnit: item.timeUnit || 'DAYS',
+          fulfilledBy: item.fulfilledBy || 'INTERNAL',
+          baseWeightKg: Number(item.baseWeightKg || 1),
+          surchargePerKg: Number(item.surchargePerKg || 0),
+          freeshippingThreshold: Number(item.freeshippingThreshold || 0),
+          allowCod: item.allowCod !== undefined ? item.allowCod : true,
+          maxWeightKg: Number(item.maxWeightKg || 10),
           baseFee: Number(item.baseFee || 0),
           status: item.status || 'ACTIVE',
           notes: item.notes || ''
@@ -61,10 +86,18 @@ export function ShippingMethodsPage() {
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingItem({
-      methodCode: `SM-${Date.now().toString().slice(-6)}`,
+      methodCode: generateShippingCode(),
       methodName: '',
       description: '',
-      estimatedHours: 24,
+      estimatedMin: 1,
+      estimatedMax: 3,
+      timeUnit: 'DAYS',
+      fulfilledBy: 'INTERNAL',
+      baseWeightKg: 1,
+      surchargePerKg: 0,
+      freeshippingThreshold: 0,
+      allowCod: true,
+      maxWeightKg: 10,
       baseFee: 30000,
       status: 'ACTIVE',
       notes: '',
@@ -73,6 +106,7 @@ export function ShippingMethodsPage() {
   };
 
   const handleOpenEdit = (item: ShippingMethodRecord) => {
+    setSelected(null);
     setModalMode('edit');
     setEditingItem(item);
     setIsModalOpen(true);
@@ -87,7 +121,15 @@ export function ShippingMethodsPage() {
         methodCode: editingItem.methodCode,
         methodName: editingItem.methodName,
         description: editingItem.description,
-        estimatedHours: Number(editingItem.estimatedHours || 0),
+        estimatedMin: Number(editingItem.estimatedMin || 0),
+        estimatedMax: Number(editingItem.estimatedMax || 0),
+        timeUnit: editingItem.timeUnit,
+        fulfilledBy: editingItem.fulfilledBy,
+        baseWeightKg: Number(editingItem.baseWeightKg || 0),
+        surchargePerKg: Number(editingItem.surchargePerKg || 0),
+        freeshippingThreshold: Number(editingItem.freeshippingThreshold || 0),
+        allowCod: editingItem.allowCod,
+        maxWeightKg: Number(editingItem.maxWeightKg || 0),
         baseFee: Number(editingItem.baseFee || 0),
         status: editingItem.status,
         notes: editingItem.notes
@@ -149,9 +191,13 @@ export function ShippingMethodsPage() {
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
       },
       {
-        accessorKey: 'estimatedHours',
+        accessorKey: 'estimatedTime',
         header: 'Hạn giao (dự kiến)',
-        cell: (info) => <span className="font-mono">{info.getValue() as number} giờ</span>,
+        cell: (info) => {
+          const row = info.row.original;
+          const unit = row.timeUnit === 'DAYS' ? 'Ngày' : 'Giờ';
+          return <span className="font-mono">{row.estimatedMin} - {row.estimatedMax} {unit}</span>;
+        },
       },
       {
         accessorKey: 'baseFee',
@@ -238,10 +284,11 @@ export function ShippingMethodsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
       )}
 
-      <Drawer
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title={`Chi tiết hình thức: ${selected?.methodName}`}
+        title={`Chi tiết hình thức giao hàng: ${selected?.methodName || ''}`}
+        width="max-w-lg"
       >
         {selected && (
           <div className="space-y-4 text-sm">
@@ -268,7 +315,7 @@ export function ShippingMethodsPage() {
                 <span className="text-gray-500 flex items-center gap-1">
                   <Clock className="w-4 h-4 text-gray-400" /> Hạn Giao Dự Kiến:
                 </span>
-                <p className="font-mono font-semibold">{selected.estimatedHours} giờ</p>
+                <p className="font-mono font-semibold">{selected.estimatedMin} - {selected.estimatedMax} {selected.timeUnit === 'DAYS' ? 'Ngày' : 'Giờ'}</p>
               </div>
               <div>
                 <span className="text-gray-500">Trạng thái:</span>
@@ -282,6 +329,30 @@ export function ShippingMethodsPage() {
                   </span>
                 </div>
               </div>
+              <div>
+                <span className="text-gray-500">Đơn vị thực hiện:</span>
+                <p className="font-semibold">{selected.fulfilledBy}</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Freeship từ đơn:</span>
+                <p className="font-semibold">{selected.freeshippingThreshold ? formatCurrency(selected.freeshippingThreshold) : 'Không áp dụng'}</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Trọng lượng cơ bản:</span>
+                <p className="font-semibold">{selected.baseWeightKg} kg</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Phí cộng thêm/kg:</span>
+                <p className="font-semibold">{formatCurrency(selected.surchargePerKg)}</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Trọng lượng tối đa:</span>
+                <p className="font-semibold">{selected.maxWeightKg} kg</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Cho phép COD:</span>
+                <p className="font-semibold">{selected.allowCod ? 'Có' : 'Không'}</p>
+              </div>
             </div>
             {selected.notes && (
               <div>
@@ -291,9 +362,17 @@ export function ShippingMethodsPage() {
                 </p>
               </div>
             )}
+            <div className="flex justify-end pt-4 border-t">
+              <button
+                onClick={() => setSelected(null)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-sm"
+              >
+                Đóng Hộp Thoại
+              </button>
+            </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}
@@ -304,15 +383,26 @@ export function ShippingMethodsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Mã phương thức *</label>
-              <input
-                type="text"
-                value={editingItem.methodCode || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, methodCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
-                placeholder="SM-XXXX"
-                required
-                disabled={modalMode === 'edit'}
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={editingItem.methodCode || ''}
+                  onChange={(e) => setEditingItem({ ...editingItem, methodCode: e.target.value })}
+                  className="w-full p-2 border rounded font-mono"
+                  placeholder="SHIP-XXXX"
+                  required
+                  disabled={modalMode === 'edit'}
+                />
+                {modalMode === 'create' && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem({ ...editingItem, methodCode: generateShippingCode() })}
+                    className="px-3 py-2 bg-gray-100 border border-gray-300 rounded text-sm hover:bg-gray-200 dark:bg-gray-800 dark:border-gray-600"
+                  >
+                    🎲
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Tên hình thức *</label>
@@ -336,16 +426,56 @@ export function ShippingMethodsPage() {
               placeholder="Chi tiết cách thức giao hàng"
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Thời gian dự kiến (giờ) *</label>
+              <label className="block text-xs text-gray-500 mb-1">Thời gian (từ) *</label>
               <input
                 type="number"
-                value={editingItem.estimatedHours || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, estimatedHours: Number(e.target.value) })}
+                value={editingItem.estimatedMin || 0}
+                onChange={(e) => setEditingItem({ ...editingItem, estimatedMin: Number(e.target.value) })}
                 className="w-full p-2 border rounded font-mono"
                 required
+                min={1}
               />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Thời gian (đến) *</label>
+              <input
+                type="number"
+                value={editingItem.estimatedMax || 0}
+                onChange={(e) => setEditingItem({ ...editingItem, estimatedMax: Number(e.target.value) })}
+                className="w-full p-2 border rounded font-mono"
+                required
+                min={1}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Đơn vị *</label>
+              <select
+                value={editingItem.timeUnit || 'DAYS'}
+                onChange={(e) => setEditingItem({ ...editingItem, timeUnit: e.target.value as any })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="HOURS">Giờ</option>
+                <option value="DAYS">Ngày</option>
+              </select>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Đơn vị thực hiện *</label>
+              <select
+                value={editingItem.fulfilledBy || 'INTERNAL'}
+                onChange={(e) => setEditingItem({ ...editingItem, fulfilledBy: e.target.value as any })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="INTERNAL">Đội nhà/Tự giao</option>
+                <option value="GHN">Giao Hàng Nhanh</option>
+                <option value="GHTK">Giao Hàng Tiết Kiệm</option>
+                <option value="VIETTELPOST">Viettel Post</option>
+                <option value="SHOPEE_EXPRESS">Shopee Express</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Phí giao hàng cơ bản (VND) *</label>
@@ -357,6 +487,63 @@ export function ShippingMethodsPage() {
                 required
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Trọng lượng cơ bản (kg)</label>
+              <input
+                type="number"
+                value={editingItem.baseWeightKg || 0}
+                onChange={(e) => setEditingItem({ ...editingItem, baseWeightKg: Number(e.target.value) })}
+                className="w-full p-2 border rounded font-mono"
+                min={0}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Phí cộng thêm/kg (VND)</label>
+              <input
+                type="number"
+                value={editingItem.surchargePerKg || 0}
+                onChange={(e) => setEditingItem({ ...editingItem, surchargePerKg: Number(e.target.value) })}
+                className="w-full p-2 border rounded font-mono"
+                min={0}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Trọng lượng tối đa (kg)</label>
+              <input
+                type="number"
+                value={editingItem.maxWeightKg || 0}
+                onChange={(e) => setEditingItem({ ...editingItem, maxWeightKg: Number(e.target.value) })}
+                className="w-full p-2 border rounded font-mono"
+                min={0}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Freeship cho đơn từ (VND)</label>
+              <input
+                type="number"
+                value={editingItem.freeshippingThreshold || 0}
+                onChange={(e) => setEditingItem({ ...editingItem, freeshippingThreshold: Number(e.target.value) })}
+                className="w-full p-2 border rounded font-mono"
+                min={0}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="allowCod"
+              checked={editingItem.allowCod !== false}
+              onChange={(e) => setEditingItem({ ...editingItem, allowCod: e.target.checked })}
+              className="w-4 h-4 text-emerald-600 rounded border-gray-300"
+            />
+            <label htmlFor="allowCod" className="text-sm font-medium">Cho phép thanh toán COD</label>
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Trạng thái *</label>

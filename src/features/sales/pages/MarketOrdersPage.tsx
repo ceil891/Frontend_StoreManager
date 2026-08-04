@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, MapPin, Calendar, User, DollarSign, Tag, CheckCircle2, Clock, XCircle, Trash2, Edit } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { useSalesStore } from '@/features/sales/store/salesStore';
 import { axiosClient } from '@/shared/lib/axiosClient';
@@ -286,7 +287,7 @@ export function MarketOrdersPage() {
       </div>
 
       {/* Drawer Chi tiết đơn hàng và tọa độ */}
-      <Drawer
+      <Modal
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
         title={selectedItem ? `Chi tiết Đơn thị trường: ${selectedItem.orderCode}` : 'Thông tin chi tiết'}
@@ -379,7 +380,7 @@ export function MarketOrdersPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Lên đơn đi tuyến mới */}
       <Modal

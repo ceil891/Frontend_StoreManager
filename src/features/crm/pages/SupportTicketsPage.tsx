@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, LifeBuoy, Building2, CheckCircle2, Clock, ShieldAlert, Send, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
@@ -12,6 +11,8 @@ interface SupportTicketRecord {
   ticketNumber: string;
   customerName: string;
   customerEmail: string;
+  customerPhone?: string;
+  referenceCode?: string;
   subject: string;
   category: 'POS_HARDWARE' | 'SOFTWARE_SYNC' | 'BILLING_DISPUTE' | 'SHIPPING_DELAY' | 'WARRANTY_CLAIM' | 'GENERAL_INQUIRY';
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
@@ -19,9 +20,22 @@ interface SupportTicketRecord {
   assignedAgent: string;
   createdAt: string;
   updatedAt: string;
+  dueDate?: string;
   lastMessage: string;
   internalNotes?: string;
 }
+
+const calculateDueDate = (priority: string) => {
+  const now = new Date();
+  switch (priority) {
+    case 'URGENT': now.setHours(now.getHours() + 2); break;
+    case 'HIGH': now.setHours(now.getHours() + 24); break;
+    case 'MEDIUM': now.setHours(now.getHours() + 72); break;
+    case 'LOW':
+    default: now.setHours(now.getHours() + 168); break;
+  }
+  return now.toISOString().substring(0, 16).replace('T', ' ');
+};
 
 const priorityStyles = {
   LOW: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300',
@@ -100,17 +114,23 @@ export function SupportTicketsPage() {
 
   const handleOpenCreate = () => {
     setModalMode('create');
+    const now = new Date();
+    const yymmdd = now.toISOString().slice(2, 10).replace(/-/g, '');
+    const randomPad4 = Math.floor(1000 + Math.random() * 9000);
     setEditingTicket({
-      ticketNumber: `TCK-${Math.floor(1000 + Math.random() * 9000)}`,
+      ticketNumber: `TK-${yymmdd}-${randomPad4}`,
       customerName: '',
       customerEmail: '',
+      customerPhone: '',
+      referenceCode: '',
       subject: '',
       category: 'GENERAL_INQUIRY',
       priority: 'LOW',
       status: 'OPEN',
       assignedAgent: 'Unassigned',
-      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      createdAt: now.toISOString().replace('T', ' ').substring(0, 16),
+      updatedAt: now.toISOString().replace('T', ' ').substring(0, 16),
+      dueDate: calculateDueDate('LOW'),
       lastMessage: '',
       internalNotes: ''
     });
@@ -310,7 +330,7 @@ export function SupportTicketsPage() {
         <ReusableDataTable columns={columns} data={data.filter(item => !search || item.ticketNumber.toLowerCase().includes(search.toLowerCase()) || item.subject.toLowerCase().includes(search.toLowerCase()) || item.customerName.toLowerCase().includes(search.toLowerCase()) || item.assignedAgent?.toLowerCase().includes(search.toLowerCase()))} isLoading={isLoading} onRowClick={(row) => setSelectedTicket(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedTicket}
         onClose={() => setSelectedTicket(null)}
         title={selectedTicket ? `Phiếu Hỗ Trợ: ${selectedTicket.ticketNumber}` : 'Chi tiết phiếu'}
@@ -410,7 +430,7 @@ export function SupportTicketsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal: Thêm / Sửa */}
       <Modal
@@ -426,9 +446,8 @@ export function SupportTicketsPage() {
               <input
                 type="text"
                 value={editingTicket.ticketNumber || ''}
-                onChange={(e) => setEditingTicket({ ...editingTicket, ticketNumber: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-                required
+                readOnly
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-mono text-sm focus:outline-none cursor-default"
               />
             </div>
             <div>
@@ -448,7 +467,7 @@ export function SupportTicketsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng liên hệ *</label>
               <input
@@ -471,26 +490,56 @@ export function SupportTicketsPage() {
                 required
               />
             </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại *</label>
+              <input
+                type="tel"
+                value={editingTicket.customerPhone || ''}
+                onChange={(e) => setEditingTicket({ ...editingTicket, customerPhone: e.target.value })}
+                placeholder="0912 345 678"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                required
+              />
+            </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tiêu đề vấn đề *</label>
-            <input
-              type="text"
-              value={editingTicket.subject || ''}
-              onChange={(e) => setEditingTicket({ ...editingTicket, subject: e.target.value })}
-              placeholder="Mô tả tóm tắt sự cố..."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-              required
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tiêu đề vấn đề *</label>
+              <input
+                type="text"
+                value={editingTicket.subject || ''}
+                onChange={(e) => setEditingTicket({ ...editingTicket, subject: e.target.value })}
+                placeholder="Mô tả tóm tắt sự cố..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã tham chiếu (Đơn hàng / Mã POS)</label>
+              <input
+                type="text"
+                value={editingTicket.referenceCode || ''}
+                onChange={(e) => setEditingTicket({ ...editingTicket, referenceCode: e.target.value })}
+                placeholder="#DH-xxxxx hoặc POS-01"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+              />
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Độ ưu tiên</label>
               <select
                 value={editingTicket.priority || 'LOW'}
-                onChange={(e) => setEditingTicket({ ...editingTicket, priority: e.target.value as any })}
+                onChange={(e) => {
+                  const newPriority = e.target.value as any;
+                  setEditingTicket({ 
+                    ...editingTicket, 
+                    priority: newPriority,
+                    dueDate: calculateDueDate(newPriority)
+                  });
+                }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
               >
                 <option value="LOW">Thấp (low)</option>
@@ -500,18 +549,33 @@ export function SupportTicketsPage() {
               </select>
             </div>
             <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hạn xử lý (SLA)</label>
+              <input
+                type="text"
+                value={editingTicket.dueDate || ''}
+                readOnly
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none cursor-default"
+              />
+            </div>
+            <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái xử lý</label>
-              <select
-                value={editingTicket.status || 'OPEN'}
-                onChange={(e) => setEditingTicket({ ...editingTicket, status: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-              >
-                <option value="OPEN">Mới mở</option>
-                <option value="IN_PROGRESS">Đang xử lý</option>
-                <option value="WAITING_ON_CUSTOMER">Chờ phản hồi</option>
-                <option value="RESOLVED">Đã giải quyết</option>
-                <option value="CLOSED">Đã đóng</option>
-              </select>
+              {modalMode === 'create' ? (
+                <div className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white text-sm cursor-default font-medium">
+                  Mới mở (OPEN)
+                </div>
+              ) : (
+                <select
+                  value={editingTicket.status || 'OPEN'}
+                  onChange={(e) => setEditingTicket({ ...editingTicket, status: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                >
+                  <option value="OPEN">Mới mở</option>
+                  <option value="IN_PROGRESS">Đang xử lý</option>
+                  <option value="WAITING_ON_CUSTOMER">Chờ phản hồi</option>
+                  <option value="RESOLVED">Đã giải quyết</option>
+                  <option value="CLOSED">Đã đóng</option>
+                </select>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhân viên phụ trách</label>

@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Plus, Edit, Trash2, Eye, Search } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
@@ -213,7 +212,7 @@ export function MarketingCampaignsPage() {
       <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row: any) => setSelected(row)} />
 
       {/* Drawer chi tiết */}
-      <Drawer isOpen={!!selected && !isModalOpen} onClose={() => setSelected(null)} title="Chi tiết chiến dịch">
+      <Modal isOpen={!!selected && !isModalOpen} onClose={() => setSelected(null)} title="Chi tiết chiến dịch" width="max-w-lg">
         {selected && (
           <div className="space-y-2 text-sm">
             <p><strong>Mã:</strong> {selected.code}</p>
@@ -223,7 +222,7 @@ export function MarketingCampaignsPage() {
             <p><strong>Trạng thái:</strong> {selected.status.replace('_', ' ')}</p>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Thêm / Sửa */}
       <Modal isOpen={isModalOpen} onClose={() => setModalOpen(false)} title={isEdit ? 'Chỉnh sửa chiến dịch' : 'Thêm chiến dịch'} width="max-w-lg">

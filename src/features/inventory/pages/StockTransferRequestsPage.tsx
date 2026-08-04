@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, ArrowRightLeft, Calendar, User, FileText, CheckCircle2, Clock, XCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 import { useAuthStore } from '@/features/auth/store/authStore';
@@ -286,7 +287,7 @@ export function StockTransferRequestsPage() {
 
       <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
 
-      <Drawer
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
         title={`Chi tiết yêu cầu: ${selected?.transferNumber}`}
@@ -328,7 +329,7 @@ export function StockTransferRequestsPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}

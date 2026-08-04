@@ -1,3 +1,4 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { 
   Plus, Download, Search, Eye, ArrowRightLeft, Building2, FileText, 
@@ -5,8 +6,8 @@ import {
   HelpCircle, Info, Calendar, Sparkles, Tag, Layers 
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type StockTransferOrder } from '../store/inventoryStore';
 import { toast } from 'sonner';
@@ -288,7 +289,7 @@ export function StockTransferPage() {
       </div>
 
       {/* Drawer Xem Chi Tiết */}
-      <Drawer
+      <Modal
         isOpen={!!selectedTransfer}
         onClose={() => setSelectedTransfer(null)}
         title={selectedTransfer ? `Lệnh điều chuyển: ${selectedTransfer.transferNumber}` : 'Chi tiết lệnh chuyển kho'}
@@ -443,7 +444,7 @@ export function StockTransferPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Form Modal (Góp ý 4 + 5) */}
       <Modal

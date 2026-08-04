@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Building2, Users, UserCheck, Briefcase, DollarSign, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import { TreeSelect } from '@/shared/components/ui/TreeSelect';
 import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
@@ -305,7 +304,7 @@ export function DepartmentsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedDept(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedDept}
         onClose={() => setSelectedDept(null)}
         title={selectedDept ? `Department Specification: ${selectedDept.departmentCode}` : 'Department Dossier'}
@@ -404,7 +403,7 @@ export function DepartmentsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}

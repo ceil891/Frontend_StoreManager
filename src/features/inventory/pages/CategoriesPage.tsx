@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Tag, Layers, CheckCircle2, FileText, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import { TreeSelect } from '@/shared/components/ui/TreeSelect';
 import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
@@ -266,7 +267,7 @@ export function CategoriesPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedCategory(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedCategory}
         onClose={() => setSelectedCategory(null)}
         title={selectedCategory ? `Thẻ danh mục: ${selectedCategory.code}` : 'Chi tiết danh mục'}
@@ -365,7 +366,7 @@ export function CategoriesPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Form Modal */}
       <Modal

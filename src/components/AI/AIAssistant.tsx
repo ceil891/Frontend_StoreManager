@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, X, Send, Sparkles, BarChart2, TrendingUp } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
-import { useNavigate } from 'react-router';
+import { useNavigate, useLocation } from 'react-router';
 
 interface ChatMessageItem {
   id: string;
@@ -49,6 +49,8 @@ export function AIAssistant() {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  const isPosPage = location.pathname === '/pos';
 
   const [messages, setMessages] = useState<ChatMessageItem[]>([
     {
@@ -163,12 +165,16 @@ export function AIAssistant() {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
             onClick={() => setIsOpen(true)}
-            className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 transition-transform hover:scale-110 active:scale-95"
+            className={twMerge(
+              "fixed z-50 flex items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 transition-all hover:scale-110 active:scale-95",
+              isPosPage ? "bottom-6 left-6 h-12 w-12" : "bottom-6 right-6 h-14 w-14"
+            )}
+            title="CEO Assistant AI (Hỗ trợ bán hàng)"
           >
-            <Sparkles className="h-6 w-6 animate-pulse" />
-            <span className="absolute -top-1 -right-1 flex h-4 w-4">
+            <Sparkles className={twMerge("animate-pulse", isPosPage ? "h-5 w-5" : "h-6 w-6")} />
+            <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex h-4 w-4 rounded-full bg-red-500"></span>
+              <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-red-500"></span>
             </span>
           </motion.button>
         )}
@@ -182,7 +188,10 @@ export function AIAssistant() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="fixed bottom-6 right-6 z-50 flex h-[600px] w-[400px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900"
+            className={twMerge(
+              "fixed bottom-6 z-50 flex h-[600px] w-[400px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900",
+              isPosPage ? "left-6" : "right-6"
+            )}
           >
             {/* Header */}
             <div className="flex items-center justify-between bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-4 text-white">

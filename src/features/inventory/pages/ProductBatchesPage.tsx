@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Layers, Building2, Calendar, FileText, AlertTriangle, ShieldCheck, Edit, Trash2, X, SlidersHorizontal } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
@@ -347,7 +348,7 @@ export function ProductBatchesPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedBatch(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedBatch}
         onClose={() => setSelectedBatch(null)}
         title={selectedBatch ? `Batch Specification: ${selectedBatch.batchNumber}` : 'Batch Details'}
@@ -478,7 +479,7 @@ export function ProductBatchesPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Form Modal */}
       <Modal

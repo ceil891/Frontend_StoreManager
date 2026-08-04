@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, Printer, FileText, Code, CheckCircle2, Copy, Trash2, X, AlertTriangle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import { useSystemStore, type PrintTemplateRecord } from '../store/systemStore';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -375,11 +374,11 @@ export function PrintTemplatesPage() {
       </div>
 
       {/* VIEW DRAWER WITH REALISTIC PREVIEW */}
-      <Drawer
+      <Modal
         isOpen={!!selectedTemplate}
         onClose={() => setSelectedTemplate(null)}
         title={selectedTemplate ? `Mẫu in: ${selectedTemplate.templateCode}` : 'Chi tiết mẫu thiết kế'}
-        width="max-w-xl"
+        width="max-w-2xl"
       >
         {selectedTemplate && (
           <div className="space-y-6">
@@ -530,14 +529,14 @@ export function PrintTemplatesPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* FORM DRAWER */}
-      <Drawer
+      <Modal
         isOpen={formOpen}
         onClose={() => setFormOpen(false)}
         title={formMode === 'create' ? 'Tạo mới bản vẽ mẫu in ấn' : 'Sửa đổi chi tiết bản vẽ mẫu in'}
-        width="max-w-md"
+        width="max-w-lg"
       >
         <form onSubmit={handleSave} className="space-y-5">
           <div className="grid grid-cols-2 gap-4">
@@ -682,7 +681,7 @@ export function PrintTemplatesPage() {
             </button>
           </div>
         </form>
-      </Drawer>
+      </Modal>
 
       {/* DELETION CONFIRMATION MODAL */}
       <Modal

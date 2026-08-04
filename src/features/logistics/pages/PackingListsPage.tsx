@@ -120,21 +120,23 @@ export function PackingListsPage() {
       }
       setIsModalOpen(false);
       fetchPackingLists();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lỗi khi lưu phiếu đóng gói.');
+      const msg = err?.response?.data?.message || 'Lỗi vi phạm ràng buộc dữ liệu backend!';
+      toast.error(`Không thể lưu phiếu đóng gói: ${msg}`);
     }
   };
 
   const handleDelete = async (id: string) => {
+    setSelected(null);
     if (confirm('Bạn có chắc chắn muốn xóa phiếu đóng gói này?')) {
       try {
         await axiosClient.delete(`/wms/packing-lists/${id}`);
         toast.success('Đã xóa phiếu đóng gói thành công!');
         fetchPackingLists();
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
-        toast.error('Lỗi khi xóa phiếu đóng gói.');
+        toast.error('Lỗi vi phạm ràng buộc khi xóa phiếu đóng gói.');
       }
     }
   };
@@ -285,18 +287,19 @@ export function PackingListsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
       )}
 
-      {/* Drawer Chi Tiết Kiện Hàng */}
-      <Drawer
+      {/* Modal Xem chi tiết phiếu đóng gói căn giữa (TC-ALL-1) */}
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title={`Chi tiết Kiện Hàng: ${selected?.packingCode}`}
+        title={selected ? `Chi tiết đóng gói: ${selected.packingCode}` : 'Thông tin đóng gói'}
+        width="max-w-md"
       >
         {selected && (
-          <div className="space-y-6 text-sm text-gray-700 dark:text-gray-300">
+          <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <span className="text-gray-400">Mã đóng gói:</span>
-                <p className="font-mono font-semibold text-gray-900 dark:text-white">{selected.packingCode}</p>
+                <p className="font-mono font-semibold text-emerald-600">{selected.packingCode}</p>
               </div>
               <div>
                 <span className="text-gray-400">Đơn hàng nguồn:</span>
@@ -377,7 +380,7 @@ export function PackingListsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Tạo Phiếu Đóng Gói */}
       <Modal

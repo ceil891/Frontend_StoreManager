@@ -1,13 +1,10 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { useCrmStore } from '../store/crmStore';
-
-import { useCallback } from 'react';
 import { axiosClient } from '@/shared/lib/axiosClient';
 
 export interface ClaimRecord {
@@ -19,10 +16,14 @@ export interface ClaimRecord {
   handler: string;
   status: 'PENDING' | 'IN_PROGRESS' | 'APPROVED' | 'REJECTED';
   notes?: string;
+  conditionOnReceive?: string;
+  estimatedReturnDate?: string;
+  repairCost?: number;
+  approvalStatus?: string;
+  progressStatus?: string;
 }
 
 export function WarrantyClaimsPage() {
-  const setData = (_fn: any) => {};
   const {
     warrantyClaims: storeClaims,
     fetchWarrantyClaims,
@@ -36,17 +37,23 @@ export function WarrantyClaimsPage() {
   }, [fetchWarrantyClaims]);
 
   const data: ClaimRecord[] = useMemo(() => {
-    return storeClaims.map((c) => ({
+    return storeClaims.map((c: any) => ({
       id: c.id,
-      warrantyCode: c.serialNumber,
-      claimCode: c.claimCode,
-      description: c.issueDescription,
-      reportedAt: c.receivedDate,
-      handler: c.repairedBy || 'Kỹ thuật viên',
+      warrantyCode: c.serialNumber || c.warrantyCode || '',
+      claimCode: c.claimCode || '',
+      description: c.issueDescription || c.description || '',
+      reportedAt: c.receivedDate || c.createdDate || '',
+      handler: c.repairedBy || c.handler || 'Kỹ thuật viên',
       status: (c.status === 'COMPLETED' ? 'APPROVED' : c.status === 'REJECTED' ? 'REJECTED' : 'PENDING') as any,
-      notes: c.notes || '',
+      notes: c.notes || c.resolutionNotes || '',
+      conditionOnReceive: c.conditionOnReceive,
+      estimatedReturnDate: c.estimatedReturnDate,
+      repairCost: c.repairCost,
+      approvalStatus: c.approvalStatus,
+      progressStatus: c.progressStatus || (c.status === 'COMPLETED' ? 'DONE' : 'NEW'),
     }));
   }, [storeClaims]);
+
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ClaimRecord | null>(null);
@@ -61,55 +68,58 @@ export function WarrantyClaimsPage() {
     handler: '',
     status: 'PENDING' as ClaimRecord['status'],
     notes: '',
+    conditionOnReceive: '',
+    estimatedReturnDate: '',
+    repairCost: 0,
+    approvalStatus: 'PENDING_CHECK',
+    progressStatus: 'NEW',
   });
 
-  const fetchClaims = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const res: any = await axiosClient.get('/crm/warranty-claims');
-      const list = Array.isArray(res) ? res : res?.content || res?.data || [];
-      if (list.length > 0) {
-        const mapped: ClaimRecord[] = list.map((item: any) => ({
-          id: String(item.id),
-          warrantyCode: item.productWarranty?.warrantyCode || item.warrantyCode || `W00${item.id}`,
-          claimCode: item.claimCode || `CLM00${item.id}`,
-          description: item.issueDescription || item.description || 'Yêu cầu bảo hành',
-          reportedAt: item.createdDate ? String(item.createdDate).split('T')[0] : '2024-05-10',
-          handler: item.handledBy?.name || item.handler || 'Nhân viên kỹ thuật',
-          status: item.status === 'PROCESSING' ? 'PENDING' : item.status === 'COMPLETED' ? 'APPROVED' : (item.status || 'PENDING'),
-          notes: item.resolutionNotes || item.notes || '',
-        }));
-        setData(mapped);
-      } else {
-        setData([]);
-      }
-    } catch (err) {
-      console.error('Error fetching warranty claims:', err);
-      setData([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const [mockCustomer, setMockCustomer] = useState<{name: string, phone: string, product: string} | null>(null);
 
-  useEffect(() => {
-    fetchClaims();
-  }, [fetchClaims]);
+  const handleWarrantyCodeBlur = () => {
+    if (form.warrantyCode && form.warrantyCode.trim() !== '') {
+      setMockCustomer({
+        name: 'Nguyễn Văn A',
+        phone: '0988123456',
+        product: 'iPhone 15 Pro Max',
+      });
+    } else {
+      setMockCustomer(null);
+    }
+  };
+
+  const generateClaimCode = () => {
+    const today = new Date();
+    const yymmdd = today.getFullYear().toString().slice(-2) + 
+      String(today.getMonth() + 1).padStart(2, '0') + 
+      String(today.getDate()).padStart(2, '0');
+    const pad4 = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+    setForm(prev => ({ ...prev, claimCode: `YCBH-${yymmdd}-${pad4}` }));
+  };
 
   const handleOpenCreate = () => {
     setEditingItem(null);
+    setMockCustomer(null);
     setForm({
-      warrantyCode: `W00${Math.floor(1 + Math.random() * 9)}`,
-      claimCode: `CLM00${Math.floor(100 + Math.random() * 900)}`,
+      warrantyCode: '',
+      claimCode: '',
       description: '',
       handler: 'Nhân viên hỗ trợ',
       status: 'PENDING',
       notes: '',
+      conditionOnReceive: '',
+      estimatedReturnDate: '',
+      repairCost: 0,
+      approvalStatus: 'PENDING_CHECK',
+      progressStatus: 'NEW',
     });
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (item: ClaimRecord) => {
     setEditingItem(item);
+    setMockCustomer(null);
     setForm({
       warrantyCode: item.warrantyCode,
       claimCode: item.claimCode,
@@ -117,6 +127,11 @@ export function WarrantyClaimsPage() {
       handler: item.handler,
       status: item.status,
       notes: item.notes || '',
+      conditionOnReceive: item.conditionOnReceive || '',
+      estimatedReturnDate: item.estimatedReturnDate || '',
+      repairCost: item.repairCost || 0,
+      approvalStatus: item.approvalStatus || 'PENDING_CHECK',
+      progressStatus: item.progressStatus || 'NEW',
     });
     setIsModalOpen(true);
   };
@@ -125,9 +140,15 @@ export function WarrantyClaimsPage() {
     e.preventDefault();
     const payload = {
       claimCode: form.claimCode,
+      warrantyCode: form.warrantyCode,
       issueDescription: form.description,
       status: form.status === 'APPROVED' ? 'COMPLETED' : form.status === 'REJECTED' ? 'REJECTED' : 'PROCESSING',
       resolutionNotes: form.notes,
+      conditionOnReceive: form.conditionOnReceive,
+      estimatedReturnDate: form.estimatedReturnDate,
+      repairCost: form.repairCost,
+      approvalStatus: form.approvalStatus,
+      progressStatus: form.progressStatus,
     };
 
     try {
@@ -139,7 +160,7 @@ export function WarrantyClaimsPage() {
         toast.success(`Tạo mới yêu cầu bảo hành ${form.claimCode} thành công!`);
       }
       setIsModalOpen(false);
-      fetchClaims();
+      fetchWarrantyClaims();
     } catch (err) {
       console.error('Error saving warranty claim:', err);
       toast.error('Lỗi khi lưu yêu cầu bảo hành');
@@ -151,7 +172,7 @@ export function WarrantyClaimsPage() {
     try {
       await axiosClient.delete(`/crm/warranty-claims/${item.id}`);
       toast.success(`Đã xóa yêu cầu ${item.claimCode}`);
-      setData((prev) => prev.filter((c) => c.id !== item.id));
+      fetchWarrantyClaims();
     } catch (err) {
       console.error('Error deleting warranty claim:', err);
       toast.error('Lỗi khi xóa yêu cầu bảo hành');
@@ -202,19 +223,25 @@ export function WarrantyClaimsPage() {
         cell: (info) => <span className="font-medium text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
-        accessorKey: 'status',
-        header: 'Trạng thái',
+        accessorKey: 'progressStatus',
+        header: 'Tiến độ',
         cell: (info) => {
           const status = info.getValue() as string;
           const styleMap: Record<string, string> = {
-            PENDING: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
-            APPROVED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
-            REJECTED: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+            NEW: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300',
+            CHECKING: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+            REPAIRING: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+            WAITING_PARTS: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+            DONE: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+            RETURNED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
           };
           const labelMap: Record<string, string> = {
-            PENDING: 'Đang chờ',
-            APPROVED: 'Đã duyệt',
-            REJECTED: 'Từ chối',
+            NEW: 'Mới tiếp nhận',
+            CHECKING: 'Đang kiểm tra',
+            REPAIRING: 'Đang sửa chữa',
+            WAITING_PARTS: 'Chờ linh kiện',
+            DONE: 'Đã sửa xong',
+            RETURNED: 'Đã trả khách',
           };
           return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${styleMap[status] || 'bg-gray-100 text-gray-800'}`}>
@@ -286,7 +313,7 @@ export function WarrantyClaimsPage() {
       </div>
 
       {/* Drawer chi tiết */}
-      <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết Yêu cầu: ${selected.claimCode}` : ''} width="max-w-lg">
+      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết Yêu cầu: ${selected.claimCode}` : ''} width="max-w-lg">
         {selected && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -299,26 +326,47 @@ export function WarrantyClaimsPage() {
                 <p className="font-medium text-gray-900 dark:text-white">{selected.warrantyCode}</p>
               </div>
             </div>
+            
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-xs text-gray-500">Mô tả</p>
                 <p className="italic text-gray-700 dark:text-gray-300">{selected.description}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">Ngày báo cáo</p>
-                <p className="font-medium">{selected.reportedAt}</p>
+                <p className="text-xs text-gray-500">Tình trạng nhận</p>
+                <p className="text-gray-700 dark:text-gray-300">{selected.conditionOnReceive || '-'}</p>
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-xs text-gray-500">Người xử lý</p>
                 <p className="font-medium">{selected.handler}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">Trạng thái</p>
-                <p>{selected.status}</p>
+                <p className="text-xs text-gray-500">Tiến độ</p>
+                <p>{selected.progressStatus}</p>
               </div>
             </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-gray-500">Kết quả duyệt</p>
+                <p>{selected.approvalStatus}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Chi phí sửa (nếu có)</p>
+                <p>{selected.repairCost ? selected.repairCost.toLocaleString() + ' đ' : '-'}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-gray-500">Ngày hẹn trả</p>
+                <p>{selected.estimatedReturnDate || '-'}</p>
+              </div>
+            </div>
+
             {selected.notes && (
               <div>
                 <p className="text-xs text-gray-500">Ghi chú</p>
@@ -327,21 +375,26 @@ export function WarrantyClaimsPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal tạo / sửa yêu cầu bảo hành */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Chỉnh sửa Yêu cầu Bảo hành' : 'Tạo Yêu cầu Bảo hành mới'} width="max-w-lg">
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Chỉnh sửa Yêu cầu Bảo hành' : 'Tạo Yêu cầu Bảo hành mới'} width="max-w-2xl">
         <form onSubmit={handleSave} className="p-4 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã yêu cầu</label>
-              <input
-                type="text"
-                required
-                value={form.claimCode}
-                onChange={(e) => setForm({ ...form, claimCode: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  required
+                  value={form.claimCode}
+                  onChange={(e) => setForm({ ...form, claimCode: e.target.value })}
+                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                />
+                <button type="button" onClick={generateClaimCode} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-lg text-sm border border-gray-300 dark:border-gray-600 whitespace-nowrap">
+                  🎲 Tạo mã
+                </button>
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã bảo hành</label>
@@ -349,53 +402,106 @@ export function WarrantyClaimsPage() {
                 type="text"
                 required
                 value={form.warrantyCode}
+                onBlur={handleWarrantyCodeBlur}
                 onChange={(e) => setForm({ ...form, warrantyCode: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               />
+              {mockCustomer && (
+                <div className="mt-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800/30 text-sm">
+                  <p><strong>Khách hàng:</strong> {mockCustomer.name} - {mockCustomer.phone}</p>
+                  <p><strong>Sản phẩm:</strong> {mockCustomer.product}</p>
+                </div>
+              )}
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mô tả sự cố</label>
-            <input
-              type="text"
-              required
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người xử lý</label>
-              <input
-                type="text"
-                value={form.handler}
-                onChange={(e) => setForm({ ...form, handler: e.target.value })}
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tình trạng ngoại quan khi nhận máy (*)</label>
+              <textarea
+                required
+                rows={2}
+                placeholder="Máy trày nhẹ 4 góc, màn hình không xước..."
+                value={form.conditionOnReceive}
+                onChange={(e) => setForm({ ...form, conditionOnReceive: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mô tả sự cố khách báo</label>
+              <textarea
+                required
+                rows={2}
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Kết quả duyệt</label>
               <select
-                value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value as any })}
+                value={form.approvalStatus}
+                onChange={(e) => setForm({ ...form, approvalStatus: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               >
-                <option value="PENDING">Đang chờ</option>
-                <option value="APPROVED">Đã duyệt</option>
-                <option value="REJECTED">Từ chối</option>
+                <option value="PENDING_CHECK">Đang chờ kiểm tra</option>
+                <option value="APPROVED">Bảo hành hợp lệ</option>
+                <option value="REJECTED">Từ chối - Lỗi người dùng</option>
+                <option value="PAID_REPAIR">Sửa tính phí</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tiến độ thực tế</label>
+              <select
+                value={form.progressStatus}
+                onChange={(e) => setForm({ ...form, progressStatus: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              >
+                <option value="NEW">Mới tiếp nhận</option>
+                <option value="CHECKING">Đang kiểm tra</option>
+                <option value="REPAIRING">Đang sửa chữa</option>
+                <option value="WAITING_PARTS">Chờ linh kiện</option>
+                <option value="DONE">Đã sửa xong</option>
+                <option value="RETURNED">Đã trả khách</option>
               </select>
             </div>
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chi phí sửa chữa (Nếu từ chối bảo hành)</label>
+              <input
+                type="number"
+                placeholder="0"
+                value={form.repairCost}
+                onChange={(e) => setForm({ ...form, repairCost: Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày hẹn trả dự kiến</label>
+              <input
+                type="date"
+                value={form.estimatedReturnDate}
+                onChange={(e) => setForm({ ...form, estimatedReturnDate: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              />
+            </div>
+          </div>
+
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú giải quyết</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú thêm</label>
             <textarea
-              rows={3}
+              rows={2}
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
             />
           </div>
+          
           <div className="pt-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
             <button
               type="button"
@@ -416,4 +522,3 @@ export function WarrantyClaimsPage() {
     </>
   );
 }
-

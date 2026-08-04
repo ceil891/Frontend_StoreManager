@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, Briefcase, DollarSign, Award, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useHrStore, type JobPositionRecord } from '../store/hrStore';
@@ -347,7 +346,7 @@ export function PositionsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedPos(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedPos}
         onClose={() => setSelectedPos(null)}
         title={selectedPos ? `Position Dossier: ${selectedPos.positionCode}` : 'Position Specification'}
@@ -431,7 +430,7 @@ export function PositionsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}

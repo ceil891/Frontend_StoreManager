@@ -1,3 +1,4 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { 
   Plus, Search, Eye, Edit, Trash2, Barcode, Grid, Package, CheckCircle2, 
@@ -5,8 +6,8 @@ import {
   Printer, ArrowRightLeft, Database, Sparkles, Percent 
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type WarehouseBinRecord } from '@/features/inventory/store/inventoryStore';
 import { toast } from 'sonner';
@@ -363,7 +364,7 @@ export function WarehouseBinsPage() {
       <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
 
       {/* Drawer: Chi tiết Ô Kệ & Tồn Kho Thực Tế (Gợi ý 7 + 8 + 12) */}
-      <Drawer
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
         title={`Chi tiết Vị trí Ô Kệ: ${selected?.binCode}`}
@@ -503,7 +504,7 @@ export function WarehouseBinsPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal: Khai báo vị trí Ô kệ mới (Gợi ý 1 + 2 + 3 + 11) */}
       <Modal

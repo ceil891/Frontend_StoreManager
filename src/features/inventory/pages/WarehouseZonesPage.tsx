@@ -1,3 +1,4 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { 
   Plus, Search, Eye, Edit, Trash2, Thermometer, Layers, Warehouse, 
@@ -5,8 +6,8 @@ import {
   Activity 
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type WarehouseZoneRecord } from '@/features/inventory/store/inventoryStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
@@ -378,7 +379,7 @@ export function WarehouseZonesPage() {
       <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
 
       {/* Drawer Xem Chi Tiết */}
-      <Drawer
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
         title={`Chi tiết Phân Khu: ${selected?.zoneCode}`}
@@ -476,7 +477,7 @@ export function WarehouseZonesPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Thêm/Sửa Phân Khu */}
       <Modal

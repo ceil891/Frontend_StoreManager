@@ -1,7 +1,6 @@
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Users, Layers, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
@@ -18,12 +17,9 @@ interface PartnerGroupItem {
   createdAt: string;
 }
 
-const MOCK_DATA: PartnerGroupItem[] = [];
-
 import { axiosClient } from '@/shared/lib/axiosClient';
 
 export function PartnerGroupsPage() {
-  const setData = (_fn: any) => {};
   const {
     partnerGroups: storeGroups,
     fetchPartnerGroups,
@@ -60,10 +56,6 @@ export function PartnerGroupsPage() {
   const [editingItem, setEditingItem] = useState<Partial<PartnerGroupItem>>({});
   const [deletingItem, setDeletingItem] = useState<PartnerGroupItem | null>(null);
 
-
-  useEffect(() => {
-    fetchPartnerGroups();
-  }, [fetchPartnerGroups]);
 
   const filtered = useMemo(() => {
     return data.filter((item) => {
@@ -129,7 +121,7 @@ export function PartnerGroupsPage() {
     try {
       await axiosClient.delete(`/crm/partner-groups/${deletingItem.id}`);
       toast.success(`Đã xóa nhóm đối tác ${deletingItem.name}`);
-      setData((prev) => prev.filter((item) => item.id !== deletingItem.id));
+      fetchPartnerGroups();
     } catch (err) {
       console.error('Error deleting partner group:', err);
       toast.error('Lỗi khi xóa nhóm đối tác');
@@ -310,10 +302,11 @@ export function PartnerGroupsPage() {
       </div>
 
       {/* Drawer Chi tiết */}
-      <Drawer
+      <Modal
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
         title={selectedItem ? `Chi tiết nhóm đối tác: ${selectedItem.groupCode}` : 'Thông tin chi tiết'}
+        width="max-w-lg"
       >
         {selectedItem && (
           <div className="space-y-6">
@@ -361,7 +354,7 @@ export function PartnerGroupsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Thêm / Sửa */}
       <Modal

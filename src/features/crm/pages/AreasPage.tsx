@@ -265,36 +265,35 @@ export function AreasPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedItem(row)} isLoading={isLoading}/>
       </div>
 
-      {/* Drawer Chi tiết */}
-      <Drawer
+      {/* Modal Xem chi tiết khu vực căn giữa (TC-ALL-1) */}
+      <Modal
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
-        title={selectedItem ? `Chi tiết địa bàn: ${selectedItem.name}` : 'Thông tin chi tiết'}
+        title={selectedItem ? `Hồ sơ địa bàn: ${selectedItem.name}` : 'Thông tin địa bàn'}
+        width="max-w-md"
       >
         {selectedItem && (
-          <div className="space-y-6">
-            <div className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
-              <MapPin className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 p-3.5 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
+              <div className="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold">
+                <Globe className="w-5 h-5" />
+              </div>
               <div>
-                <p className="text-xs text-gray-500">Mã định danh khu vực</p>
-                <p className="text-base font-bold text-emerald-800 dark:text-emerald-400">{selectedItem.areaCode}</p>
+                <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">{selectedItem.areaCode}</span>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white">{selectedItem.name}</h3>
               </div>
             </div>
 
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500">Tên khu vực:</span>
-                <span className="font-bold text-gray-900 dark:text-white">{selectedItem.name}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500">Cấp quản lý hành chính:</span>
+                <span className="text-gray-500">Cấp phân loại:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">
-                  {selectedItem.level === 'TỈNH_THÀNH' ? 'Tỉnh / Thành phố' : selectedItem.level === 'QUẬN_HUYỆN' ? 'Quận / huyện' : 'Phường / xã'}
+                  {selectedItem.level === 'TỈNH_THÀNH' ? 'Tỉnh / Thành phố' : selectedItem.level === 'QUẬN_HUYỆN' ? 'Quận / Huyện' : 'Phường / Xã'}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500">Khu vực quản lý cấp trên (Cha):</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedItem.parentName || 'Không có (Cấp cao nhất)'}</span>
+                <span className="text-gray-500">Khu vực cha:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{selectedItem.parentName || '— (Trực thuộc trung ương)'}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500">Ngày tạo:</span>
@@ -317,9 +316,19 @@ export function AreasPage() {
                 <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedItem.description || 'Chưa có mô tả chi tiết cho khu vực này.'}</p>
               </div>
             </div>
+
+            <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => setSelectedItem(null)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-sm"
+              >
+                Đóng Hộp Thoại
+              </button>
+            </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Thêm / Sửa */}
       <Modal

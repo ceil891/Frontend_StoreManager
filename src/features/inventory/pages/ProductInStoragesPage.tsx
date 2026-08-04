@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, MapPin, Grid, RefreshCw, Package } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import {
   useInventoryStore,
@@ -213,7 +214,7 @@ export function ProductInStoragesPage() {
       </div>
 
       {/* Drawer chi tiết */}
-      <Drawer
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
         title={`Vị trí sản phẩm: ${selected?.productName}`}
@@ -253,7 +254,7 @@ export function ProductInStoragesPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal gán vị trí kho */}
       <Modal

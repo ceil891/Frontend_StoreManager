@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Search, Download, Eye, Monitor, Smartphone, Globe, Trash2, Shield } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
@@ -177,7 +176,7 @@ export function DeviceSessionsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} isLoading={isLoading} />
       </div>
 
-      <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết phiên: ${selected.userName}` : ''} width="max-w-lg">
+      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết phiên: ${selected.userName}` : ''} width="max-w-lg">
         {selected && (
           <div className="space-y-5">
             <div className={`p-4 rounded-xl border flex items-center gap-3 ${selected.status === 'HOẠT_ĐỘNG' ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-gray-50 dark:bg-gray-900/30 border-gray-200 dark:border-gray-700'}`}>
@@ -211,7 +210,7 @@ export function DeviceSessionsPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal isOpen={!!revokingItem} onClose={() => setRevokingItem(null)} title="Xác nhận thu hồi phiên" isDestructive width="max-w-md">
         <div className="space-y-4">

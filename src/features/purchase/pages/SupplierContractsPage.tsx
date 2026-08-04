@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, Calendar, FileCheck, Landmark, ShieldAlert, Award, FileText, CheckCircle2, Clock, XCircle, UserCheck } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -273,7 +274,7 @@ export function SupplierContractsPage() {
       </div>
 
       {/* Drawer chi tiết hợp đồng */}
-      <Drawer
+      <Modal
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
         title={selectedItem ? `Chi tiết Hợp đồng: ${selectedItem.contractNumber}` : 'Thông tin chi tiết'}
@@ -357,7 +358,7 @@ export function SupplierContractsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal lập hợp đồng mới */}
       <Modal

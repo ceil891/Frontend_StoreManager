@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Crown, Diamond, Award, Star, Users, TrendingUp, Gift, Edit,
   Percent, Zap, Headphones, Shield, BadgeCheck, ChevronRight, Plus, Trash2,

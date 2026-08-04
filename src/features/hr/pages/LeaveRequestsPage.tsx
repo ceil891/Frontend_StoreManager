@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Download, Eye, Edit, Trash2, CalendarDays } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useHrStore } from '../store/hrStore';
@@ -116,7 +115,7 @@ export function LeaveRequestsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)}/>
       </div>
 
-      <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết đơn: ${selected.userName}`:''}>
+      <Modal isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết đơn: ${selected.userName}`:''} width="max-w-lg">
         {selected&&(
           <div className="space-y-4">
             <div className="flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
@@ -131,7 +130,7 @@ export function LeaveRequestsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title="Tạo đơn xin nghỉ phép" width="max-w-lg">
         <form onSubmit={handleSave} className="space-y-4">

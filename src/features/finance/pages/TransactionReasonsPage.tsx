@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, Tag, DollarSign, Calendar, CheckCircle2, ShieldCheck, Copy, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type TransactionReasonRecord } from '../store/financeStore';
 import { toast } from 'sonner';
@@ -285,7 +286,7 @@ export function TransactionReasonsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedReason(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedReason}
         onClose={() => setSelectedReason(null)}
         title={selectedReason ? `Quy Cài Đặt Lý Do: ${selectedReason.reasonCode}` : 'Chi tiết lý do giao dịch'}
@@ -401,7 +402,7 @@ export function TransactionReasonsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal: Thêm / Sửa */}
       <Modal

@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Eye, Edit, Trash2, Search, Palette } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { useColorStore, type ColorRecord } from '../store/colorStore';
 
@@ -214,7 +215,7 @@ export function ColorsPage() {
       </div>
 
       {/* Drawer chi tiết */}
-      <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết: ${selected.colorName}` : ''}>
+      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết: ${selected.colorName}` : ''}>
         {selected && (
           <div className="space-y-6 p-4">
             <div className="flex items-center gap-4">
@@ -259,7 +260,7 @@ export function ColorsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Create/Edit */}
       <Modal

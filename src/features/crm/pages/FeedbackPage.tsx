@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Plus, Download, Search, Filter, Eye, MessageSquareQuote, Building2, Calendar, Star, CheckCircle2, ThumbsUp, Send, Edit, Trash2, TrendingUp, AlertTriangle, Smile, Frown } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
@@ -11,6 +10,7 @@ interface CustomerFeedbackRecord {
   id: string;
   feedbackRef: string;
   customerName: string;
+  customerPhone?: string;
   customerEmail: string;
   storeLocation: string;
   rating: number; // 1 to 5
@@ -22,7 +22,23 @@ interface CustomerFeedbackRecord {
   submittedAt: string;
   assignedManager?: string;
   resolutionNotes?: string;
+  orderRef?: string;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  channel: 'STORE' | 'HOTLINE' | 'WEBSITE' | 'SOCIAL_MEDIA';
+  dueDate?: string;
 }
+
+const calculateDueDate = (priority: string) => {
+  const now = new Date();
+  switch (priority) {
+    case 'URGENT': now.setHours(now.getHours() + 2); break;
+    case 'HIGH': now.setHours(now.getHours() + 24); break;
+    case 'MEDIUM': now.setHours(now.getHours() + 72); break;
+    case 'LOW':
+    default: now.setHours(now.getHours() + 168); break;
+  }
+  return now.toISOString().substring(0, 16).replace('T', ' ');
+};
 
 const MOCK_FEEDBACK: CustomerFeedbackRecord[] = [];
 
@@ -96,10 +112,13 @@ export function FeedbackPage() {
 
   const handleOpenCreate = () => {
     setModalMode('create');
+    const randomHex = Math.random().toString(16).substring(2, 6).toUpperCase();
+    const year = new Date().getFullYear();
     setEditingFeedback({
-      feedbackRef: `FB-${Math.floor(2026000 + Math.random() * 9000)}`,
+      feedbackRef: `FB-${year}-${randomHex}`,
       customerName: '',
       customerEmail: '',
+      customerPhone: '',
       storeLocation: 'Chi nhánh chính',
       rating: 5,
       category: 'GENERAL',
@@ -109,7 +128,10 @@ export function FeedbackPage() {
       status: 'NEW',
       submittedAt: new Date().toISOString().split('T')[0],
       assignedManager: '',
-      resolutionNotes: ''
+      resolutionNotes: '',
+      priority: 'LOW',
+      channel: 'STORE',
+      dueDate: calculateDueDate('LOW'),
     });
     setIsModalOpen(true);
   };
@@ -538,7 +560,7 @@ export function FeedbackPage() {
         <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row) => setSelectedFeedback(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedFeedback}
         onClose={() => setSelectedFeedback(null)}
         title={selectedFeedback ? `Hồ Sơ Phản Hồi: ${selectedFeedback.feedbackRef}` : 'Chi tiết phản hồi'}
@@ -647,7 +669,7 @@ export function FeedbackPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal: Thêm / Sửa */}
       <Modal
@@ -663,9 +685,8 @@ export function FeedbackPage() {
               <input
                 type="text"
                 value={editingFeedback.feedbackRef || ''}
-                onChange={(e) => setEditingFeedback({ ...editingFeedback, feedbackRef: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-                required
+                readOnly
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-mono text-sm focus:outline-none cursor-default"
               />
             </div>
             <div>
@@ -692,18 +713,19 @@ export function FeedbackPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Email liên hệ *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại *</label>
               <input
-                type="email"
-                value={editingFeedback.customerEmail || ''}
-                onChange={(e) => setEditingFeedback({ ...editingFeedback, customerEmail: e.target.value })}
+                type="tel"
+                value={editingFeedback.customerPhone || ''}
+                onChange={(e) => setEditingFeedback({ ...editingFeedback, customerPhone: e.target.value, customerEmail: e.target.value })}
+                placeholder="0912 345 678"
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
                 required
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đánh giá (1-5 sao)</label>
               <input
@@ -711,7 +733,11 @@ export function FeedbackPage() {
                 min="1"
                 max="5"
                 value={editingFeedback.rating ?? 5}
-                onChange={(e) => setEditingFeedback({ ...editingFeedback, rating: parseInt(e.target.value) || 5 })}
+                onChange={(e) => {
+                  const newRating = parseInt(e.target.value) || 5;
+                  const newSentiment = newRating >= 4 ? 'POSITIVE' : newRating <= 2 ? 'NEGATIVE' : 'NEUTRAL';
+                  setEditingFeedback({ ...editingFeedback, rating: newRating, sentiment: newSentiment });
+                }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary font-mono"
               />
             </div>
@@ -728,18 +754,6 @@ export function FeedbackPage() {
                 <option value="CHECKOUT_SPEED">Tốc độ thanh toán</option>
                 <option value="PRICING">Giá cả & Hóa đơn</option>
                 <option value="GENERAL">Ý kiến chung</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mức độ hài lòng</label>
-              <select
-                value={editingFeedback.sentiment || 'POSITIVE'}
-                onChange={(e) => setEditingFeedback({ ...editingFeedback, sentiment: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
-              >
-                <option value="POSITIVE">Tích cực (Positive)</option>
-                <option value="NEUTRAL">Trung lập (Neutral)</option>
-                <option value="NEGATIVE">Tiêu cực (Negative)</option>
               </select>
             </div>
           </div>
@@ -803,6 +817,64 @@ export function FeedbackPage() {
               placeholder="Đã gửi thư xin lỗi kèm voucher bồi thường..."
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary resize-none"
             />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã đơn hàng liên quan (nếu có)</label>
+              <input
+                type="text"
+                value={editingFeedback.orderRef || ''}
+                onChange={(e) => setEditingFeedback({ ...editingFeedback, orderRef: e.target.value })}
+                placeholder="#DH-xxxxx"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Kênh tiếp nhận</label>
+              <select
+                value={editingFeedback.channel || 'STORE'}
+                onChange={(e) => setEditingFeedback({ ...editingFeedback, channel: e.target.value as any })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+              >
+                <option value="STORE">Tại cửa hàng (STORE)</option>
+                <option value="HOTLINE">Hotline</option>
+                <option value="WEBSITE">Website</option>
+                <option value="SOCIAL_MEDIA">Mạng xã hội (SOCIAL_MEDIA)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Độ ưu tiên</label>
+              <select
+                value={editingFeedback.priority || 'LOW'}
+                onChange={(e) => {
+                  const newPriority = e.target.value as any;
+                  setEditingFeedback({
+                    ...editingFeedback,
+                    priority: newPriority,
+                    dueDate: calculateDueDate(newPriority)
+                  });
+                }}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+              >
+                <option value="LOW">Thấp (LOW)</option>
+                <option value="MEDIUM">Trung bình (MEDIUM)</option>
+                <option value="HIGH">Cao (HIGH)</option>
+                <option value="URGENT">Khẩn cấp (URGENT - SLA 2h)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hạn xử lý (SLA Due Date)</label>
+              <input
+                type="text"
+                value={editingFeedback.dueDate || ''}
+                readOnly
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none cursor-default"
+              />
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">

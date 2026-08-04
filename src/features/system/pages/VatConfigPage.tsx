@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, Percent, FileText, Globe, FileSpreadsheet, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import { useVatStore, type VatRuleRecord } from '../store/vatStore';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -385,12 +384,12 @@ export function VatConfigPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedVat(row)} />
       </div>
 
-      {/* Details View Drawer */}
-      <Drawer
+      {/* Details View Modal */}
+      <Modal
         isOpen={!!selectedVat}
         onClose={() => setSelectedVat(null)}
         title={selectedVat ? `Thông tin chi tiết biểu thuế: ${selectedVat.taxCode}` : 'Chi tiết thuế'}
-        width="max-w-xl"
+        width="max-w-2xl"
       >
         {selectedVat && (
           <div className="space-y-6">
@@ -491,14 +490,14 @@ export function VatConfigPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
-      {/* Create / Edit Drawer Form */}
-      <Drawer
+      {/* Create / Edit Modal Form */}
+      <Modal
         isOpen={formOpen}
         onClose={() => setFormOpen(false)}
         title={formMode === 'create' ? 'Tạo mới quy tắc thuế quan' : 'Cập nhật thông số quy tắc thuế'}
-        width="max-w-xl"
+        width="max-w-2xl"
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div>
@@ -652,7 +651,7 @@ export function VatConfigPage() {
             </button>
           </div>
         </form>
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={!!deletingVat}

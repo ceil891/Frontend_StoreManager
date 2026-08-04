@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Eye, Edit, Trash2, Search, TrendingDown, BarChart3, Package } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore } from '../store/financeStore';
@@ -234,7 +233,7 @@ export function DepreciationHistoryPage() {
       </div>
 
       {/* Drawer */}
-      <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết: ${selected.depCode}` : ''} width="max-w-md">
+      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết: ${selected.depCode}` : ''} width="max-w-lg">
         {selected && (
           <div className="space-y-4 p-4">
             <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
@@ -265,7 +264,7 @@ export function DepreciationHistoryPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalMode === 'create' ? 'Ghi khấu hao mới' : 'Chỉnh sửa khấu hao'} width="max-w-lg">
