@@ -17,6 +17,7 @@ import { Link } from 'react-router';
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 import { useCrmStore } from '@/features/crm/store/crmStore';
 import { useLoyaltyConfigStore } from '@/features/crm/store/loyaltyConfigStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 import { useDebounce } from '@/shared/hooks/useDebounce';
 import { toast } from 'sonner';
 
@@ -78,17 +79,48 @@ function SafeProductImage({ src, alt, className, iconClassName }: { src?: string
 }
 
 export function PosTerminalPage() {
+  const user = useAuthStore((s) => s.user);
   const { items, addItem, removeItem, updateQuantity, getTotal, clearCart, tabs, activeTabId, createTab, switchTab, closeTab } = usePosCartStore();
   const paymentMethodsFromConfig = usePosConfigStore((s) => s.paymentMethods);
   const addSaleOrder = useSalesStore((s) => s.addSaleOrder);
   const { products, fetchProducts, categories, fetchCategories } = useInventoryStore();
   const { customers, fetchCustomers, addCustomer } = useCrmStore();
+  const { branches, fetchBranches } = useBranchStore();
 
   useEffect(() => {
     fetchProducts();
     fetchCategories();
     fetchCustomers();
-  }, [fetchProducts, fetchCategories, fetchCustomers]);
+    fetchBranches();
+  }, [fetchProducts, fetchCategories, fetchCustomers, fetchBranches]);
+
+  const { activeBranchId, activeBranchName, isBranchUnassigned } = useMemo(() => {
+    if (user?.branchId) {
+      const userBranchId = String(user.branchId);
+      const matched = (branches || []).find((b) => String(b.id) === userBranchId || b.branchCode === userBranchId);
+      return {
+        activeBranchId: userBranchId,
+        activeBranchName: matched?.name || BRANCH_NAME_BY_ID[userBranchId] || `Chi nhánh ${userBranchId}`,
+        isBranchUnassigned: false,
+      };
+    }
+
+    // Tài khoản chưa gán branchId
+    if (user?.role === 'SUPER_ADMIN') {
+      const firstBranch = branches[0];
+      return {
+        activeBranchId: firstBranch ? String(firstBranch.id) : '1',
+        activeBranchName: firstBranch ? `${firstBranch.name}` : 'Chi nhánh chính',
+        isBranchUnassigned: false,
+      };
+    }
+
+    return {
+      activeBranchId: branches[0] ? String(branches[0].id) : null,
+      activeBranchName: 'Chưa phân công chi nhánh',
+      isBranchUnassigned: true,
+    };
+  }, [branches, user]);
 
   const productsList = useMemo(() => {
     return (products || []).map((p) => {
@@ -263,10 +295,26 @@ export function PosTerminalPage() {
 
   // Time & Shift logic
   const [currentTime, setCurrentTime] = useState(new Date());
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Keyboard shortcuts (F2 to focus search box)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const getShift = (date: Date) => {
     const hour = date.getHours();
     if (hour >= 6 && hour < 14) return 'Ca sáng (06:00 - 14:00)';
@@ -414,8 +462,8 @@ export function PosTerminalPage() {
       .join(', ')
       .slice(0, 240);
 
-    const branchId = user?.branchId ?? null;
-    const branchName = branchId ? (BRANCH_NAME_BY_ID[branchId] ?? branchId) : 'N/A';
+    const branchId = activeBranchId;
+    const branchName = activeBranchName;
     const cashierName = user?.name || 'Thu ngân POS';
     const customerDisplayName = activeCustomer
       ? activeCustomer.name
@@ -530,14 +578,18 @@ export function PosTerminalPage() {
                 <Search className="h-4 w-4 text-gray-400" />
               </div>
               <input
+                ref={searchInputRef}
                 type="text"
-                placeholder="Tìm sản phẩm theo tên hoặc SKU... (F2)"
+                placeholder="Nhập tên sản phẩm, SKU hoặc quét Barcode..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="block w-full pl-9 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
+                className="block w-full pl-9 pr-16 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all shadow-sm"
               />
-              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                <ScanBarcode className="h-4 w-4 text-gray-400" />
+              <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center gap-1.5 pointer-events-none">
+                <span className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono font-bold bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 rounded border border-gray-300 dark:border-gray-500">
+                  F2
+                </span>
+                <ScanBarcode className="h-4 w-4 text-emerald-600 dark:text-emerald-400 animate-pulse" />
               </div>
             </div>
           </div>
@@ -548,9 +600,15 @@ export function PosTerminalPage() {
               <span>{currentTime.toLocaleDateString('vi-VN')} {currentTime.toLocaleTimeString('vi-VN')}</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1" title="Phiên làm việc giỏ hàng của máy POS này được cô lập độc lập">
-                💻 Máy POS 01 (Độc lập)
-              </span>
+              {isBranchUnassigned ? (
+                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1" title="Tài khoản này chưa được gán chi nhánh cụ thể trong Quản lý Nhân sự">
+                  ⚠️ Chưa phân công chi nhánh
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1" title="Máy POS cố định gắn liền với tài khoản nhân viên & ca bán hàng">
+                  💻 POS 01 • {activeBranchName}
+                </span>
+              )}
               <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded border border-emerald-100 dark:border-emerald-800">
                 {getShift(currentTime)}
               </p>
@@ -597,39 +655,40 @@ export function PosTerminalPage() {
                     disabled={disabled}
                     aria-label={`Thêm sản phẩm ${product.name}. Giá ${fmt(product.price)}. Tồn kho ${product.stock}. Đang chọn ${inCart}.`}
                     onClick={() => handleAddProduct(product)}
-                    className={`relative bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-all shadow-sm select-none flex flex-col group text-left ${
+                    className={`relative bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-all duration-150 select-none flex flex-col group text-left ${
                       cartItem
-                        ? 'border-emerald-400 dark:border-emerald-500 ring-1 ring-emerald-300 dark:ring-emerald-600'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-emerald-400 dark:hover:border-emerald-500'
-                    } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-md active:scale-95'}`}
+                        ? 'border-emerald-500 dark:border-emerald-500 ring-2 ring-emerald-400/30 dark:ring-emerald-500/40 shadow-sm'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-emerald-500 dark:hover:border-emerald-500 hover:scale-[1.01] hover:shadow-md'
+                    } ${outOfStock ? 'opacity-70 grayscale-[25%] bg-gray-50 dark:bg-gray-900/60 cursor-not-allowed' : disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer active:scale-95'}`}
                   >
                     {cartItem && (
-                      <div className="absolute top-1.5 right-1.5 w-5 h-5 bg-emerald-500 text-white text-[10px] font-black rounded-full flex items-center justify-center z-10 shadow">
+                      <div className="absolute top-1.5 right-1.5 w-5 h-5 bg-emerald-600 text-white text-[10px] font-black rounded-full flex items-center justify-center z-10 shadow-sm">
                         {cartItem.quantity}
                       </div>
                     )}
                     {outOfStock && (
-                      <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black z-10">
-                        HẾT
+                      <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md bg-red-600 text-white text-[10px] font-black z-10 tracking-wider shadow-sm">
+                        HẾT HÀNG
                       </div>
                     )}
                     {atLimit && !outOfStock && (
-                      <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black z-10">
+                      <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md bg-amber-500 text-white text-[10px] font-black z-10 shadow-sm">
                         TỐI ĐA
                       </div>
                     )}
-                    <div className="h-20 bg-gray-50 dark:bg-gray-900/40 flex items-center justify-center p-2 shrink-0">
-                      <SafeProductImage src={product.image} alt={product.name} className="h-full object-contain rounded" />
+                    {/* Compact Image 96x96 centered */}
+                    <div className="h-24 bg-gray-50 dark:bg-gray-900/40 flex items-center justify-center p-1.5 shrink-0 border-b border-gray-100 dark:border-gray-750">
+                      <SafeProductImage src={product.image} alt={product.name} className="h-full max-h-24 w-full object-contain rounded-lg" />
                     </div>
                     <div className="p-2 flex-1 flex flex-col justify-between">
-                      <h3 className="text-xs font-bold text-gray-900 dark:text-white line-clamp-2 mb-1 group-hover:text-emerald-600 transition-colors">
+                      <h3 className="text-xs font-bold text-gray-900 dark:text-white line-clamp-2 leading-tight group-hover:text-emerald-600 transition-colors">
                         {product.name}
                       </h3>
-                      <div>
-                        <p className="text-[10px] text-gray-400 font-mono mb-0.5">{product.sku}</p>
-                        <div className="flex justify-between items-baseline">
+                      <div className="mt-1">
+                        <p className="text-[10px] text-gray-400 font-mono leading-none mb-1">{product.sku}</p>
+                        <div className="flex items-baseline justify-between gap-1 flex-wrap">
                           <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">{fmt(product.price)}</span>
-                          <span className="text-[9px] text-gray-400">Tồn: {product.stock}</span>
+                          <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">• Tồn: {product.stock}</span>
                         </div>
                       </div>
                     </div>
@@ -651,13 +710,13 @@ export function PosTerminalPage() {
               <div
                 key={t.id}
                 onClick={() => switchTab(t.id)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all select-none ${
                   isActive
-                    ? 'bg-emerald-600 text-white shadow'
-                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 border border-gray-200 dark:border-gray-700'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'
                 }`}
               >
-                <span>{t.name}</span>
+                <span>{t.name}{t.items.length > 0 ? ` (${t.items.length})` : ''}</span>
                 {t.items.length > 0 && (
                   <span
                     className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
@@ -795,10 +854,27 @@ export function PosTerminalPage() {
         {/* Cart Items */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {items.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-gray-300 dark:text-gray-600">
-              <ShoppingCartIcon className="w-12 h-12 mb-2 opacity-30" />
-              <p className="text-sm">Giỏ hàng trống</p>
-              <p className="text-xs mt-1">Click vào sản phẩm để thêm</p>
+            <div className="h-full flex flex-col items-center justify-center p-4 text-center text-gray-400 dark:text-gray-500 select-none">
+              <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3 border border-emerald-100 dark:border-emerald-900/40 shadow-sm">
+                <ShoppingCartIcon className="w-8 h-8" />
+              </div>
+              <h3 className="text-sm font-black text-gray-800 dark:text-gray-200 mb-1">Giỏ hàng đang trống</h3>
+              <p className="text-xs text-gray-400 mb-4">Thực hiện 1 trong các cách sau để lên đơn:</p>
+
+              <div className="w-full bg-gray-50 dark:bg-gray-900/60 rounded-xl p-3 border border-gray-200 dark:border-gray-700/60 text-left space-y-2 text-xs">
+                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                  <span>Click chọn sản phẩm bên trái</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                  <span>Quét mã vạch bằng đầu đọc Barcode</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                  <span>Nhấn <kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">F2</kbd> để tìm kiếm nhanh</span>
+                </div>
+              </div>
             </div>
           ) : items.map(item => (
             <div key={item.id} className="flex gap-2.5 bg-gray-50 dark:bg-gray-700/40 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700">
@@ -889,9 +965,9 @@ export function PosTerminalPage() {
               <span>Thuế VAT (8%)</span>
               <span>{fmt(vatAmount)}</span>
             </div>
-            <div className="flex justify-between text-base font-black text-gray-900 dark:text-white pt-2 border-t border-gray-200 dark:border-gray-700">
-              <span>Tổng cộng</span>
-              <span className="text-emerald-600 dark:text-emerald-400">{fmt(totalAmount)}</span>
+            <div className="flex justify-between items-baseline pt-2.5 mt-2 border-t-2 border-dashed border-gray-200 dark:border-gray-700">
+              <span className="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">TỔNG CỘNG</span>
+              <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">{fmt(totalAmount)}</span>
             </div>
           </div>
 
@@ -899,7 +975,7 @@ export function PosTerminalPage() {
             <button
               onClick={() => { clearCart(); setAppliedVoucher(null); setVoucherError(''); setUsedPoints(0); }}
               disabled={items.length === 0}
-              className="p-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-xl hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-xl hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               title="Xóa giỏ hàng"
             >
               <Trash2 className="w-5 h-5" />
@@ -907,10 +983,10 @@ export function PosTerminalPage() {
             <button
               onClick={() => setIsPaymentOpen(true)}
               disabled={items.length === 0}
-              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow"
+              className="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-emerald-600/30"
             >
               <CreditCard className="w-5 h-5" />
-              Thanh toán {fmt(totalAmount)}
+              THANH TOÁN {fmt(totalAmount)}
             </button>
           </div>
         </div>

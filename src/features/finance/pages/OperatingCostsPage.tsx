@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, Calendar, Building, FileText, TrendingDown, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type OperatingCost } from '../store/financeStore';
 import { toast } from 'sonner';
@@ -246,7 +247,7 @@ export function OperatingCostsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedCost(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedCost}
         onClose={() => setSelectedCost(null)}
         title={selectedCost ? `Khoản Chi: ${selectedCost.costCode}` : 'Chi tiết khoản chi'}
@@ -327,7 +328,7 @@ export function OperatingCostsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal: Thêm / Sửa */}
       <Modal

@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -316,7 +317,7 @@ export function PurchaseReturnsListsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
       )}
 
-      <Drawer
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
         title={`Chi tiết Phiếu Xuất Trả: ${selected?.returnCode}`}
@@ -381,7 +382,7 @@ export function PurchaseReturnsListsPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}

@@ -34,7 +34,7 @@ interface PosCartState {
   tabs: CartTab[];
   activeTabId: string;
 
-  // Helpers to get active cart items & customer
+  // Derived: always reflects the active tab's items & customer
   items: CartItem[];
   customer: { id: string; name: string } | null;
 
@@ -51,6 +51,16 @@ interface PosCartState {
   closeTab: (id: string) => void;
 }
 
+/** Helper: get the active tab safely */
+const getActiveTab = (tabs: CartTab[], activeTabId: string): CartTab =>
+  tabs.find((t) => t.id === activeTabId) ?? tabs[0];
+
+/** Helper: after modifying tabs, re-derive items & customer from activeTabId */
+const deriveFromActive = (tabs: CartTab[], activeTabId: string) => {
+  const active = getActiveTab(tabs, activeTabId);
+  return { items: active.items, customer: active.customer };
+};
+
 export const usePosCartStore = create<PosCartState>()(
   persist(
     (set, get) => ({
@@ -61,72 +71,71 @@ export const usePosCartStore = create<PosCartState>()(
 
       addItem: (product) =>
         set((state) => {
-          const currentTab = state.tabs.find((t) => t.id === state.activeTabId) || state.tabs[0];
-          const existing = currentTab.items.find((item) => item.id === product.id);
+          const activeTab = getActiveTab(state.tabs, state.activeTabId);
+          const existing = activeTab.items.find((item) => item.id === product.id);
           const updatedItems = existing
-            ? currentTab.items.map((item) =>
+            ? activeTab.items.map((item) =>
                 item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
               )
-            : [...currentTab.items, { ...product, quantity: 1, discount: 0 }];
+            : [...activeTab.items, { ...product, quantity: 1, discount: 0 }];
 
           const updatedTabs = state.tabs.map((t) =>
-            t.id === currentTab.id ? { ...t, items: updatedItems } : t
+            t.id === activeTab.id ? { ...t, items: updatedItems } : t
           );
 
           return {
             tabs: updatedTabs,
-            items: updatedItems,
-            customer: currentTab.customer,
+            ...deriveFromActive(updatedTabs, state.activeTabId),
           };
         }),
 
       removeItem: (id) =>
         set((state) => {
-          const currentTab = state.tabs.find((t) => t.id === state.activeTabId) || state.tabs[0];
-          const updatedItems = currentTab.items.filter((item) => item.id !== id);
+          const activeTab = getActiveTab(state.tabs, state.activeTabId);
+          const updatedItems = activeTab.items.filter((item) => item.id !== id);
           const updatedTabs = state.tabs.map((t) =>
-            t.id === currentTab.id ? { ...t, items: updatedItems } : t
+            t.id === activeTab.id ? { ...t, items: updatedItems } : t
           );
           return {
             tabs: updatedTabs,
-            items: updatedItems,
+            ...deriveFromActive(updatedTabs, state.activeTabId),
           };
         }),
 
       updateQuantity: (id, quantity) =>
         set((state) => {
-          const currentTab = state.tabs.find((t) => t.id === state.activeTabId) || state.tabs[0];
+          const activeTab = getActiveTab(state.tabs, state.activeTabId);
           const updatedItems =
             quantity <= 0
-              ? currentTab.items.filter((item) => item.id !== id)
-              : currentTab.items.map((item) => (item.id === id ? { ...item, quantity } : item));
+              ? activeTab.items.filter((item) => item.id !== id)
+              : activeTab.items.map((item) => (item.id === id ? { ...item, quantity } : item));
 
           const updatedTabs = state.tabs.map((t) =>
-            t.id === currentTab.id ? { ...t, items: updatedItems } : t
+            t.id === activeTab.id ? { ...t, items: updatedItems } : t
           );
           return {
             tabs: updatedTabs,
-            items: updatedItems,
+            ...deriveFromActive(updatedTabs, state.activeTabId),
           };
         }),
 
       setCustomer: (customer) =>
         set((state) => {
-          const currentTab = state.tabs.find((t) => t.id === state.activeTabId) || state.tabs[0];
+          const activeTab = getActiveTab(state.tabs, state.activeTabId);
           const updatedTabs = state.tabs.map((t) =>
-            t.id === currentTab.id ? { ...t, customer } : t
+            t.id === activeTab.id ? { ...t, customer } : t
           );
           return {
             tabs: updatedTabs,
-            customer,
+            ...deriveFromActive(updatedTabs, state.activeTabId),
           };
         }),
 
       clearCart: () =>
         set((state) => {
-          const currentTab = state.tabs.find((t) => t.id === state.activeTabId) || state.tabs[0];
+          const activeTab = getActiveTab(state.tabs, state.activeTabId);
           const updatedTabs = state.tabs.map((t) =>
-            t.id === currentTab.id ? { ...t, items: [], customer: null } : t
+            t.id === activeTab.id ? { ...t, items: [], customer: null } : t
           );
           return {
             tabs: updatedTabs,
@@ -142,11 +151,11 @@ export const usePosCartStore = create<PosCartState>()(
 
       createTab: () => {
         const state = get();
-        const nextIdx = state.tabs.length + 1;
         const newTabId = `tab_${Date.now()}`;
+        const tabCount = state.tabs.length + 1;
         const newTab: CartTab = {
           id: newTabId,
-          name: `Đơn tạm ${nextIdx}`,
+          name: `Đơn tạm ${tabCount}`,
           items: [],
           customer: null,
           createdAt: new Date().toISOString(),
@@ -176,17 +185,24 @@ export const usePosCartStore = create<PosCartState>()(
       closeTab: (id) => {
         const state = get();
         if (state.tabs.length <= 1) {
-          // If last tab, just clear it
-          state.clearCart();
+          // Last tab — just clear it instead of removing
+          const clearedTabs = state.tabs.map((t) =>
+            t.id === id ? { ...t, items: [], customer: null } : t
+          );
+          set({ tabs: clearedTabs, items: [], customer: null });
           return;
         }
         const updatedTabs = state.tabs.filter((t) => t.id !== id);
-        const nextActive = updatedTabs[updatedTabs.length - 1];
+        // Switch to previous tab or the last available
+        const newActive =
+          state.activeTabId === id
+            ? updatedTabs[updatedTabs.length - 1]
+            : updatedTabs.find((t) => t.id === state.activeTabId) ?? updatedTabs[0];
         set({
           tabs: updatedTabs,
-          activeTabId: nextActive.id,
-          items: nextActive.items,
-          customer: nextActive.customer,
+          activeTabId: newActive.id,
+          items: newActive.items,
+          customer: newActive.customer,
         });
       },
     }),
@@ -216,10 +232,22 @@ export const usePosCartStore = create<PosCartState>()(
           }
         },
       },
+      // Only persist tab data, not derived items/customer
       partialize: (state) => ({
         tabs: state.tabs,
         activeTabId: state.activeTabId,
       }),
+      // After rehydration, re-derive items & customer from the active tab
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          const activeTab =
+            state.tabs.find((t) => t.id === state.activeTabId) ?? state.tabs[0];
+          if (activeTab) {
+            state.items = activeTab.items;
+            state.customer = activeTab.customer;
+          }
+        }
+      },
     }
   )
 );

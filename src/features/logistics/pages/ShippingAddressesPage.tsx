@@ -1,11 +1,11 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Calendar, MapPin, Building, Download } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, MapPin, Building, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
+import { useAreaStore } from '@/features/crm/store/areaStore';
 
 interface ShippingAddressRecord {
   id: string;
@@ -58,9 +58,12 @@ export function ShippingAddressesPage() {
     }
   };
 
+  const { areas, fetchAreas } = useAreaStore();
+
   useEffect(() => {
     fetchAddresses();
-  }, []);
+    fetchAreas();
+  }, [fetchAreas]);
 
   const handleOpenCreate = () => {
     setModalMode('create');
@@ -254,53 +257,47 @@ export function ShippingAddressesPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
       )}
 
-      <Drawer
+      {/* Modal Xem chi tiết địa chỉ căn giữa (TC-ALL-1) */}
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title={`Địa chỉ giao hàng: ${selected?.customerName}`}
+        title={selected ? `Chi tiết địa chỉ giao hàng: ${selected.customerName}` : 'Thông tin địa chỉ'}
+        width="max-w-lg"
       >
         {selected && (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã khách hàng:</span>
+                <span className="text-gray-500">Mã KH:</span>
                 <p className="font-mono font-semibold">{selected.customerCode}</p>
               </div>
               <div>
                 <span className="text-gray-500">Số điện thoại:</span>
-                <p className="font-mono">{selected.phone}</p>
+                <p className="font-mono font-bold text-emerald-600">{selected.phone}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500 flex items-center gap-1">
-                <MapPin className="w-4 h-4 text-gray-400" /> Địa Chỉ Giao Hàng Chi Tiết:
-              </span>
-              <p className="font-semibold text-base text-gray-700 dark:text-gray-300">{selected.fullAddress}</p>
+              <span className="text-gray-500">Họ và tên người nhận:</span>
+              <p className="font-semibold text-base">{selected.customerName}</p>
+            </div>
+            <div>
+              <span className="text-gray-500">Địa chỉ giao hàng đầy đủ:</span>
+              <p className="text-gray-700 dark:text-gray-300 font-medium">{selected.fullAddress}</p>
             </div>
             <div className="grid grid-cols-2 gap-4 border-t pt-2">
               <div>
-                <span className="text-gray-500">Quận/Huyện:</span>
-                <p className="font-semibold">{selected.district}</p>
+                <span className="text-gray-500">Phân loại địa chỉ:</span>
+                <p className="font-semibold">{selected.addressType === 'NHA_RIENG' ? 'Nhà Riêng / Cá nhân' : 'Văn Phòng / Cơ quan'}</p>
               </div>
               <div>
-                <span className="text-gray-500">Tỉnh/thành phố:</span>
-                <p className="font-semibold">{selected.city}</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <span className="text-gray-500">Loại địa chỉ:</span>
-                <p>{selected.addressType === 'VAN_PHONG' ? 'Văn Phòng công ty' : 'Nhà riêng'}</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Mặc định:</span>
+                <span className="text-gray-500">Đặc tính:</span>
                 <div>
                   <span
                     className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
                       selected.isDefault ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
                     }`}
                   >
-                    {selected.isDefault ? 'Đồng Ý mặc định' : 'Địa chỉ phụ'}
+                    {selected.isDefault ? 'Địa chỉ mặc định' : 'Địa chỉ phụ'}
                   </span>
                 </div>
               </div>
@@ -313,9 +310,17 @@ export function ShippingAddressesPage() {
                 </p>
               </div>
             )}
+            <div className="flex justify-end pt-4 border-t">
+              <button
+                onClick={() => setSelected(null)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-sm"
+              >
+                Đóng Hộp Thoại
+              </button>
+            </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}
@@ -347,6 +352,12 @@ export function ShippingAddressesPage() {
               />
             </div>
           </div>
+          <datalist id="area-shipping-address-suggestions">
+            {areas.map((area) => (
+              <option key={area.id} value={area.parentName ? `${area.name}, ${area.parentName}` : area.name} />
+            ))}
+          </datalist>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Tên khách hàng *</label>
@@ -360,13 +371,14 @@ export function ShippingAddressesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Địa chỉ chi tiết *</label>
+              <label className="block text-xs text-gray-500 mb-1">Địa chỉ chi tiết (Có gợi ý khu vực) *</label>
               <input
                 type="text"
+                list="area-shipping-address-suggestions"
                 value={editingItem.fullAddress || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, fullAddress: e.target.value })}
                 className="w-full p-2 border rounded"
-                placeholder="Số nhà, ngõ/ngách, tên đường..."
+                placeholder="Nhập hoặc chọn gợi ý địa chỉ khu vực..."
                 required
               />
             </div>

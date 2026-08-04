@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, Settings, RefreshCw, Key, Cpu, Trash2, X, AlertTriangle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import { useSystemStore, type SystemConfigParameter } from '../store/systemStore';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -345,11 +344,11 @@ export function SystemConfigPage() {
       </div>
 
       {/* VIEW DRAWER */}
-      <Drawer
+      <Modal
         isOpen={!!selectedParam}
         onClose={() => setSelectedParam(null)}
         title={selectedParam ? `Thông tin tham số: ${selectedParam.configKey}` : 'Chi tiết tham số'}
-        width="max-w-xl"
+        width="max-w-2xl"
       >
         {selectedParam && (
           <div className="space-y-6">
@@ -450,14 +449,14 @@ export function SystemConfigPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* FORM DRAWER */}
-      <Drawer
+      <Modal
         isOpen={formOpen}
         onClose={() => setFormOpen(false)}
         title={formMode === 'create' ? 'Định nghĩa tham số hệ thống mới' : 'Cập nhật giá trị tham số'}
-        width="max-w-md"
+        width="max-w-lg"
       >
         <form onSubmit={handleSave} className="space-y-5">
           <div>
@@ -573,7 +572,7 @@ export function SystemConfigPage() {
             </button>
           </div>
         </form>
-      </Drawer>
+      </Modal>
 
       {/* DELETION CONFIRMATION MODAL */}
       <Modal

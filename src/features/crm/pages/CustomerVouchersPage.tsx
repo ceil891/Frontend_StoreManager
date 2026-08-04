@@ -1,11 +1,33 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { useCrmStore } from '../store/crmStore';
+
+interface VoucherRecord {
+  id: string;
+  customerId: string;
+  customerName: string;
+  voucherCode: string;
+  issuedAt: string;
+  expiryDate: string;
+  status: 'ACTIVE' | 'EXPIRED' | 'USED' | 'REVOKED';
+  notes: string;
+  type?: 'PERCENTAGE' | 'FIXED_AMOUNT' | 'FREE_SHIPPING';
+  discountValue?: number;
+  startDate?: string;
+}
+
+const generateVoucherCode = () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let randomPart = '';
+  for (let i = 0; i < 4; i++) {
+    randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `VC2026-${randomPart}`;
+};
 
 export function CustomerVouchersPage() {
   const {
@@ -30,9 +52,12 @@ export function CustomerVouchersPage() {
       customerName: cv.customerName,
       voucherCode: cv.voucherCode,
       issuedAt: cv.issueDate,
-      expiryDate: '2026-12-31',
+      startDate: cv.startDate || cv.issueDate,
+      expiryDate: cv.expiryDate || '2026-12-31',
       status: (cv.status === 'UNUSED' ? 'ACTIVE' : cv.status) as any,
       notes: cv.voucherName,
+      type: cv.type || 'FIXED_AMOUNT',
+      discountValue: cv.discountValue || 0,
     }));
   }, [storeVouchers]);
 
@@ -47,6 +72,10 @@ export function CustomerVouchersPage() {
     voucherCode: '',
     status: 'ACTIVE' as any,
     notes: '',
+    startDate: new Date().toISOString().split('T')[0],
+    expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    type: 'FIXED_AMOUNT' as 'PERCENTAGE' | 'FIXED_AMOUNT' | 'FREE_SHIPPING',
+    discountValue: 0,
   });
 
   const handleDelete = async (item: any) => {
@@ -64,9 +93,13 @@ export function CustomerVouchersPage() {
     setForm({
       customerName: '',
       customerPhone: '',
-      voucherCode: `VC-${Math.floor(1000 + Math.random() * 9000)}`,
+      voucherCode: generateVoucherCode(),
       status: 'ACTIVE',
       notes: '',
+      startDate: new Date().toISOString().split('T')[0],
+      expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      type: 'FIXED_AMOUNT',
+      discountValue: 0,
     });
     setIsModalOpen(true);
   };
@@ -79,6 +112,10 @@ export function CustomerVouchersPage() {
       voucherCode: item.voucherCode,
       status: item.status,
       notes: item.notes || '',
+      startDate: item.startDate || new Date().toISOString().split('T')[0],
+      expiryDate: item.expiryDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      type: item.type || 'FIXED_AMOUNT',
+      discountValue: item.discountValue || 0,
     });
     setIsModalOpen(true);
   };
@@ -99,8 +136,10 @@ export function CustomerVouchersPage() {
           customerPhone: form.customerPhone || '0900000000',
           voucherCode: form.voucherCode,
           voucherName: form.notes || 'Voucher tặng',
-          discountValue: 50000,
-          issueDate: new Date().toISOString().split('T')[0],
+          discountValue: form.discountValue,
+          issueDate: form.startDate,
+          expiryDate: form.expiryDate,
+          type: form.type,
           status: 'UNUSED',
         });
         toast.success('Cấp voucher cho khách hàng thành công');
@@ -246,7 +285,7 @@ export function CustomerVouchersPage() {
       </div>
 
       {/* Drawer chi tiết */}
-      <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết Voucher: ${selected.voucherCode}` : ''} width="max-w-lg">
+      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết Voucher: ${selected.voucherCode}` : ''} width="max-w-lg">
         {selected && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -281,31 +320,98 @@ export function CustomerVouchersPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal tạo / sửa voucher khách hàng */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Chỉnh sửa Voucher Khách Hàng' : 'Cấp Voucher cho Khách Hàng'} width="max-w-lg">
         <form onSubmit={handleSave} className="p-4 space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã Voucher</label>
-            <input
-              type="text"
-              required
-              value={form.voucherCode}
-              onChange={(e) => setForm({ ...form, voucherCode: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                required
+                value={form.voucherCode}
+                onChange={(e) => setForm({ ...form, voucherCode: e.target.value })}
+                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, voucherCode: generateVoucherCode() })}
+                className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm hover:bg-gray-200 flex items-center gap-1 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+              >
+                🎲 Tạo mã
+              </button>
+            </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên khách hàng</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng</label>
             <input
               type="text"
+              list="customer-suggestions"
               required
-              placeholder="Nhập tên khách hàng"
+              placeholder="Gõ tên/SĐT/Mã KH để tìm..."
               value={form.customerName}
               onChange={(e) => setForm({ ...form, customerName: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
             />
+            <datalist id="customer-suggestions">
+              <option value="Nguyễn Văn A - 0901234567" />
+              <option value="Trần Thị B - 0912345678" />
+              <option value="Lê Văn C - 0923456789" />
+            </datalist>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày hiệu lực</label>
+              <input
+                type="date"
+                required
+                value={form.startDate}
+                onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày hết hạn</label>
+              <input
+                type="date"
+                required
+                value={form.expiryDate}
+                onChange={(e) => setForm({ ...form, expiryDate: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại voucher</label>
+              <select
+                value={form.type}
+                onChange={(e) => setForm({ ...form, type: e.target.value as any, discountValue: e.target.value === 'FREE_SHIPPING' ? 0 : form.discountValue })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              >
+                <option value="PERCENTAGE">Giảm theo %</option>
+                <option value="FIXED_AMOUNT">Giảm cố định</option>
+                <option value="FREE_SHIPPING">Freeship</option>
+              </select>
+            </div>
+            {form.type !== 'FREE_SHIPPING' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Giá trị ({form.type === 'PERCENTAGE' ? '%' : 'VNĐ'})
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  max={form.type === 'PERCENTAGE' ? 100 : undefined}
+                  value={form.discountValue}
+                  onChange={(e) => setForm({ ...form, discountValue: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                />
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
@@ -315,9 +421,9 @@ export function CustomerVouchersPage() {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
             >
               <option value="ACTIVE">Hoạt động</option>
-              <option value="USED">Đã sử dụng</option>
-              <option value="EXPIRED">Hết hạn</option>
-              <option value="REVOKED">Bị thu hồi</option>
+              <option value="USED" disabled={!editingItem}>Đã sử dụng</option>
+              <option value="EXPIRED" disabled={!editingItem}>Hết hạn</option>
+              <option value="REVOKED" disabled={!editingItem}>Bị thu hồi</option>
             </select>
           </div>
           <div>

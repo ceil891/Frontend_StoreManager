@@ -105,15 +105,17 @@ export const useUserStore = create<UserStore>()(
       fetchUsers: async () => {
         set({ isLoading: true, error: null });
         try {
-          const response = await axiosClient.get<any, any[]>('/system/users');
-          // Lấy danh sách roles trong DB để map roleId -> roleName
+          const response = await axiosClient.get<any, any>('/users');
+          const rawUsers = Array.isArray(response) ? response : (response?.content || response?.data || response?.items || []);
+          
           let roles: any[] = [];
           try {
-            roles = await axiosClient.get<any, any[]>('/system/roles');
+            const roleRes = await axiosClient.get<any, any>('/roles');
+            roles = Array.isArray(roleRes) ? roleRes : (roleRes?.content || roleRes?.data || roleRes?.items || []);
           } catch (roleErr) {
             console.warn('Failed to fetch roles, using fallback mapping:', roleErr);
           }
-          const mapped = response.map((u: any) => {
+          const mapped = (Array.isArray(rawUsers) ? rawUsers : []).map((u: any) => {
             const roleObj = Array.isArray(roles) ? roles.find((r: any) => r.id === u.role?.id) : undefined;
             const roleName = roleObj?.roleName || u.role?.roleName || 'STAFF';
             

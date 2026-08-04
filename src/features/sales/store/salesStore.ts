@@ -66,8 +66,9 @@ export interface SaleOrder {
 }
 
 export const BRANCH_NAME_BY_ID: Record<string, string> = {
-  branch_001: 'CH Quận 1',
-  'BR-001': 'CH Quận 1',
+  '1': 'Chi nhánh chính',
+  branch_001: 'Chi nhánh chính',
+  'BR-001': 'Chi nhánh chính',
   'BR-002': 'CH Tân Bình',
   'BR-003': 'CH Gò Vấp',
   'BR-004': 'CH Quận 7',

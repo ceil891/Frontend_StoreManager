@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Search, Download, Eye, KeyRound, ShieldCheck } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
+import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -138,7 +138,7 @@ export function PasswordHistoryPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} isLoading={isLoading} />
       </div>
 
-      <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title="Chi tiết lần thay đổi mật khẩu">
+      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title="Chi tiết lần thay đổi mật khẩu" width="max-w-lg">
         {selected && (
           <div className="space-y-5">
             <div className="flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
@@ -168,7 +168,7 @@ export function PasswordHistoryPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
     </>
   );
 }

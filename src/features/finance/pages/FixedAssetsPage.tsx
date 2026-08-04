@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Search, Download, Eye, Edit, Trash2, Plus, CalendarDays, TrendingUp, TrendingDown, Calendar } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore } from '../store/financeStore';
@@ -112,7 +111,7 @@ export function FixedAssetsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)}/>
       </div>
 
-      <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết: ${selected.assetName}`:''}>
+      <Modal isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết: ${selected.assetName}`:''} width="max-w-lg">
         {selected && (
           <div className="space-y-4 p-4">
             <div className="grid grid-cols-2 gap-4">
@@ -123,7 +122,7 @@ export function FixedAssetsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title={form.id?`Cập nhật TSCĐ`:`Thêm TSCĐ mới`} size="erp">
         <form onSubmit={handleSave}>

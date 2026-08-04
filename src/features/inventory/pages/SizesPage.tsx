@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Eye, Edit, Trash2, Search, Ruler } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { useSizeStore, type SizeRecord } from '../store/sizeStore';
 
@@ -203,7 +204,7 @@ export function SizesPage() {
       </div>
 
       {/* Drawer */}
-      <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết: ${selected.sizeName}` : ''}>
+      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết: ${selected.sizeName}` : ''}>
         {selected && (
           <div className="space-y-4 p-4">
             <div className="flex items-center gap-4">
@@ -225,7 +226,7 @@ export function SizesPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Create/Edit */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalMode === 'create' ? 'Thêm kích thước mới' : 'Chỉnh sửa kích thước'} width="max-w-md">

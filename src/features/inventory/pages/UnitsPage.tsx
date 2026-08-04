@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Scale, CheckCircle2, Sliders, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type UnitOfMeasure } from '@/features/inventory/store/inventoryStore';
 
@@ -284,7 +285,7 @@ export function UnitsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedUnit(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedUnit}
         onClose={() => setSelectedUnit(null)}
         title={selectedUnit ? `Unit Spec: ${selectedUnit.code}` : 'Unit Details'}
@@ -357,7 +358,7 @@ export function UnitsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Thêm / Sửa Đơn vị */}
       <Modal

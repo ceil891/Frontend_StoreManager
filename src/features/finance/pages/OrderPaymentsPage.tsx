@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Plus, Download, Eye, Edit, Trash2, Search, CreditCard, Banknote, Smartphone, Wallet, TrendingUp, Clock, RefreshCw } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -304,8 +305,8 @@ export function OrderPaymentsPage() {
         )}
       </div>
 
-      {/* Drawer */}
-      <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết: ${selected.paymentCode}` : ''} width="max-w-md">
+      {/* Modal Detail */}
+      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết: ${selected.paymentCode}` : ''} width="max-w-lg">
         {selected && (
           <div className="space-y-5 p-4">
             <div className={`p-4 rounded-xl border ${statusConfig[selected.status].className} border-current/20`}>
@@ -332,7 +333,7 @@ export function OrderPaymentsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Create */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Ghi thanh toán mới" width="max-w-lg">

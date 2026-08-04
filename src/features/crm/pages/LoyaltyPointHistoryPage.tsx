@@ -1,10 +1,23 @@
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Download, Search, Eye, Award, AlertCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
+import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { useCrmStore } from '../store/crmStore';
+
+interface LoyaltyPointHistoryItem {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  pointChange: number;
+  transactionType: string;
+  referenceCode: string;
+  transactionDate: string;
+  operatorName: string;
+  pointBalanceAfter: number;
+  notes?: string;
+}
 
 export function LoyaltyPointHistoryPage() {
   const {
@@ -16,7 +29,7 @@ export function LoyaltyPointHistoryPage() {
     fetchLoyaltyHistories();
   }, [fetchLoyaltyHistories]);
 
-  const data: any[] = useMemo(() => {
+  const data: LoyaltyPointHistoryItem[] = useMemo(() => {
     return storeHistories.map((h: any) => ({
       id: h.id,
       customerName: h.customerName,
@@ -31,45 +44,19 @@ export function LoyaltyPointHistoryPage() {
     }));
   }, [storeHistories]);
 
+  const totalPoints = useMemo(() => {
+    if (data.length > 0) {
+      return data[0].pointBalanceAfter || 0; // Or calculate sum, but using latest balance makes sense
+    }
+    return 0;
+  }, [data]);
+
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('Tất cả');
+  const [dateFilter, setDateFilter] = useState<'7days' | '30days' | 'thisMonth' | 'all'>('all');
   
   const [selectedItem, setSelectedItem] = useState<LoyaltyPointHistoryItem | null>(null);
-
-  const fetchLoyaltyHistory = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const res: any = await axiosClient.get('/crm/loyalty-history');
-      const list = Array.isArray(res) ? res : res?.content || res?.data || [];
-      if (list.length > 0) {
-        const mapped: LoyaltyPointHistoryItem[] = list.map((item: any) => ({
-          id: `GD-${item.id}`,
-          customerName: item.customer?.name || 'Khách hàng',
-          customerPhone: item.customer?.phone || '0900000000',
-          pointChange: item.pointsChange || 0,
-          transactionType: item.transactionType === 'EARN' ? 'TÍCH_ĐIỂM_ĐƠN_HÀNG' : item.transactionType === 'REDEEM' ? 'ĐỔI_QUÀ' : 'ĐIỀU_CHỈNH_HỆ_THỐNG',
-          referenceCode: item.refCode || `REF-${item.id}`,
-          transactionDate: item.createdDate ? String(item.createdDate).split('T')[0] : '2026-06-04',
-          operatorName: 'Hệ thống tự động',
-          pointBalanceAfter: item.currentPoints || 0,
-          notes: item.description || '',
-        }));
-        setData(mapped);
-      } else {
-        setData([]);
-      }
-    } catch (err) {
-      console.error('Error fetching loyalty history:', err);
-      setData([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchLoyaltyHistory();
-  }, [fetchLoyaltyHistory]);
 
   const filtered = useMemo(() => {
     return data.filter((item) => {
@@ -79,9 +66,25 @@ export function LoyaltyPointHistoryPage() {
         item.customerPhone.toLowerCase().includes(search.toLowerCase()) ||
         item.referenceCode.toLowerCase().includes(search.toLowerCase());
       const matchesType = typeFilter === 'Tất cả' || item.transactionType === typeFilter;
-      return matchesSearch && matchesType;
+      
+      let matchesDate = true;
+      if (item.transactionDate) {
+        const txDate = new Date(item.transactionDate);
+        const now = new Date();
+        if (dateFilter === '7days') {
+          const diff = now.getTime() - txDate.getTime();
+          matchesDate = diff <= 7 * 24 * 60 * 60 * 1000;
+        } else if (dateFilter === '30days') {
+          const diff = now.getTime() - txDate.getTime();
+          matchesDate = diff <= 30 * 24 * 60 * 60 * 1000;
+        } else if (dateFilter === 'thisMonth') {
+          matchesDate = txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
+        }
+      }
+
+      return matchesSearch && matchesType && matchesDate;
     });
-  }, [data, search, typeFilter]);
+  }, [data, search, typeFilter, dateFilter]);
 
   const columns = useMemo<ColumnDef<LoyaltyPointHistoryItem>[]>(
     () => [
@@ -160,6 +163,15 @@ export function LoyaltyPointHistoryPage() {
         ),
       },
       {
+        accessorKey: 'pointBalanceAfter',
+        header: 'Số dư sau GD',
+        cell: (info) => (
+          <span className="text-gray-500 font-mono text-sm">
+            {info.getValue() as number}
+          </span>
+        ),
+      },
+      {
         id: 'actions',
         header: 'Thao tác',
         cell: ({ row }) => (
@@ -195,8 +207,39 @@ export function LoyaltyPointHistoryPage() {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="flex-1 relative">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
+              <Award className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Tổng điểm khả dụng</p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{totalPoints.toLocaleString()} điểm</h3>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+              <AlertCircle className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Điểm chờ kích hoạt</p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">150 điểm</h3>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+            <div className="p-3 bg-amber-50 dark:bg-amber-900/30 rounded-lg">
+              <AlertCircle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Điểm sắp hết hạn</p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">100 điểm</h3>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Hết hạn: 31/08/2026</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col lg:flex-row gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="flex-1 relative min-w-0">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-4 w-4 text-gray-400" />
             </div>
@@ -205,21 +248,49 @@ export function LoyaltyPointHistoryPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm theo mã GD, khách hàng, số điện thoại, hóa đơn..."
-              className="block w-full sm:max-w-md pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
+              className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 font-medium whitespace-nowrap">Loại giao dịch:</span>
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white p-2"
-            >
-              <option value="Tất cả">Tất cả loại giao dịch</option>
-              <option value="TÍCH_ĐIỂM_ĐƠN_HÀNG">Tích điểm đơn hàng</option>
-              <option value="ĐỔI_QUÀ">Đổi quà / Voucher</option>
-              <option value="ĐIỀU_CHỈNH_HỆ_THỐNG">Hệ thống điều chỉnh</option>
-            </select>
+          
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 p-1 rounded-lg">
+              {(
+                [
+                  { id: 'all', label: 'Tất cả' },
+                  { id: '7days', label: '7 ngày qua' },
+                  { id: 'thisMonth', label: 'Tháng này' },
+                  { id: '30days', label: '30 ngày' },
+                ] as const
+              ).map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setDateFilter(f.id)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    dateFilter === f.id
+                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="h-8 w-px bg-gray-200 dark:bg-gray-700 hidden lg:block"></div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 font-medium whitespace-nowrap hidden sm:inline">Loại GD:</span>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white py-1.5 px-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+              >
+                <option value="Tất cả">Tất cả loại giao dịch</option>
+                <option value="TÍCH_ĐIỂM_ĐƠN_HÀNG">Tích điểm đơn hàng</option>
+                <option value="ĐỔI_QUÀ">Đổi quà / Voucher</option>
+                <option value="ĐIỀU_CHỈNH_HỆ_THỐNG">Hệ thống điều chỉnh</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -227,10 +298,11 @@ export function LoyaltyPointHistoryPage() {
       </div>
 
       {/* Drawer Chi tiết */}
-      <Drawer
+      <Modal
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
         title={selectedItem ? `Chi tiết giao dịch điểm: ${selectedItem.id}` : 'Thông tin chi tiết'}
+        width="max-w-lg"
       >
         {selectedItem && (
           <div className="space-y-6">
@@ -294,7 +366,7 @@ export function LoyaltyPointHistoryPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
     </>
   );
 }

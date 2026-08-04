@@ -2,7 +2,6 @@ import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Mail, Phone, MapPin, Building, Key, ShieldCheck, UserX, UserCheck, Trash2, X, Edit, Scan } from 'lucide-react';
 import { toast } from 'sonner';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import { useUserStore, type SystemUserRecord } from '../store/userStore';
 import { UserAvatar } from '@/shared/components/ui/UserAvatar';
@@ -510,8 +509,8 @@ export function UsersPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedUser(row)} />
       </div>
 
-      {/* Details View Drawer */}
-      <Drawer
+      {/* Details View Modal */}
+      <Modal
         isOpen={!!selectedUser}
         onClose={() => setSelectedUser(null)}
         title={selectedUser ? `Thông tin tài khoản: ${selectedUser.userCode}` : 'Hồ sơ nhân sự'}
@@ -668,14 +667,14 @@ export function UsersPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
-      {/* Create / Edit Drawer Form */}
-      <Drawer
+      {/* Create / Edit Modal Form */}
+      <Modal
         isOpen={formOpen}
         onClose={() => setFormOpen(false)}
         title={formMode === 'create' ? 'Cấp phát tài khoản nhân sự mới' : 'Cập nhật lý lịch nhân viên'}
-        size="erp"
+        width="max-w-2xl"
       >
         <form onSubmit={handleSave}>
           <div className="erp-form-body">
@@ -974,7 +973,7 @@ export function UsersPage() {
             </button>
           </div>
         </form>
-      </Drawer>
+      </Modal>
 
 
       <Modal

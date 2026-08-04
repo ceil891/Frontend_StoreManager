@@ -116,21 +116,23 @@ export function DeliveryNotesPage() {
       }
       setIsModalOpen(false);
       fetchNotes();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lỗi khi lưu biên bản giao hàng.');
+      const msg = err?.response?.data?.message || 'Lỗi vi phạm dữ liệu bắt buộc từ backend!';
+      toast.error(`Không thể lưu biên bản giao hàng: ${msg}`);
     }
   };
 
   const handleDelete = async (id: string) => {
+    setSelected(null);
     if (confirm('Bạn có chắc chắn muốn xóa biên bản giao hàng này?')) {
       try {
         await axiosClient.delete(`/wms/delivery-notes/${id}`);
         toast.success('Đã xóa biên bản giao hàng thành công!');
         fetchNotes();
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
-        toast.error('Lỗi khi xóa biên bản giao hàng.');
+        toast.error('Lỗi vi phạm ràng buộc dữ liệu backend khi xóa biên bản.');
       }
     }
   };
@@ -249,17 +251,19 @@ export function DeliveryNotesPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
       )}
 
-      <Drawer
+      {/* Modal Xem chi tiết biên bản căn giữa (TC-ALL-1) */}
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title={`Chi tiết Biên Bản: ${selected?.noteCode}`}
+        title={selected ? `Biên bản giao nhận: ${selected.noteCode}` : 'Thông tin biên bản'}
+        width="max-w-md"
       >
         {selected && (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <span className="text-gray-500">Mã biên bản:</span>
-                <p className="font-mono font-semibold">{selected.noteCode}</p>
+                <p className="font-mono font-semibold text-emerald-600">{selected.noteCode}</p>
               </div>
               <div>
                 <span className="text-gray-500">Mã vận đơn:</span>
@@ -318,14 +322,22 @@ export function DeliveryNotesPage() {
                 </p>
               </div>
             )}
+            <div className="flex justify-end pt-3 border-t">
+              <button
+                onClick={() => setSelected(null)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-sm"
+              >
+                Đóng Hộp Thoại
+              </button>
+            </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? '📋 Tạo biên bản bàn giao hàng hóa mới' : '⚙️ Sửa biên bản bàn giao'}
+        title={modalMode === 'create' ? 'Tạo biên bản bàn giao hàng hóa mới' : 'Sửa biên bản bàn giao'}
         width="max-w-2xl"
       >
         <form onSubmit={handleSave} className="space-y-4 text-xs">

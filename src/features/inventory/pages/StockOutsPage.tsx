@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, FileText, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type StockOutRecord } from '@/features/inventory/store/inventoryStore';
 
@@ -184,7 +185,7 @@ export function StockOutsPage() {
 
       <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
 
-      <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title={`Chi tiết xuất kho: ${selected?.stockOutCode}`}>
+      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title={`Chi tiết xuất kho: ${selected?.stockOutCode}`}>
         {selected && (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
@@ -225,7 +226,7 @@ export function StockOutsPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalMode === 'create' ? 'Lập phiếu xuất kho mới' : 'Sửa phiếu xuất kho'}>
         <form onSubmit={handleSave} className="space-y-4">

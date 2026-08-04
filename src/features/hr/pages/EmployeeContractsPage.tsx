@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Edit, Trash2, FileText } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useHrStore } from '../store/hrStore';
@@ -117,7 +116,7 @@ export function EmployeeContractsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)}/>
       </div>
 
-      <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết: ${selected.contractNumber}`:''}>
+      <Modal isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết: ${selected.contractNumber}`:''} width="max-w-lg">
         {selected&&(
           <div className="space-y-4">
             <div className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
@@ -131,7 +130,7 @@ export function EmployeeContractsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title={mode==='create'?'Lập hợp đồng lao động mới':'Cập nhật hợp đồng'} width="max-w-lg">
         <form onSubmit={handleSave} className="space-y-4">

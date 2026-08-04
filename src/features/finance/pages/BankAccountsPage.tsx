@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, Building2, CreditCard, Building, ShieldCheck, DollarSign, Lock, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -279,7 +280,7 @@ export function BankAccountsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedAccount(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedAccount}
         onClose={() => setSelectedAccount(null)}
         title={selectedAccount ? `Chi Tiết Tài Khoản: ${selectedAccount.bankName}` : 'Chi tiết thông tin'}
@@ -415,7 +416,7 @@ export function BankAccountsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal: Thêm / Sửa */}
       <Modal

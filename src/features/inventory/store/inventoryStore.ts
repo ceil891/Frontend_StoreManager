@@ -924,7 +924,7 @@ export const useInventoryStore = create<InventoryState>()(
             unit: item.baseUnitName || item.baseUnitCode || 'Cái',
             weight: '0 kg',
             location: 'Kệ chính',
-            onHand: 0, // sẽ được cập nhật từ inventory stock bên dưới
+            onHand: Number(item.onHand || 0),
             status: (item.isActive ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE',
             description: item.description || '',
             mainImage: item.mainImageUrl || item.mainImage || item.imageUrl || '',
@@ -938,19 +938,18 @@ export const useInventoryStore = create<InventoryState>()(
             lastUpdated: item.createdAt ? new Date(item.createdAt).toLocaleString('vi-VN') : undefined,
           }));
 
-          // 2. Fetch tồn kho thực tế từ size_inventory (đã được cộng qua completeImportReceipt)
+          // 2. Fetch tồn kho thực tế từ size_inventory (nếu có bổ sung thêm)
           let stockMap: Record<string, number> = {};
           try {
             const stockRes = await axiosClient.get<any, any>('/inventories');
             const stockList: any[] = Array.isArray(stockRes) ? stockRes : (stockRes?.data || stockRes?.content || stockRes || []);
-            // Gộp quantityPhysical theo productId (tổng tất cả khu vực/zone)
             stockList.forEach((s: any) => {
               const pid = String(s.productId);
               const qty = Number(s.quantityPhysical || s.quantity || 0);
               stockMap[pid] = (stockMap[pid] || 0) + qty;
             });
           } catch {
-            // Nếu stock API lỗi, giữ onHand = 0 (không ảnh hưởng danh sách sản phẩm)
+            // stock API fallback
           }
 
           // 3. Merge tồn kho thực tế từ backend database vào sản phẩm
@@ -958,7 +957,7 @@ export const useInventoryStore = create<InventoryState>()(
             const realQty = stockMap[p.id];
             return {
               ...p,
-              onHand: realQty !== undefined ? realQty : 0,
+              onHand: realQty !== undefined && realQty > 0 ? realQty : p.onHand,
             };
           });
 
@@ -1158,15 +1157,11 @@ export const useInventoryStore = create<InventoryState>()(
         set((state) => ({ categories: [newRecord, ...state.categories] }));
         try {
           const payload = {
+            categoryCode: category.code || `CAT-${Date.now().toString().slice(-4)}`,
             categoryName: category.categoryName,
             description: category.description,
             parentId: category.parentId ? Number(category.parentId) : null,
             isActive: category.status === 'ACTIVE',
-            department: category.department,
-            manager: category.manager,
-            inventoryGlCode: category.inventoryGlCode,
-            cogsGlCode: category.cogsGlCode,
-            taxClass: category.taxClass,
           };
           await axiosClient.post('/categories', payload);
           get().fetchCategories();
@@ -1175,20 +1170,17 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
       updateCategory: async (id, data) => {
+        const existing = get().categories.find((c) => c.id === id);
         set((state) => ({
           categories: state.categories.map((c) => (c.id === id ? { ...c, ...data } : c)),
         }));
         try {
           const payload = {
-            categoryName: data.categoryName,
-            description: data.description,
-            parentId: data.parentId ? Number(data.parentId) : null,
-            isActive: data.status === undefined ? undefined : data.status === 'ACTIVE',
-            department: data.department,
-            manager: data.manager,
-            inventoryGlCode: data.inventoryGlCode,
-            cogsGlCode: data.cogsGlCode,
-            taxClass: data.taxClass,
+            categoryCode: data.code || existing?.code || `CAT-${id}`,
+            categoryName: data.categoryName || existing?.categoryName || 'Danh mục',
+            description: data.description !== undefined ? data.description : existing?.description,
+            parentId: data.parentId ? Number(data.parentId) : (existing?.parentId ? Number(existing.parentId) : null),
+            isActive: data.status !== undefined ? (data.status === 'ACTIVE') : (existing?.status === 'ACTIVE'),
           };
           await axiosClient.put(`/categories/${id}`, payload);
         } catch (error) {

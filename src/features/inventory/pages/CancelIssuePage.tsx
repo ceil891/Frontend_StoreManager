@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, AlertCircle, Building2, Calendar, FileText, CheckCircle2, Edit, Trash2, X, User, ImageIcon, RefreshCw } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { exportToCsv } from '@/shared/utils/exportCsv';
 import { useInventoryStore, type CancelIssueRecord } from '../store/inventoryStore';
@@ -346,7 +347,7 @@ export function CancelIssuePage() {
       </div>
 
       {/* Drawer chi tiết */}
-      <Drawer
+      <Modal
         isOpen={!!selectedIssue}
         onClose={() => setSelectedIssue(null)}
         title={selectedIssue ? `Chi tiết Hủy hàng: ${selectedIssue.issueCode}` : 'Chi tiết phiếu'}
@@ -473,7 +474,7 @@ export function CancelIssuePage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isFormOpen}

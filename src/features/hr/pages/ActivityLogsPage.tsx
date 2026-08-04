@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Download, Search, Eye, Monitor, X, FileText, Building2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
+import { Modal } from '@/shared/components/ui/Modal';
 import { UserAvatar } from '@/shared/components/ui/UserAvatar';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
@@ -283,7 +283,7 @@ export function ActivityLogsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedLog(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedLog}
         onClose={() => setSelectedLog(null)}
         title={selectedLog ? `Chi tiết hoạt động` : ''}
@@ -404,7 +404,7 @@ export function ActivityLogsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
     </>
   );
 }

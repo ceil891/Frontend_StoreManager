@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation, Link } from 'react-router';
-import { LogOut, Search, Menu, Store, ChevronRight, X, Moon, Sun, Command } from 'lucide-react';
+import { LogOut, Search, Menu, Store, ChevronRight, X, Moon, Sun, Command, ShoppingCart } from 'lucide-react';
 import { useAuthStore, useAuthUser, useAuthPermissions } from '@/features/auth/store/authStore';
 import { NAV_GROUPS, type NavItem } from '@/shared/config/navigation';
 import { UserAvatar } from '@/shared/components/ui/UserAvatar';
@@ -8,6 +8,8 @@ import { useThemeStore } from '@/shared/store/themeStore';
 import { CommandPalette, useCommandPalette } from '@/shared/components/ui/CommandPalette';
 import { AIAlerts } from '@/components/AI/AIAlerts';
 import { AIAssistant } from '@/components/AI/AIAssistant';
+import { CartDrawer } from '@/features/cart/components/CartDrawer';
+import { useCartTotalQuantity } from '@/features/cart/store/cartStore';
 
 function getAllHrefs(items: NavItem[]): string[] {
   const hrefs: string[] = [];
@@ -59,6 +61,8 @@ function filterNavItem(item: NavItem, permissions: string[]): NavItem | null {
 export function MainLayout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
+  const cartTotalQty = useCartTotalQuantity();
 
   const allHrefs = useMemo(() => {
     const list: string[] = [];
@@ -295,6 +299,9 @@ export function MainLayout() {
       {/* Command Palette — rendered at root level for correct z-index */}
       <CommandPalette isOpen={cmdOpen} onClose={closeCmd} />
 
+      {/* Cart Drawer */}
+      <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} />
+
       <div className="h-screen flex overflow-hidden bg-gray-50 dark:bg-gray-950">
         {/* Mobile overlay */}
         {sidebarOpen && (
@@ -409,6 +416,16 @@ export function MainLayout() {
             </button>
 
             <div className="ml-auto flex items-center gap-1">
+              {/* Quick POS Terminal Button */}
+              <Link
+                to="/pos"
+                title="Mở máy bán hàng POS"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all active:scale-95 mr-1"
+              >
+                <ShoppingCart className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Bán hàng POS</span>
+              </Link>
+
               {/* Dark Mode Toggle */}
               <button
                 onClick={toggleTheme}

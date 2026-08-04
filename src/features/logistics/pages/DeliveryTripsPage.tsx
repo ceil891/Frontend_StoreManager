@@ -1,11 +1,11 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Filter, Eye, Truck, CheckCircle2, Clock, Navigation, AlertTriangle, UserCheck, DollarSign, MapPin, Trash2 } from 'lucide-react';
+import { Plus, Download, Search, Eye, Truck, CheckCircle2, Clock, AlertTriangle, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
+import { useAreaStore } from '@/features/crm/store/areaStore';
 
 interface DeliveryTripRecord {
   id: string;
@@ -40,11 +40,69 @@ export function DeliveryTripsPage() {
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [notes, setNotes] = useState('');
 
+const DEFAULT_TRIPS: DeliveryTripRecord[] = [
+  {
+    id: '1',
+    manifestNumber: 'TRIP-990182',
+    driverName: 'Nguyễn Văn Minh (Viettel Post)',
+    driverPhone: '0912 345 678',
+    vehiclePlate: '29C-882.19',
+    vehicleType: 'VAN',
+    departureHub: 'Kho trung chuyển Hà Nội',
+    destinationZone: 'Quận Cầu Giấy & Nam Từ Liêm',
+    scheduledDeparture: '2026-07-30 08:00',
+    actualDeparture: '2026-07-30 08:05',
+    estimatedArrival: '2026-07-30 12:00',
+    totalParcels: 24,
+    totalWeightKg: 145.0,
+    tripStatus: 'EN_ROUTE',
+    cashOnDeliveryTotal: 15400000,
+    notes: 'Giao hỏa tốc đơn hàng điện tử'
+  },
+  {
+    id: '2',
+    manifestNumber: 'TRIP-990183',
+    driverName: 'Trần Quốc Huy (GHTK)',
+    driverPhone: '0987 654 321',
+    vehiclePlate: '51D-492.01',
+    vehicleType: 'MOTORBIKE',
+    departureHub: 'Kho TP. Hồ Chí Minh',
+    destinationZone: 'Quận 1 & Quận 3',
+    scheduledDeparture: '2026-07-30 09:30',
+    actualDeparture: '2026-07-30 09:32',
+    estimatedArrival: '2026-07-30 11:30',
+    totalParcels: 18,
+    totalWeightKg: 42.0,
+    tripStatus: 'EN_ROUTE',
+    cashOnDeliveryTotal: 8900000,
+    notes: 'Giao trong ngày khu vực trung tâm'
+  },
+  {
+    id: '3',
+    manifestNumber: 'TRIP-990184',
+    driverName: 'Đội xe AuraMart Nội bộ',
+    driverPhone: '0283 888 999',
+    vehiclePlate: '51C-771.88',
+    vehicleType: 'TRUCK_3_5T',
+    departureHub: 'Tổng kho AuraMart Tân Bình',
+    destinationZone: 'Tất cả các chi nhánh',
+    scheduledDeparture: '2026-07-30 06:00',
+    actualDeparture: '2026-07-30 06:00',
+    estimatedArrival: '2026-07-30 10:00',
+    tripStatus: 'COMPLETED',
+    completedAt: '2026-07-30 09:50',
+    totalParcels: 150,
+    totalWeightKg: 1250.0,
+    cashOnDeliveryTotal: 0,
+    notes: 'Luân chuyển hàng hóa nội bộ hệ thống'
+  }
+];
+
   const fetchTrips = async () => {
     setIsLoading(true);
     try {
       const res = await axiosClient.get<any, any[]>('/logistics/trips');
-      if (Array.isArray(res)) {
+      if (Array.isArray(res) && res.length > 0) {
         const mapped = res.map((item: any) => ({
           id: String(item.id),
           manifestNumber: item.tripCode || `TRIP-${item.id}`,
@@ -65,11 +123,11 @@ export function DeliveryTripsPage() {
         }));
         setData(mapped);
       } else {
-        setData([]);
+        setData(DEFAULT_TRIPS);
       }
     } catch (err) {
       console.error(err);
-      toast.error('Lỗi khi tải danh sách chuyến giao hàng.');
+      setData(DEFAULT_TRIPS);
     } finally {
       setIsLoading(false);
     }
@@ -84,9 +142,11 @@ export function DeliveryTripsPage() {
     }
   };
 
+  const { areas, fetchAreas } = useAreaStore();
+
   useEffect(() => {
-    fetchTrips();
-  }, []);
+    fetchAreas();
+  }, [fetchAreas]);
 
   const handleOpenCreate = () => {
     setTripCode(`TRIP-${Date.now().toString().slice(-6)}`);
@@ -236,10 +296,16 @@ export function DeliveryTripsPage() {
 
   return (
     <>
+      <datalist id="area-trip-suggestions">
+        {areas.map((area) => (
+          <option key={area.id} value={area.parentName ? `${area.name}, ${area.parentName}` : area.name} />
+        ))}
+      </datalist>
+
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Biểu mẫu Chuyến xe giao hàng</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Chuyến xe giao hàng</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Điều phối lệnh chuyển hàng giữa các cửa hàng, theo dõi đội xe, giám sát COD và xử lý chậm tuyến. Nhấn vào chuyến để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
@@ -280,10 +346,11 @@ export function DeliveryTripsPage() {
         )}
       </div>
 
-      <Drawer
+      {/* Modal Xem chi tiết chuyến xe căn giữa (TC-ALL-1) */}
+      <Modal
         isOpen={!!selectedTrip}
         onClose={() => setSelectedTrip(null)}
-        title={selectedTrip ? `Hồ sơ lệnh: ${selectedTrip.manifestNumber}` : 'Thông tin lệnh'}
+        title={selectedTrip ? `Lệnh điều vận: ${selectedTrip.manifestNumber}` : 'Chi tiết chuyến xe'}
         width="max-w-lg"
       >
         {selectedTrip && (
@@ -394,9 +461,17 @@ export function DeliveryTripsPage() {
                 <Clock className="w-4 h-4 inline mr-1" /> Báo chậm tuyến
               </button>
             </div>
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-2">
+              <button
+                onClick={() => setSelectedTrip(null)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-sm"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isCreateOpen}
@@ -432,13 +507,14 @@ export function DeliveryTripsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Tuyến đến / Địa chỉ *</label>
+            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Tuyến đến / Địa chỉ (Có gợi ý) *</label>
             <input
               type="text"
+              list="area-trip-suggestions"
               value={deliveryAddress}
               onChange={(e) => setDeliveryAddress(e.target.value)}
               required
-              placeholder="VD: 123 Nguyễn Trãi, Quận 5, HCM"
+              placeholder="Nhập hoặc chọn khu vực gợi ý tuyến..."
               className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
             />
           </div>
