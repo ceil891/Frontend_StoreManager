@@ -12,7 +12,7 @@ import { useBranchStore } from '@/features/system/store/branchStore';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 
 export enum TransferRequestStatus {
   DRAFT = 'DRAFT',
