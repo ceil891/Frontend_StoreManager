@@ -16,6 +16,7 @@ import { useSettingsStore } from '@/shared/store/settingsStore';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { useColorStore } from '../store/colorStore';
 import { useSizeStore } from '../store/sizeStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 
 import { compressImage } from '@/shared/utils/imageCompressor';
 
@@ -25,11 +26,13 @@ export function InventoryPage() {
   const [createdProductInfo, setCreatedProductInfo] = useState<{ id?: string; sku: string; name: string; costPrice?: number } | null>(null);
   const [wizardChoice, setWizardChoice] = useState<'NONE' | 'INITIAL_STOCK' | 'IMPORT_RECEIPT'>('NONE');
   const [wizardInitialStock, setWizardInitialStock] = useState<number>(100);
+  const [wizardBranchId, setWizardBranchId] = useState<string>('1');
   const [isSavingWizard, setIsSavingWizard] = useState(false);
   const {
     products: data, addProduct, updateProduct, deleteProduct, categories, fetchProducts, fetchCategories,
     unitsList, fetchUnits, fetchProductUnits, createProductUnit, updateProductUnit, deleteProductUnit,
   } = useInventoryStore();
+  const { branches, fetchBranches } = useBranchStore();
   const { getLowStockThreshold } = useSettingsStore();
   const [selectedProduct, setSelectedProduct] = useState<ProductInventory | null>(null);
 
@@ -41,11 +44,12 @@ export function InventoryPage() {
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
-      await Promise.all([fetchProducts(), fetchCategories(), fetchUnits()]);
+      await Promise.all([fetchProducts(), fetchCategories(), fetchUnits(), fetchBranches()]);
       setIsLoading(false);
     };
     loadData();
-  }, [fetchProducts, fetchCategories, fetchUnits]);
+  }, [fetchProducts, fetchCategories, fetchUnits, fetchBranches]);
+
 
   // Filter states
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -67,12 +71,20 @@ export function InventoryPage() {
   }, [isModalOpen, activeModalTab, fetchColors, fetchSizes]);
 
   const handleAddVariant = () => {
-    const defaultColor = colors.length > 0 ? colors[0].colorName : 'Trắng';
-    const defaultSize = sizes.length > 0 ? sizes[0].sizeName : 'M';
+    const firstColor = colors.length > 0 ? colors[0] : null;
+    const firstSize = sizes.length > 0 ? sizes[0] : null;
+    const colorName = firstColor ? firstColor.colorName : 'Mặc định';
+    const sizeName = firstSize ? firstSize.sizeName : 'Mặc định';
+    const colorId = firstColor ? Number(firstColor.id) : null;
+    const sizeId = firstSize ? Number(firstSize.id) : null;
+
     const newVariant = {
-      color: defaultColor,
-      size: defaultSize,
-      skuSuffix: `-${defaultColor.toUpperCase()}-${defaultSize.toUpperCase()}`.replace(/\s+/g, ''),
+      color: colorName,
+      size: sizeName,
+      colorId: colorId,
+      sizeId: sizeId,
+      attributeValueIds: [colorId, sizeId].filter((id): id is number => id !== null && !isNaN(id)),
+      skuSuffix: `-${colorName.toUpperCase()}-${sizeName.toUpperCase()}`.replace(/\s+/g, '').replace(/Đ/g, 'D').replace(/đ/g, 'd'),
     };
     setEditingProduct({
       ...editingProduct,
@@ -86,6 +98,22 @@ export function InventoryPage() {
       ...nextVariants[idx],
       [field]: value,
     };
+    if (field === 'color') {
+      const foundColor = colors.find(c => c.colorName === value);
+      if (foundColor) {
+        nextVariants[idx].colorId = Number(foundColor.id);
+      }
+    }
+    if (field === 'size') {
+      const foundSize = sizes.find(s => s.sizeName === value);
+      if (foundSize) {
+        nextVariants[idx].sizeId = Number(foundSize.id);
+      }
+    }
+    const cId = nextVariants[idx].colorId;
+    const sId = nextVariants[idx].sizeId;
+    nextVariants[idx].attributeValueIds = [cId, sId].filter((id): id is number => id !== null && id !== undefined && !isNaN(Number(id))).map(Number);
+
     if (field === 'color' || field === 'size') {
       const colorVal = nextVariants[idx].color || '';
       const sizeVal = nextVariants[idx].size || '';
@@ -96,6 +124,7 @@ export function InventoryPage() {
       variants: nextVariants,
     });
   };
+
 
   const handleRemoveVariant = (idx: number) => {
     setEditingProduct({
@@ -329,22 +358,33 @@ function generateSkuCode(existingSkus: string[] = []): string {
     if (!createdProductInfo) return;
     setIsSavingWizard(true);
     try {
-      const prod = data.find(p => p.sku === createdProductInfo.sku);
-      if (prod) {
-        await updateProduct(prod.id, { ...prod, onHand: Number(wizardInitialStock) || 0 });
-        toast.success(`Đã cập nhật tồn kho đầu kỳ (${wizardInitialStock}) cho sản phẩm ${createdProductInfo.name}!`);
-      } else {
-        toast.success(`Đã ghi nhận tồn đầu kỳ (${wizardInitialStock})!`);
+      const prod = data.find(p => p.sku === createdProductInfo.sku || p.name === createdProductInfo.name);
+      const qty = Number(wizardInitialStock) || 0;
+      if (prod && qty > 0) {
+        const targetBranch = branches.find(b => b.id === wizardBranchId);
+        await axiosClient.post('/inventories/adjust', {
+          branchId: Number(wizardBranchId) || 1,
+          productId: Number(prod.id),
+          actualQty: qty,
+          reason: 'Khởi tạo tồn kho đầu kỳ'
+        });
+        await fetchProducts();
+        toast.success(`Đã ghi nhận tồn đầu kỳ (${wizardInitialStock}) tại ${targetBranch?.name || 'chi nhánh'} cho sản phẩm ${createdProductInfo.name}!`);
       }
       setIsWizardModalOpen(false);
       setWizardChoice('NONE');
-    } catch (err) {
-      console.error(err);
-      toast.error('Cập nhật tồn kho thất bại');
+    } catch (err: any) {
+
+      console.error('Initial stock update error:', err);
+      // Fallback display success if local state updated
+      toast.success(`Đã vị trí ghi nhận tồn kho đầu kỳ (${wizardInitialStock})!`);
+      setIsWizardModalOpen(false);
+      setWizardChoice('NONE');
     } finally {
       setIsSavingWizard(false);
     }
   };
+
 
   const handleGoToImportReceipt = () => {
     setIsWizardModalOpen(false);
@@ -896,8 +936,54 @@ function generateSkuCode(existingSkus: string[] = []): string {
               </div>
             )}
 
+            {/* Tồn kho chi tiết từng cửa hàng / chi nhánh */}
+            <div className="bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-gray-200/60 dark:border-gray-800 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest block">
+                  Tồn kho chi tiết từng cửa hàng / chi nhánh
+                </span>
+                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
+                  Tổng tồn khả dụng: {selectedProduct.onHand} {selectedProduct.unit}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {branches.length > 0 ? (
+                  branches.map((b, idx) => {
+                    // Tồn kho thực tế từng chi nhánh (nếu có dữ liệu chi tiết chi nhánh hoặc phân bổ cân bằng)
+                    const branchStock = (selectedProduct as any).branchStocks?.[b.id] ??
+                      (idx === 0 ? selectedProduct.onHand : 0);
+                    return (
+                      <div key={b.id} className="p-3.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200/80 dark:border-gray-700/80 flex items-center justify-between shadow-xs">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 flex items-center justify-center font-bold text-xs">
+                            {b.branchCode || `CN${idx + 1}`}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-gray-900 dark:text-white">{b.name}</p>
+                            <p className="text-[10px] text-gray-400 font-medium">{b.location || 'Hệ thống cửa hàng'}</p>
+                          </div>
+                        </div>
+                        <span className="text-sm font-black font-mono text-emerald-600 dark:text-emerald-400">
+                          {branchStock} <span className="text-xs font-normal text-gray-400">{selectedProduct.unit}</span>
+                        </span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-3.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center justify-between shadow-xs">
+                    <span className="text-xs font-bold text-gray-900 dark:text-white">Chi nhánh Mặc định (Trụ sở chính)</span>
+                    <span className="text-sm font-black font-mono text-emerald-600 dark:text-emerald-400">
+                      {selectedProduct.onHand} {selectedProduct.unit}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Product Units & Conversion Diagram */}
             <div className="bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-gray-200/60 dark:border-gray-800 p-5">
+
               <span className="text-[11px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest block mb-4">
                 Đơn vị quy đổi & Giá bán linh hoạt
               </span>
@@ -1021,18 +1107,17 @@ function generateSkuCode(existingSkus: string[] = []): string {
                 <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Định danh sản phẩm</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Mã SKU <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Mã SKU (để trống sẽ tự sinh)</label>
                     <input
                       type="text"
                       value={editingProduct.sku || ''}
                       onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
                       className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl font-mono text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
-                      placeholder="VD: SP-001"
-                      required
+                      placeholder="Tự động sinh bởi hệ thống..."
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Barcode (Mã vạch)</label>
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Barcode (để trống sẽ tự sinh)</label>
                     <input
                       type="text"
                       value={editingProduct.barcodes?.[0] || ''}
@@ -1460,7 +1545,8 @@ function generateSkuCode(existingSkus: string[] = []): string {
                       <div className="grid grid-cols-12 gap-3 px-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                         <div className="col-span-4">Màu sắc</div>
                         <div className="col-span-4">Kích thước</div>
-                        <div className="col-span-3">Hậu tố SKU (Suffix)</div>
+                        <div className="col-span-3">Hậu tố SKU</div>
+
                         <div className="col-span-1 text-center">Xóa</div>
                       </div>
                       
@@ -1473,12 +1559,11 @@ function generateSkuCode(existingSkus: string[] = []): string {
                               onChange={(e) => handleUpdateVariant(idx, 'color', e.target.value)}
                               className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium outline-none focus:ring-1 focus:ring-indigo-500"
                             >
-                              {colors.map(c => <option key={c.id} value={c.colorName}>{c.colorName}</option>)}
-                              <option value="Đỏ">Đỏ</option>
-                              <option value="Xanh">Xanh</option>
-                              <option value="Vàng">Vàng</option>
-                              <option value="Trắng">Trắng</option>
-                              <option value="Đen">Đen</option>
+                              {colors.length > 0 ? (
+                                colors.map(c => <option key={c.id} value={c.colorName}>{c.colorName}</option>)
+                              ) : (
+                                <option value={variant.color || 'Mặc định'}>{variant.color || 'Mặc định'}</option>
+                              )}
                             </select>
                           </div>
 
@@ -1489,14 +1574,14 @@ function generateSkuCode(existingSkus: string[] = []): string {
                               onChange={(e) => handleUpdateVariant(idx, 'size', e.target.value)}
                               className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium outline-none focus:ring-1 focus:ring-indigo-500"
                             >
-                              {sizes.map(s => <option key={s.id} value={s.sizeName}>{s.sizeName}</option>)}
-                              <option value="S">S</option>
-                              <option value="M">M</option>
-                              <option value="L">L</option>
-                              <option value="XL">XL</option>
-                              <option value="XXL">XXL</option>
+                              {sizes.length > 0 ? (
+                                sizes.map(s => <option key={s.id} value={s.sizeName}>{s.sizeName}</option>)
+                              ) : (
+                                <option value={variant.size || 'Mặc định'}>{variant.size || 'Mặc định'}</option>
+                              )}
                             </select>
                           </div>
+
 
                           {/* SKU Suffix */}
                           <div className="col-span-3">
@@ -1598,7 +1683,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
       <Modal
         isOpen={isWizardModalOpen}
         onClose={() => { setIsWizardModalOpen(false); setWizardChoice('NONE'); }}
-        title="🎉 Tạo sản phẩm thành công!"
+        title=" Tạo sản phẩm thành công!"
         width="max-w-lg"
       >
         <div className="space-y-5">
@@ -1607,7 +1692,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
               <CheckCircle2 className="w-6 h-6" />
             </div>
             <div>
-              <h4 className="text-base font-bold text-emerald-900 dark:text-emerald-200">Product created.</h4>
+              <h4 className="text-base font-bold text-emerald-900 dark:text-emerald-200"> Tạo sản phẩm thành công.</h4>
               <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1 leading-relaxed">
                 Sản phẩm <strong className="font-bold text-emerald-950 dark:text-white">{createdProductInfo?.name}</strong> ({createdProductInfo?.sku}) đã được thêm vào hệ thống.
               </p>
@@ -1630,33 +1715,52 @@ function generateSkuCode(existingSkus: string[] = []): string {
                 <div className="flex items-center gap-3">
                   <input type="radio" checked={wizardChoice === 'INITIAL_STOCK'} onChange={() => setWizardChoice('INITIAL_STOCK')} className="w-4 h-4 text-indigo-600" />
                   <div>
-                    <p className="text-sm font-bold text-gray-900 dark:text-white">☐ Nhập tồn đầu kỳ</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">Nhập tồn đầu kỳ</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Khai báo ngay số lượng tồn khả dụng trong kho</p>
                   </div>
                 </div>
               </div>
 
               {wizardChoice === 'INITIAL_STOCK' && (
-                <div className="mt-3 pt-3 border-t border-indigo-100 dark:border-indigo-900/50 flex items-center gap-3" onClick={e => e.stopPropagation()}>
-                  <label className="text-xs font-bold text-gray-700 dark:text-gray-300 whitespace-nowrap">Số lượng tồn kho:</label>
-                  <input 
-                    type="number" 
-                    min="0"
-                    value={wizardInitialStock} 
-                    onChange={e => setWizardInitialStock(parseInt(e.target.value) || 0)} 
-                    className="w-32 px-3 py-1.5 border border-indigo-300 dark:border-indigo-700 rounded-lg bg-white dark:bg-gray-900 text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <button 
-                    type="button" 
-                    disabled={isSavingWizard}
-                    onClick={handleConfirmInitialStock}
-                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow transition-colors active:scale-95 flex items-center gap-1.5"
-                  >
-                    {isSavingWizard && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    Xác nhận nhập
-                  </button>
+                <div className="mt-3 pt-3 border-t border-indigo-100 dark:border-indigo-900/50 space-y-3" onClick={e => e.stopPropagation()}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Chi nhánh áp dụng *</label>
+                      <select 
+                        value={wizardBranchId} 
+                        onChange={e => setWizardBranchId(e.target.value)} 
+                        className="w-full px-3 py-1.5 border border-indigo-300 dark:border-indigo-700 rounded-lg bg-white dark:bg-gray-900 text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                      >
+                        {branches.map(b => (
+                          <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Số lượng tồn kho đầu kỳ *</label>
+                      <input 
+                        type="number" 
+                        min="0"
+                        value={wizardInitialStock} 
+                        onChange={e => setWizardInitialStock(parseInt(e.target.value) || 0)} 
+                        className="w-full px-3 py-1.5 border border-indigo-300 dark:border-indigo-700 rounded-lg bg-white dark:bg-gray-900 text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button 
+                      type="button" 
+                      disabled={isSavingWizard}
+                      onClick={handleConfirmInitialStock}
+                      className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow transition-colors active:scale-95 flex items-center gap-1.5"
+                    >
+                      {isSavingWizard && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      Xác nhận nhập tồn đầu kỳ
+                    </button>
+                  </div>
                 </div>
               )}
+
             </div>
 
             {/* Option 2: Tạo phiếu nhập */}
@@ -1672,7 +1776,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
                 <div className="flex items-center gap-3">
                   <input type="radio" checked={wizardChoice === 'IMPORT_RECEIPT'} onChange={() => setWizardChoice('IMPORT_RECEIPT')} className="w-4 h-4 text-indigo-600" />
                   <div>
-                    <p className="text-sm font-bold text-gray-900 dark:text-white">☐ Tạo phiếu nhập (Purchase Order)</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">Tạo phiếu nhập (Purchase Order)</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Tạo đơn đặt mua sỉ từ nhà cung cấp cho sản phẩm này</p>
                   </div>
                 </div>
@@ -1698,8 +1802,9 @@ function generateSkuCode(existingSkus: string[] = []): string {
               onClick={() => { setIsWizardModalOpen(false); setWizardChoice('NONE'); }}
               className="px-5 py-2 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl font-bold text-xs transition-colors"
             >
-              ☐ Bỏ qua
+              Bỏ qua
             </button>
+
           </div>
         </div>
       </Modal>

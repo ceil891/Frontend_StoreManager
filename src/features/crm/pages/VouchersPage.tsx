@@ -536,7 +536,7 @@ export function VouchersPage() {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               >
                 <option value="PERCENTAGE">Phần trăm (%)</option>
-                <option value="FIXED_AMOUNT">Số tiền cố định ($)</option>
+                <option value="FIXED_AMOUNT">Số tiền cố định (VNĐ)</option>
                 <option value="FREE_SHIPPING">Miễn phí vận chuyển</option>
                 <option value="FREE_ITEM">Tặng quà</option>
               </select>
@@ -553,7 +553,7 @@ export function VouchersPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn tối thiểu ($)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn tối thiểu (VNĐ)</label>
               <input
                 type="number"
                 value={formData.minOrderValue}
@@ -562,7 +562,7 @@ export function VouchersPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giảm tối đa ($)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giảm tối đa (VNĐ)</label>
               <input
                 type="number"
                 value={formData.maxDiscount}

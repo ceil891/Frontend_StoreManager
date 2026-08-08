@@ -340,7 +340,7 @@ export function UnitsPage() {
                   type="text"
                   value={unitCode}
                   onChange={(e) => setUnitCode(e.target.value.toUpperCase())}
-                  placeholder="VD: PCS, BOX, KG, L"
+                  placeholder="VD: CAI, THUNG, HOP, KG"
                   className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
                   required
                 />
@@ -363,12 +363,13 @@ export function UnitsPage() {
                   onChange={(e) => setUnitType(e.target.value as UnitOfMeasure['type'])}
                   className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
                 >
-                  <option value="QUANTITY">Số lượng (QUANTITY)</option>
-                  <option value="WEIGHT">Trọng lượng (WEIGHT)</option>
-                  <option value="VOLUME">Thể tích (VOLUME)</option>
-                  <option value="LENGTH">Chiều dài / Kích thước (LENGTH)</option>
+                  <option value="QUANTITY">Số lượng</option>
+                  <option value="WEIGHT">Trọng lượng</option>
+                  <option value="VOLUME">Thể tích</option>
+                  <option value="LENGTH">Chiều dài / Kích thước</option>
                 </select>
               </div>
+
             </div>
 
             <div className="erp-form-section space-y-4">

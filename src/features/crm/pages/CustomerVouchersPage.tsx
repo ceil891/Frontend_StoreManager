@@ -36,6 +36,8 @@ export function CustomerVouchersPage() {
     addCustomerVoucher,
     updateCustomerVoucher,
     deleteCustomerVoucher,
+    customers,
+    fetchCustomers,
   } = useCrmStore();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -43,7 +45,8 @@ export function CustomerVouchersPage() {
   useEffect(() => {
     setIsLoading(true);
     fetchCustomerVouchers().finally(() => setIsLoading(false));
-  }, [fetchCustomerVouchers]);
+    fetchCustomers();
+  }, [fetchCustomerVouchers, fetchCustomers]);
 
   const data = useMemo(() => {
     return storeVouchers.map((cv: any) => ({
@@ -352,13 +355,20 @@ export function CustomerVouchersPage() {
               required
               placeholder="Gõ tên/SĐT/Mã KH để tìm..."
               value={form.customerName}
-              onChange={(e) => setForm({ ...form, customerName: e.target.value })}
+              onChange={(e) => {
+                const val = e.target.value;
+                setForm({ ...form, customerName: val });
+                const matched = (customers || []).find((c: any) => `${c.name} - ${c.phone}` === val);
+                if (matched) {
+                  setForm(prev => ({ ...prev, customerName: matched.name, customerPhone: matched.phone }));
+                }
+              }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
             />
             <datalist id="customer-suggestions">
-              <option value="Nguyễn Văn A - 0901234567" />
-              <option value="Trần Thị B - 0912345678" />
-              <option value="Lê Văn C - 0923456789" />
+              {(customers || []).map((c: any) => (
+                <option key={c.id} value={`${c.name} - ${c.phone}`} />
+              ))}
             </datalist>
           </div>
           <div className="grid grid-cols-2 gap-4">

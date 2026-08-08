@@ -33,15 +33,15 @@ export function PartnerGroupsPage() {
   }, [fetchPartnerGroups]);
 
   const data: PartnerGroupItem[] = useMemo(() => {
-    return storeGroups.map((g) => ({
-      id: g.id,
-      groupCode: g.groupCode,
-      name: g.groupName,
-      type: 'KHÁCH_HÀNG',
-      description: g.description,
-      memberCount: g.memberCount,
-      status: g.status === 'ACTIVE' ? 'KÍCH_HOẠT' : 'KHOÁ',
-      createdAt: '2026-01-15',
+    return (storeGroups || []).map((g: any) => ({
+      id: String(g.id || ''),
+      groupCode: String(g.groupCode || g.code || ''),
+      name: String(g.groupName || g.name || ''),
+      type: (g.partnerType === 'SUPPLIER' || g.type === 'NHÀ_CUNG_CẤP') ? 'NHÀ_CUNG_CẤP' as const : 'KHÁCH_HÀNG' as const,
+      description: typeof g.description === 'string' ? g.description : String(g.description || ''),
+      memberCount: Number(g.memberCount ?? g.membersCount ?? 0) || 0,
+      status: (g.status === 'ACTIVE' || g.status === 'KÍCH_HOẠT') ? 'KÍCH_HOẠT' as const : 'KHOÁ' as const,
+      createdAt: typeof g.createdAt === 'string' ? g.createdAt : '2026-01-15',
     }));
   }, [storeGroups]);
 
@@ -60,9 +60,9 @@ export function PartnerGroupsPage() {
   const filtered = useMemo(() => {
     return data.filter((item) => {
       const matchesSearch =
-        item.groupCode.toLowerCase().includes(search.toLowerCase()) ||
-        item.name.toLowerCase().includes(search.toLowerCase()) ||
-        item.description.toLowerCase().includes(search.toLowerCase());
+        (item.groupCode || '').toLowerCase().includes(search.toLowerCase()) ||
+        (item.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (item.description || '').toLowerCase().includes(search.toLowerCase());
       const matchesType = typeFilter === 'Tất cả' || item.type === typeFilter;
       const matchesStatus = statusFilter === 'Tất cả' || item.status === statusFilter;
       return matchesSearch && matchesType && matchesStatus;
@@ -137,20 +137,20 @@ export function PartnerGroupsPage() {
         header: 'Mã nhóm',
         cell: (info) => (
           <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-            {info.getValue() as string}
+            {String(info.getValue() || '')}
           </span>
         ),
       },
       {
         accessorKey: 'name',
         header: 'Tên nhóm đối tác',
-        cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{String(info.getValue() || '')}</span>,
       },
       {
         accessorKey: 'type',
         header: 'Phân loại',
         cell: (info) => {
-          const type = info.getValue() as string;
+          const type = String(info.getValue() || '');
           return (
             <span
               className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-semibold ${
@@ -168,19 +168,24 @@ export function PartnerGroupsPage() {
         accessorKey: 'description',
         header: 'Mô tả',
         cell: (info) => (
-          <span className="text-gray-500 text-sm whitespace-normal max-w-xs block truncate" title={info.getValue() as string}>
-            {info.getValue() as string}
+          <span className="text-gray-500 text-sm whitespace-normal max-w-xs block truncate" title={String(info.getValue() || '')}>
+            {String(info.getValue() || '')}
           </span>
         ),
       },
       {
         accessorKey: 'memberCount',
         header: 'Số thành viên',
-        cell: (info) => (
-          <span className="font-semibold text-gray-800 dark:text-gray-200">
-            {(info.getValue() as number).toLocaleString()}
-          </span>
-        ),
+        cell: (info) => {
+          const raw = info.getValue();
+          const val = Number(raw ?? 0);
+          const safeVal = Number.isNaN(val) ? 0 : val;
+          return (
+            <span className="font-semibold text-gray-800 dark:text-gray-200">
+              {safeVal.toLocaleString('vi-VN')}
+            </span>
+          );
+        },
       },
       {
         accessorKey: 'status',
@@ -329,7 +334,7 @@ export function PartnerGroupsPage() {
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500">Số thành viên hiện tại:</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">{selectedItem.memberCount.toLocaleString()} đối tác</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">{(Number(selectedItem.memberCount) || 0).toLocaleString('vi-VN')} đối tác</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500">Ngày lập nhóm:</span>

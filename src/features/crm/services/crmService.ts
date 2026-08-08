@@ -239,25 +239,28 @@ export const crmService = {
 
   // --- Marketing Campaigns ---
   async fetchMarketingCampaigns(): Promise<MarketingCampaignRecord[]> {
-    const res = await axiosClient.get<any, any[]>('/crm/marketing-campaigns');
+    const res = await axiosClient.get<any, any[]>('/crm/campaigns');
     const list = Array.isArray(res) ? res : (res?.content || []);
     return list.map((item: any) => ({
       id: String(item.id),
-      code: item.code || '',
-      title: item.title || '',
+      code: item.campaignCode || item.code || '',
+      title: item.name || item.title || '',
       channel: item.channel || 'SMS',
       targetAudience: item.targetAudience || 'Tất cả khách hàng',
       sentCount: Number(item.sentCount || 0),
       openRatePercentage: Number(item.openRatePercentage || 0),
       conversionRatePercentage: Number(item.conversionRatePercentage || 0),
       status: item.status || 'DRAFT',
-      scheduledDate: item.scheduledDate ? item.scheduledDate.split('T')[0] : '',
+      scheduledDate: item.startDate ? item.startDate.split('T')[0] : (item.scheduledDate ? item.scheduledDate.split('T')[0] : ''),
+      startDate: item.startDate ? item.startDate.split('T')[0] : '',
+      endDate: item.endDate ? item.endDate.split('T')[0] : '',
+      budget: Number(item.budget || 0),
       contentSnippet: item.contentSnippet || '',
     }));
   },
 
   async addMarketingCampaign(item: Omit<MarketingCampaignRecord, 'id'>): Promise<MarketingCampaignRecord> {
-    const res = await axiosClient.post<any, any>('/crm/marketing-campaigns', item);
+    const res = await axiosClient.post<any, any>('/crm/campaigns', item);
     const result = res?.data || res;
     return {
       id: String(result?.id || Date.now()),
@@ -267,12 +270,32 @@ export const crmService = {
   },
 
   async updateMarketingCampaign(id: string, data: Partial<MarketingCampaignRecord>): Promise<Partial<MarketingCampaignRecord>> {
-    const res = await axiosClient.put<any, any>(`/crm/marketing-campaigns/${id}`, data);
+    const res = await axiosClient.put<any, any>(`/crm/campaigns/${id}`, data);
     return res?.data || res || data;
   },
 
   async deleteMarketingCampaign(id: string): Promise<void> {
-    await axiosClient.delete(`/crm/marketing-campaigns/${id}`);
+    await axiosClient.delete(`/crm/campaigns/${id}`);
+  },
+
+  // --- Loyalty Tiers ---
+  async fetchLoyaltyTiers(): Promise<any[]> {
+    const res = await axiosClient.get<any, any[]>('/crm/tiers');
+    return Array.isArray(res) ? res : (res?.content || []);
+  },
+
+  async addLoyaltyTier(tier: any): Promise<any> {
+    const res = await axiosClient.post<any, any>('/crm/tiers', tier);
+    return res?.data || res;
+  },
+
+  async updateLoyaltyTier(id: string, tier: any): Promise<any> {
+    const res = await axiosClient.put<any, any>(`/crm/tiers/${id}`, tier);
+    return res?.data || res;
+  },
+
+  async deleteLoyaltyTier(id: string): Promise<void> {
+    await axiosClient.delete(`/crm/tiers/${id}`);
   },
 
   // --- Partner Groups ---
@@ -282,10 +305,11 @@ export const crmService = {
     return list.map((item: any) => ({
       id: String(item.id),
       groupCode: item.groupCode || '',
-      groupName: item.groupName || '',
+      groupName: item.groupName || item.name || '',
       partnerType: item.partnerType || 'CUSTOMER',
       description: item.description || '',
-      membersCount: Number(item.membersCount || 0),
+      membersCount: Number(item.membersCount ?? item.memberCount ?? 0),
+      memberCount: Number(item.membersCount ?? item.memberCount ?? 0),
       defaultDiscountPercent: Number(item.defaultDiscountPercent || 0),
       status: item.status || 'ACTIVE',
     }));

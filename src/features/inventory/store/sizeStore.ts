@@ -30,29 +30,27 @@ export const useSizeStore = create<SizeState>()((set, get) => ({
   fetchSizes: async () => {
     set({ isLoading: true, error: null });
     try {
-      const res = await axiosClient.get<any, any[]>('/sizes?includeDeleted=false');
-      const mapped = (res || []).map((s: any) => ({
+      const res = await axiosClient.get<any, any>('/sizes?includeDeleted=false');
+      const rawList = Array.isArray(res) ? res : (res?.content || res?.data || []);
+      const mapped: SizeRecord[] = (rawList || []).map((s: any) => ({
         id: String(s.id),
         sizeCode: s.sizeCode || '',
         sizeName: s.sizeName || '',
         sizeGroup: 'GENERAL' as const,
         sortOrder: 1,
         description: s.description || '',
-        status: (s.isActive ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE',
+        status: (s.isActive !== false ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE',
       }));
-      const currentLocal = get().sizes || [];
-      const merged = [...mapped];
-      currentLocal.forEach(loc => {
-        if (!merged.some(m => String(m.id) === String(loc.id) || m.sizeCode === loc.sizeCode)) {
-          merged.push(loc);
-        }
-      });
-      set({ sizes: merged, isLoading: false });
+      const unique = mapped.filter((s, idx, self) =>
+        idx === self.findIndex((t) => String(t.id) === String(s.id) || (t.sizeName && t.sizeName.trim().toLowerCase() === s.sizeName.trim().toLowerCase()))
+      );
+      set({ sizes: unique, isLoading: false });
     } catch (err: any) {
       console.error('Failed to fetch sizes:', err);
       set({ isLoading: false, error: err.message || 'Lỗi khi tải danh sách kích thước' });
     }
   },
+
 
   addSize: async (size) => {
     const tempId = `sz_${Date.now()}`;

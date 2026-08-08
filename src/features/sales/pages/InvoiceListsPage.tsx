@@ -376,7 +376,8 @@ export function InvoiceListsPage() {
                 onChange={(e) => setEditingItem({ ...editingItem, invoiceType: e.target.value as any })}
                 className="w-full p-2 border rounded"
               >
-                <option value="BAN_LE">Bán lẻ (POS)</option>
+                <option value="BAN_LE">Bán lẻ</option>
+
                 <option value="BAN_SI">Bán sỉ (hợp đồng)</option>
                 <option value="TRA_HANG">Hoàn trả / hủy hàng</option>
               </select>

@@ -822,20 +822,6 @@ export function ShippingCarriersPage() {
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Tên đối tác vận chuyển *</label>
-              <input
-                type="text"
-                value={formState.carrierName || ''}
-                onChange={(e) => setFormState({ ...formState, carrierName: e.target.value })}
-                className={`w-full p-2.5 bg-slate-50 border rounded-xl text-xs focus:outline-none focus:border-slate-900 ${
-                  formErrors.carrierName ? 'border-rose-500 bg-rose-50' : 'border-slate-200'
-                }`}
-                placeholder="Ví dụ: Viettel Post, Giao Hàng Tiết Kiệm, GHN..."
-              />
-              {formErrors.carrierName && <p className="text-[11px] text-rose-500 mt-1">{formErrors.carrierName}</p>}
-            </div>
-
-            <div>
               <label className="block font-bold text-slate-700 mb-1">Email đối soát / Liên hệ</label>
               <input
                 type="email"

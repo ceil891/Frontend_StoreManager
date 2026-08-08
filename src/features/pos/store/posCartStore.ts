@@ -14,11 +14,22 @@ export interface CartItem extends PosProduct {
   discount: number;
 }
 
+export interface VoucherInfo {
+  code: string;
+  type: 'PERCENT' | 'FLAT';
+  value: number;
+}
+
 export interface CartTab {
   id: string;
   name: string;
   items: CartItem[];
-  customer: { id: string; name: string } | null;
+  customer: { id: string; name: string; phone?: string } | null;
+  customerPhone: string;
+  selectedPaymentId: string;
+  appliedVoucher: VoucherInfo | null;
+  usedPoints: number;
+  cashGiven: string;
   createdAt: string;
 }
 
@@ -27,6 +38,11 @@ const DEFAULT_TAB: CartTab = {
   name: 'Đơn hàng 1',
   items: [],
   customer: null,
+  customerPhone: '',
+  selectedPaymentId: 'fb-cash',
+  appliedVoucher: null,
+  usedPoints: 0,
+  cashGiven: '',
   createdAt: new Date().toISOString(),
 };
 
@@ -34,14 +50,24 @@ interface PosCartState {
   tabs: CartTab[];
   activeTabId: string;
 
-  // Derived: always reflects the active tab's items & customer
+  // Derived state: always reflects the active tab's properties
   items: CartItem[];
-  customer: { id: string; name: string } | null;
+  customer: { id: string; name: string; phone?: string } | null;
+  customerPhone: string;
+  selectedPaymentId: string;
+  appliedVoucher: VoucherInfo | null;
+  usedPoints: number;
+  cashGiven: string;
 
   addItem: (product: PosProduct) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
-  setCustomer: (customer: { id: string; name: string } | null) => void;
+  setCustomer: (customer: { id: string; name: string; phone?: string } | null) => void;
+  setCustomerPhone: (phone: string) => void;
+  setSelectedPaymentId: (paymentId: string) => void;
+  setAppliedVoucher: (voucher: VoucherInfo | null) => void;
+  setUsedPoints: (points: number) => void;
+  setCashGiven: (cash: string) => void;
   clearCart: () => void;
   getTotal: () => number;
 
@@ -55,10 +81,18 @@ interface PosCartState {
 const getActiveTab = (tabs: CartTab[], activeTabId: string): CartTab =>
   tabs.find((t) => t.id === activeTabId) ?? tabs[0];
 
-/** Helper: after modifying tabs, re-derive items & customer from activeTabId */
+/** Helper: after modifying tabs, re-derive properties from activeTabId */
 const deriveFromActive = (tabs: CartTab[], activeTabId: string) => {
   const active = getActiveTab(tabs, activeTabId);
-  return { items: active.items, customer: active.customer };
+  return {
+    items: active.items || [],
+    customer: active.customer || null,
+    customerPhone: active.customerPhone || '',
+    selectedPaymentId: active.selectedPaymentId || 'fb-cash',
+    appliedVoucher: active.appliedVoucher || null,
+    usedPoints: active.usedPoints || 0,
+    cashGiven: active.cashGiven || '',
+  };
 };
 
 export const usePosCartStore = create<PosCartState>()(
@@ -68,6 +102,11 @@ export const usePosCartStore = create<PosCartState>()(
       activeTabId: 'tab_1',
       items: [],
       customer: null,
+      customerPhone: '',
+      selectedPaymentId: 'fb-cash',
+      appliedVoucher: null,
+      usedPoints: 0,
+      cashGiven: '',
 
       addItem: (product) =>
         set((state) => {
@@ -131,16 +170,86 @@ export const usePosCartStore = create<PosCartState>()(
           };
         }),
 
+      setCustomerPhone: (customerPhone) =>
+        set((state) => {
+          const activeTab = getActiveTab(state.tabs, state.activeTabId);
+          const updatedTabs = state.tabs.map((t) =>
+            t.id === activeTab.id ? { ...t, customerPhone } : t
+          );
+          return {
+            tabs: updatedTabs,
+            ...deriveFromActive(updatedTabs, state.activeTabId),
+          };
+        }),
+
+      setSelectedPaymentId: (selectedPaymentId) =>
+        set((state) => {
+          const activeTab = getActiveTab(state.tabs, state.activeTabId);
+          const updatedTabs = state.tabs.map((t) =>
+            t.id === activeTab.id ? { ...t, selectedPaymentId } : t
+          );
+          return {
+            tabs: updatedTabs,
+            ...deriveFromActive(updatedTabs, state.activeTabId),
+          };
+        }),
+
+      setAppliedVoucher: (appliedVoucher) =>
+        set((state) => {
+          const activeTab = getActiveTab(state.tabs, state.activeTabId);
+          const updatedTabs = state.tabs.map((t) =>
+            t.id === activeTab.id ? { ...t, appliedVoucher } : t
+          );
+          return {
+            tabs: updatedTabs,
+            ...deriveFromActive(updatedTabs, state.activeTabId),
+          };
+        }),
+
+      setUsedPoints: (usedPoints) =>
+        set((state) => {
+          const activeTab = getActiveTab(state.tabs, state.activeTabId);
+          const updatedTabs = state.tabs.map((t) =>
+            t.id === activeTab.id ? { ...t, usedPoints } : t
+          );
+          return {
+            tabs: updatedTabs,
+            ...deriveFromActive(updatedTabs, state.activeTabId),
+          };
+        }),
+
+      setCashGiven: (cashGiven) =>
+        set((state) => {
+          const activeTab = getActiveTab(state.tabs, state.activeTabId);
+          const updatedTabs = state.tabs.map((t) =>
+            t.id === activeTab.id ? { ...t, cashGiven } : t
+          );
+          return {
+            tabs: updatedTabs,
+            ...deriveFromActive(updatedTabs, state.activeTabId),
+          };
+        }),
+
       clearCart: () =>
         set((state) => {
           const activeTab = getActiveTab(state.tabs, state.activeTabId);
           const updatedTabs = state.tabs.map((t) =>
-            t.id === activeTab.id ? { ...t, items: [], customer: null } : t
+            t.id === activeTab.id
+              ? {
+                  ...t,
+                  items: [],
+                  customer: null,
+                  customerPhone: '',
+                  selectedPaymentId: 'fb-cash',
+                  appliedVoucher: null,
+                  usedPoints: 0,
+                  cashGiven: '',
+                }
+              : t
           );
           return {
             tabs: updatedTabs,
-            items: [],
-            customer: null,
+            ...deriveFromActive(updatedTabs, state.activeTabId),
           };
         }),
 
@@ -155,17 +264,21 @@ export const usePosCartStore = create<PosCartState>()(
         const tabCount = state.tabs.length + 1;
         const newTab: CartTab = {
           id: newTabId,
-          name: `Đơn tạm ${tabCount}`,
+          name: `Đơn hàng ${tabCount}`,
           items: [],
           customer: null,
+          customerPhone: '',
+          selectedPaymentId: 'fb-cash',
+          appliedVoucher: null,
+          usedPoints: 0,
+          cashGiven: '',
           createdAt: new Date().toISOString(),
         };
         const updatedTabs = [...state.tabs, newTab];
         set({
           tabs: updatedTabs,
           activeTabId: newTabId,
-          items: [],
-          customer: null,
+          ...deriveFromActive(updatedTabs, newTabId),
         });
         return newTabId;
       },
@@ -176,8 +289,7 @@ export const usePosCartStore = create<PosCartState>()(
         if (targetTab) {
           set({
             activeTabId: id,
-            items: targetTab.items,
-            customer: targetTab.customer,
+            ...deriveFromActive(state.tabs, id),
           });
         }
       },
@@ -187,9 +299,23 @@ export const usePosCartStore = create<PosCartState>()(
         if (state.tabs.length <= 1) {
           // Last tab — just clear it instead of removing
           const clearedTabs = state.tabs.map((t) =>
-            t.id === id ? { ...t, items: [], customer: null } : t
+            t.id === id
+              ? {
+                  ...t,
+                  items: [],
+                  customer: null,
+                  customerPhone: '',
+                  selectedPaymentId: 'fb-cash',
+                  appliedVoucher: null,
+                  usedPoints: 0,
+                  cashGiven: '',
+                }
+              : t
           );
-          set({ tabs: clearedTabs, items: [], customer: null });
+          set({
+            tabs: clearedTabs,
+            ...deriveFromActive(clearedTabs, state.activeTabId),
+          });
           return;
         }
         const updatedTabs = state.tabs.filter((t) => t.id !== id);
@@ -201,8 +327,7 @@ export const usePosCartStore = create<PosCartState>()(
         set({
           tabs: updatedTabs,
           activeTabId: newActive.id,
-          items: newActive.items,
-          customer: newActive.customer,
+          ...deriveFromActive(updatedTabs, newActive.id),
         });
       },
     }),
@@ -232,20 +357,14 @@ export const usePosCartStore = create<PosCartState>()(
           }
         },
       },
-      // Only persist tab data, not derived items/customer
       partialize: (state) => ({
         tabs: state.tabs,
         activeTabId: state.activeTabId,
       }),
-      // After rehydration, re-derive items & customer from the active tab
       onRehydrateStorage: () => (state) => {
         if (state) {
-          const activeTab =
-            state.tabs.find((t) => t.id === state.activeTabId) ?? state.tabs[0];
-          if (activeTab) {
-            state.items = activeTab.items;
-            state.customer = activeTab.customer;
-          }
+          const derived = deriveFromActive(state.tabs, state.activeTabId);
+          Object.assign(state, derived);
         }
       },
     }

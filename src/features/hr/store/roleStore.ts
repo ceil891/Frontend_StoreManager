@@ -130,7 +130,18 @@ export function parseApiPermission(p: any): PermissionItem {
 
   if (prefix === 'dashboard') group = 'Dashboard';
   else if (prefix === 'sales') group = 'Sales';
-  else if (prefix === 'pos') group = 'POS';
+  else if (prefix === 'pos') {
+    group = 'POS';
+    if (key === 'pos:terminal:access') { moduleName = 'Màn hình POS'; action = 'Truy cập'; }
+    else if (key === 'pos:session:view') { moduleName = 'Ca làm việc'; action = 'Xem ca'; }
+    else if (key === 'pos:session:open') { moduleName = 'Ca làm việc'; action = 'Mở ca'; }
+    else if (key === 'pos:session:close') { moduleName = 'Ca làm việc'; action = 'Chốt ca'; }
+    else if (key === 'pos:payment:process') { moduleName = 'Thanh toán'; action = 'Xác nhận'; }
+    else if (key === 'pos:order:discount') { moduleName = 'Bán hàng POS'; action = 'Chiết khấu'; }
+    else if (key === 'pos:order:cancel') { moduleName = 'Bán hàng POS'; action = 'Hủy đơn'; }
+    else if (key === 'pos:inventory:negative-sell') { moduleName = 'Tồn kho POS'; action = 'Bán âm kho'; }
+    else if (key === 'pos:price:override') { moduleName = 'Giá bán POS'; action = 'Sửa giá'; }
+  }
   else if (prefix === 'purchase') group = 'Purchase';
   else if (prefix === 'crm') group = 'CRM';
   else if (prefix === 'finance') group = 'Finance';
@@ -149,8 +160,9 @@ export function parseApiPermission(p: any): PermissionItem {
   const moduleVi = MODULE_VIETNAMESE_MAP[moduleName] || moduleName;
   let name = p.description || `${actionVi} ${moduleVi}`;
 
-  return { key, name, group, module: moduleName, action };
+  return { key, name, group, module: moduleVi, action: actionVi };
 }
+
 
 // ── Default/Fallback System Permissions List ─────────────────────
 export const DEFAULT_SYSTEM_PERMISSIONS: PermissionItem[] = [
@@ -208,10 +220,17 @@ export const DEFAULT_SYSTEM_PERMISSIONS: PermissionItem[] = [
   { key: 'sales:return:create', name: 'Tạo đơn khách trả hàng', group: 'Sales', module: 'Return', action: 'Create' },
 
   // POS Terminal
-  { key: 'pos:session:view', name: 'Xem ca làm việc POS', group: 'POS', module: 'POS', action: 'View' },
-  { key: 'pos:session:open', name: 'Mở ca làm việc POS', group: 'POS', module: 'POS', action: 'CheckIn' },
-  { key: 'pos:session:close', name: 'Kết thúc ca POS', group: 'POS', module: 'POS', action: 'CheckOut' },
-  { key: 'pos:payment:process', name: 'Thực hiện thanh toán POS', group: 'POS', module: 'POS', action: 'Confirm' },
+  { key: 'pos:terminal:access', name: 'Truy cập màn hình bán hàng POS', group: 'POS', module: 'Màn hình POS', action: 'Truy cập' },
+  { key: 'pos:session:view', name: 'Xem lịch sử ca làm việc POS', group: 'POS', module: 'Ca làm việc', action: 'Xem ca' },
+  { key: 'pos:session:open', name: 'Mở ca làm việc POS (Vào ca)', group: 'POS', module: 'Ca làm việc', action: 'Mở ca' },
+  { key: 'pos:session:close', name: 'Chốt & Kết thúc ca POS (Tan ca)', group: 'POS', module: 'Ca làm việc', action: 'Chốt ca' },
+  { key: 'pos:payment:process', name: 'Thực hiện thanh toán đơn hàng POS', group: 'POS', module: 'Thanh toán', action: 'Xác nhận' },
+  { key: 'pos:order:discount', name: 'Áp dụng chiết khấu / Giảm giá đơn POS', group: 'POS', module: 'Bán hàng POS', action: 'Chiết khấu' },
+  { key: 'pos:order:cancel', name: 'Hủy đơn hàng bán lẻ tại quầy POS', group: 'POS', module: 'Bán hàng POS', action: 'Hủy đơn' },
+  { key: 'pos:inventory:negative-sell', name: 'Cho phép bán âm tồn kho tại POS', group: 'POS', module: 'Tồn kho POS', action: 'Bán âm kho' },
+  { key: 'pos:price:override', name: 'Cho phép chỉnh sửa giá bán tại quầy POS', group: 'POS', module: 'Giá bán POS', action: 'Sửa giá' },
+
+
 
   // Purchase
   { key: 'purchase:supplier:view', name: 'Xem nhà cung cấp', group: 'Purchase', module: 'Supplier', action: 'View' },

@@ -256,6 +256,17 @@ export function RolesPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+      {/* Breadcrumbs */}
+      <nav className="flex text-xs font-medium text-gray-500 dark:text-gray-400 space-x-2">
+        <span>Trang chủ</span>
+        <span>&gt;</span>
+        <span>Hệ thống</span>
+        <span>&gt;</span>
+        <span>Quản lý Nhân sự (HRM)</span>
+        <span>&gt;</span>
+        <span className="text-gray-900 dark:text-white font-semibold">Phân quyền</span>
+      </nav>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -264,6 +275,7 @@ export function RolesPage() {
           </h1>
           <p className="text-gray-500 mt-1">Cấu hình quyền truy cập và chức năng cho các nhóm người dùng trong hệ thống (Enterprise IAM).</p>
         </div>
+
         <div className="flex items-center gap-3">
           <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 transition-colors shadow-sm font-semibold text-sm">
             <Download className="w-4 h-4" /> Xuất Excel
@@ -301,21 +313,23 @@ export function RolesPage() {
       <Modal 
         isOpen={formOpen} 
         onClose={() => setFormOpen(false)} 
-        title={formMode === 'create' ? 'Tạo Vai Trò Mới' : formMode === 'edit' ? 'Chỉnh Sửa Vai Trò' : 'Chi Tiết Vai Trò'}
+        title={formMode === 'create' ? '🛡 Tạo Vai Trò Mới' : formMode === 'edit' ? '✏️ Chỉnh Sửa Vai Trò' : '🔍 Chi Tiết Vai Trò'}
         width="w-[95vw] max-w-7xl"
       >
-        <form onSubmit={handleSaveRole} className="flex flex-col h-[75vh]">
-          <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
-            
-            {/* Left Column: Role Details */}
-            <div className="lg:w-1/4 flex flex-col gap-5 overflow-y-auto pr-2 scrollbar-thin">
-              <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700 space-y-4">
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
-                  <Shield className="w-4 h-4 text-primary" /> Thông tin cơ bản
+        <form onSubmit={handleSaveRole} className="flex flex-col" style={{ height: 'calc(85vh - 80px)' }}>
+          {/* Content: fixed height, no outer scroll */}
+          <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 overflow-hidden">
+
+            {/* ── Left Column: Basic Info + Module Filter ── */}
+            <div className="lg:w-[22%] flex flex-col gap-3 overflow-y-auto pr-1 scrollbar-thin">
+              {/* Basic Info Card */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700 space-y-3 shrink-0">
+                <h3 className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2 uppercase tracking-wider">
+                  <Shield className="w-3.5 h-3.5 text-primary" /> Thông tin cơ bản
                 </h3>
-                
+
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mã vai trò {formMode !== 'view' && '*'}</label>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Mã vai trò {formMode !== 'view' && <span className="text-red-500">*</span>}</label>
                   <input
                     type="text"
                     required
@@ -323,12 +337,12 @@ export function RolesPage() {
                     onChange={(e) => setEditingRole({ ...editingRole, roleCode: e.target.value.toUpperCase().replace(/\s+/g, '_') })}
                     readOnly={formMode === 'view' || !!editingRole.isSystemRole}
                     placeholder="VD: STORE_MANAGER"
-                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm focus:ring-2 focus:ring-primary read-only:bg-gray-100 dark:read-only:bg-gray-800"
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm focus:ring-2 focus:ring-primary read-only:bg-gray-100 dark:read-only:bg-gray-800 font-mono"
                   />
                 </div>
-                
+
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tên hiển thị {formMode !== 'view' && '*'}</label>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Tên hiển thị {formMode !== 'view' && <span className="text-red-500">*</span>}</label>
                   <input
                     type="text"
                     required
@@ -339,38 +353,38 @@ export function RolesPage() {
                     className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm focus:ring-2 focus:ring-primary read-only:bg-gray-100 dark:read-only:bg-gray-800"
                   />
                 </div>
-                
+
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mô tả</label>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Mô tả <span className="text-gray-400 font-normal normal-case">(Tuỳ chọn)</span></label>
                   <textarea
                     value={editingRole.description}
                     onChange={(e) => setEditingRole({ ...editingRole, description: e.target.value })}
                     readOnly={formMode === 'view'}
-                    rows={3}
-                    placeholder="Mô tả quyền hạn của vai trò này..."
+                    rows={2}
+                    placeholder="Mô tả phạm vi quyền hạn..."
                     className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm focus:ring-2 focus:ring-primary read-only:bg-gray-100 dark:read-only:bg-gray-800 resize-none"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Màu sắc</label>
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Màu sắc</label>
                     <select
                       value={editingRole.color || '#10b981'}
                       onChange={(e) => setEditingRole({ ...editingRole, color: e.target.value })}
                       disabled={formMode === 'view'}
-                      className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm focus:ring-2 focus:ring-primary disabled:opacity-70"
+                      className="block w-full px-2 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-xs focus:ring-2 focus:ring-primary disabled:opacity-70"
                     >
                       {ROLE_COLORS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Trạng thái</label>
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Trạng thái</label>
                     <select
                       value={editingRole.status}
                       onChange={(e) => setEditingRole({ ...editingRole, status: e.target.value as any })}
                       disabled={formMode === 'view'}
-                      className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm focus:ring-2 focus:ring-primary disabled:opacity-70"
+                      className="block w-full px-2 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-xs focus:ring-2 focus:ring-primary disabled:opacity-70"
                     >
                       <option value="ACTIVE">Hoạt động</option>
                       <option value="DEPRECATED">Vô hiệu hóa</option>
@@ -380,41 +394,48 @@ export function RolesPage() {
                 </div>
               </div>
 
-              {/* Module Groups Navigation */}
-              <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 py-3 overflow-y-auto scrollbar-thin hidden lg:block">
+              {/* Module Filter Sidebar — radio group for filtering permissions */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 py-3 flex-1">
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider px-3 pb-2 border-b border-gray-200 dark:border-gray-700">Lọc theo phân hệ</p>
                 <ModuleGroupSidebar activeModule={activeModule} onSelectModule={setActiveModule} />
               </div>
             </div>
 
-            {/* Right Column: Permission Configuration */}
-            <div className="lg:w-3/4 flex flex-col min-h-0 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
-              <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50 dark:bg-gray-800/50 rounded-t-xl">
-                <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    Cấu hình quyền hạn 
-                    <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs">
-                      {editingRole.grantedPermissions?.length || 0} quyền đã chọn
+            {/* ── Right Column: Permission Configuration ── */}
+            <div className="lg:w-[78%] flex flex-col min-h-0 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+              {/* Sticky sub-header */}
+              <div className="p-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 rounded-t-xl space-y-2 shrink-0">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                  <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2 text-sm">
+                    Cấu hình quyền hạn
+                    <span className="bg-primary text-white px-2 py-0.5 rounded-full text-[11px] font-bold">
+                      Đã chọn: {editingRole.grantedPermissions?.length || 0}
                     </span>
+                    {activeModule && (
+                      <span className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 px-2 py-0.5 rounded-full text-[11px] font-semibold">
+                        Đang lọc: {activeModule}
+                      </span>
+                    )}
                   </h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Tích chọn các quyền được phép thực hiện.</p>
-                </div>
-                <div className="w-full sm:w-auto">
-                  <PermissionSearch 
-                    selectedPermissions={editingRole.grantedPermissions || []} 
-                    onTogglePermission={togglePermission} 
-                  />
+                  <div className="w-full sm:w-auto">
+                    <PermissionSearch
+                      selectedPermissions={editingRole.grantedPermissions || []}
+                      onTogglePermission={togglePermission}
+                    />
+                  </div>
                 </div>
               </div>
 
+              {/* Single scrollable permission area */}
               <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
                 {formMode === 'view' ? (
-                  <PermissionSummary 
-                    roleCode={editingRole.roleCode!} 
-                    roleTitle={editingRole.roleTitle!} 
-                    grantedPermissions={editingRole.grantedPermissions || []} 
+                  <PermissionSummary
+                    roleCode={editingRole.roleCode!}
+                    roleTitle={editingRole.roleTitle!}
+                    grantedPermissions={editingRole.grantedPermissions || []}
                   />
                 ) : (
-                  <RolePermissionMatrix 
+                  <RolePermissionMatrix
                     selectedPermissions={editingRole.grantedPermissions || []}
                     onChange={updatePermissions}
                     isReadOnly={false}
@@ -425,22 +446,29 @@ export function RolesPage() {
             </div>
           </div>
 
-          <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => setFormOpen(false)}
-              className="px-6 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg text-sm font-semibold transition-colors"
-            >
-              Đóng
-            </button>
-            {formMode !== 'view' && (
+          {/* ── Fixed Footer ── */}
+          <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center shrink-0">
+            <p className="text-xs text-gray-400">
+              {formMode === 'create' ? 'Vai trò mới sẽ có hiệu lực ngay sau khi lưu.' : 'Thay đổi quyền sẽ áp dụng cho tất cả người dùng thuộc vai trò này.'}
+            </p>
+            <div className="flex items-center gap-3">
               <button
-                type="submit"
-                className="px-6 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold shadow transition-colors"
+                type="button"
+                onClick={() => setFormOpen(false)}
+                className="px-5 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg text-sm font-semibold transition-colors"
               >
-                Lưu vai trò
+                Đóng
               </button>
-            )}
+              {formMode !== 'view' && (
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-bold shadow transition-colors flex items-center gap-2"
+                >
+                  <Shield className="w-4 h-4" />
+                  {formMode === 'create' ? 'Tạo vai trò' : 'Lưu thay đổi'}
+                </button>
+              )}
+            </div>
           </div>
         </form>
       </Modal>

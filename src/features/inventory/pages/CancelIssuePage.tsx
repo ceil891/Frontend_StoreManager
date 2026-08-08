@@ -524,7 +524,8 @@ export function CancelIssuePage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chọn sản phẩm (SKU) *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chọn sản phẩm *</label>
+
               <select
                 value={editingIssue.sku || ''}
                 onChange={(e) => {

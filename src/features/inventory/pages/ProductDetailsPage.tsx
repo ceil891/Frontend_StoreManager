@@ -371,7 +371,7 @@ export function ProductDetailsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục phân cấp (Parent Category) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục sản phẩm *</label>
               <TreeSelect
                 value={editingItem.categoryName}
                 onChange={(val) => setEditingItem({ ...editingItem, categoryName: val })}
@@ -417,7 +417,7 @@ export function ProductDetailsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá nhập chi phí (Cost Price) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá vốn mặc định (Cost Price) *</label>
               <CurrencyInput
                 value={editingItem.costPrice || 0}
                 onChange={(val) => setEditingItem({ ...editingItem, costPrice: val })}
@@ -425,7 +425,7 @@ export function ProductDetailsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá bán lẻ đề xuất (Selling Price) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá bán lẻ đề xuất (List Price) *</label>
               <CurrencyInput
                 value={editingItem.sellingPrice || 0}
                 onChange={(val) => setEditingItem({ ...editingItem, sellingPrice: val })}
@@ -434,26 +434,29 @@ export function ProductDetailsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Định mức tồn tối thiểu (Reorder Level)</label>
-              <input
-                type="number"
-                value={editingItem.reorderPoint ?? 10}
-                onChange={(e) => setEditingItem({ ...editingItem, reorderPoint: parseInt(e.target.value) || 0 })}
-                placeholder="10"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tồn kho an toàn (Safety Stock)</label>
-              <input
-                type="number"
-                value={editingItem.safetyStock ?? 5}
-                onChange={(e) => setEditingItem({ ...editingItem, safetyStock: parseInt(e.target.value) || 0 })}
-                placeholder="5"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
-              />
+          <div className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/60">
+            <span className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Định mức Kho & Tồn kho an toàn</span>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Định mức đặt hàng lại (Reorder Level)</label>
+                <input
+                  type="number"
+                  value={editingItem.reorderPoint ?? 10}
+                  onChange={(e) => setEditingItem({ ...editingItem, reorderPoint: parseInt(e.target.value) || 0 })}
+                  placeholder="10"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tồn kho an toàn tối thiểu (Safety Stock)</label>
+                <input
+                  type="number"
+                  value={editingItem.safetyStock ?? 5}
+                  onChange={(e) => setEditingItem({ ...editingItem, safetyStock: parseInt(e.target.value) || 0 })}
+                  placeholder="5"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
+                />
+              </div>
             </div>
           </div>
 

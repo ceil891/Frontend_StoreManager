@@ -294,21 +294,58 @@ export function ColorsPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã màu Hex *</label>
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={editingColor.hexCode || '#000000'}
-                onChange={(e) => setEditingColor({ ...editingColor, hexCode: e.target.value })}
-                className="w-12 h-10 rounded-lg border border-gray-300 dark:border-gray-600 cursor-pointer p-1"
-              />
-              <input
-                value={editingColor.hexCode || ''}
-                onChange={(e) => setEditingColor({ ...editingColor, hexCode: e.target.value })}
-                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-mono"
-                placeholder="#000000"
-              />
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="relative flex items-center justify-center shrink-0">
+                  <input
+                    type="color"
+                    id="colorPickerInput"
+                    value={editingColor.hexCode?.startsWith('#') ? editingColor.hexCode : '#000000'}
+                    onChange={(e) => setEditingColor({ ...editingColor, hexCode: e.target.value.toUpperCase() })}
+                    className="w-12 h-10 rounded-lg border border-gray-300 dark:border-gray-600 cursor-pointer p-0.5 bg-white dark:bg-gray-800 shadow-sm"
+                  />
+                </div>
+                <input
+                  type="text"
+                  value={editingColor.hexCode || ''}
+                  onChange={(e) => {
+                    let val = e.target.value.toUpperCase();
+                    if (val && !val.startsWith('#') && /^[0-9A-F]{1,6}$/i.test(val)) {
+                      val = '#' + val;
+                    }
+                    setEditingColor({ ...editingColor, hexCode: val });
+                  }}
+                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-mono"
+                  placeholder="#000000"
+                />
+              </div>
+
+              {/* Quick Preset Colors */}
+              <div className="flex items-center gap-1.5 pt-1">
+                <span className="text-[10px] text-gray-400 font-medium">Gợi ý màu:</span>
+                {[
+                  { name: 'Đen', hex: '#000000' },
+                  { name: 'Trắng', hex: '#FFFFFF' },
+                  { name: 'Đỏ', hex: '#EF4444' },
+                  { name: 'Xanh dương', hex: '#3B82F6' },
+                  { name: 'Xanh lá', hex: '#10B981' },
+                  { name: 'Vàng', hex: '#F59E0B' },
+                  { name: 'Tím', hex: '#8B5CF6' },
+                  { name: 'Xám', hex: '#6B7280' },
+                ].map(p => (
+                  <button
+                    key={p.hex}
+                    type="button"
+                    title={p.name}
+                    onClick={() => setEditingColor({ ...editingColor, hexCode: p.hex })}
+                    className="w-5 h-5 rounded-full border border-gray-300 dark:border-gray-600 shadow-xs hover:scale-110 transition-transform cursor-pointer"
+                    style={{ backgroundColor: p.hex }}
+                  />
+                ))}
+              </div>
             </div>
           </div>
+
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mô tả</label>
             <textarea

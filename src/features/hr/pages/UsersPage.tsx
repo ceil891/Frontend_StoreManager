@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Eye, Mail, Phone, MapPin, Building, Key, ShieldCheck, UserX, UserCheck, Trash2, X, Edit, Scan } from 'lucide-react';
+import { Plus, Download, Search, Eye, Mail, Phone, MapPin, Building, Key, ShieldCheck, UserX, UserCheck, Trash2, X, Edit, Scan, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -21,16 +21,18 @@ const statusBadgeStyles = {
 type SearchField = 'all' | 'userCode' | 'fullName' | 'emailAddress' | 'assignedRole' | 'primaryDepartment' | 'branchLocation';
 
 export function UsersPage() {
-  const { users, fetchUsers, addUser, updateUser, deleteUser } = useUserStore();
+  const { users, fetchUsers, addUser, updateUser, updateUserRoleAndBranch, deleteUser } = useUserStore();
   const { roles, fetchRoles } = useRoleStore();
   const { branches, fetchBranches } = useBranchStore();
-  const { departments, positions } = useHrStore();
+  const { departments, positions, fetchDepartments, fetchPositions } = useHrStore();
 
   useEffect(() => {
     fetchUsers();
     fetchRoles();
     fetchBranches();
-  }, [fetchUsers, fetchRoles, fetchBranches]);
+    fetchDepartments();
+    fetchPositions();
+  }, [fetchUsers, fetchRoles, fetchBranches, fetchDepartments, fetchPositions]);
 
   const [search, setSearch] = useState('');
   const [searchField, setSearchField] = useState<SearchField>('all');
@@ -39,6 +41,54 @@ export function UsersPage() {
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [faceScanUser, setFaceScanUser] = useState<SystemUserRecord | null>(null);
   const [scanStep, setScanStep] = useState<number>(0);
+
+  // Quick Role & Branch Change Modal State
+  const [roleModalUser, setRoleModalUser] = useState<SystemUserRecord | null>(null);
+  const [selectedRoleId, setSelectedRoleId] = useState<string>('4');
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('1');
+  const [isSavingRole, setIsSavingRole] = useState(false);
+
+  const handleOpenRoleModal = (user: SystemUserRecord) => {
+    setRoleModalUser(user);
+    const matched = roles.find(r => 
+      String(r.id) === user.assignedRole || 
+      r.roleName === user.assignedRole || 
+      r.roleCode === user.assignedRole || 
+      r.roleTitle === user.assignedRole
+    );
+    setSelectedRoleId(matched ? String(matched.id) : (roles[0]?.id ? String(roles[0].id) : '4'));
+    setSelectedBranchId(user.branchId ? String(user.branchId) : (branches[0]?.id ? String(branches[0].id) : '1'));
+  };
+
+  const handleSaveRoleAndBranch = async () => {
+    if (!roleModalUser) return;
+    setIsSavingRole(true);
+    try {
+      await updateUserRoleAndBranch(roleModalUser.id, selectedRoleId, selectedBranchId);
+      const targetRole = roles.find(r => String(r.id) === String(selectedRoleId));
+      const targetBranch = branches.find(b => String(b.id) === String(selectedBranchId));
+      toast.success(`Đã cập nhật vai trò ${targetRole?.roleTitle || ''} & chi nhánh cho ${roleModalUser.fullName}!`);
+      
+      // Update selectedUser if open in drawer
+      if (selectedUser && String(selectedUser.id) === String(roleModalUser.id)) {
+        setSelectedUser(prev => prev ? {
+          ...prev,
+          assignedRole: targetRole?.roleCode || targetRole?.roleName || selectedRoleId,
+          branchId: selectedBranchId,
+          branchLocation: targetBranch?.name || `Chi nhánh ${selectedBranchId}`
+        } : null);
+      }
+      setRoleModalUser(null);
+    } catch (err: any) {
+      toast.error('Lỗi khi cập nhật: ' + (err.message || 'Hệ thống bận'));
+    } finally {
+      setIsSavingRole(false);
+    }
+  };
+
+
+
+
 
   // Filter states
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -299,7 +349,7 @@ export function UsersPage() {
             />
             <div>
               <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.fullName}</p>
-              <p className="text-xs text-gray-500">{positions.find(p => p.id === row.original.positionId)?.positionTitle || row.original.positionId}</p>
+              <p className="text-xs text-gray-500">{positions.find(p => String(p.id) === String(row.original.positionId))?.positionTitle || row.original.positionId || '—'}</p>
               <p className="text-xs text-gray-400 font-mono">{row.original.emailAddress}</p>
             </div>
           </div>
@@ -322,11 +372,12 @@ export function UsersPage() {
         accessorKey: 'departmentId',
         header: 'Phòng ban & Chi nhánh',
         cell: ({ row }) => {
-          const dept = departments.find(d => d.id === row.original.departmentId);
+          const dept = departments.find(d => String(d.id) === String(row.original.departmentId));
+          const branchObj = branches.find(b => String(b.id) === String(row.original.branchId) || b.branchCode === String(row.original.branchId));
           return (
             <div>
-              <p className="text-sm text-gray-800 dark:text-gray-200 font-medium">{dept?.departmentName || row.original.departmentId}</p>
-              <p className="text-xs text-gray-500">{row.original.branchLocation}</p>
+              <p className="text-sm text-gray-800 dark:text-gray-200 font-medium">{dept?.departmentName || row.original.departmentId || '—'}</p>
+              <p className="text-xs text-gray-500 font-semibold">{branchObj?.name || row.original.branchLocation || '—'}</p>
             </div>
           );
         },
@@ -381,6 +432,13 @@ export function UsersPage() {
               <Eye className="w-4 h-4" />
             </button>
             <button
+              onClick={() => handleOpenRoleModal(row.original)}
+              className="p-1.5 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg transition-colors border border-emerald-200/60 dark:border-emerald-800/40"
+              title="Phân gán vai trò bảo mật (Role)"
+            >
+              <ShieldCheck className="w-4 h-4" />
+            </button>
+            <button
               onClick={() => handleOpenEdit(row.original)}
               className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
               title="Chỉnh sửa lý lịch"
@@ -399,11 +457,12 @@ export function UsersPage() {
             >
               <Trash2 className="w-4 h-4" />
             </button>
+
           </div>
         ),
       },
     ],
-    [roles]
+    [roles, departments, positions, branches]
   );
 
   return (
@@ -526,7 +585,7 @@ export function UsersPage() {
                 size="xl"
               />
               <h3 className="text-lg font-bold text-gray-900 dark:text-white">{selectedUser.fullName}</h3>
-              <p className="text-sm text-gray-500">{positions.find(p => p.id === selectedUser.positionId)?.positionTitle || selectedUser.positionId}</p>
+              <p className="text-sm text-gray-500">{positions.find(p => String(p.id) === String(selectedUser.positionId))?.positionTitle || selectedUser.positionId || '—'}</p>
               <p className="text-xs font-mono text-gray-400">{selectedUser.userCode} · {selectedUser.authUserId}</p>
               {selectedUser.faceEnrolled ? (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 mt-2 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
@@ -555,7 +614,7 @@ export function UsersPage() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Vai trò phân quyền</p>
                   <p className="text-lg font-bold font-mono text-gray-900 dark:text-white mt-0.5">
-                    {roles.find(r => r.roleCode === selectedUser.assignedRole)?.roleTitle || selectedUser.assignedRole}
+                    {roles.find(r => r.roleCode === selectedUser.assignedRole || r.roleName === selectedUser.assignedRole || r.roleTitle === selectedUser.assignedRole || String(r.id) === selectedUser.assignedRole)?.roleTitle || roles.find(r => r.roleCode === selectedUser.assignedRole || r.roleName === selectedUser.assignedRole)?.roleName || selectedUser.assignedRole}
                   </p>
                 </div>
               </div>
@@ -600,7 +659,7 @@ export function UsersPage() {
               </div>
               <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                 <Building className="w-4 h-4 text-gray-400 shrink-0" />
-                <span>Bộ phận phòng ban: <span className="font-semibold">{departments.find(d => d.id === selectedUser.departmentId)?.departmentName || selectedUser.departmentId}</span></span>
+                <span>Bộ phận phòng ban: <span className="font-semibold">{departments.find(d => String(d.id) === String(selectedUser.departmentId))?.departmentName || selectedUser.departmentId || '—'}</span></span>
               </div>
               <div className="flex items-center gap-2 text-sm pt-1 text-gray-700 dark:text-gray-300">
                 <UserCheck className="w-4 h-4 text-gray-400 shrink-0" />
@@ -608,7 +667,7 @@ export function UsersPage() {
               </div>
               <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                 <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
-                <span>Chi nhánh: <span className="font-semibold">{selectedUser.branchLocation}</span> <span className="font-mono text-xs text-gray-400">({selectedUser.branchId})</span></span>
+                <span>Chi nhánh: <span className="font-semibold">{branches.find(b => String(b.id) === String(selectedUser.branchId))?.name || selectedUser.branchLocation || '—'}</span> <span className="font-mono text-xs text-gray-400">({branches.find(b => String(b.id) === String(selectedUser.branchId))?.branchCode || `ID: ${selectedUser.branchId}`})</span></span>
               </div>
 
               <div className="flex justify-between items-center pt-3 border-t border-gray-200 dark:border-gray-700 text-xs font-mono">
@@ -1105,6 +1164,102 @@ export function UsersPage() {
           </div>
         )}
       </Modal>
+
+
+      {/* Modal Đổi nhanh Vai trò Bảo mật & Chi nhánh (Quick Role & Branch Modal) */}
+      <Modal
+        isOpen={!!roleModalUser}
+        onClose={() => setRoleModalUser(null)}
+        title={roleModalUser ? `Phân gán vai trò & chi nhánh: ${roleModalUser.fullName}` : 'Vai trò & Chi nhánh'}
+        width="max-w-md"
+      >
+        {roleModalUser && (
+          <div className="space-y-4 text-sm">
+            <div className="p-3.5 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-200/80 dark:border-gray-700/80 flex items-center gap-3.5 shadow-xs">
+              <UserAvatar name={roleModalUser.fullName} avatarUrl={roleModalUser.avatarUrl} seed={roleModalUser.emailAddress} size="md" />
+              <div>
+                <p className="font-bold text-gray-900 dark:text-white">{roleModalUser.fullName}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">{roleModalUser.emailAddress}</p>
+                <span className="inline-block text-[10px] font-mono font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded mt-1 border border-emerald-200 dark:border-emerald-800">
+                  Mã NV: {roleModalUser.userCode}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">
+                1. Vai trò Bảo mật (Role) *
+              </label>
+              <select
+                value={selectedRoleId}
+                onChange={(e) => setSelectedRoleId(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 shadow-xs"
+              >
+                {roles.length > 0 ? (
+                  roles.map((r) => (
+                    <option key={r.id} value={String(r.id)}>
+                      {r.roleTitle || r.roleName} ({r.roleName || r.roleCode})
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="1">Quản trị viên tối cao (SUPER_ADMIN)</option>
+                    <option value="2">Quản lý cửa hàng (STORE_MANAGER)</option>
+                    <option value="3">Thu ngân bán hàng (CASHIER)</option>
+                    <option value="4">Nhân viên thông thường (STAFF)</option>
+                  </>
+                )}
+              </select>
+
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">
+                2. Chi nhánh làm việc (Branch) *
+              </label>
+              <select
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 shadow-xs"
+              >
+                {branches.length > 0 ? (
+                  branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.branchCode || `CN-${b.id}`})
+                    </option>
+                  ))
+                ) : (
+                  <option value="1">CH Quận 1 (Trụ sở chính)</option>
+                )}
+              </select>
+              <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
+                Chi nhánh quyết định phạm vi truy cập dữ liệu kho, hóa đơn bán hàng và báo cáo doanh thu của nhân viên.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-4 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setRoleModalUser(null)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl text-xs font-bold transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isSavingRole}
+                onClick={handleSaveRoleAndBranch}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 active:scale-95 transition-all flex items-center gap-1.5"
+              >
+                {isSavingRole && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Xác nhận lưu
+              </button>
+            </div>
+          </div>
+        )}
+
+      </Modal>
     </>
   );
 }
+

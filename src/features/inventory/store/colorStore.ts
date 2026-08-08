@@ -29,28 +29,26 @@ export const useColorStore = create<ColorState>()((set, get) => ({
   fetchColors: async () => {
     set({ isLoading: true, error: null });
     try {
-      const res = await axiosClient.get<any, any[]>('/colors?includeDeleted=false');
-      const mapped = (res || []).map((c: any) => ({
+      const res = await axiosClient.get<any, any>('/colors?includeDeleted=false');
+      const rawList = Array.isArray(res) ? res : (res?.content || res?.data || []);
+      const mapped: ColorRecord[] = (rawList || []).map((c: any) => ({
         id: String(c.id),
         colorCode: c.colorCode || '',
         colorName: c.colorName || '',
-        hexCode: c.hexValue || '#000000',
+        hexCode: c.hexValue || c.hexCode || '#000000',
         description: c.description || '',
-        status: (c.isActive ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE',
+        status: (c.isActive !== false ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE',
       }));
-      const currentLocal = get().colors || [];
-      const merged = [...mapped];
-      currentLocal.forEach(loc => {
-        if (!merged.some(m => String(m.id) === String(loc.id) || m.colorCode === loc.colorCode)) {
-          merged.push(loc);
-        }
-      });
-      set({ colors: merged, isLoading: false });
+      const unique = mapped.filter((c, idx, self) =>
+        idx === self.findIndex((t) => String(t.id) === String(c.id) || (t.colorName && t.colorName.trim().toLowerCase() === c.colorName.trim().toLowerCase()))
+      );
+      set({ colors: unique, isLoading: false });
     } catch (err: any) {
       console.error('Failed to fetch colors:', err);
       set({ isLoading: false, error: err.message || 'Lỗi khi tải danh sách màu sắc' });
     }
   },
+
 
   addColor: async (color) => {
     const tempId = `clr_${Date.now()}`;

@@ -175,23 +175,63 @@ export interface ProductBatchRecord {
   notes?: string;
 }
 
+export interface TransferRequestItem {
+  id?: string;
+  productName: string;
+  variant: string;
+  sku: string;
+  availableQuantity?: number;
+  requestedQuantity: number;
+}
+
+export interface TransferRequestRecord {
+  id: string;
+  requestCode: string;
+  sourceHub: string;
+  destinationHub: string;
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  reason?: string;
+  requestedBy: string;
+  requestDate: string;
+  expectedDate?: string;
+  status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  notes?: string;
+  items: TransferRequestItem[];
+}
+
+export interface StockTransferItem {
+  id?: string;
+  productName: string;
+  variant: string;
+  sku: string;
+  requestedQuantity?: number;
+  quantity: number;
+  receivedQuantity?: number;
+  unitPrice: number;
+  amount: number;
+}
+
 export interface StockTransferOrder {
   id: string;
   transferNumber: string;
+  requestRefCode?: string;
   sourceHub: string;
   destinationHub: string;
   dispatchDate: string;
   estArrivalDate: string;
   totalUnits: number;
   totalValuation: number;
-  status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'SHIPPED' | 'RECEIVED' | 'IN_TRANSIT' | 'COMPLETED' | 'REJECTED' | 'DISCREPANCY_HELD' | 'CANCELLED' | 'CANCELLED_DISCREPANCY';
+  status: 'DRAFT' | 'READY_TO_SHIP' | 'PENDING_APPROVAL' | 'APPROVED' | 'SHIPPED' | 'RECEIVED' | 'IN_TRANSIT' | 'COMPLETED' | 'REJECTED' | 'DISCREPANCY_HELD' | 'CANCELLED' | 'CANCELLED_DISCREPANCY';
   logisticsPartner: string;
   trackingRef?: string;
   requestedBy: string;
   approvedBy?: string;
+  shippedBy?: string;
+  receivedBy?: string;
   notes?: string;
   priority?: 'LOW' | 'MEDIUM' | 'HIGH';
   reason?: 'RESTOCK' | 'REBALANCE' | 'PROMO' | 'LAYOUT_CHANGE' | 'OTHER';
+  items?: StockTransferItem[];
 }
 
 // ---------------------------
@@ -633,15 +673,29 @@ export interface InventoryCheckRecord {
   notes?: string;
 }
 
+export interface StockOutDetailItem {
+  id?: string;
+  productName: string;
+  variant: string;
+  sku: string;
+  barcode?: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+}
+
 export interface StockOutRecord {
   id: string;
   stockOutCode: string;
-  outType: 'BAN_HANG' | 'TRA_NCC' | 'HUY_HANG_HONG' | 'CHUYEN_KHO';
+  outType: 'BAN_HANG' | 'TRA_NCC' | 'HUY_HANG_HONG' | 'CHUYEN_KHO' | 'NOI_BO';
+  warehouseName?: string;
   issuedDate: string;
+  totalVariants?: number;
   totalItems: number;
   totalValue: number;
   creator: string;
   status: 'CHO_XU_LY' | 'DA_XUAT' | 'DA_HUY';
+  items?: StockOutDetailItem[];
   notes?: string;
 }
 
@@ -847,13 +901,12 @@ interface InventoryState {
   completeLocationTransfer: (id: string) => Promise<void>;
   cancelLocationTransfer: (id: string) => Promise<void>;
 
-  // --- Purchase: SupplierProduct ---
-  supplierProducts: SupplierProductRecord[];
-  fetchSupplierProducts: (supplierId?: string) => Promise<void>;
-  addSupplierProduct: (data: Omit<SupplierProductRecord, 'id'>) => Promise<void>;
-  updateSupplierProduct: (id: string, data: Partial<SupplierProductRecord>) => Promise<void>;
-  deleteSupplierProduct: (id: string) => Promise<void>;
-  setSupplierProductPreferred: (id: string, value: boolean) => Promise<void>;
+  // --- StockOut ---
+  stockOuts: StockOutRecord[];
+  fetchStockOuts: () => Promise<void>;
+  addStockOut: (stockOut: Omit<StockOutRecord, 'id'> | StockOutRecord) => Promise<void>;
+  updateStockOut: (id: string, data: Partial<StockOutRecord>) => Promise<void>;
+  deleteStockOut: (id: string) => Promise<void>;
 }
 
 // ---------------------------
@@ -884,6 +937,7 @@ export const useInventoryStore = create<InventoryState>()(
       categories: [],
       brands: [],
       productBatches: [],
+      stockOuts: [],
       stockTransfers: [],
       products: [],
       combos: [],
@@ -996,26 +1050,51 @@ export const useInventoryStore = create<InventoryState>()(
             lastUpdated: item.createdAt ? new Date(item.createdAt).toLocaleString('vi-VN') : undefined,
           }));
 
-          // 2. Fetch tồn kho thực tế từ size_inventory (nếu có bổ sung thêm)
+          // 2. Fetch tồn kho thực tế từ balances (/inventories/balances hoặc /inventories)
           let stockMap: Record<string, number> = {};
+          let branchStocksMap: Record<string, Record<string, number>> = {};
           try {
-            const stockRes = await axiosClient.get<any, any>('/inventories');
-            const stockList: any[] = Array.isArray(stockRes) ? stockRes : (stockRes?.data || stockRes?.content || stockRes || []);
-            stockList.forEach((s: any) => {
-              const pid = String(s.productId);
-              const qty = Number(s.quantityPhysical || s.quantity || 0);
-              stockMap[pid] = (stockMap[pid] || 0) + qty;
-            });
+            const balancesRes = await axiosClient.get<any, any>('/inventories/balances');
+            const balancesList: any[] = Array.isArray(balancesRes) ? balancesRes : (balancesRes?.data || balancesRes?.content || balancesRes || []);
+            if (balancesList.length > 0) {
+              balancesList.forEach((b: any) => {
+                let pid = b.productId ? String(b.productId) : null;
+                if (!pid && b.sku) {
+                  const found = mapped.find(mp => mp.sku === b.sku);
+                  if (found) pid = found.id;
+                }
+                if (!pid) pid = String(b.productVariantId || b.sku);
+                const branchId = String(b.branchId);
+                const qty = Number(b.availableQuantity ?? b.onHandQuantity ?? b.quantityPhysical ?? 0);
+                
+                stockMap[pid] = (stockMap[pid] || 0) + qty;
+                if (!branchStocksMap[pid]) branchStocksMap[pid] = {};
+                branchStocksMap[pid][branchId] = (branchStocksMap[pid][branchId] || 0) + qty;
+              });
+            } else {
+              const stockRes = await axiosClient.get<any, any>('/inventories');
+              const stockList: any[] = Array.isArray(stockRes) ? stockRes : (stockRes?.data || stockRes?.content || stockRes || []);
+              stockList.forEach((s: any) => {
+                const pid = String(s.productId);
+                const branchId = String(s.branchId || 1);
+                const qty = Number(s.quantityPhysical || s.quantity || 0);
+                stockMap[pid] = (stockMap[pid] || 0) + qty;
+                if (!branchStocksMap[pid]) branchStocksMap[pid] = {};
+                branchStocksMap[pid][branchId] = (branchStocksMap[pid][branchId] || 0) + qty;
+              });
+            }
           } catch {
             // stock API fallback
           }
 
-          // 3. Merge tồn kho thực tế từ backend database vào sản phẩm
+          // 3. Merge tồn kho thực tế từ backend database vào sản phẩm (Physical Stock = SUM của tất cả chi nhánh)
           const withStock = mapped.map((p) => {
             const realQty = stockMap[p.id];
+            const pBranchStocks = branchStocksMap[p.id] || {};
             return {
               ...p,
-              onHand: realQty !== undefined && realQty > 0 ? realQty : p.onHand,
+              onHand: realQty !== undefined ? realQty : p.onHand,
+              branchStocks: pBranchStocks,
             };
           });
 
@@ -1494,13 +1573,28 @@ export const useInventoryStore = create<InventoryState>()(
           const unitObj = get().unitsList.find(u => u.unitName === product.unit);
           const baseUnitId = unitObj ? Number(unitObj.id) : 1;
 
+          const rawVariants = product.variants || [];
+          const structuredVariants = rawVariants.map(v => ({
+            attributeValueIds: (v as any).attributeValueIds || [],
+            customSku: (v as any).customSku || v.skuSuffix || null,
+            barcode: (v as any).barcode || null,
+            price: (v as any).price || product.price,
+            imageUrl: (v as any).imageUrl || null,
+            initialStocks: (v as any).initialStocks || []
+          }));
+
+          const hasVariants = structuredVariants.length > 0;
+          const initialStocks = (!hasVariants && product.onHand !== undefined && Number(product.onHand) > 0)
+            ? [{ branchId: 1, quantity: Number(product.onHand) }]
+            : [];
+
           const payload = {
-            productCode: product.sku,
+            productCode: product.sku || null,
             name: product.name,
             description: product.description,
             basePrice: product.price,
             costPrice: product.costPrice,
-            barcode: product.barcodes?.[0] || '',
+            barcode: product.barcodes?.[0] || null,
             isActive: product.status === 'ACTIVE',
             categoryId: categoryId,
             baseUnitId: baseUnitId,
@@ -1511,7 +1605,8 @@ export const useInventoryStore = create<InventoryState>()(
             minStock: product.minStock || 0,
             maxStock: product.maxStock || 0,
             galleryImages: JSON.stringify(product.galleryImages || []),
-            variants: JSON.stringify(product.variants || []),
+            variants: structuredVariants,
+            initialStocks: initialStocks,
             conversionUnits: (product.units || [])
               .filter(u => !u.isBaseUnit)
               .map(u => {
@@ -1527,24 +1622,8 @@ export const useInventoryStore = create<InventoryState>()(
               })
               .filter(u => u.unitId > 0),
           };
-          const createdRes: any = await axiosClient.post('/products', payload);
-          const createdProduct = createdRes?.data || createdRes?.content || createdRes || {};
-          const createdId = createdProduct.id || createdProduct.productId;
 
-          // Initial stock DB persistence (INV-P03)
-          if (product.onHand !== undefined && Number(product.onHand) > 0 && createdId) {
-            try {
-              await axiosClient.post('/inventories', {
-                productId: Number(createdId),
-                branchId: 1,
-                quantityPhysical: Number(product.onHand),
-                quantityAvailable: Number(product.onHand),
-                notes: 'Khởi tạo tồn kho ban đầu'
-              });
-            } catch (invErr) {
-              console.warn('Initial stock sync fallback:', invErr);
-            }
-          }
+          await axiosClient.post('/products', payload);
           await get().fetchProducts();
         } catch (error) {
           console.error('Failed to add product:', error);
@@ -1552,6 +1631,7 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
       updateProduct: async (id, data) => {
+
         try {
           const categoryObj = data.category ? get().categories.find(c => c.categoryName === data.category) : undefined;
           const categoryId = categoryObj ? Number(categoryObj.id) : undefined;
@@ -2604,7 +2684,9 @@ export const useInventoryStore = create<InventoryState>()(
               grnNumber: r.receiptCode,
               poNumber: r.purchaseOrderCode || '',
               supplierName: r.supplierName || '',
+              supplierId: r.supplierId || r.supplier?.id || undefined,
               receivingStore: r.branchName || '',
+              branchId: r.branchId || r.branch?.id || undefined,
               receivedDate: formatApiDate(r.receiptDate),
               totalItems: lineQty,
               acceptedItems: lineQty,
@@ -2625,8 +2707,9 @@ export const useInventoryStore = create<InventoryState>()(
         try {
           const payload = {
             receiptCode: receipt.grnNumber || `GRN-${Date.now()}`,
+            purchaseOrderCode: receipt.poNumber || null,
             receiptDate: new Date(receipt.receivedDate || Date.now()).toISOString(),
-            branchId: (receipt as any).branchId || resolveBranchId(receipt.receivingStore),
+            branchId: (receipt as any).branchId || 1,
             supplierId: (receipt as any).supplierId || null,
             inspectedBy: receipt.inspectedBy || null,
             note: receipt.notes || null,
@@ -2664,9 +2747,10 @@ export const useInventoryStore = create<InventoryState>()(
             await axiosClient.post(`/inventories/imports/${id}/complete`);
           } else {
             const payload = {
-              receiptCode: data.grnNumber,
+              receiptCode: data.grnNumber || undefined,
+              purchaseOrderCode: data.poNumber !== undefined ? data.poNumber : undefined,
               receiptDate: new Date().toISOString(),
-              branchId: (data as any).branchId || resolveBranchId(data.receivingStore),
+              branchId: (data as any).branchId || 1,
               supplierId: (data as any).supplierId || null,
               inspectedBy: data.inspectedBy || null,
               note: data.notes || null,
@@ -2802,6 +2886,55 @@ export const useInventoryStore = create<InventoryState>()(
           await get().fetchReturnToSuppliers();
         } catch (error) {
           console.error('Failed to delete return to supplier:', error);
+        }
+      },
+
+      // --- StockOut API ---
+      fetchStockOuts: async () => {
+        try {
+          const data = await axiosClient.get<any, any[]>('/inventories/exports');
+          const list = Array.isArray(data) ? data : (data?.content || []);
+          const mapped: StockOutRecord[] = list.map((item: any) => ({
+            id: String(item.id),
+            stockOutCode: item.stockOutCode || `PXK${item.id}`,
+            outType: item.outType || 'BAN_HANG',
+            warehouseName: item.warehouseName || 'Chi nhánh Hà Nội (Kho chính)',
+            issuedDate: item.issuedDate || new Date().toISOString().slice(0, 16).replace('T', ' '),
+            totalVariants: item.totalVariants || (item.items ? item.items.length : 1),
+            totalItems: Number(item.totalItems || 0),
+            totalValue: Number(item.totalValue || 0),
+            creator: item.creator || 'Nhân viên kho',
+            status: item.status || 'CHO_XU_LY',
+            notes: item.notes || '',
+            items: item.items || [],
+          }));
+          set({ stockOuts: mapped });
+        } catch (error) {
+          console.error('Failed to fetch stock outs:', error);
+        }
+      },
+      addStockOut: async (stockOut) => {
+        try {
+          await axiosClient.post('/inventories/exports', stockOut);
+          await get().fetchStockOuts();
+        } catch (error) {
+          console.error('Failed to add stock out:', error);
+        }
+      },
+      updateStockOut: async (id, data) => {
+        try {
+          await axiosClient.put(`/inventories/exports/${id}`, data);
+          await get().fetchStockOuts();
+        } catch (error) {
+          console.error('Failed to update stock out:', error);
+        }
+      },
+      deleteStockOut: async (id) => {
+        try {
+          await axiosClient.delete(`/inventories/exports/${id}`);
+          await get().fetchStockOuts();
+        } catch (error) {
+          console.error('Failed to delete stock out:', error);
         }
       },
     }),

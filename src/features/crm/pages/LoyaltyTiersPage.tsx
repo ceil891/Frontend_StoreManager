@@ -9,19 +9,33 @@ import { Modal } from '@/shared/components/ui/Modal';
 type TierKey = string;
 
 interface TierBenefit {
-  icon: React.ReactNode;
+  icon: string | React.ReactNode;
   text: string;
 }
+
+const RenderBenefitIcon = ({ icon, className }: { icon: any; className?: string }) => {
+  if (icon && typeof icon === 'object' && (icon as any).$$typeof) {
+    return icon;
+  }
+  const typeStr = typeof icon === 'string' ? icon.toLowerCase() : '';
+  if (typeStr.includes('percent')) return <Percent className={className || "w-3.5 h-3.5"} />;
+  if (typeStr.includes('gift')) return <Gift className={className || "w-3.5 h-3.5"} />;
+  if (typeStr.includes('shield')) return <Shield className={className || "w-3.5 h-3.5"} />;
+  if (typeStr.includes('headphones')) return <Headphones className={className || "w-3.5 h-3.5"} />;
+  if (typeStr.includes('crown')) return <Crown className={className || "w-3.5 h-3.5"} />;
+  if (typeStr.includes('badge')) return <BadgeCheck className={className || "w-3.5 h-3.5"} />;
+  return <Zap className={className || "w-3.5 h-3.5"} />;
+};
 
 interface LoyaltyTier {
   key: TierKey;
   name: string;
   nameEn: string;
-  minSpend: number;       // USD – ngưỡng tối thiểu
+  minSpend: number;
   maxSpend: number | null;
-  pointRate: number;      // điểm / 1$ chi tiêu
-  discountPct: number;    // % giảm giá
-  customerCount: number;  // mock
+  pointRate: number;
+  discountPct: number;
+  customerCount: number;
   benefits: TierBenefit[];
   gradient: string;
   border: string;
@@ -39,7 +53,7 @@ const INITIAL_TIERS: LoyaltyTier[] = [
     name: 'Đồng',
     nameEn: 'Bronze',
     minSpend: 0,
-    maxSpend: 199,
+    maxSpend: 1999999,
     pointRate: 1,
     discountPct: 0,
     customerCount: 128,
@@ -51,17 +65,17 @@ const INITIAL_TIERS: LoyaltyTier[] = [
     bgCard: 'bg-orange-500',
     progressColor: 'bg-orange-400',
     benefits: [
-      { icon: <Zap className="w-3.5 h-3.5" />, text: 'Tích 1 điểm / $1 chi tiêu' },
-      { icon: <Gift className="w-3.5 h-3.5" />, text: 'Quà sinh nhật cơ bản' },
-      { icon: <BadgeCheck className="w-3.5 h-3.5" />, text: 'Xem lịch sử đơn hàng' },
+      { icon: 'zap', text: 'Tích 1 điểm / 100.000đ chi tiêu' },
+      { icon: 'gift', text: 'Quà sinh nhật cơ bản' },
+      { icon: 'badge', text: 'Xem lịch sử đơn hàng' },
     ],
   },
   {
     key: 'SILVER',
     name: 'Bạc',
     nameEn: 'Silver',
-    minSpend: 200,
-    maxSpend: 799,
+    minSpend: 2000000,
+    maxSpend: 9999999,
     pointRate: 2,
     discountPct: 3,
     customerCount: 85,
@@ -73,18 +87,18 @@ const INITIAL_TIERS: LoyaltyTier[] = [
     bgCard: 'bg-slate-500',
     progressColor: 'bg-slate-400',
     benefits: [
-      { icon: <Zap className="w-3.5 h-3.5" />, text: 'Tích 2 điểm / $1 chi tiêu' },
-      { icon: <Percent className="w-3.5 h-3.5" />, text: 'Giảm 3% mọi đơn hàng' },
-      { icon: <Gift className="w-3.5 h-3.5" />, text: 'Quà sinh nhật nâng cấp' },
-      { icon: <Shield className="w-3.5 h-3.5" />, text: 'Bảo hành ưu tiên +3 tháng' },
+      { icon: 'zap', text: 'Tích 2 điểm / 100.000đ chi tiêu' },
+      { icon: 'percent', text: 'Giảm 3% mọi đơn hàng' },
+      { icon: 'gift', text: 'Quà sinh nhật nâng cấp' },
+      { icon: 'shield', text: 'Bảo hành ưu tiên +3 tháng' },
     ],
   },
   {
     key: 'GOLD',
     name: 'Vàng',
     nameEn: 'Gold',
-    minSpend: 800,
-    maxSpend: 3999,
+    minSpend: 10000000,
+    maxSpend: 49999999,
     pointRate: 3,
     discountPct: 7,
     customerCount: 47,
@@ -96,18 +110,18 @@ const INITIAL_TIERS: LoyaltyTier[] = [
     bgCard: 'bg-yellow-500',
     progressColor: 'bg-yellow-400',
     benefits: [
-      { icon: <Zap className="w-3.5 h-3.5" />, text: 'Tích 3 điểm / $1 chi tiêu' },
-      { icon: <Percent className="w-3.5 h-3.5" />, text: 'Giảm 7% mọi đơn hàng' },
-      { icon: <Headphones className="w-3.5 h-3.5" />, text: 'Hỗ trợ ưu tiên 24/7' },
-      { icon: <Gift className="w-3.5 h-3.5" />, text: 'Quà tặng cao cấp hàng quý' },
-      { icon: <Shield className="w-3.5 h-3.5" />, text: 'Bảo hành ưu tiên +6 tháng' },
+      { icon: 'zap', text: 'Tích 3 điểm / 100.000đ chi tiêu' },
+      { icon: 'percent', text: 'Giảm 7% mọi đơn hàng' },
+      { icon: 'headphones', text: 'Hỗ trợ ưu tiên 24/7' },
+      { icon: 'gift', text: 'Quà tặng cao cấp hàng quý' },
+      { icon: 'shield', text: 'Bảo hành ưu tiên +6 tháng' },
     ],
   },
   {
     key: 'DIAMOND',
     name: 'Kim Cương',
     nameEn: 'Diamond',
-    minSpend: 4000,
+    minSpend: 50000000,
     maxSpend: null,
     pointRate: 5,
     discountPct: 15,
@@ -120,12 +134,12 @@ const INITIAL_TIERS: LoyaltyTier[] = [
     bgCard: 'bg-blue-600',
     progressColor: 'bg-blue-500',
     benefits: [
-      { icon: <Zap className="w-3.5 h-3.5" />, text: 'Tích 5 điểm / $1 chi tiêu' },
-      { icon: <Percent className="w-3.5 h-3.5" />, text: 'Giảm 15% mọi đơn hàng' },
-      { icon: <Headphones className="w-3.5 h-3.5" />, text: 'Quản lý tài khoản riêng' },
-      { icon: <Crown className="w-3.5 h-3.5" />, text: 'Sự kiện VIP độc quyền' },
-      { icon: <Gift className="w-3.5 h-3.5" />, text: 'Voucher cao cấp hàng tháng' },
-      { icon: <Shield className="w-3.5 h-3.5" />, text: 'Bảo hành trọn đời ưu tiên' },
+      { icon: 'zap', text: 'Tích 5 điểm / 100.000đ chi tiêu' },
+      { icon: 'percent', text: 'Giảm 15% mọi đơn hàng' },
+      { icon: 'headphones', text: 'Quản lý tài khoản riêng' },
+      { icon: 'crown', text: 'Sự kiện VIP độc quyền' },
+      { icon: 'gift', text: 'Voucher cao cấp hàng tháng' },
+      { icon: 'shield', text: 'Bảo hành trọn đời ưu tiên' },
     ],
   },
 ];
@@ -189,11 +203,13 @@ const TIER_THEMES = [
 ];
 
 import { useLoyaltyConfigStore } from '../store/loyaltyConfigStore';
+import { useCrmStore } from '../store/crmStore';
 import { toast } from 'sonner';
 
 // ─────────────────────────────────────────────────────────────────────────────
 export function LoyaltyTiersPage() {
   const { config, updateConfig } = useLoyaltyConfigStore();
+  const { fetchLoyaltyTiers, addLoyaltyTier, updateLoyaltyTier, deleteLoyaltyTier } = useCrmStore();
   const [localConfig, setLocalConfig] = useState(config);
   const [isConfigSaving, setIsConfigSaving] = useState(false);
 
@@ -209,11 +225,51 @@ export function LoyaltyTiersPage() {
   const [tiers, setTiers] = useState<LoyaltyTier[]>(() => {
     try {
       const saved = localStorage.getItem('retailhub-loyalty-tiers');
-      return saved ? JSON.parse(saved) : INITIAL_TIERS;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((t: any) => ({
+            ...t,
+            benefits: Array.isArray(t.benefits)
+              ? t.benefits.map((b: any) => ({
+                  ...b,
+                  icon: typeof b.icon === 'string' ? b.icon : 'zap',
+                }))
+              : [],
+          }));
+        }
+      }
     } catch {
-      return INITIAL_TIERS;
+      localStorage.removeItem('retailhub-loyalty-tiers');
     }
+    return INITIAL_TIERS;
   });
+
+  useEffect(() => {
+    fetchLoyaltyTiers().then((apiTiers) => {
+      if (apiTiers && apiTiers.length > 0) {
+        const mapped = apiTiers.map((t: any, idx: number) => {
+          const theme = TIER_THEMES[idx % TIER_THEMES.length];
+          return {
+            key: String(t.tierCode || t.id || `TIER_${idx}`),
+            name: t.tierName || t.name || 'Hạng',
+            nameEn: t.tierCode || 'Tier',
+            minSpend: Number(t.minSpend || 0),
+            maxSpend: t.maxSpend ? Number(t.maxSpend) : null,
+            pointRate: Number(t.pointMultiplier || 1),
+            discountPct: Number(t.discountPercent || 0),
+            customerCount: Number(t.activeMembersCount || t.customerCount || 0),
+            benefits: [
+              { icon: 'zap', text: `Tích ${t.pointMultiplier || 1} điểm / 100.000đ chi tiêu` },
+              { icon: 'percent', text: `Giảm ${t.discountPercent || 0}% mọi đơn hàng` },
+            ],
+            ...theme,
+          };
+        });
+        setTiers(mapped);
+      }
+    });
+  }, [fetchLoyaltyTiers]);
 
   useEffect(() => {
     try {
@@ -535,31 +591,27 @@ export function LoyaltyTiersPage() {
 
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                Ngưỡng chi tiêu tối thiểu ($)
-                <span className="ml-1 font-normal text-gray-400">(đơn vị USD)</span>
+                Ngưỡng chi tiêu tối thiểu (VNĐ)
               </label>
               <input
                 type="number"
                 min={0}
-                step={1}
+                step={100000}
                 value={editForm.minSpend}
                 onChange={(e) => setEditForm({ ...editForm, minSpend: parseFloat(e.target.value) || 0 })}
                 className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-primary focus:border-primary"
               />
-              <p className="text-xs text-gray-400 mt-1">
-                Tương đương ~{(editForm.minSpend * 25000).toLocaleString('vi-VN')} VNĐ
-              </p>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                Ngưỡng chi tiêu tối đa ($)
+                Ngưỡng chi tiêu tối đa (VNĐ)
                 <span className="ml-1 font-normal text-gray-400">(để trống = không giới hạn)</span>
               </label>
               <input
                 type="number"
                 min={0}
-                step={1}
+                step={100000}
                 value={editForm.maxSpend ?? ''}
                 onChange={(e) => {
                   const raw = e.target.value.trim();
@@ -572,7 +624,7 @@ export function LoyaltyTiersPage() {
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
                 Tỷ lệ tích điểm
-                <span className="ml-1 font-normal text-gray-400">(điểm / $1 chi tiêu)</span>
+                <span className="ml-1 font-normal text-gray-400">(điểm / 100.000đ chi tiêu)</span>
               </label>
               <div className="flex items-center gap-3">
                 <input
@@ -587,7 +639,7 @@ export function LoyaltyTiersPage() {
                   x{editForm.pointRate}
                 </div>
               </div>
-              <p className="text-xs text-gray-400 mt-1">Mỗi $1 chi tiêu tích được {editForm.pointRate} điểm</p>
+              <p className="text-xs text-gray-400 mt-1">Mỗi 100.000đ chi tiêu tích được {editForm.pointRate} điểm</p>
             </div>
 
             <div>
@@ -681,12 +733,12 @@ export function LoyaltyTiersPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                Chi tiêu tối thiểu ($)
+                Chi tiêu tối thiểu (VNĐ)
               </label>
               <input
                 type="number"
                 min={0}
-                step={1}
+                step={100000}
                 value={editForm.minSpend}
                 onChange={(e) => setEditForm({ ...editForm, minSpend: parseInt(e.target.value, 10) || 0 })}
                 className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-primary focus:border-primary"
@@ -694,12 +746,12 @@ export function LoyaltyTiersPage() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                Chi tiêu tối đa ($)
+                Chi tiêu tối đa (VNĐ)
               </label>
               <input
                 type="number"
                 min={0}
-                step={1}
+                step={100000}
                 value={editForm.maxSpend ?? ''}
                 onChange={(e) => {
                   const raw = e.target.value.trim();
@@ -713,7 +765,7 @@ export function LoyaltyTiersPage() {
 
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Điểm / $1</label>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Điểm/100kđ</label>
               <input
                 type="number"
                 min={1}
@@ -835,10 +887,10 @@ function TierCard({ tier, totalCustomers, onEdit, onDelete }: TierCardProps) {
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1">
           <ChevronRight className={`w-3 h-3 ${tier.iconColor}`} />
           {tier.minSpend === 0
-            ? `Từ $0 – $${tier.maxSpend}`
+            ? `Từ 0đ – ${tier.maxSpend ? tier.maxSpend.toLocaleString('vi-VN') + 'đ' : 'Không giới hạn'}`
             : tier.maxSpend === null
-              ? `Từ $${tier.minSpend.toLocaleString()} trở lên`
-              : `$${tier.minSpend.toLocaleString()} – $${tier.maxSpend.toLocaleString()}`
+              ? `Từ ${tier.minSpend.toLocaleString('vi-VN')}đ trở lên`
+              : `${tier.minSpend.toLocaleString('vi-VN')}đ – ${tier.maxSpend.toLocaleString('vi-VN')}đ`
           }
         </p>
       </div>
@@ -847,7 +899,7 @@ function TierCard({ tier, totalCustomers, onEdit, onDelete }: TierCardProps) {
       <div className="px-5 pb-4 grid grid-cols-2 gap-3">
         <div className="bg-white/60 dark:bg-black/20 rounded-xl p-3 text-center backdrop-blur-sm">
           <p className={`text-lg font-bold ${tier.textAccent}`}>x{tier.pointRate}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 leading-tight">điểm/$1</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 leading-tight">điểm/100kđ</p>
         </div>
         <div className="bg-white/60 dark:bg-black/20 rounded-xl p-3 text-center backdrop-blur-sm">
           <p className={`text-lg font-bold ${tier.textAccent}`}>{tier.discountPct}%</p>
@@ -862,7 +914,7 @@ function TierCard({ tier, totalCustomers, onEdit, onDelete }: TierCardProps) {
           {tier.benefits.map((b, i) => (
             <li key={i} className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
               <div className={`flex-shrink-0 ${tier.textAccent}`}>
-                {b.icon}
+                <RenderBenefitIcon icon={b.icon} className="w-3.5 h-3.5" />
               </div>
               <span>{b.text}</span>
             </li>

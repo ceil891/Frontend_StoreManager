@@ -210,6 +210,11 @@ interface CRMState {
   updateMarketingCampaign: (id: string, data: Partial<MarketingCampaignRecord>) => Promise<void>;
   deleteMarketingCampaign: (id: string) => Promise<void>;
 
+  fetchLoyaltyTiers: () => Promise<any[]>;
+  addLoyaltyTier: (item: any) => Promise<any>;
+  updateLoyaltyTier: (id: string, item: any) => Promise<any>;
+  deleteLoyaltyTier: (id: string) => Promise<void>;
+
   fetchPartnerGroups: () => Promise<void>;
   addPartnerGroup: (item: Omit<PartnerGroupRecord, 'id'>) => Promise<void>;
   updatePartnerGroup: (id: string, data: Partial<PartnerGroupRecord>) => Promise<void>;
@@ -570,6 +575,60 @@ export const useCrmStore = create<CRMState>()((set) => ({
     } catch (e: any) {
       console.error(e);
       set((state) => ({ marketingCampaigns: state.marketingCampaigns.filter((mc) => mc.id !== id), isLoading: false }));
+    }
+  },
+
+  fetchLoyaltyTiers: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await crmService.fetchLoyaltyTiers();
+      if (data && data.length > 0) set({ loyaltyTiers: data });
+      set({ isLoading: false });
+      return data;
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      return [];
+    }
+  },
+
+  addLoyaltyTier: async (item) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await crmService.addLoyaltyTier(item);
+      set((state) => ({ loyaltyTiers: [created, ...state.loyaltyTiers], isLoading: false }));
+      return created;
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  updateLoyaltyTier: async (id, item) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updated = await crmService.updateLoyaltyTier(id, item);
+      set((state) => ({
+        loyaltyTiers: state.loyaltyTiers.map((t) => (t.id === id ? { ...t, ...updated } : t)),
+        isLoading: false,
+      }));
+      return updated;
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  deleteLoyaltyTier: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await crmService.deleteLoyaltyTier(id);
+      set((state) => ({ loyaltyTiers: state.loyaltyTiers.filter((t) => String(t.id) !== String(id)), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ loyaltyTiers: state.loyaltyTiers.filter((t) => String(t.id) !== String(id)), isLoading: false }));
     }
   },
 

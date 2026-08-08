@@ -351,7 +351,7 @@ export function ProductBatchesPage() {
       <Modal
         isOpen={!!selectedBatch}
         onClose={() => setSelectedBatch(null)}
-        title={selectedBatch ? `Batch Specification: ${selectedBatch.batchNumber}` : 'Batch Details'}
+        title={selectedBatch ? `Thông tin lô hàng: ${selectedBatch.batchNumber}` : 'Chi tiết lô hàng'}
         width="max-w-lg"
       >
         {selectedBatch && (
@@ -373,12 +373,12 @@ export function ProductBatchesPage() {
                   <p className={`text-xs font-semibold uppercase tracking-wider ${
                     selectedBatch.qualityStatus === 'PASSED_QA' ? 'text-emerald-800 dark:text-emerald-400' : selectedBatch.qualityStatus === 'QUARANTINED' ? 'text-amber-800 dark:text-amber-400' : 'text-red-800 dark:text-red-400'
                   }`}>
-                    Remaining Batch Valuation
+                    Giá trị tồn kho lô
                   </p>
                   <p className={`text-xl font-bold ${
                     selectedBatch.qualityStatus === 'PASSED_QA' ? 'text-emerald-700 dark:text-emerald-400' : selectedBatch.qualityStatus === 'QUARANTINED' ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400'
                   }`}>
-                    ${(selectedBatch.remainingUnits * selectedBatch.unitCost).toFixed(2)}
+                    {(selectedBatch.remainingUnits * (selectedBatch.unitCost || 0)).toLocaleString('vi-VN')} ₫
                   </p>
                 </div>
               </div>
@@ -387,20 +387,20 @@ export function ProductBatchesPage() {
                 selectedBatch.qualityStatus === 'QUARANTINED' ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
                 'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100'
               }`}>
-                {selectedBatch.qualityStatus.replace('_', ' ')}
+                {selectedBatch.qualityStatus === 'PASSED_QA' ? 'Đã duyệt QA' : selectedBatch.qualityStatus === 'QUARANTINED' ? 'Cách ly' : selectedBatch.qualityStatus}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Storage Location
+                  <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Vị trí lưu kho
                 </div>
                 <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedBatch.location}</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Calendar className="w-4 h-4 text-red-500" /> Expiry Cutoff
+                  <Calendar className="w-4 h-4 text-red-500" /> Hạn sử dụng
                 </div>
                 <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedBatch.expiryDate}</p>
               </div>
@@ -408,43 +408,44 @@ export function ProductBatchesPage() {
 
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Target Product Name:</span>
+                <span className="text-gray-500 dark:text-gray-400">Tên sản phẩm:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedBatch.productName}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">SKU Barcode Anchor:</span>
+                <span className="text-gray-500 dark:text-gray-400">Mã SKU / Barcode:</span>
                 <span className="font-mono font-semibold text-gray-900 dark:text-white">{selectedBatch.sku}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Manufacture Date:</span>
+                <span className="text-gray-500 dark:text-gray-400">Ngày sản xuất:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedBatch.manufactureDate}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Unit Cost Valuation:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">${selectedBatch.unitCost.toFixed(2)} / unit</span>
+                <span className="text-gray-500 dark:text-gray-400">Đơn giá vốn:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{(selectedBatch.unitCost || 0).toLocaleString('vi-VN')} ₫ / sản phẩm</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Remaining vs Initial Stock:</span>
+                <span className="text-gray-500 dark:text-gray-400">Tồn kho / Ban đầu:</span>
                 <span className="font-bold text-gray-900 dark:text-white">
-                  {selectedBatch.remainingUnits} / {selectedBatch.initialUnits} units
+                  {selectedBatch.remainingUnits} / {selectedBatch.initialUnits} sản phẩm
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Origin Supplier Vendor:</span>
+                <span className="text-gray-500 dark:text-gray-400">Nhà cung cấp:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedBatch.supplierName}</span>
               </div>
               <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
-                <span className="text-gray-500 dark:text-gray-400">QA Certified Inspector:</span>
+                <span className="text-gray-500 dark:text-gray-400">Người kiểm định QA:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedBatch.inspector}</span>
               </div>
 
               {selectedBatch.notes && (
                 <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Intake Verification Notes</span>
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Ghi chú kiểm định nhập kho</span>
                   <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedBatch.notes}</p>
                 </div>
               )}
             </div>
+
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex flex-wrap gap-3">
               {selectedBatch.qualityStatus !== 'EXPIRED' && (
@@ -518,7 +519,8 @@ export function ProductBatchesPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chọn Sản phẩm hệ thống (SKU) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chọn Sản phẩm hệ thống *</label>
+
               <SearchLookupModal
                 title="Chọn Sản Phẩm"
                 iconType="package"

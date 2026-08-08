@@ -356,14 +356,15 @@ export function CategoriesPage() {
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
               <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                <FileText className="w-4 h-4" /> View Associated Products
+                <FileText className="w-4 h-4" /> Xem sản phẩm thuộc danh mục
               </button>
               {selectedCategory.status !== 'ACTIVE' && (
                 <button className="px-4 py-2.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 font-semibold rounded-lg hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors text-sm">
-                  <CheckCircle2 className="w-4 h-4 inline mr-1" /> Restore Active Status
+                  <CheckCircle2 className="w-4 h-4 inline mr-1" /> Khôi phục trạng thái hoạt động
                 </button>
               )}
             </div>
+
           </div>
         )}
       </Modal>
@@ -401,7 +402,8 @@ export function CategoriesPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục cấp trên (Tree Hierarchy)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục cấp trên</label>
+
                 <TreeSelect
                   value={editingCategory.parentId}
                   onChange={(val) => setEditingCategory({ ...editingCategory, parentId: val || undefined })}
@@ -501,11 +503,12 @@ export function CategoriesPage() {
                   value={editingCategory.department || ''}
                   onChange={(e) => setEditingCategory({ ...editingCategory, department: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                  placeholder="Ví dụ: Fashion, Electronics..."
+                  placeholder="Ví dụ: Thời trang, Điện tử..."
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người quản lý (Lead Manager)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người quản lý</label>
+
                 <input
                   type="text"
                   value={editingCategory.manager || ''}

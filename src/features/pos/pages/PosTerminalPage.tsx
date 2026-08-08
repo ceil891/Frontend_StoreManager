@@ -12,7 +12,7 @@ import { Modal } from '@/shared/components/ui/Modal';
 import { PrintInvoiceModal, type PrintInvoiceData } from '@/shared/components/ui/PrintInvoiceModal';
 import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
 import { useSalesStore, BRANCH_NAME_BY_ID, deriveShiftId, WALK_IN_CUSTOMER_ID } from '@/features/sales/store/salesStore';
-import { useAuthStore } from '@/features/auth/store/authStore';
+import { useAuthStore, useAuthPermissions } from '@/features/auth/store/authStore';
 import { Link } from 'react-router';
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 import { useCrmStore } from '@/features/crm/store/crmStore';
@@ -20,6 +20,8 @@ import { useLoyaltyConfigStore } from '@/features/crm/store/loyaltyConfigStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
 import { useDebounce } from '@/shared/hooks/useDebounce';
 import { toast } from 'sonner';
+
+import { axiosClient } from '@/shared/lib/axiosClient';
 
 // ─── POS Vouchers ─────────────────────────────────────────────
 
@@ -80,7 +82,32 @@ function SafeProductImage({ src, alt, className, iconClassName }: { src?: string
 
 export function PosTerminalPage() {
   const user = useAuthStore((s) => s.user);
-  const { items, addItem, removeItem, updateQuantity, getTotal, clearCart, tabs, activeTabId, createTab, switchTab, closeTab } = usePosCartStore();
+  const {
+    items,
+    addItem,
+    removeItem,
+    updateQuantity,
+    getTotal,
+    clearCart,
+    tabs,
+    activeTabId,
+    createTab,
+    switchTab,
+    closeTab,
+    customer: activeCustomer,
+    setCustomer: setActiveCustomer,
+    customerPhone,
+    setCustomerPhone,
+    selectedPaymentId,
+    setSelectedPaymentId,
+    appliedVoucher,
+    setAppliedVoucher,
+    usedPoints,
+    setUsedPoints,
+    cashGiven,
+    setCashGiven,
+  } = usePosCartStore();
+
   const paymentMethodsFromConfig = usePosConfigStore((s) => s.paymentMethods);
   const addSaleOrder = useSalesStore((s) => s.addSaleOrder);
   const { products, fetchProducts, categories, fetchCategories } = useInventoryStore();
@@ -94,33 +121,43 @@ export function PosTerminalPage() {
     fetchBranches();
   }, [fetchProducts, fetchCategories, fetchCustomers, fetchBranches]);
 
+  const [selectedPosBranchId, setSelectedPosBranchId] = useState<string>('');
+
+  const permissions = useAuthPermissions();
+  const canChangeBranch = user?.role === 'SUPER_ADMIN' || permissions.includes('pos:branch:change');
+
   const { activeBranchId, activeBranchName, isBranchUnassigned } = useMemo(() => {
-    if (user?.branchId) {
-      const userBranchId = String(user.branchId);
-      const matched = (branches || []).find((b) => String(b.id) === userBranchId || b.branchCode === userBranchId);
-      return {
-        activeBranchId: userBranchId,
-        activeBranchName: matched?.name || BRANCH_NAME_BY_ID[userBranchId] || `Chi nhánh ${userBranchId}`,
-        isBranchUnassigned: false,
-      };
-    }
-
-    // Tài khoản chưa gán branchId
-    if (user?.role === 'SUPER_ADMIN') {
-      const firstBranch = branches[0];
-      return {
-        activeBranchId: firstBranch ? String(firstBranch.id) : '1',
-        activeBranchName: firstBranch ? `${firstBranch.name}` : 'Chi nhánh chính',
-        isBranchUnassigned: false,
-      };
-    }
-
+    const targetId = selectedPosBranchId || (user?.branchId ? String(user.branchId) : (branches[0] ? String(branches[0].id) : '1'));
+    const matched = (branches || []).find((b) => String(b.id) === targetId || b.branchCode === targetId || `BR-${String(b.id).padStart(3, '0')}` === targetId);
+    const resolvedId = matched ? String(matched.id) : targetId;
     return {
-      activeBranchId: branches[0] ? String(branches[0].id) : null,
-      activeBranchName: 'Chưa phân công chi nhánh',
-      isBranchUnassigned: true,
+      activeBranchId: resolvedId,
+      activeBranchName: matched?.name || BRANCH_NAME_BY_ID[resolvedId] || `Chi nhánh ${resolvedId}`,
+      isBranchUnassigned: !user?.branchId && !selectedPosBranchId && user?.role !== 'SUPER_ADMIN',
     };
-  }, [branches, user]);
+  }, [branches, user, selectedPosBranchId]);
+
+  // Branch stock mapping for POS
+  const [branchStockMap, setBranchStockMap] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!activeBranchId) return;
+    axiosClient.get<any, any>(`/inventories/branches/${activeBranchId}/inventory`)
+      .then((res) => {
+        const list: any[] = Array.isArray(res) ? res : (res?.data || res?.content || res || []);
+        const map: Record<string, number> = {};
+        list.forEach((b: any) => {
+          const qty = Number(b.availableQuantity ?? b.onHandQuantity ?? 0);
+          if (b.productId) map[String(b.productId)] = qty;
+          if (b.productVariantId) map[String(b.productVariantId)] = qty;
+          if (b.sku) map[b.sku] = qty;
+        });
+        setBranchStockMap(map);
+      })
+      .catch((err) => {
+        console.warn('Failed to fetch POS branch inventory:', err);
+      });
+  }, [activeBranchId]);
 
   const productsList = useMemo(() => {
     return (products || [])
@@ -133,6 +170,10 @@ export function PosTerminalPage() {
         else if (tc === 'VAT_10') rate = 0.10;
         else if (tc === 'EXEMPT') rate = 0.00;
         const barcode = p.barcodes && p.barcodes.length > 0 ? p.barcodes[0] : (p.sku || String(p.id));
+
+        // Tồn kho hiển thị POS = Tồn kho khả dụng chuẩn tại Chi nhánh được chọn
+        const bStock = branchStockMap[String(p.id)] ?? branchStockMap[p.sku] ?? (p as any).branchStocks?.[activeBranchId] ?? 0;
+
         return {
           id: String(p.id),
           name: p.name || '',
@@ -142,11 +183,11 @@ export function PosTerminalPage() {
           barcode,
           category: p.category || 'Tất cả',
           unit: p.unit || 'Cái',
-          stock: Number(p.onHand || 0),
+          stock: Number(bStock),
           taxRate: rate,
         };
       });
-  }, [products, categories]);
+  }, [products, categories, branchStockMap, activeBranchId]);
 
   const categoryTabs = useMemo(() => {
     const dbCats = (categories || []).map((c) => c.categoryName).filter(Boolean);
@@ -167,13 +208,9 @@ export function PosTerminalPage() {
       isCash: m.providerType === 'CASH_DRAWER',
     }));
   }, [paymentMethodsFromConfig]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('Tất cả');
-
-  // Customer
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [activeCustomer, setActiveCustomer] = useState<{ id: string; name: string; phone: string; points: number } | null>(null);
-  const [usedPoints, setUsedPoints] = useState(0);
 
   // Quick Create Customer Modal State
   const [isQuickCustomerOpen, setIsQuickCustomerOpen] = useState(false);
@@ -272,13 +309,10 @@ export function PosTerminalPage() {
 
   // Voucher
   const [voucherCode, setVoucherCode] = useState('');
-  const [appliedVoucher, setAppliedVoucher] = useState<{ code: string; type: 'PERCENT' | 'FLAT'; value: number } | null>(null);
   const [voucherError, setVoucherError] = useState('');
 
   // Payment modal
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
-  const [selectedPaymentId, setSelectedPaymentId] = useState(FALLBACK_PAYMENTS[0].id);
-  const [cashGiven, setCashGiven] = useState('');
   const [paymentState, setPaymentState] = useState<'idle' | 'processing' | 'success'>('idle');
   const [currentOrderCode, setCurrentOrderCode] = useState('');
 
@@ -541,16 +575,15 @@ export function PosTerminalPage() {
       setPaymentState('success');
 
       setTimeout(() => {
-        clearCart();
-        setAppliedVoucher(null);
+        if (tabs.length > 1) {
+          closeTab(activeTabId);
+        } else {
+          clearCart();
+        }
         setVoucherError('');
-        setActiveCustomer(null);
-        setCustomerPhone('');
-        setUsedPoints(0);
         setPaymentState('idle');
         setIsPaymentOpen(false);
-        setCashGiven('');
-        setIsPrintInvoiceOpen(true);
+        toast.success(`Thanh toán thành công đơn hàng ${code}!`);
       }, 1000);
     };
 
@@ -611,15 +644,34 @@ export function PosTerminalPage() {
               <span>{currentTime.toLocaleDateString('vi-VN')} {currentTime.toLocaleTimeString('vi-VN')}</span>
             </div>
             <div className="flex items-center gap-2">
-              {isBranchUnassigned ? (
-                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1" title="Tài khoản này chưa được gán chi nhánh cụ thể trong Quản lý Nhân sự">
-                  ⚠️ Chưa phân công chi nhánh
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1" title="Máy POS cố định gắn liền với tài khoản nhân viên & ca bán hàng">
-                  💻 POS 01 • {activeBranchName}
-                </span>
-              )}
+              <div className="flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-lg text-[11px] font-bold shadow-xs">
+                <span className="hidden sm:inline">💻 POS 01 •</span>
+                {canChangeBranch ? (
+                  <select
+                    value={activeBranchId || ''}
+                    onChange={(e) => {
+                      setSelectedPosBranchId(e.target.value);
+                      const bName = branches.find(b => String(b.id) === e.target.value)?.name || e.target.value;
+                      toast.info(`Đã chuyển kho POS sang: ${bName}`);
+                    }}
+                    className="bg-transparent font-bold outline-none cursor-pointer text-indigo-900 dark:text-indigo-200"
+                  >
+                    {branches.length > 0 ? (
+                      branches.map((b) => (
+                        <option key={b.id} value={String(b.id)} className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                          {b.name} ({b.branchCode || `CN-${b.id}`})
+                        </option>
+                      ))
+                    ) : (
+                      <option value="1">CH Quận 1 (Trụ sở chính)</option>
+                    )}
+                  </select>
+                ) : (
+                  <span className="font-bold text-indigo-900 dark:text-indigo-200">
+                    {activeBranchName}
+                  </span>
+                )}
+              </div>
               <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded border border-emerald-100 dark:border-emerald-800">
                 {getShift(currentTime)}
               </p>
@@ -722,14 +774,20 @@ export function PosTerminalPage() {
             return (
               <div
                 key={t.id}
-                onClick={() => switchTab(t.id)}
+                onClick={() => {
+                  if (isPaymentOpen) {
+                    setIsPaymentOpen(false);
+                    setPaymentState('idle');
+                  }
+                  switchTab(t.id);
+                }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all select-none ${
                   isActive
                     ? 'bg-emerald-600 text-white shadow-sm'
                     : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'
                 }`}
               >
-                <span>{t.name}{t.items.length > 0 ? ` (${t.items.length})` : ''}</span>
+                <span>{t.name}</span>
                 {t.items.length > 0 && (
                   <span
                     className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
@@ -744,6 +802,10 @@ export function PosTerminalPage() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (isPaymentOpen && isActive) {
+                        setIsPaymentOpen(false);
+                        setPaymentState('idle');
+                      }
                       closeTab(t.id);
                     }}
                     className="opacity-60 hover:opacity-100 p-0.5 rounded hover:bg-black/10 transition-opacity"
@@ -757,7 +819,13 @@ export function PosTerminalPage() {
           })}
           <button
             type="button"
-            onClick={() => createTab()}
+            onClick={() => {
+              if (isPaymentOpen) {
+                setIsPaymentOpen(false);
+                setPaymentState('idle');
+              }
+              createTab();
+            }}
             className="flex items-center gap-1 px-2 py-1 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 border border-emerald-300 dark:border-emerald-800 rounded-lg text-xs font-bold whitespace-nowrap transition-colors"
             title="⚡ Mở giỏ/đơn bán dở mới"
           >

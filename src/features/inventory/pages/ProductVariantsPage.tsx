@@ -119,14 +119,22 @@ export function ProductVariantsPage() {
     try {
       const [prodsRes, attrsRes] = await Promise.allSettled([
         axiosClient.get('/catalog/products'),
-        axiosClient.get('/catalog/attributes')
+        axiosClient.get('/attributes')
       ]);
 
       const prodsData: any = prodsRes.status === 'fulfilled' ? prodsRes.value : [];
-      const attrsData: any = attrsRes.status === 'fulfilled' ? attrsRes.value : [];
+      let attrsData: any = attrsRes.status === 'fulfilled' ? attrsRes.value : [];
 
-      const fetchedProds = Array.isArray(prodsData) ? prodsData : prodsData?.content || [];
-      const fetchedAttrs = Array.isArray(attrsData) ? attrsData : attrsData?.content || [];
+      if (!attrsData || (Array.isArray(attrsData) && attrsData.length === 0)) {
+        try {
+          attrsData = await axiosClient.get('/catalog/attributes');
+        } catch {
+          // ignore
+        }
+      }
+
+      const fetchedProds = Array.isArray(prodsData) ? prodsData : prodsData?.content || prodsData?.data || [];
+      const fetchedAttrs = Array.isArray(attrsData) ? attrsData : attrsData?.content || attrsData?.data || [];
 
       const finalProds = fetchedProds.length > 0 ? fetchedProds : defaultParentProducts;
       const finalAttrs = fetchedAttrs.length > 0 ? fetchedAttrs : defaultAttributes;
@@ -148,43 +156,54 @@ export function ProductVariantsPage() {
   const handleOpenCreate = () => {
     const firstId = productsList[0]?.id ? String(productsList[0].id) : '1';
     setSelectedProductId(firstId);
-    setNewSku(`SKU-POLO-M-RED-${Math.floor(100 + Math.random() * 900)}`);
-    setNewBarcode(`893${Math.floor(100000000 + Math.random() * 900000000)}`);
-    setNewPrice(350000);
+    setNewSku('');
+    setNewBarcode('');
+    setNewPrice('');
     
-    // Initial pre-filled attribute row
+    // Start with empty attribute rows - user will select from real API data
     setSelectedAttributes([
-      { attributeId: '1', valueId: '102' },
-      { attributeId: '2', valueId: '201' }
+      { attributeId: '', valueId: '' },
+      { attributeId: '', valueId: '' }
     ]);
-    setAttributeValuesMap(defaultAttributeValues);
+    setAttributeValuesMap({});
     setIsCreateOpen(true);
     loadCreationData();
   };
 
   const handleAttributeChange = async (index: number, attrId: string) => {
-    const updatedSelected = [...selectedAttributes];
+    if (!attrId) {
+      const updated = [...selectedAttributes];
+      updated[index] = { attributeId: '', valueId: '' };
+      setSelectedAttributes(updated);
+      return;
+    }
+
     const defaultVals = defaultAttributeValues[attrId] || [];
-    const firstValId = defaultVals[0]?.id || '';
+    let fetchedVals: any[] = [];
+
+    try {
+      let res: any;
+      try {
+        res = await axiosClient.get(`/attributes/${attrId}/values`);
+      } catch {
+        res = await axiosClient.get(`/catalog/attributes/${attrId}/values`);
+      }
+      fetchedVals = Array.isArray(res) ? res : res?.content || res?.data || [];
+    } catch (err) {
+      console.error(err);
+    }
+
+    const finalVals = fetchedVals.length > 0 ? fetchedVals : defaultVals;
+    const firstValId = finalVals[0]?.id ? String(finalVals[0].id) : '';
+
+    const updatedSelected = [...selectedAttributes];
     updatedSelected[index] = { attributeId: attrId, valueId: firstValId };
     setSelectedAttributes(updatedSelected);
 
-    if (!attrId) return;
-
-    try {
-      const vals: any = await axiosClient.get(`/catalog/attributes/${attrId}/values`);
-      const fetchedVals = Array.isArray(vals) ? vals : vals?.content || [];
-      setAttributeValuesMap(prev => ({
-        ...prev,
-        [attrId]: fetchedVals.length > 0 ? fetchedVals : defaultVals
-      }));
-    } catch (err) {
-      console.error(err);
-      setAttributeValuesMap(prev => ({
-        ...prev,
-        [attrId]: defaultVals
-      }));
-    }
+    setAttributeValuesMap(prev => ({
+      ...prev,
+      [attrId]: finalVals
+    }));
   };
 
   const handleValueChange = (index: number, valId: string) => {
@@ -541,7 +560,7 @@ export function ProductVariantsPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mã vạch (Barcode)</label>
+            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mã vạch</label>
             <input
               type="text"
               value={editingItem.barcode || ''}
@@ -613,26 +632,27 @@ export function ProductVariantsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mã SKU biến thể</label>
+              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mã SKU biến thể (Tự động sinh nếu trống)</label>
               <input
                 type="text"
                 value={newSku}
                 onChange={(e) => setNewSku(e.target.value)}
-                placeholder="VD: SKU-POLO-M-RED"
+                placeholder="Để trống hệ thống sẽ tự sinh..."
                 className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500/50"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mã vạch (Barcode)</label>
+              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mã vạch (Tự động sinh nếu trống)</label>
               <input
                 type="text"
                 value={newBarcode}
                 onChange={(e) => setNewBarcode(e.target.value)}
-                placeholder="Nhập mã vạch..."
+                placeholder="Để trống hệ thống sẽ tự sinh..."
                 className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500/50"
               />
             </div>
           </div>
+
 
           <div>
             <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Giá bán riêng (₫)</label>

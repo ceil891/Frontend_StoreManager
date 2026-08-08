@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-  UserPlus, Download, Star, Eye, Edit, Trash2, Award, Gift, Zap, BadgeCheck, Users,
+  UserPlus, Download, Star, Eye, Edit, Trash2, Award, Gift, Zap, BadgeCheck, Users, Camera, Upload,
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -15,6 +15,7 @@ import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
+import { compressImage } from '@/shared/utils/imageCompressor';
 
 const TIER_THRESHOLDS = {
   BRONZE: 0,
@@ -155,6 +156,30 @@ export function CustomersPage() {
       toast.success(`Đã cập nhật thông tin khách hàng: ${cleanName}`);
     }
     setIsModalOpen(false);
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Vui lòng chọn tệp hình ảnh (JPG, PNG, WebP)!');
+      return;
+    }
+    try {
+      const compressed = await compressImage(file, { maxWidth: 400, maxHeight: 400, quality: 0.85 });
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64Url = event.target?.result as string;
+        if (base64Url) {
+          setEditingCustomer((prev) => ({ ...prev, avatarUrl: base64Url }));
+          toast.success('Đã chọn & tải ảnh đại diện thành công!');
+        }
+      };
+      reader.readAsDataURL(compressed);
+    } catch (err) {
+      console.error('Error processing avatar image:', err);
+      toast.error('Lỗi khi xử lý hình ảnh!');
+    }
   };
 
   const handleDeleteConfirm = () => {
@@ -423,6 +448,41 @@ export function CustomersPage() {
           <form onSubmit={handleSaveCustomer} className="space-y-6">
             <div className="erp-form-section space-y-4">
               <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-150 dark:border-gray-700 pb-2 mb-4">Thông tin cơ bản & Định danh</h3>
+
+              {/* Avatar Upload Block */}
+              <div className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 mb-4">
+                <div className="relative group shrink-0">
+                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-emerald-500 bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm">
+                    {editingCustomer.avatarUrl ? (
+                      <img src={editingCustomer.avatarUrl} alt="Avatar Customer" className="w-full h-full object-cover" />
+                    ) : (
+                      <UserAvatar name={editingCustomer.name || 'Khách hàng'} size="lg" />
+                    )}
+                  </div>
+                  <label className="absolute bottom-0 right-0 p-1 bg-emerald-600 text-white rounded-full cursor-pointer shadow hover:bg-emerald-700 transition-all hover:scale-110">
+                    <Camera className="w-3.5 h-3.5" />
+                    <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
+                  </label>
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white">Ảnh đại diện khách hàng</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Nhấp để chọn tệp ảnh từ máy tính (PNG, JPG, WebP) hoặc dán liên kết ảnh bên dưới.</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs font-semibold cursor-pointer hover:bg-emerald-100 transition-colors">
+                      <Upload className="w-3.5 h-3.5" />
+                      Tải ảnh lên
+                      <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
+                    </label>
+                    <input
+                      type="text"
+                      value={editingCustomer.avatarUrl || ''}
+                      onChange={(e) => setEditingCustomer((prev) => ({ ...prev, avatarUrl: e.target.value }))}
+                      placeholder="Hoặc dán URL ảnh..."
+                      className="flex-1 px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>

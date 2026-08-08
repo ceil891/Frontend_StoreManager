@@ -21,6 +21,7 @@ export function RolePermissionMatrix({
   activeModule,
 }: RolePermissionMatrixProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('accordion');
+  const [filterMode, setFilterMode] = useState<'all' | 'selected' | 'unselected'>('all');
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>(
     MODULE_GROUPS.reduce((acc, g) => ({ ...acc, [g.key]: true }), {})
   );
@@ -84,6 +85,26 @@ export function RolePermissionMatrix({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Filter tabs */}
+      {!isReadOnly && (
+        <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 w-fit">
+          {(['all', 'selected', 'unselected'] as const).map(mode => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setFilterMode(mode)}
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                filterMode === mode
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+              }`}
+            >
+              {mode === 'all' ? 'Tất cả' : mode === 'selected' ? `☑ Đã chọn (${selectedPermissions.length})` : '☐ Chưa chọn'}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Header controls */}
       <div className="flex flex-col sm:flex-row justify-between items-center bg-gray-50 dark:bg-gray-900/50 p-2 rounded-lg border border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-2">
@@ -145,6 +166,15 @@ export function RolePermissionMatrix({
             const isPartiallySelected = selectedInModule > 0 && !isAllSelected;
             const isExpanded = expandedModules[group.key];
 
+            // Apply filterMode within module
+            const visiblePerms = filterMode === 'selected'
+              ? modulePerms.filter(p => selectedPermissions.includes(p.key))
+              : filterMode === 'unselected'
+              ? modulePerms.filter(p => !selectedPermissions.includes(p.key))
+              : modulePerms;
+
+            if (visiblePerms.length === 0 && filterMode !== 'all') return null;
+
             return (
               <div key={group.key} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800">
                 <div 
@@ -158,8 +188,16 @@ export function RolePermissionMatrix({
                     <span className="text-base font-bold flex items-center gap-2">
                       <span className="w-6 text-center">{group.icon}</span> {group.label}
                     </span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-medium">
-                      {selectedInModule} / {modulePerms.length}
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                        isAllSelected
+                          ? 'bg-primary/10 text-primary'
+                          : isPartiallySelected
+                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                      }`}
+                    >
+                      {selectedInModule}/{modulePerms.length}
                     </span>
                   </div>
                   {!isReadOnly && (
@@ -189,31 +227,42 @@ export function RolePermissionMatrix({
                       className="border-t border-gray-100 dark:border-gray-700 p-4 bg-gray-50/50 dark:bg-gray-900/30"
                     >
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                        {modulePerms.map(perm => {
+                        {visiblePerms.map(perm => {
                           const isSelected = selectedPermissions.includes(perm.key);
                           const matchesSearch = searchTerm && (perm.name.toLowerCase().includes(searchTerm.toLowerCase()) || perm.action.toLowerCase().includes(searchTerm.toLowerCase()));
                           
-                          return (
-                            <div 
-                              key={perm.key}
-                              onClick={() => togglePermission(perm.key)}
-                              className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer select-none transition-all ${
-                                isSelected 
-                                  ? 'bg-primary/5 dark:bg-primary/10 border-primary shadow-sm' 
-                                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                              } ${matchesSearch ? 'ring-2 ring-emerald-400' : ''} ${isReadOnly ? 'opacity-80 cursor-default' : ''}`}
-                            >
-                              <div className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-gray-300 dark:border-gray-600'}`}>
-                                {isSelected && <Check className="w-3 h-3 text-white" />}
+                          return (() => {
+                            // Strip common long prefix for display, keep full in tooltip
+                            const displayName = perm.name
+                              .replace(/^Quyền truy cập chức năng\s+/i, '')
+                              .replace(/^Quyền\s+/i, '');
+                            const shortDisplay = displayName.length > 32
+                              ? displayName.slice(0, 30) + '…'
+                              : displayName;
+
+                            return (
+                              <div
+                                key={perm.key}
+                                onClick={() => togglePermission(perm.key)}
+                                title={perm.name}
+                                className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer select-none transition-all ${
+                                  isSelected
+                                    ? 'bg-primary/5 dark:bg-primary/10 border-primary shadow-sm'
+                                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                                } ${matchesSearch ? 'ring-2 ring-emerald-400' : ''} ${isReadOnly ? 'opacity-80 cursor-default' : ''}`}
+                              >
+                                <div className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-gray-300 dark:border-gray-600'}`}>
+                                  {isSelected && <Check className="w-3 h-3 text-white" />}
+                                </div>
+                                <div className="flex-1 min-w-0 leading-tight">
+                                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-200" style={{ wordBreak: 'break-word' }}>{shortDisplay}</p>
+                                  <span className="text-[10px] font-mono text-gray-500 dark:text-gray-400 block mt-0.5 bg-gray-100 dark:bg-gray-800 px-1 rounded inline-block">
+                                    {MODULE_VIETNAMESE_MAP[perm.module] || perm.module} • {ACTION_VIETNAMESE_MAP[perm.action] || perm.action}
+                                  </span>
+                                </div>
                               </div>
-                              <div className="flex-1 min-w-0 leading-tight">
-                                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{perm.name}</p>
-                                <span className="text-[10px] font-mono text-gray-500 dark:text-gray-400 block mt-0.5 truncate bg-gray-100 dark:bg-gray-800 px-1 rounded inline-block">
-                                  {MODULE_VIETNAMESE_MAP[perm.module] || perm.module} • {ACTION_VIETNAMESE_MAP[perm.action] || perm.action}
-                                </span>
-                              </div>
-                            </div>
-                          );
+                            );
+                          })()
                         })}
                       </div>
                     </motion.div>

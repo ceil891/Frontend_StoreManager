@@ -474,7 +474,8 @@ export function StockLedgerPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Chọn Sản phẩm (SKU) *</label>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Chọn Sản phẩm *</label>
+
               <select
                 value={editingEntry.sku || ''}
                 onChange={(e) => {

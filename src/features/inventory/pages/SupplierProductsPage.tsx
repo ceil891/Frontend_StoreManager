@@ -7,8 +7,10 @@ import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
+import { toast } from 'sonner';
 import { useInventoryStore, type SupplierProductRecord } from '@/features/inventory/store/inventoryStore';
 import { usePurchaseStore } from '@/features/purchase/store/purchaseStore';
+
 
 export function SupplierProductsPage() {
   const {
@@ -354,17 +356,17 @@ export function SupplierProductsPage() {
                 type="text"
                 value={editingItem.supplierSku || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, supplierSku: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full h-[42px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
                 placeholder="SKU đối tác định nghĩa..."
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thời gian giao hàng chuẩn (Lead Time - Ngày) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thời gian giao hàng chuẩn (ngày) *</label>
               <input
                 type="number"
                 value={editingItem.leadTimeDays || 3}
                 onChange={(e) => setEditingItem({ ...editingItem, leadTimeDays: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full h-[42px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
                 required
               />
             </div>
@@ -373,17 +375,19 @@ export function SupplierProductsPage() {
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá nhập thỏa thuận hợp đồng *</label>
-              <div className="flex gap-2">
-                <CurrencyInput
-                  value={editingItem.unitPrice || 0}
-                  onChange={(val) => setEditingItem(prev => ({ ...prev, unitPrice: val }))}
-                  currencySymbol={editingItem.currency === 'USD' ? '$' : '₫'}
-                  placeholder="0"
-                />
+              <div className="flex gap-2 items-center">
+                <div className="flex-1 h-[42px]">
+                  <CurrencyInput
+                    value={editingItem.unitPrice || 0}
+                    onChange={(val) => setEditingItem(prev => ({ ...prev, unitPrice: val }))}
+                    currencySymbol={editingItem.currency === 'USD' ? '$' : '₫'}
+                    placeholder="0"
+                  />
+                </div>
                 <select
                   value={editingItem.currency || 'VND'}
                   onChange={(e) => setEditingItem({ ...editingItem, currency: e.target.value })}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  className="h-[42px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-semibold"
                 >
                   <option value="VND">VND</option>
                   <option value="USD">USD</option>
@@ -391,35 +395,38 @@ export function SupplierProductsPage() {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lượng đặt tối thiểu (MOQ) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lượng đặt tối thiểu *</label>
               <input
                 type="number"
                 value={editingItem.moq || 1}
                 onChange={(e) => setEditingItem({ ...editingItem, moq: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full h-[42px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
                 required
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center pt-2">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={!!editingItem.isPreferred}
-                  onChange={(e) => setEditingItem({ ...editingItem, isPreferred: e.target.checked })}
-                  className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                />
-                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Nhà cung cấp ưu tiên chính</span>
-              </label>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Quyền ưu tiên</label>
+              <div className="h-[42px] px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 flex items-center">
+                <label className="flex items-center gap-2 cursor-pointer select-none w-full">
+                  <input
+                    type="checkbox"
+                    checked={!!editingItem.isPreferred}
+                    onChange={(e) => setEditingItem({ ...editingItem, isPreferred: e.target.checked })}
+                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                  />
+                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Nhà cung cấp ưu tiên chính</span>
+                </label>
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái hoạt động *</label>
               <select
                 value={editingItem.isActive === false ? 'false' : 'true'}
                 onChange={(e) => setEditingItem({ ...editingItem, isActive: e.target.value === 'true' })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full h-[42px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
               >
                 <option value="true">Đang cung cấp hàng</option>
                 <option value="false">Tạm ngưng cung cấp</option>
@@ -429,9 +436,10 @@ export function SupplierProductsPage() {
 
           <div>
             <FileDropzone
-              label="Bản báo giá & Hợp đồng cung ứng đính kèm (PDF/Image)"
+              label="Bản báo giá & Hợp đồng cung ứng đính kèm"
             />
           </div>
+
 
           <div className="flex justify-end gap-2 pt-2 border-t">
             <button

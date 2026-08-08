@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { userService, normalizeSystemUser, branchLabel } from '../services/userService';
+import { useAuthStore } from '@/features/auth/store/authStore';
+
 
 export const BRANCH_OPTIONS = [
   { id: 'HQ', label: 'Trụ sở chính - TP.HCM' },
@@ -49,6 +51,7 @@ interface UserStore {
   fetchUsers: () => Promise<void>;
   addUser: (user: SystemUserInput) => Promise<void>;
   updateUser: (user: SystemUserRecord) => Promise<void>;
+  updateUserRoleAndBranch: (userId: string, roleCode: string, branchId: string) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
 }
 
@@ -94,6 +97,39 @@ export const useUserStore = create<UserStore>()((set) => ({
       throw err;
     }
   },
+
+  updateUserRoleAndBranch: async (userId: string, roleCode: string, branchId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      await userService.updateRoleAndBranch(userId, roleCode, branchId);
+      const data = await userService.fetchUsers();
+      set({ users: data, isLoading: false });
+
+      // Cập nhật session tức thì cho user đang đăng nhập nếu tự phân gán lại cho mình
+      const currentAuthUser = useAuthStore.getState().user;
+      if (currentAuthUser && String(currentAuthUser.id) === String(userId)) {
+        const updatedSelf = data.find(u => String(u.id) === String(userId));
+        if (updatedSelf) {
+          useAuthStore.setState({
+            user: {
+              ...currentAuthUser,
+              role: updatedSelf.assignedRole,
+              branchId: updatedSelf.branchId,
+              branchLocation: updatedSelf.branchLocation,
+            }
+          });
+          // Tải lại bộ mã quyền mới của vai trò được gắn mới
+          await useAuthStore.getState().loadPermissions();
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to update role and branch:', err);
+      set({ isLoading: false, error: err.message || 'Lỗi khi cập nhật vai trò & chi nhánh' });
+      throw err;
+    }
+  },
+
+
 
   deleteUser: async (id) => {
     set({ isLoading: true, error: null });

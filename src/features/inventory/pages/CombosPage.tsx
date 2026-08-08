@@ -4,7 +4,9 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { toast } from 'sonner';
 import { useInventoryStore, type ProductCombo, type ComboDetailItem } from '../store/inventoryStore';
+
 
 export function CombosPage() {
   const { combos: data, addCombo, updateCombo, deleteCombo, products, fetchCombos, fetchProducts } = useInventoryStore();
@@ -170,7 +172,8 @@ export function CombosPage() {
           const t = info.getValue() as string;
           return (
             <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-              {t === 'PRE_ASSEMBLED' ? 'Đóng gói sẵn' : 'Gom động (POS)'}
+              {t === 'PRE_ASSEMBLED' ? 'Đóng gói sẵn' : 'Gom động'}
+
             </span>
           );
         },
@@ -502,7 +505,8 @@ export function CombosPage() {
                   {editingDetails.map((d) => (
                     <div key={d.id} className="bg-white border p-2 rounded relative flex flex-col gap-2 shadow-sm">
                       <div>
-                        <label className="block text-[10px] text-gray-500 font-bold">Chọn Sản phẩm (SKU)</label>
+                        <label className="block text-[10px] text-gray-500 font-bold">Chọn Sản phẩm</label>
+
                         <select 
                           value={d.sku}
                           onChange={(e) => handleDetailSkuChange(d.id, e.target.value)}

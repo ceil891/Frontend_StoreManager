@@ -16,7 +16,7 @@ export function normalizeSystemUser(
   partial: Partial<SystemUserRecord> & Pick<SystemUserRecord, 'id' | 'emailAddress' | 'fullName'>
 ): SystemUserRecord {
   const email = partial.emailAddress;
-  const branchId = partial.branchId ?? 'BR-001';
+  const branchId = partial.branchId ?? '1';
   return {
     id: partial.id,
     authUserId: partial.authUserId ?? partial.id,
@@ -60,8 +60,17 @@ export const userService = {
     }
 
     return (Array.isArray(rawUsers) ? rawUsers : []).map((u: any) => {
-      const roleObj = Array.isArray(roles) ? roles.find((r: any) => r.id === u.role?.id) : undefined;
-      const roleName = roleObj?.roleName || u.role?.roleName || 'STAFF';
+      const userRoleId = u.role?.id ? String(u.role.id) : (u.roleId ? String(u.roleId) : undefined);
+      const roleObj = Array.isArray(roles) ? roles.find((r: any) => String(r.id) === userRoleId || r.roleName === (u.roleName || u.role?.roleName)) : undefined;
+      // Use roleCode for assignedRole so that column lookups in UsersPage match by roleCode
+      const roleCode = roleObj?.roleCode || roleObj?.roleName || u.roleName || u.role?.roleName || 'STAFF';
+
+      const rawBranchId = u.branch?.id ? String(u.branch.id) : (u.branchId ? String(u.branchId) : '1');
+      const branchName = u.branch?.branchName || u.branchName || u.branch?.name || `Chi nhánh ${rawBranchId}`;
+
+      // Map departmentId and positionId from API if available (otherwise fallback)
+      const departmentId = u.departmentId ? String(u.departmentId) : (u.department?.id ? String(u.department.id) : '');
+      const positionId = u.positionId ? String(u.positionId) : (u.position?.id ? String(u.position.id) : '');
 
       return normalizeSystemUser({
         id: String(u.id),
@@ -71,11 +80,11 @@ export const userService = {
         emailAddress: u.email || '',
         contactPhone: u.phone || '',
         avatarUrl: buildUserAvatarUrl(u.email || ''),
-        assignedRole: roleName,
-        departmentId: '1',
-        branchId: u.branch?.id ? String(u.branch.id) : 'BR-001',
-        branchLocation: u.branch?.branchName || 'CH Quận 1',
-        positionId: '1',
+        assignedRole: roleCode,
+        departmentId,
+        branchId: rawBranchId,
+        branchLocation: branchName,
+        positionId,
         managerId: undefined,
         hireDate: u.createdAt ? u.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
         employmentType: 'FULL_TIME',
@@ -90,9 +99,14 @@ export const userService = {
   async addUser(newUser: SystemUserInput): Promise<SystemUserRecord> {
     let roleId = 4;
     try {
-      const roles = await axiosClient.get<any, any[]>('/roles');
-      const roleObj = roles.find((r: any) => r.roleName === newUser.assignedRole);
-      if (roleObj) roleId = roleObj.id;
+      const rolesRes = await axiosClient.get<any, any>('/roles');
+      const roles = Array.isArray(rolesRes) ? rolesRes : (rolesRes?.content || rolesRes?.data || []);
+      const roleObj = roles.find((r: any) => 
+        String(r.id) === String(newUser.assignedRole) || 
+        r.roleName === newUser.assignedRole || 
+        r.roleCode === newUser.assignedRole
+      );
+      if (roleObj) roleId = Number(roleObj.id);
     } catch (e) {}
 
     const payload = {
@@ -116,20 +130,41 @@ export const userService = {
 
   async updateUser(updatedUser: SystemUserRecord): Promise<SystemUserRecord> {
     const userId = updatedUser.id;
-    let roleId = 4;
+    let roleId: number | null = null;
     try {
-      const roles = await axiosClient.get<any, any[]>('/roles');
-      const roleObj = roles.find((r: any) => r.roleName === updatedUser.assignedRole);
-      if (roleObj) roleId = roleObj.id;
+      const rolesRes = await axiosClient.get<any, any>('/roles');
+      const roles = Array.isArray(rolesRes) ? rolesRes : (rolesRes?.content || rolesRes?.data || []);
+      const roleObj = roles.find((r: any) => 
+        String(r.id) === String(updatedUser.assignedRole) || 
+        r.roleName === updatedUser.assignedRole || 
+        r.roleCode === updatedUser.assignedRole
+      );
+      if (roleObj) roleId = Number(roleObj.id);
     } catch (e) {}
 
-    const payload = {
+    // 1. Gọi dedicated API /users/{id}/role-branch nếu có vai trò/chi nhánh
+    if (roleId || updatedUser.branchId) {
+      try {
+        const body: any = {};
+        if (roleId) body.roleId = roleId;
+        if (updatedUser.branchId) body.branchId = Number(updatedUser.branchId);
+        await axiosClient.put(`/users/${userId}/role-branch`, body);
+      } catch (err) {
+        console.warn('Dedicated role-branch API call failed, falling back to full update:', err);
+      }
+    }
+
+    // 2. Cập nhật thông tin chung
+    const payload: any = {
       fullName: updatedUser.fullName,
       email: updatedUser.emailAddress,
       phone: updatedUser.contactPhone,
-      roleId: Number(roleId),
       branchId: updatedUser.branchId ? Number(updatedUser.branchId) : 1,
     };
+    if (roleId) {
+      payload.roleId = roleId;
+    }
+
     const res = await axiosClient.put<any, any>(`/users/${userId}`, payload);
     const item = res?.data || res;
     return {
@@ -137,6 +172,40 @@ export const userService = {
       ...(item || {}),
     };
   },
+
+  async updateRoleAndBranch(userId: string, roleCode: string, branchId: string): Promise<void> {
+    let roleId: number | null = null;
+    try {
+      const rolesRes = await axiosClient.get<any, any>('/roles');
+      const roles = Array.isArray(rolesRes) ? rolesRes : (rolesRes?.content || rolesRes?.data || []);
+      const roleObj = roles.find((r: any) => 
+        String(r.id) === String(roleCode) || 
+        r.roleName === roleCode || 
+        r.roleCode === roleCode ||
+        r.roleTitle === roleCode
+      );
+      if (roleObj) {
+        roleId = Number(roleObj.id);
+      } else {
+        const parsed = Number(roleCode.replace(/[^0-9]/g, ''));
+        if (!isNaN(parsed) && parsed > 0) roleId = parsed;
+      }
+    } catch (e) {}
+
+    const body: any = {};
+    if (roleId) body.roleId = Number(roleId);
+    if (branchId) {
+      const parsedBranch = Number(String(branchId).replace(/[^0-9]/g, ''));
+      if (!isNaN(parsedBranch) && parsedBranch > 0) {
+        body.branchId = parsedBranch;
+      }
+    }
+
+    await axiosClient.put(`/users/${userId}/role-branch`, body);
+  },
+
+
+
 
   async deleteUser(id: string): Promise<void> {
     try {
