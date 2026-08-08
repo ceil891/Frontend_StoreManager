@@ -213,6 +213,7 @@ const ActivityLogsPage = lz(() => import('@/features/hr/pages/ActivityLogsPage')
 const EmployeeContractsPage = lz(() => import('@/features/hr/pages/EmployeeContractsPage'), 'EmployeeContractsPage');
 const AttendancePage        = lz(() => import('@/features/hr/pages/AttendancePage'), 'AttendancePage');
 const LeaveRequestsPage     = lz(() => import('@/features/hr/pages/LeaveRequestsPage'), 'LeaveRequestsPage');
+const ShiftSwapRequestsPage = lz(() => import('@/features/hr/pages/ShiftSwapRequestsPage'), 'ShiftSwapRequestsPage');
 const KpiRecordsPage        = lz(() => import('@/features/hr/pages/KpiRecordsPage'), 'KpiRecordsPage');
 const PayrollPage           = lz(() => import('@/features/hr/pages/PayrollPage'), 'PayrollPage');
 const PermissionsPage       = lz(() => import('@/features/hr/pages/PermissionsPage'), 'PermissionsPage');
@@ -407,6 +408,7 @@ const router = createBrowserRouter([
           { path: 'hr/contracts', ...protect(<EmployeeContractsPage />, 'system:user:view') },
           { path: 'hr/attendance', ...protect(<AttendancePage />, 'hrm:attendance:view') },
           { path: 'hr/leave-requests', ...protect(<LeaveRequestsPage />, 'hrm:attendance:view') },
+          { path: 'hr/shift-swaps', ...protect(<ShiftSwapRequestsPage />, 'hrm:attendance:view') },
           { path: 'hr/kpis', ...protect(<KpiRecordsPage />, 'system:user:view') },
           { path: 'hr/payroll', ...protect(<PayrollPage />, 'system:user:view') },
 

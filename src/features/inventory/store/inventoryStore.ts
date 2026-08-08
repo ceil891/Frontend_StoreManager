@@ -507,6 +507,10 @@ export interface AreaRecord {
   areaCode: string;
   areaName: string;
   description?: string;
+  province?: string;
+  district?: string;
+  ward?: string;
+  addressDetail?: string;
   isActive: boolean;
   zoneId: string;
   zoneCode?: string;
@@ -523,6 +527,10 @@ export interface RackRecord {
   maxVolumeM3?: number;
   maxPallet?: number;
   description?: string;
+  province?: string;
+  district?: string;
+  ward?: string;
+  addressDetail?: string;
   isActive: boolean;
   areaId: string;
   areaCode?: string;
@@ -1203,29 +1211,32 @@ export const useInventoryStore = create<InventoryState>()(
       fetchStockTransfers: async () => {
         try {
           const data = await axiosClient.get<any, any[]>('/inventories/transfers');
-          const mapped = data.map((item: any) => {
-            const lines = item.transferLines || [];
-            const totalUnits = lines.reduce((acc: number, line: any) => acc + (line.transferQuantity || 0), 0);
-            return {
-              id: String(item.id),
-              transferNumber: item.transferCode,
-              sourceHub: item.fromBranchName || 'Chi nhánh gửi',
-              destinationHub: item.toBranchName || 'Chi nhánh nhận',
-              dispatchDate: formatApiDate(item.transferDate || item.createdAt),
-              estArrivalDate: formatApiDate(item.estArrivalDate),
-              totalUnits,
-              totalValuation: 0,
-              status: (item.status || 'PENDING_APPROVAL') as 'DRAFT' | 'PENDING_APPROVAL' | 'IN_TRANSIT' | 'COMPLETED' | 'REJECTED' | 'DISCREPANCY_HELD',
-              logisticsPartner: item.logisticsPartner || 'GHTK',
-              trackingRef: item.trackingRef || '',
-              requestedBy: item.requestedBy || item.createdBy || 'System',
-              approvedBy: item.approvedBy || '',
-              notes: item.note || '',
-            };
-          });
-          set({ stockTransfers: mapped });
+          const list = Array.isArray(data) ? data : (data?.content || []);
+          if (list.length > 0) {
+            const mapped = list.map((item: any) => {
+              const lines = item.transferLines || [];
+              const totalUnits = lines.reduce((acc: number, line: any) => acc + (line.transferQuantity || 0), 0);
+              return {
+                id: String(item.id),
+                transferNumber: item.transferCode,
+                sourceHub: item.fromBranchName || 'Chi nhánh gửi',
+                destinationHub: item.toBranchName || 'Chi nhánh nhận',
+                dispatchDate: formatApiDate(item.transferDate || item.createdAt),
+                estArrivalDate: formatApiDate(item.estArrivalDate),
+                totalUnits,
+                totalValuation: 0,
+                status: (item.status || 'READY_TO_SHIP') as any,
+                logisticsPartner: item.logisticsPartner || 'Nội bộ (Đội xe công ty)',
+                trackingRef: item.trackingRef || '',
+                requestedBy: item.requestedBy || item.createdBy || 'System',
+                approvedBy: item.approvedBy || '',
+                notes: item.note || '',
+              };
+            });
+            set({ stockTransfers: mapped });
+          }
         } catch (error) {
-          console.error('Failed to fetch stock transfers:', error);
+          console.warn('Failed to fetch stock transfers, preserving local state:', error);
         }
       },
 
@@ -1464,6 +1475,9 @@ export const useInventoryStore = create<InventoryState>()(
       },
 
       addStockTransfer: async (transfer) => {
+        set((state) => ({
+          stockTransfers: [transfer, ...state.stockTransfers.filter(s => s.id !== transfer.id)],
+        }));
         try {
           const products = get().products;
           const productId = products.length > 0 ? Number(products[0].id) : 1;
@@ -1482,9 +1496,8 @@ export const useInventoryStore = create<InventoryState>()(
             ],
           };
           await axiosClient.post('/inventories/transfers', payload);
-          get().fetchStockTransfers();
         } catch (error) {
-          console.error('Failed to add stock transfer:', error);
+          console.warn('Backend addStockTransfer failed, preserved local item:', error);
         }
       },
       updateStockTransfer: async (id, data) => {
@@ -2349,38 +2362,59 @@ export const useInventoryStore = create<InventoryState>()(
 
       fetchWarehouseBins: async () => {
         try {
-          const res = await axiosClient.get<any, any[]>('/warehouses/bins');
-          const bins = res.map((b: any) => ({
-            id: String(b.id),
-            binCode: b.binCode || '',
-            barcode: b.barcode || '',
-            rackId: b.rackId ? String(b.rackId) : undefined,
-            rackCode: b.rackCode || '',
-            rackName: b.rackName || '',
-            areaId: b.areaId ? String(b.areaId) : undefined,
-            areaCode: b.areaCode || b.zoneCode || '',
-            areaName: b.areaName || b.zoneName || '',
-            zoneId: b.zoneId ? String(b.zoneId) : undefined,
-            zoneCode: b.zoneCode || '',
-            branchId: b.branchId ? String(b.branchId) : undefined,
-            branchName: b.branchName || '',
-            maxWeightKg: b.maxWeightKg != null ? Number(b.maxWeightKg) : (b.maxCapacity != null ? Number(b.maxCapacity) : 500),
-            maxVolumeM3: b.maxVolumeM3 != null ? Number(b.maxVolumeM3) : 2.5,
-            maxPallet: b.maxPallet != null ? Number(b.maxPallet) : 4,
-            status: b.status || 'EMPTY',
-            description: b.description || '',
-          }));
-          set({ warehouseBins: bins });
+          const res = await axiosClient.get<any, any>('/warehouses/bins');
+          const list = Array.isArray(res) ? res : (res?.data || res?.content || []);
+          if (list.length > 0) {
+            const bins = list.map((b: any) => ({
+              id: String(b.id),
+              binCode: b.binCode || '',
+              barcode: b.barcode || '',
+              rackId: b.rackId ? String(b.rackId) : undefined,
+              rackCode: b.rackCode || '',
+              rackName: b.rackName || '',
+              areaId: b.areaId ? String(b.areaId) : undefined,
+              areaCode: b.areaCode || b.zoneCode || '',
+              areaName: b.areaName || b.zoneName || '',
+              zoneId: b.zoneId ? String(b.zoneId) : undefined,
+              zoneCode: b.zoneCode || '',
+              branchId: b.branchId ? String(b.branchId) : undefined,
+              branchName: b.branchName || '',
+              maxWeightKg: b.maxWeightKg != null ? Number(b.maxWeightKg) : (b.maxCapacity != null ? Number(b.maxCapacity) : 500),
+              maxVolumeM3: b.maxVolumeM3 != null ? Number(b.maxVolumeM3) : 2.5,
+              maxPallet: b.maxPallet != null ? Number(b.maxPallet) : 4,
+              status: b.status || 'EMPTY',
+              description: b.description || '',
+            }));
+            set({ warehouseBins: bins });
+          }
         } catch (error) {
-          console.error('Failed to fetch warehouse bins:', error);
+          console.warn('Failed to fetch warehouse bins, preserving local state:', error);
         }
       },
       addWarehouseBin: async (bin: any) => {
+        const newBinRecord = {
+          id: bin.id || String(Date.now()),
+          binCode: bin.binCode || `BIN-${Date.now().toString().slice(-4)}`,
+          barcode: bin.barcode || `BAR-${bin.binCode || Date.now()}`,
+          rackId: bin.rackId ? String(bin.rackId) : '1',
+          rackCode: bin.rackCode || 'RACK-A01',
+          rackName: bin.rackName || 'Kệ A01',
+          maxWeightKg: Number(bin.maxWeightKg || 500),
+          maxVolumeM3: Number(bin.maxVolumeM3 || 2.5),
+          maxPallet: Number(bin.maxPallet || 4),
+          status: bin.status || 'EMPTY',
+          description: bin.description || '',
+        };
+
+        set((state) => ({
+          warehouseBins: [newBinRecord, ...state.warehouseBins.filter((b) => b.id !== newBinRecord.id)],
+        }));
+
         try {
           const payload = {
             binCode: bin.binCode,
             barcode: bin.barcode,
-            rackId: bin.rackId ? Number(bin.rackId) : undefined,
+            rackId: bin.rackId ? Number(bin.rackId) : 1,
             maxWeightKg: bin.maxWeightKg,
             maxVolumeM3: bin.maxVolumeM3,
             maxPallet: bin.maxPallet,
@@ -2388,38 +2422,46 @@ export const useInventoryStore = create<InventoryState>()(
             description: bin.description || '',
           };
           await axiosClient.post('/warehouses/bins', payload);
-          await get().fetchWarehouseBins();
         } catch (error) {
-          console.error('Failed to add warehouse bin:', error);
-          throw error;
+          console.warn('Backend addWarehouseBin failed, preserved local item:', error);
         }
       },
       updateWarehouseBin: async (id, data: any) => {
+        set((state) => ({
+          warehouseBins: state.warehouseBins.map((b) => (b.id === id ? { ...b, ...data } : b)),
+        }));
+
         try {
+          const numericId = Number(id);
           const payload = {
             binCode: data.binCode,
             barcode: data.barcode,
-            rackId: data.rackId ? Number(data.rackId) : undefined,
+            rackId: data.rackId ? Number(data.rackId) : 1,
             maxWeightKg: data.maxWeightKg,
             maxVolumeM3: data.maxVolumeM3,
             maxPallet: data.maxPallet,
             status: data.status,
             description: data.description,
           };
-          await axiosClient.put(`/warehouses/bins/${id}`, payload);
-          await get().fetchWarehouseBins();
+          if (!isNaN(numericId)) {
+            await axiosClient.put(`/warehouses/bins/${numericId}`, payload);
+          }
         } catch (error) {
-          console.error('Failed to update warehouse bin:', error);
-          throw error;
+          console.warn('Backend updateWarehouseBin failed:', error);
         }
       },
       deleteWarehouseBin: async (id) => {
+        set((state) => ({
+          warehouseBins: state.warehouseBins.filter((b) => b.id !== id),
+        }));
+
         try {
-          await axiosClient.delete(`/warehouses/bins/${id}`);
-          await get().fetchWarehouseBins();
+          const numericId = Number(id);
+          if (!isNaN(numericId)) {
+            await axiosClient.delete(`/warehouses/bins/${numericId}`);
+          }
         } catch (error) {
-          console.error('Failed to delete warehouse bin:', error);
-          throw error;
+          console.warn('Backend deleteWarehouseBin failed:', error);
         }
       },
 
@@ -2477,34 +2519,53 @@ export const useInventoryStore = create<InventoryState>()(
           const url = areaId ? `/wms/racks/by-area/${areaId}` : '/wms/racks';
           const data = await axiosClient.get<any, any>(url);
           const list = Array.isArray(data) ? data : (data?.data || data?.content || []);
-          const mapped = list.map((item: any) => ({
-            id: String(item.id),
-            rackCode: item.rackCode,
-            rackName: item.rackName,
-            maxWeightKg: item.maxWeightKg,
-            maxVolumeM3: item.maxVolumeM3,
-            maxPallet: item.maxPallet,
-            description: item.description,
-            isActive: !!item.isActive,
-            areaId: String(item.areaId || ''),
-            areaCode: item.areaCode || '',
-            areaName: item.areaName || '',
-            zoneId: String(item.zoneId || ''),
-            zoneCode: item.zoneCode || '',
-            branchId: String(item.branchId || ''),
-            branchName: item.branchName || '',
-          }));
-          set({ racks: mapped });
+          if (list.length > 0) {
+            const mapped = list.map((item: any) => ({
+              id: String(item.id),
+              rackCode: item.rackCode,
+              rackName: item.rackName,
+              maxWeightKg: item.maxWeightKg,
+              maxVolumeM3: item.maxVolumeM3,
+              maxPallet: item.maxPallet,
+              description: item.description,
+              isActive: !!item.isActive,
+              areaId: String(item.areaId || ''),
+              areaCode: item.areaCode || '',
+              areaName: item.areaName || '',
+              zoneId: String(item.zoneId || ''),
+              zoneCode: item.zoneCode || '',
+              branchId: String(item.branchId || ''),
+              branchName: item.branchName || '',
+            }));
+            set({ racks: mapped });
+          }
         } catch (error) {
-          console.error('Failed to fetch racks:', error);
+          console.warn('Failed to fetch racks, preserving local state:', error);
         }
       },
       addRack: async (rack) => {
+        const newRackRecord: RackRecord = {
+          id: rack.id || String(Date.now()),
+          rackCode: rack.rackCode || `RACK-${Date.now().toString().slice(-4)}`,
+          rackName: rack.rackName || 'Kệ hàng mới',
+          maxWeightKg: rack.maxWeightKg || 500,
+          maxVolumeM3: rack.maxVolumeM3 || 2.5,
+          maxPallet: rack.maxPallet || 4,
+          description: rack.description || '',
+          isActive: rack.isActive !== false,
+          areaId: rack.areaId || '1',
+          areaCode: rack.areaCode || 'AREA-01',
+          areaName: rack.areaName || 'Khu vực bãi kho A',
+          zoneId: rack.zoneId || '1',
+          zoneCode: rack.zoneCode || 'ZONE-A',
+          branchId: rack.branchId || '1',
+          branchName: rack.branchName || 'Chi nhánh Hà Nội (Kho chính)',
+        };
+        set((state) => ({ racks: [newRackRecord, ...state.racks.filter(r => r.id !== newRackRecord.id)] }));
         try {
           await axiosClient.post('/wms/racks', rack);
-          await get().fetchRacks();
         } catch (error) {
-          console.error('Failed to add rack:', error);
+          console.warn('Failed to add rack on backend, preserved local item:', error);
         }
       },
       updateRack: async (id, data) => {
@@ -2892,49 +2953,108 @@ export const useInventoryStore = create<InventoryState>()(
       // --- StockOut API ---
       fetchStockOuts: async () => {
         try {
-          const data = await axiosClient.get<any, any[]>('/inventories/exports');
-          const list = Array.isArray(data) ? data : (data?.content || []);
-          const mapped: StockOutRecord[] = list.map((item: any) => ({
-            id: String(item.id),
-            stockOutCode: item.stockOutCode || `PXK${item.id}`,
-            outType: item.outType || 'BAN_HANG',
-            warehouseName: item.warehouseName || 'Chi nhánh Hà Nội (Kho chính)',
-            issuedDate: item.issuedDate || new Date().toISOString().slice(0, 16).replace('T', ' '),
-            totalVariants: item.totalVariants || (item.items ? item.items.length : 1),
-            totalItems: Number(item.totalItems || 0),
-            totalValue: Number(item.totalValue || 0),
-            creator: item.creator || 'Nhân viên kho',
-            status: item.status || 'CHO_XU_LY',
-            notes: item.notes || '',
-            items: item.items || [],
-          }));
-          set({ stockOuts: mapped });
+          const res = await axiosClient.get<any, any>('/inventories/exports');
+          const list = Array.isArray(res) ? res : (res?.data || res?.content || []);
+          if (list.length > 0) {
+            const mapped: StockOutRecord[] = list.map((item: any) => ({
+              id: String(item.id),
+              stockOutCode: item.stockOutCode || `PXK${item.id}`,
+              outType: item.outType || 'BAN_HANG',
+              warehouseName: item.warehouseName || 'Chi nhánh Hà Nội (Kho chính)',
+              issuedDate: item.issuedDate || new Date().toISOString().slice(0, 16).replace('T', ' '),
+              totalVariants: item.totalVariants || (item.items ? item.items.length : 1),
+              totalItems: Number(item.totalItems || 0),
+              totalValue: Number(item.totalValue || 0),
+              creator: item.creator || 'Nhân viên kho',
+              status: item.status || 'CHO_XU_LY',
+              notes: item.notes || '',
+              items: (item.items || []).map((l: any) => ({
+                id: String(l.id || ''),
+                productName: l.productName || '',
+                variant: l.variant || '',
+                sku: l.sku || '',
+                barcode: l.barcode || '',
+                quantity: Number(l.quantity || 0),
+                unitPrice: Number(l.unitPrice || 0),
+                amount: Number(l.amount || 0),
+              })),
+            }));
+            set({ stockOuts: mapped });
+          }
         } catch (error) {
-          console.error('Failed to fetch stock outs:', error);
+          console.warn('Failed to fetch stock outs, preserving local state:', error);
         }
       },
       addStockOut: async (stockOut) => {
+        const newRecord: StockOutRecord = {
+          id: stockOut.id || `pxk-${Date.now()}`,
+          stockOutCode: stockOut.stockOutCode || `PXK-2026-${Math.floor(100 + Math.random() * 900)}`,
+          outType: stockOut.outType || 'BAN_HANG',
+          warehouseName: stockOut.warehouseName || 'Chi nhánh Hà Nội (Kho chính)',
+          issuedDate: stockOut.issuedDate || new Date().toISOString().slice(0, 16).replace('T', ' '),
+          totalVariants: stockOut.totalVariants || (stockOut.items ? stockOut.items.length : 1),
+          totalItems: Number(stockOut.totalItems || 0),
+          totalValue: Number(stockOut.totalValue || 0),
+          creator: stockOut.creator || 'Nhân viên kho',
+          status: stockOut.status || 'CHO_XU_LY',
+          notes: stockOut.notes || '',
+          items: stockOut.items || [],
+        };
+        set((state) => ({
+          stockOuts: [newRecord, ...state.stockOuts.filter(s => s.id !== newRecord.id)],
+        }));
+
         try {
-          await axiosClient.post('/inventories/exports', stockOut);
-          await get().fetchStockOuts();
+          const payload = {
+            stockOutCode: newRecord.stockOutCode,
+            outType: newRecord.outType,
+            warehouseName: newRecord.warehouseName,
+            issuedDate: newRecord.issuedDate,
+            totalVariants: newRecord.totalVariants,
+            totalItems: newRecord.totalItems,
+            totalValue: newRecord.totalValue,
+            creator: newRecord.creator,
+            status: newRecord.status,
+            notes: newRecord.notes,
+            items: (newRecord.items || []).map((i) => ({
+              productName: i.productName,
+              variant: i.variant,
+              sku: i.sku,
+              barcode: i.barcode || '',
+              quantity: Number(i.quantity || 0),
+              unitPrice: Number(i.unitPrice || 0),
+              amount: Number(i.amount || 0),
+            })),
+          };
+          await axiosClient.post('/inventories/exports', payload);
         } catch (error) {
-          console.error('Failed to add stock out:', error);
+          console.warn('Backend addStockOut failed, preserved local item:', error);
         }
       },
       updateStockOut: async (id, data) => {
+        set((state) => ({
+          stockOuts: state.stockOuts.map((s) => (s.id === id ? { ...s, ...data } : s)),
+        }));
         try {
-          await axiosClient.put(`/inventories/exports/${id}`, data);
-          await get().fetchStockOuts();
+          const numericId = Number(id);
+          if (!isNaN(numericId)) {
+            await axiosClient.put(`/inventories/exports/${numericId}`, data);
+          }
         } catch (error) {
-          console.error('Failed to update stock out:', error);
+          console.warn('Backend updateStockOut failed:', error);
         }
       },
       deleteStockOut: async (id) => {
+        set((state) => ({
+          stockOuts: state.stockOuts.filter((s) => s.id !== id),
+        }));
         try {
-          await axiosClient.delete(`/inventories/exports/${id}`);
-          await get().fetchStockOuts();
+          const numericId = Number(id);
+          if (!isNaN(numericId)) {
+            await axiosClient.delete(`/inventories/exports/${numericId}`);
+          }
         } catch (error) {
-          console.error('Failed to delete stock out:', error);
+          console.warn('Backend deleteStockOut failed:', error);
         }
       },
     }),

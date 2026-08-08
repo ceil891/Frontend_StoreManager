@@ -9,8 +9,8 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type TransferRequestRecord, type TransferRequestItem } from '../store/inventoryStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
+import { useUserStore } from '@/features/hr/store/userStore';
 import { useAuthStore } from '@/features/auth/store/authStore';
-import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router';
 
@@ -54,6 +54,7 @@ export function StockTransferRequestsPage() {
   } = useInventoryStore();
 
   const { branches, fetchBranches } = useBranchStore();
+  const { users, fetchUsers } = useUserStore();
   const currentUser = useAuthStore((s) => s.user);
 
   const [search, setSearch] = useState('');
@@ -62,9 +63,6 @@ export function StockTransferRequestsPage() {
   const [selected, setSelected] = useState<TransferRequestRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-
-  // Dynamic API Users
-  const [usersList, setUsersList] = useState<any[]>([]);
 
   // Request form state
   const [editingHeader, setEditingHeader] = useState<Partial<TransferRequestRecord>>({});
@@ -133,17 +131,8 @@ export function StockTransferRequestsPage() {
     fetchStockTransfers();
     fetchProducts();
     fetchBranches();
-
-    // Fetch active users from Backend API
-    axiosClient.get('/users?status=ACTIVE&size=200')
-      .then((res: any) => {
-        const list = Array.isArray(res) ? res : (res?.content || res?.data || res || []);
-        if (Array.isArray(list) && list.length > 0) {
-          setUsersList(list);
-        }
-      })
-      .catch(() => {});
-  }, [fetchStockTransfers, fetchProducts, fetchBranches]);
+    fetchUsers();
+  }, [fetchStockTransfers, fetchProducts, fetchBranches, fetchUsers]);
 
   const filtered = useMemo(() => {
     return requests.filter((item) => {
@@ -173,7 +162,7 @@ export function StockTransferRequestsPage() {
 
     const defaultSource = branches.length > 0 ? branches[0].name : 'Chi nhánh Hà Nội (Kho chính)';
     const defaultDest = branches.length > 1 ? branches[1].name : 'Chi nhánh TP. Hồ Chí Minh';
-    const defaultUser = currentUser?.name || (usersList.length > 0 ? (usersList[0].fullName || usersList[0].username) : 'System User');
+    const defaultUser = currentUser?.name || (users.length > 0 ? users[0].fullName : 'Nguyễn Văn Hưng (Thủ kho)');
 
     setEditingHeader({
       requestCode: generateNextRequestCode(),
@@ -294,7 +283,7 @@ export function StockTransferRequestsPage() {
       destinationHub: editingHeader.destinationHub || 'Chi nhánh TP. Hồ Chí Minh',
       priority: editingHeader.priority || TransferPriority.MEDIUM,
       reason: editingHeader.reason || 'Bổ sung tồn kho',
-      requestedBy: editingHeader.requestedBy || currentUser?.name || 'System User',
+      requestedBy: editingHeader.requestedBy || currentUser?.name || 'Nguyễn Văn Hưng',
       requestDate: editingHeader.requestDate || new Date().toISOString().split('T')[0],
       expectedDate: editingHeader.expectedDate || '',
       status: newStatus,
@@ -473,10 +462,10 @@ export function StockTransferRequestsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <FileText className="text-amber-600" /> Quản lý Yêu Cầu Chuyển Kho (Transfer Requests)
+            <FileText className="text-amber-600" /> Quản lý Yêu Cầu Chuyển Kho
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Ghi nhận nhu cầu luân chuyển tồn kho giữa các bãi kho & phê duyệt trước khi tạo Phiếu chuyển kho xuất hàng (Chưa trừ tồn kho).
+            Ghi nhận nhu cầu luân chuyển tồn kho giữa các chi nhánh và phê duyệt trước khi lập phiếu chuyển kho.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -695,27 +684,26 @@ export function StockTransferRequestsPage() {
 
               <div>
                 <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Người đề xuất *</label>
-                {usersList.length > 0 ? (
-                  <select
-                    value={editingHeader.requestedBy || currentUser?.name || ''}
-                    onChange={(e) => setEditingHeader({ ...editingHeader, requestedBy: e.target.value })}
-                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-medium"
-                  >
-                    {usersList.map((u) => (
-                      <option key={u.id} value={u.fullName || u.username}>
-                        {u.fullName || u.username} ({u.role || 'User'})
+                <select
+                  value={editingHeader.requestedBy || currentUser?.name || ''}
+                  onChange={(e) => setEditingHeader({ ...editingHeader, requestedBy: e.target.value })}
+                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-900 dark:text-white"
+                >
+                  {users.length > 0 ? (
+                    users.map((u) => (
+                      <option key={u.id} value={u.fullName || u.emailAddress}>
+                        {u.fullName || u.emailAddress} ({u.assignedRole || 'Nhân viên'})
                       </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={editingHeader.requestedBy || currentUser?.name || 'System User'}
-                    onChange={(e) => setEditingHeader({ ...editingHeader, requestedBy: e.target.value })}
-                    required
-                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-medium"
-                  />
-                )}
+                    ))
+                  ) : (
+                    <>
+                      <option value="Nguyễn Văn Hưng (Thủ kho)">Nguyễn Văn Hưng (Thủ kho)</option>
+                      <option value="Lưu Hữu Phước (Quản lý kho)">Lưu Hữu Phước (Quản lý kho)</option>
+                      <option value="Trần Thị Mai (Kế toán kho)">Trần Thị Mai (Kế toán kho)</option>
+                      <option value={currentUser?.name || 'System Admin'}>{currentUser?.name || 'System Admin'}</option>
+                    </>
+                  )}
+                </select>
               </div>
 
               <div>
