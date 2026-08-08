@@ -73,6 +73,20 @@ export interface LeaveRequestRecord {
   approvedBy?: string;
 }
 
+export interface ShiftSwapRequestRecord {
+  id: string;
+  requestCode: string;
+  requesterName: string;
+  requesterShift: string;
+  targetUserName: string;
+  targetUserShift: string;
+  swapDate: string;
+  reason: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  approvedBy?: string;
+  notes?: string;
+}
+
 export interface PayrollRecord {
   id: string;
   payrollCode: string;
@@ -93,6 +107,7 @@ interface HrState {
   contracts: EmployeeContractRecord[];
   kpiRecords: KpiRecord[];
   leaveRequests: LeaveRequestRecord[];
+  shiftSwapRequests: ShiftSwapRequestRecord[];
   payrolls: PayrollRecord[];
   isLoading: boolean;
   error: string | null;
@@ -122,6 +137,11 @@ interface HrState {
   updateLeaveRequest: (id: string, data: Partial<LeaveRequestRecord>) => Promise<void>;
   deleteLeaveRequest: (id: string) => Promise<void>;
 
+  fetchShiftSwapRequests: () => Promise<void>;
+  addShiftSwapRequest: (item: Omit<ShiftSwapRequestRecord, 'id'>) => Promise<void>;
+  updateShiftSwapRequest: (id: string, data: Partial<ShiftSwapRequestRecord>) => Promise<void>;
+  deleteShiftSwapRequest: (id: string) => Promise<void>;
+
   fetchPayrolls: () => Promise<void>;
   addPayroll: (item: Omit<PayrollRecord, 'id'>) => Promise<void>;
   updatePayroll: (id: string, data: Partial<PayrollRecord>) => Promise<void>;
@@ -136,6 +156,34 @@ export const useHrStore = create<HrState>()(
       contracts: [],
       kpiRecords: [],
       leaveRequests: [],
+      shiftSwapRequests: [
+        {
+          id: 'ssr-1',
+          requestCode: 'DC-2026-001',
+          requesterName: 'Nguyễn Văn Hưng',
+          requesterShift: 'Ca sáng (08:00 - 12:00)',
+          targetUserName: 'Trần Thị Mai',
+          targetUserShift: 'Ca chiều (13:00 - 17:00)',
+          swapDate: '2026-08-10',
+          reason: 'Có việc gia đình đột xuất buổi sáng',
+          status: 'PENDING',
+          approvedBy: 'Chưa duyệt',
+          notes: 'Đã thỏa thuận 2 bên',
+        },
+        {
+          id: 'ssr-2',
+          requestCode: 'DC-2026-002',
+          requesterName: 'Lưu Hữu Phước',
+          requesterShift: 'Ca tối (17:00 - 21:00)',
+          targetUserName: 'Lê Hoàng Nam',
+          targetUserShift: 'Ca sáng (08:00 - 12:00)',
+          swapDate: '2026-08-12',
+          reason: 'Đi khám sức khỏe định kỳ',
+          status: 'APPROVED',
+          approvedBy: 'Giám đốc HR (System Admin)',
+          notes: 'Hợp lệ',
+        },
+      ],
       payrolls: [],
       isLoading: false,
       error: null,
@@ -319,6 +367,58 @@ export const useHrStore = create<HrState>()(
           await get().fetchLeaveRequests();
         } catch {
           set((state) => ({ leaveRequests: state.leaveRequests.filter((l) => l.id !== id) }));
+        }
+      },
+
+      fetchShiftSwapRequests: async () => {
+        try {
+          const res = await axiosClient.get<any, ShiftSwapRequestRecord[]>('/hr/shift-swaps');
+          if (res && res.length > 0) {
+            set({ shiftSwapRequests: res });
+          }
+        } catch {
+          // Keep local state
+        }
+      },
+      addShiftSwapRequest: async (item) => {
+        const newRecord: ShiftSwapRequestRecord = {
+          id: `ssr_${Date.now()}`,
+          requestCode: item.requestCode || `DC-2026-${Math.floor(100 + Math.random() * 900)}`,
+          requesterName: item.requesterName,
+          requesterShift: item.requesterShift,
+          targetUserName: item.targetUserName,
+          targetUserShift: item.targetUserShift,
+          swapDate: item.swapDate,
+          reason: item.reason,
+          status: item.status || 'PENDING',
+          approvedBy: item.approvedBy || 'Chưa duyệt',
+          notes: item.notes || '',
+        };
+        set((state) => ({ shiftSwapRequests: [newRecord, ...state.shiftSwapRequests] }));
+        try {
+          await axiosClient.post('/hr/shift-swaps', item);
+        } catch {
+          // Keep local record
+        }
+      },
+      updateShiftSwapRequest: async (id, data) => {
+        set((state) => ({
+          shiftSwapRequests: state.shiftSwapRequests.map((s) => (s.id === id ? { ...s, ...data } : s)),
+        }));
+        try {
+          await axiosClient.put(`/hr/shift-swaps/${id}`, data);
+        } catch {
+          // Keep local change
+        }
+      },
+      deleteShiftSwapRequest: async (id) => {
+        set((state) => ({
+          shiftSwapRequests: state.shiftSwapRequests.filter((s) => s.id !== id),
+        }));
+        try {
+          await axiosClient.delete(`/hr/shift-swaps/${id}`);
+        } catch {
+          // Keep local change
         }
       },
 

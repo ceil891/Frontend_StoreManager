@@ -10,6 +10,7 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 
 import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
+import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type RackRecord } from '@/features/inventory/store/inventoryStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
@@ -496,12 +497,12 @@ export function WarehouseAreasPage() {
               <MapPin className="w-4 h-4 text-emerald-600" /> 1. Thông tin định vị kho bãi
             </h4>
             
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] font-bold text-gray-550 uppercase mb-1">Chi nhánh *</label>
                 <select
                   value={editingItem.branchId || ''}
-                  onChange={(e) => setEditingItem({ ...editingItem, branchId: e.target.value, zoneId: '', areaId: '' })}
+                  onChange={(e) => setEditingItem({ ...editingItem, branchId: e.target.value, zoneId: '' })}
                   className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded text-xs bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 >
                   <option value="">-- Tất cả Chi nhánh --</option>
@@ -526,25 +527,30 @@ export function WarehouseAreasPage() {
                     name: z.zoneName,
                     subtitle: `Kiểu: ${z.zoneType || 'Normal'}`
                   }))}
-                  onChange={(val) => setEditingItem(prev => ({ ...prev, zoneId: val, areaId: '' }))}
+                  onChange={(val) => setEditingItem(prev => ({ ...prev, zoneId: val }))}
                 />
               </div>
+            </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-gray-550 uppercase mb-1">Bãi kho (Area) *</label>
-                <SearchLookupModal
-                  title="Chọn Bãi Kho (Area)"
-                  iconType="location"
-                  placeholder="Chọn Area..."
-                  value={editingItem.areaId}
-                  options={filteredAreas.map(a => ({
-                    id: a.id,
-                    code: a.areaCode,
-                    name: a.areaName,
-                  }))}
-                  onChange={(val) => setEditingItem(prev => ({ ...prev, areaId: val }))}
-                />
-              </div>
+            <div className="border-t border-gray-200 dark:border-gray-800 pt-2.5">
+              <label className="block text-[10px] font-bold text-gray-550 uppercase mb-1 flex items-center gap-1">
+                <MapPin className="w-3.5 h-3.5 text-emerald-600" /> Vị trí địa lý kho (Tỉnh/Thành phố, Quận/Huyện, Phường/Xã)
+              </label>
+              <AddressCascadeSelect
+                province={editingItem.province || ''}
+                district={editingItem.district || ''}
+                ward={editingItem.ward || ''}
+                addressDetail={editingItem.addressDetail || ''}
+                onChange={(addr) => {
+                  setEditingItem((prev) => ({
+                    ...prev,
+                    province: addr.province,
+                    district: addr.district,
+                    ward: addr.ward,
+                    addressDetail: addr.addressDetail,
+                  }));
+                }}
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
