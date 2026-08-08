@@ -556,7 +556,7 @@ export function SalesInvoicesPage() {
                 onClick={handleAddInvoiceItem}
                 className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] flex items-center gap-1"
               >
-                <Plus className="w-3.5 h-3.5" /> Thêm sản phẩm
+                <Plus className="w-3.5 h-3.5" /> Thêm Sản Phẩm
               </button>
             </div>
 

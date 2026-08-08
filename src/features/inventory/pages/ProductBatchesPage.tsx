@@ -293,7 +293,7 @@ export function ProductBatchesPage() {
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0">
-              <Download className="w-4 h-4" /> Xuất dữ liệu
+              <Download className="w-4 h-4" /> Xuất Dữ Liệu
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm whitespace-nowrap shrink-0">
               <Plus className="w-4 h-4" /> Đăng ký lô nhập
@@ -464,17 +464,34 @@ export function ProductBatchesPage() {
                 </>
               )}
               {selectedBatch.qualityStatus === 'QUARANTINED' && (
-                <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                  <ShieldCheck className="w-4 h-4" /> Release From Quarantine
+                <button 
+                  onClick={() => {
+                    updateProductBatch(selectedBatch.id, { qualityStatus: 'PASSED_QA' });
+                    toast.success(`Đã giải phóng cách ly cho lô ${selectedBatch.batchNumber}`);
+                    setSelectedBatch(null);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                >
+                  <ShieldCheck className="w-4 h-4" /> Giải phóng kiểm dịch
                 </button>
               )}
               {selectedBatch.qualityStatus === 'EXPIRED' && (
-                <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                  <AlertTriangle className="w-4 h-4" /> Execute Stock Disposal
+                <button 
+                  onClick={() => {
+                    deleteProductBatch(selectedBatch.id);
+                    toast.success(`Đã xử lý tiêu hủy thành công lô ${selectedBatch.batchNumber}`);
+                    setSelectedBatch(null);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                >
+                  <AlertTriangle className="w-4 h-4" /> Tiêu hủy / Xử lý hàng hết hạn
                 </button>
               )}
-              <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
-                <FileText className="w-4 h-4 inline mr-1" /> Print Batch Barcode
+              <button 
+                onClick={() => toast.success(`Đang in mã vạch cho lô hàng ${selectedBatch.batchNumber}...`)}
+                className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
+              >
+                <FileText className="w-4 h-4 inline mr-1" /> In mã vạch lô hàng
               </button>
             </div>
           </div>

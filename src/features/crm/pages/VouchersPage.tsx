@@ -164,7 +164,7 @@ export function VouchersPage() {
         toast.success(`Cập nhật voucher ${formData.voucherCode} thành công!`);
       } else {
         await axiosClient.post('/crm/vouchers', payload);
-        toast.success(`Tạo mới voucher ${formData.voucherCode} thành công!`);
+        toast.success(`Tạo Mới voucher ${formData.voucherCode} thành công!`);
       }
       setIsModalOpen(false);
       fetchVouchers();
@@ -505,7 +505,7 @@ export function VouchersPage() {
       </Modal>
 
       {/* Create / Edit Modal */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Chỉnh sửa Voucher' : 'Tạo mới Voucher'} width="max-w-lg">
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Chỉnh sửa Voucher' : 'Tạo Mới Voucher'} width="max-w-lg">
         <form onSubmit={handleSave} className="p-4 space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã Voucher</label>

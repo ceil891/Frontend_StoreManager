@@ -889,7 +889,7 @@ export function FeedbackPage() {
               type="submit"
               className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              {modalMode === 'create' ? 'Tạo mới' : 'Lưu thay đổi'}
+              {modalMode === 'create' ? 'Tạo Mới' : 'Lưu thay đổi'}
             </button>
           </div>
         </form>

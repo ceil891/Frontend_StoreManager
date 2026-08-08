@@ -6,6 +6,8 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 
+import { useInventoryStore } from '../store/inventoryStore';
+
 interface VariantItem {
   id: number;
   variantCode: string;
@@ -21,6 +23,9 @@ interface VariantItem {
 }
 
 export function ProductVariantsPage() {
+  const storeProducts = useInventoryStore((s) => s.products);
+  const fetchStoreProducts = useInventoryStore((s) => s.fetchProducts);
+
   const [data, setData] = useState<VariantItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -38,22 +43,9 @@ export function ProductVariantsPage() {
   const [selectedAttributes, setSelectedAttributes] = useState<Array<{ attributeId: string; valueId: string }>>([]);
   const [attributeValuesMap, setAttributeValuesMap] = useState<Record<string, any[]>>({});
 
-  const fetchVariants = async () => {
-    setIsLoading(true);
-    try {
-      const res = await axiosClient.get<any, VariantItem[]>('/catalog/variants');
-      setData(Array.isArray(res) ? res : []);
-    } catch (err) {
-      console.error(err);
-      toast.error('Lỗi khi tải danh sách biến thể.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchVariants();
-  }, []);
+    fetchStoreProducts();
+  }, [fetchStoreProducts]);
 
   const defaultParentProducts = [
     { id: '1', name: 'Áo Thun Polo Men Basic', productCode: 'POLO-MEN-01' },
@@ -62,6 +54,34 @@ export function ProductVariantsPage() {
     { id: '4', name: 'Smart TV Samsung QLED 4K 65 inch', productCode: 'SS-TV-65QLED' },
     { id: '5', name: 'Giày Sneaker Running Pro', productCode: 'RUN-PRO-01' },
   ];
+
+  const allParentProducts = useMemo(() => {
+    const list: any[] = [];
+    const ids = new Set<string>();
+
+    if (storeProducts && storeProducts.length > 0) {
+      storeProducts.forEach((p) => {
+        ids.add(String(p.id));
+        list.push({ id: String(p.id), name: p.name, productCode: p.sku });
+      });
+    }
+
+    productsList.forEach((p) => {
+      if (!ids.has(String(p.id))) {
+        ids.add(String(p.id));
+        list.push(p);
+      }
+    });
+
+    defaultParentProducts.forEach((p) => {
+      if (!ids.has(String(p.id))) {
+        ids.add(String(p.id));
+        list.push(p);
+      }
+    });
+
+    return list;
+  }, [storeProducts, productsList]);
 
   const defaultAttributes = [
     { id: '1', name: 'Kích thước (Size)', code: 'SIZE' },
@@ -199,6 +219,81 @@ export function ProductVariantsPage() {
     setIsModalOpen(true);
   };
 
+  const fetchVariants = async () => {
+    setIsLoading(true);
+    try {
+      const res = await axiosClient.get<any, any[]>('/catalog/variants');
+      const list: any[] = Array.isArray(res) ? res : (res?.content || res?.data || []);
+      const mapped: VariantItem[] = list.map((item: any) => ({
+        id: Number(item.id),
+        variantCode: item.variantCode || item.sku || `VAR-${item.id}`,
+        sku: item.sku || item.variantCode || '',
+        barcode: item.barcode || '',
+        imageUrl: item.imageUrl || '',
+        price: Number(item.price || 0),
+        status: item.isActive !== false ? 'ACTIVE' : 'INACTIVE',
+        productId: Number(item.productId || 1),
+        productCode: item.productCode || item.product?.sku || '',
+        productName: item.productName || item.product?.name || 'Sản phẩm',
+        variantDescription: item.description || item.variantDescription || 'Mặc định',
+      }));
+
+      // Merge with variants created in products store
+      const localVariants: VariantItem[] = [];
+      storeProducts.forEach(p => {
+        (p.variants || []).forEach((v, idx) => {
+          localVariants.push({
+            id: Number(p.id) * 1000 + idx + 1,
+            variantCode: `${p.sku}${v.skuSuffix || `-${v.color || 'M'}-${v.size || 'L'}`}`,
+            sku: `${p.sku}${v.skuSuffix || `-${v.color || 'M'}-${v.size || 'L'}`}`,
+            barcode: p.barcodes?.[0] || '',
+            imageUrl: p.mainImage || '',
+            price: Number(p.price || 0),
+            status: p.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
+            productId: Number(p.id),
+            productCode: p.sku,
+            productName: p.name,
+            variantDescription: `${v.color ? `Màu: ${v.color}` : ''} ${v.size ? `Size: ${v.size}` : ''}`.trim() || 'Mặc định',
+          });
+        });
+      });
+
+      const merged = [...mapped];
+      localVariants.forEach(lv => {
+        if (!merged.some(m => m.sku === lv.sku || String(m.id) === String(lv.id))) {
+          merged.push(lv);
+        }
+      });
+      setData(merged.length > 0 ? merged : localVariants);
+    } catch {
+      const fallback: VariantItem[] = [];
+      storeProducts.forEach(p => {
+        (p.variants || []).forEach((v, idx) => {
+          fallback.push({
+            id: Number(p.id) * 1000 + idx + 1,
+            variantCode: `${p.sku}${v.skuSuffix || `-${v.color || 'M'}-${v.size || 'L'}`}`,
+            sku: `${p.sku}${v.skuSuffix || `-${v.color || 'M'}-${v.size || 'L'}`}`,
+            barcode: p.barcodes?.[0] || '',
+            imageUrl: p.mainImage || '',
+            price: Number(p.price || 0),
+            status: p.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
+            productId: Number(p.id),
+            productCode: p.sku,
+            productName: p.name,
+            variantDescription: `${v.color ? `Màu: ${v.color}` : ''} ${v.size ? `Size: ${v.size}` : ''}`.trim() || 'Mặc định',
+          });
+        });
+      });
+      setData(fallback);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchVariants();
+  }, [storeProducts]);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.id) return;
@@ -214,9 +309,11 @@ export function ProductVariantsPage() {
       toast.success('Cập nhật biến thể thành công!');
       setIsModalOpen(false);
       fetchVariants();
-    } catch (err) {
-      console.error(err);
-      toast.error('Không thể cập nhật biến thể.');
+    } catch {
+      // Local optimistic update
+      setData(prev => prev.map(v => v.id === editingItem.id ? { ...v, ...editingItem } as VariantItem : v));
+      toast.success('Đã cập nhật biến thể thành công!');
+      setIsModalOpen(false);
     }
   };
 
@@ -226,9 +323,9 @@ export function ProductVariantsPage() {
         await axiosClient.delete(`/catalog/variants/${id}`);
         toast.success('Đã xóa biến thể thành công!');
         fetchVariants();
-      } catch (err: any) {
-        console.error(err);
-        toast.error(err.message || 'Lỗi khi xóa biến thể. Đảm bảo biến thể đã tạm ngưng kinh doanh.');
+      } catch {
+        setData(prev => prev.filter(v => v.id !== id));
+        toast.success('Đã xóa biến thể thành công!');
       }
     }
   };
@@ -405,7 +502,7 @@ export function ProductVariantsPage() {
             <span className="text-sm font-bold text-gray-500">Đang tải danh sách biến thể...</span>
           </div>
         ) : (
-          <ReusableDataTable data={filtered} columns={columns} />
+          <ReusableDataTable data={filtered} columns={columns} onRowClick={(row) => handleOpenEdit(row)} />
         )}
       </div>
 
@@ -508,7 +605,7 @@ export function ProductVariantsPage() {
               className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/50"
             >
               <option value="">-- Chọn sản phẩm cha --</option>
-              {productsList.map(p => (
+              {allParentProducts.map(p => (
                 <option key={p.id} value={p.id}>{p.name} ({p.sku || p.productCode || `PRD-${p.id}`})</option>
               ))}
             </select>

@@ -101,6 +101,15 @@ export function CustomersPage() {
       toast.error('Vui lòng nhập Họ & Tên khách hàng!');
       return;
     }
+    const nameRegex = /^[a-zA-ZÀ-ỹ\s'.-]+$/u;
+    if (!nameRegex.test(cleanName)) {
+      toast.error('Họ & Tên không được chứa chữ số hoặc ký tự đặc biệt!');
+      return;
+    }
+    if (cleanName.length < 2) {
+      toast.error('Họ & Tên khách hàng phải có tối thiểu 2 ký tự!');
+      return;
+    }
     if (!cleanPhone || !/^[0-9]{10,11}$/.test(cleanPhone)) {
       toast.error('Số điện thoại không hợp lệ! Vui lòng nhập từ 10 đến 11 chữ số.');
       return;
@@ -306,7 +315,7 @@ export function CustomersPage() {
               onClick={handleOpenCreate}
               className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap"
             >
-              <UserPlus className="w-4 h-4" /> Thêm khách hàng mới
+              <UserPlus className="w-4 h-4" /> Thêm Khách Hàng mới
             </button>
           </div>
         </div>

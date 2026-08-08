@@ -249,7 +249,7 @@ export function QuotesPage() {
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0">
-              <Download className="w-4 h-4" /> Xuất dữ liệu
+              <Download className="w-4 h-4" /> Xuất Dữ Liệu
             </button>
             {canManage && (
               <button onClick={handleOpenCreate} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0">

@@ -517,7 +517,7 @@ export function OnlineOrdersPage() {
 
       {/* Data Table */}
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
-        <ReusableDataTable columns={columns} data={filteredOrders} />
+        <ReusableDataTable columns={columns} data={filteredOrders} onRowClick={(row) => setSelectedOrder(row)} />
       </div>
 
       {/* Order Detail Drawer */}

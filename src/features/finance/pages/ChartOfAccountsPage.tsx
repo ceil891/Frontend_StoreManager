@@ -125,7 +125,7 @@ export default function ChartOfAccountsPage() {
         toast.success('Cập nhật tài khoản thành công');
       } else {
         await axiosClient.post('/accounting/chart-of-accounts', payload);
-        toast.success('Thêm tài khoản thành công');
+        toast.success('Thêm Tài Khoản thành công');
       }
       setIsModal(false);
       await fetchAccounts();
@@ -302,7 +302,7 @@ export default function ChartOfAccountsPage() {
       </Modal>
 
       {/* Modal Thêm / Sửa */}
-      <Modal isOpen={isModal} onClose={() => setIsModal(false)} title={form.id ? `Cập nhật tài khoản kế toán` : `Thêm tài khoản mới`} width="max-w-lg">
+      <Modal isOpen={isModal} onClose={() => setIsModal(false)} title={form.id ? `Cập nhật tài khoản kế toán` : `Thêm Tài Khoản mới`} width="max-w-lg">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>

@@ -175,7 +175,7 @@ export function ColorsPage() {
               onClick={handleOpenCreate}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
             >
-              <Plus className="w-4 h-4" /> Thêm màu sắc
+              <Plus className="w-4 h-4" /> Thêm Màu Sắc
             </button>
           </div>
         </div>
@@ -266,7 +266,7 @@ export function ColorsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm màu sắc mới' : 'Chỉnh sửa màu sắc'}
+        title={modalMode === 'create' ? 'Thêm Màu Sắc mới' : 'Chỉnh sửa màu sắc'}
         width="max-w-md"
       >
         <form onSubmit={handleSave} className="space-y-4">
@@ -335,7 +335,7 @@ export function ColorsPage() {
               Hủy bỏ
             </button>
             <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm transition-colors">
-              {modalMode === 'create' ? 'Tạo mới' : 'Lưu thay đổi'}
+              {modalMode === 'create' ? 'Tạo Mới' : 'Lưu thay đổi'}
             </button>
           </div>
         </form>

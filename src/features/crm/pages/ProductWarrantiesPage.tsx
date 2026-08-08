@@ -227,7 +227,7 @@ export function ProductWarrantiesPage() {
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
-              <Download className="w-4 h-4" /> Xuất dữ liệu
+              <Download className="w-4 h-4" /> Xuất Dữ Liệu
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg">
               <Plus className="w-4 h-4" /> Thêm sổ bảo hành
@@ -380,7 +380,7 @@ export function ProductWarrantiesPage() {
               Hủy bỏ
             </button>
             <button type="submit" className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded text-sm font-medium">
-              {modalMode === 'create' ? 'Thêm mới' : 'Lưu thay đổi'}
+              {modalMode === 'create' ? 'Thêm Mới' : 'Lưu thay đổi'}
             </button>
           </div>
         </form>

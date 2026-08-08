@@ -123,25 +123,29 @@ export function PosTerminalPage() {
   }, [branches, user]);
 
   const productsList = useMemo(() => {
-    return (products || []).map((p) => {
-      const cat = (categories || []).find((c) => c.categoryName === p.category);
-      const tc = (cat?.taxClass || 'VAT_8') as string;
-      let rate = 0.08;
-      if (tc === 'VAT_5') rate = 0.05;
-      else if (tc === 'VAT_10') rate = 0.10;
-      else if (tc === 'EXEMPT') rate = 0.00;
-      return {
-        id: String(p.id),
-        name: p.name || '',
-        price: Number(p.price || 0),
-        image: p.mainImage || (p as any).mainImageUrl || 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=200&q=80',
-        sku: p.sku || '',
-        category: p.category || 'Tất cả',
-        unit: p.unit || 'Cái',
-        stock: Number(p.onHand || 0),
-        taxRate: rate,
-      };
-    });
+    return (products || [])
+      .filter((p) => p.status === 'ACTIVE' && (p as any).isActive !== false)
+      .map((p) => {
+        const cat = (categories || []).find((c) => c.categoryName === p.category);
+        const tc = (cat?.taxClass || 'VAT_8') as string;
+        let rate = 0.08;
+        if (tc === 'VAT_5') rate = 0.05;
+        else if (tc === 'VAT_10') rate = 0.10;
+        else if (tc === 'EXEMPT') rate = 0.00;
+        const barcode = p.barcodes && p.barcodes.length > 0 ? p.barcodes[0] : (p.sku || String(p.id));
+        return {
+          id: String(p.id),
+          name: p.name || '',
+          price: Number(p.price || 0),
+          image: p.mainImage || (p as any).mainImageUrl || 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=200&q=80',
+          sku: p.sku || '',
+          barcode,
+          category: p.category || 'Tất cả',
+          unit: p.unit || 'Cái',
+          stock: Number(p.onHand || 0),
+          taxRate: rate,
+        };
+      });
   }, [products, categories]);
 
   const categoryTabs = useMemo(() => {
@@ -472,7 +476,10 @@ export function PosTerminalPage() {
     const performOrderCreation = () => {
       addSaleOrder({
         code,
-        customerId: activeCustomer?.id ?? WALK_IN_CUSTOMER_ID,
+        orderCode: code,
+        orderDate: new Date().toISOString(),
+        customerId: Number(activeCustomer?.id) || 1,
+        branchId: Number(branchId) || 1,
         customerName: customerDisplayName,
         date: dateStr,
         subTotal: Math.round(subtotal),
@@ -485,17 +492,21 @@ export function PosTerminalPage() {
         cashier: user?.name ?? 'Thu ngân',
         createdByName: user?.name ?? 'Thu ngân',
         createdByEmail: user?.email,
-        branchId,
         branchName,
         origin: 'POS',
         currency: 'VND',
         itemsSummary,
         orderLines,
+        details: items.map(i => ({
+          productVariantId: Number(i.id) || 1,
+          quantity: i.quantity,
+          unitPriceSnapshot: i.price
+        })),
         amountTendered: isCashPayment ? Math.round(cashGivenNum) : Math.round(totalAmount),
         changeAmount: isCashPayment ? Math.round(changeAmount) : 0,
         shiftId: deriveShiftId(now),
         promoCodeApplied: appliedVoucher?.code,
-      });
+      } as any);
 
       // Tự động trừ tồn kho hiển thị (onHand) trên POS ngay lập tức & đồng bộ toàn hệ thống
       try {
@@ -653,7 +664,7 @@ export function PosTerminalPage() {
                     key={product.id}
                     type="button"
                     disabled={disabled}
-                    aria-label={`Thêm sản phẩm ${product.name}. Giá ${fmt(product.price)}. Tồn kho ${product.stock}. Đang chọn ${inCart}.`}
+                    aria-label={`Thêm Sản Phẩm ${product.name}. Giá ${fmt(product.price)}. Tồn kho ${product.stock}. Đang chọn ${inCart}.`}
                     onClick={() => handleAddProduct(product)}
                     className={`relative bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-all duration-150 select-none flex flex-col group text-left ${
                       cartItem
@@ -685,7 +696,9 @@ export function PosTerminalPage() {
                         {product.name}
                       </h3>
                       <div className="mt-1">
-                        <p className="text-[10px] text-gray-400 font-mono leading-none mb-1">{product.sku}</p>
+                        <p className="text-[10px] text-gray-400 font-mono leading-none mb-1">
+                          SKU: {product.sku} {product.barcode && product.barcode !== product.sku ? `• Barcode: ${product.barcode}` : ''}
+                        </p>
                         <div className="flex items-baseline justify-between gap-1 flex-wrap">
                           <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">{fmt(product.price)}</span>
                           <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">• Tồn: {product.stock}</span>

@@ -529,7 +529,7 @@ export function MobileInventoryPage() {
                 <div className="bg-white dark:bg-slate-900 rounded-[28px] w-full max-w-[340px] p-5 shadow-xl border border-slate-100 dark:border-slate-800 max-h-[85%] overflow-y-auto animate-fade-in no-scrollbar">
                   <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800">
                     <h3 className="text-sm font-black text-slate-800 dark:text-white">
-                      {editingProduct ? 'Chỉnh sửa sản phẩm' : 'Thêm sản phẩm di động'}
+                      {editingProduct ? 'Chỉnh sửa sản phẩm' : 'Thêm Sản Phẩm di động'}
                     </h3>
                     <button 
                       onClick={() => setIsFormOpen(false)}
@@ -763,7 +763,7 @@ export function MobileInventoryPage() {
                         type="submit"
                         className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-sm"
                       >
-                        {editingProduct ? 'Cập nhật' : 'Tạo mới'}
+                        {editingProduct ? 'Cập nhật' : 'Tạo Mới'}
                       </button>
                     </div>
                   </form>

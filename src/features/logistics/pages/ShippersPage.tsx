@@ -147,6 +147,12 @@ export function ShippersPage() {
 
   const fetchShippers = async () => {
     setIsLoading(true);
+    const local = getSavedShippers();
+    if (local.length > 0) {
+      setData(local);
+      setIsLoading(false);
+      return;
+    }
     try {
       const res = await axiosClient.get<any, any[]>('/logistics/shippers');
       if (Array.isArray(res) && res.length > 0) {
@@ -167,12 +173,15 @@ export function ShippersPage() {
           notes: item.note || ''
         }));
         setData(mapped);
+        saveShippersList(mapped);
       } else {
         setData(defaultShipperList);
+        saveShippersList(defaultShipperList);
       }
     } catch (err) {
       console.error(err);
       setData(defaultShipperList);
+      saveShippersList(defaultShipperList);
     } finally {
       setIsLoading(false);
     }
@@ -277,10 +286,18 @@ export function ShippersPage() {
     }
 
     if (modalMode === 'create') {
-      setData(prev => [newRecord, ...prev]);
+      setData(prev => {
+        const next = [newRecord, ...prev];
+        saveShippersList(next);
+        return next;
+      });
       toast.success('Tạo đối tác giao hàng thành công!');
     } else {
-      setData(prev => prev.map(item => item.id === newRecord.id ? newRecord : item));
+      setData(prev => {
+        const next = prev.map(item => item.id === newRecord.id ? newRecord : item);
+        saveShippersList(next);
+        return next;
+      });
       toast.success('Cập nhật đối tác thành công!');
     }
 
@@ -300,7 +317,11 @@ export function ShippersPage() {
       } catch (err) {
         console.warn('API delete shipper failed, applying local state update:', err);
       }
-      setData(prev => prev.filter(item => item.id !== id));
+      setData(prev => {
+        const next = prev.filter(item => item.id !== id);
+        saveShippersList(next);
+        return next;
+      });
       toast.success('Đã xóa đối tác thành công!');
       setSelectedShipper(null);
     }

@@ -261,7 +261,7 @@ export function SupplierWarehousesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm kho đối tác NCC mới' : 'Sửa kho đối tác'}
+        title={modalMode === 'create' ? 'Thêm Kho đối tác NCC mới' : 'Sửa kho đối tác'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">

@@ -72,13 +72,24 @@ export function CombosPage() {
 
   const handleSaveCombo = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingCombo.comboCode || !editingCombo.comboName) return;
+    if (!editingCombo.comboCode?.trim()) {
+      toast.error('Vui lòng nhập Mã Combo (VD: CB-1001)!');
+      return;
+    }
+    if (!editingCombo.comboName?.trim()) {
+      toast.error('Vui lòng nhập Tên Combo sản phẩm!');
+      return;
+    }
+    if (editingDetails.length === 0) {
+      toast.error('Vui lòng thêm ít nhất một sản phẩm thành phần cho gói Combo!');
+      return;
+    }
 
     const payload: Omit<ProductCombo, 'id'> = {
-      comboCode: editingCombo.comboCode,
+      comboCode: editingCombo.comboCode.trim(),
       comboBarcode: editingCombo.comboBarcode || '',
       comboType: editingCombo.comboType || 'PRE_ASSEMBLED',
-      comboName: editingCombo.comboName,
+      comboName: editingCombo.comboName.trim(),
       description: editingCombo.description || '',
       comboPrice: Number(editingCombo.comboPrice) || 0,
       status: editingCombo.status || 'ACTIVE',
@@ -89,8 +100,10 @@ export function CombosPage() {
 
     if (modalMode === 'create') {
       addCombo(payload);
+      toast.success(`Đã tạo thành công Combo: ${payload.comboName}`);
     } else if (editingCombo.id) {
       updateCombo(editingCombo.id, payload);
+      toast.success(`Đã cập nhật Combo: ${payload.comboName}`);
     }
     setIsModalOpen(false);
   };

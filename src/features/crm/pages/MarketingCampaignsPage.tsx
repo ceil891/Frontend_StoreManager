@@ -179,7 +179,7 @@ export function MarketingCampaignsPage() {
         toast.success(`Cập nhật chiến dịch ${selected.name} thành công!`);
       } else {
         await axiosClient.post('/crm/campaigns', payload);
-        toast.success(`Tạo mới chiến dịch ${selected.name} thành công!`);
+        toast.success(`Tạo Mới chiến dịch ${selected.name} thành công!`);
       }
       setModalOpen(false);
       fetchCampaigns();

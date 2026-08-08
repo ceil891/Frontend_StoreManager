@@ -18,7 +18,7 @@ interface CartActions {
   /** Background sync – hiển thị local ngay, diff với backend */
   fetchCart: () => Promise<void>;
 
-  /** Thêm sản phẩm – optimistic update */
+  /** Thêm Sản Phẩm – optimistic update */
   addItem: (variantId: number, quantity?: number) => Promise<void>;
 
   /** Cập nhật số lượng – optimistic update. quantity=0 → xóa */
