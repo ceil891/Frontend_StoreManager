@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit, Trash, Info } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -179,7 +178,7 @@ const CostCentersPage: React.FC = () => {
           className="flex items-center space-x-1 px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition"
         >
           <Plus size={16} />
-          <span>Thêm mới</span>
+          <span>Thêm Mới</span>
         </button>
       </div>
       {isLoading ? (
@@ -195,7 +194,7 @@ const CostCentersPage: React.FC = () => {
       )}
 
       {/* Drawer chi tiết */}
-      <Drawer isOpen={isDrawerOpen} onClose={() => setDrawerOpen(false)} title="Chi tiết Trung tâm chi phí">
+      <Modal isOpen={isDrawerOpen} onClose={() => setDrawerOpen(false)} title="Chi tiết Trung tâm chi phí" width="max-w-lg">
         {selectedItem && (
           <div className="space-y-2 text-sm">
             <p><strong>Mã trung tâm:</strong> {selectedItem.id}</p>
@@ -205,10 +204,10 @@ const CostCentersPage: React.FC = () => {
             <p><strong>Trạng thái:</strong> {selectedItem.isActive ? 'HOẠT ĐỘNG' : 'NGỪNG HOẠT ĐỘNG'}</p>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal thêm / sửa */}
-      <Modal isOpen={isModalOpen} onClose={() => setModalOpen(false)} title={isEditMode ? 'Chỉnh sửa Trung tâm chi phí' : 'Thêm mới Trung tâm chi phí'}>
+      <Modal isOpen={isModalOpen} onClose={() => setModalOpen(false)} title={isEditMode ? 'Chỉnh sửa Trung tâm chi phí' : 'Thêm Mới Trung tâm chi phí'}>
         <form onSubmit={handleSave} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Mã trung tâm</label>

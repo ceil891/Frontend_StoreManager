@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, Bell, Send, Users, Mail, MessageSquare, Trash2, X, AlertTriangle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import { useSystemStore, type NotificationRuleRecord } from '../store/systemStore';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -368,12 +367,12 @@ export function NotificationsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedRule(row)} />
       </div>
 
-      {/* VIEW DRAWER */}
-      <Drawer
+      {/* VIEW MODAL */}
+      <Modal
         isOpen={!!selectedRule}
         onClose={() => setSelectedRule(null)}
         title={selectedRule ? `Luật gửi cảnh báo: ${selectedRule.ruleCode}` : 'Chi tiết luật thiết lập'}
-        width="max-w-xl"
+        width="max-w-2xl"
       >
         {selectedRule && (
           <div className="space-y-6">
@@ -466,14 +465,14 @@ export function NotificationsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
-      {/* FORM DRAWER */}
-      <Drawer
+      {/* FORM MODAL */}
+      <Modal
         isOpen={formOpen}
         onClose={() => setFormOpen(false)}
-        title={formMode === 'create' ? 'Tạo mới luật gửi thông báo cảnh báo' : 'Sửa đổi cấu trúc cảnh báo tự động'}
-        width="max-w-md"
+        title={formMode === 'create' ? 'Tạo Mới luật gửi thông báo cảnh báo' : 'Sửa đổi cấu trúc cảnh báo tự động'}
+        width="max-w-lg"
       >
         <form onSubmit={handleSave} className="space-y-5">
           <div className="grid grid-cols-2 gap-4">
@@ -585,7 +584,7 @@ export function NotificationsPage() {
             </button>
           </div>
         </form>
-      </Drawer>
+      </Modal>
 
       {/* DELETION CONFIRMATION MODAL */}
       <Modal

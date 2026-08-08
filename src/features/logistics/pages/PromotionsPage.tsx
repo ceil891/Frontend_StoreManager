@@ -103,23 +103,35 @@ export function PromotionsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (modalMode === 'create') {
-      await addPromotion({
-        promoCode: editingPromo.promoCode || 'PROMO',
-        promoName: editingPromo.campaignTitle || 'Khuyến mãi mới',
-        discountType: 'PERCENT',
-        discountValue: 10,
-        startDate: editingPromo.startDate || '',
-        endDate: editingPromo.endDate || '',
-        status: 'ACTIVE',
-      });
-    } else if (editingPromo.id) {
-      await updatePromotion(editingPromo.id, {
-        promoCode: editingPromo.promoCode,
-        promoName: editingPromo.campaignTitle,
-      });
+    try {
+      const numericVal = parseFloat(editingPromo.discountValue || '10') || 10;
+      if (modalMode === 'create') {
+        await addPromotion({
+          promoCode: editingPromo.promoCode || 'PROMO-2026',
+          promoName: editingPromo.campaignTitle || 'Chương trình khuyến mãi mới',
+          discountType: 'PERCENT',
+          discountValue: numericVal,
+          startDate: editingPromo.startDate || new Date().toISOString().slice(0, 10),
+          endDate: editingPromo.endDate || '',
+          status: editingPromo.status === 'EXPIRED' ? 'EXPIRED' : 'ACTIVE',
+        });
+        toast.success('Khởi chạy chương trình khuyến mãi mới thành công!');
+      } else if (editingPromo.id) {
+        await updatePromotion(editingPromo.id, {
+          promoCode: editingPromo.promoCode,
+          promoName: editingPromo.campaignTitle,
+          discountValue: numericVal,
+          startDate: editingPromo.startDate,
+          endDate: editingPromo.endDate,
+        });
+        toast.success('Cập nhật khuyến mãi thành công!');
+      }
+      setIsModalOpen(false);
+      fetchPromotions();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi lưu chương trình khuyến mãi!');
     }
-    setIsModalOpen(false);
   };
 
   const handleDelete = async (id: string) => {
@@ -244,7 +256,8 @@ export function PromotionsPage() {
       </div>
 
       {/* Detail Drawer */}
-      <Drawer
+      {/* Modal Xem chi tiết khuyến mãi căn giữa (TC-ALL-1) */}
+      <Modal
         isOpen={!!selectedPromo}
         onClose={() => setSelectedPromo(null)}
         title={selectedPromo ? `Hồ sơ chương trình: ${selectedPromo.promoCode}` : 'Thông tin chương trình'}
@@ -290,7 +303,7 @@ export function PromotionsPage() {
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   <DollarSign className="w-4 h-4 text-emerald-600" /> Tổng tiền chiết khấu
                 </div>
-                <p className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 truncate">${selectedPromo.totalDiscountGivenUsd.toFixed(2)}</p>
+                <p className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 truncate">{selectedPromo.totalDiscountGivenUsd.toLocaleString('vi-VN')} VNĐ</p>
               </div>
             </div>
 
@@ -298,9 +311,6 @@ export function PromotionsPage() {
               <div className="border-b border-gray-200 dark:border-gray-700 pb-3">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Tên chiến dịch</span>
                 <h3 className="text-base font-bold text-gray-900 dark:text-white">{selectedPromo.campaignTitle}</h3>
-                <span className={`inline-block mt-1 text-xs px-2.5 py-0.5 rounded-full font-bold border ${segmentBadgeStyles[selectedPromo.targetSegment]}`}>
-                  Phân khúc: {selectedPromo.targetSegment.replace(/_/g, ' ')}
-                </span>
               </div>
 
               <div className="grid grid-cols-2 pt-2 text-xs font-mono">
@@ -313,39 +323,19 @@ export function PromotionsPage() {
                   <span className="text-red-500 font-semibold">{selectedPromo.endDate}</span>
                 </div>
               </div>
-
-              <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700 text-sm font-mono">
-                <span className="text-gray-500 dark:text-gray-400 font-sans">Giá trị đơn tối thiểu:</span>
-                <span className="font-bold text-gray-900 dark:text-white">${selectedPromo.minSpendRequired.toFixed(2)}</span>
-              </div>
-
-              {selectedPromo.marketingNotes && (
-                <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Ghi chú truyền thông</span>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedPromo.marketingNotes}</p>
-                </div>
-              )}
             </div>
 
-            <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
-              {selectedPromo.status === 'UPCOMING' && (
-                <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                  <CheckCircle2 className="w-4 h-4" /> Force Immediate Launch
-                </button>
-              )}
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-2">
               <button
-                onClick={() => navigator.clipboard.writeText(selectedPromo.promoCode)}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                onClick={() => setSelectedPromo(null)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-sm"
               >
-                <Copy className="w-4 h-4" /> Copy Promo Tag
-              </button>
-              <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
-                <Calendar className="w-4 h-4 inline mr-1" /> Extend Expiry Window
+                Đóng Hộp Thoại
               </button>
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Create/Edit Modal */}
       <Modal

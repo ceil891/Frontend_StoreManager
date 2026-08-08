@@ -1,3 +1,4 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { 
   Plus, Search, Eye, Edit, Trash2, Grid, Package, CheckCircle2, 
@@ -5,8 +6,8 @@ import {
   Percent, RefreshCw, Barcode, MapPin, Sliders, Layout, ShieldAlert
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -363,7 +364,7 @@ export function WarehouseAreasPage() {
       <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
 
       {/* Drawer: Chi tiết Kệ Hàng */}
-      <Drawer
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
         title={`Chi tiết Kệ Hàng: ${selected?.rackCode}`}
@@ -472,7 +473,7 @@ export function WarehouseAreasPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Khai báo kệ hàng */}
       <Modal

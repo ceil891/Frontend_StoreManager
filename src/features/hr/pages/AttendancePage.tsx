@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Search, Download, Eye, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
+import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 
 interface AttendanceItem {
@@ -92,7 +92,7 @@ export function AttendancePage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} isLoading={isLoading}/>
       </div>
 
-      <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết chấm công: ${selected.userName}`:''}>
+      <Modal isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết chấm công: ${selected.userName}`:''} width="max-w-lg">
         {selected&&(
           <div className="space-y-4">
             <div className={`p-4 rounded-xl border flex items-center gap-3 ${statusCfg[selected.status]?.cls.includes('emerald')?'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200':'bg-gray-50 dark:bg-gray-900/30 border-gray-200'}`}>
@@ -117,7 +117,7 @@ export function AttendancePage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
     </>
   );
 }

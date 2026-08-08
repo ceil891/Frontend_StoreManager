@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Search, Download, Eye, Monitor, Smartphone, Globe, Trash2, Shield } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
@@ -9,15 +8,18 @@ import { toast } from 'sonner';
 
 interface DeviceSessionItem {
   id: string;
+  deviceId: string;
   userId: string;
   userName: string;
   deviceInfo: string;
   deviceType: 'Máy tính' | 'Điện thoại' | 'Máy tính bảng';
   ipAddress: string;
+  macAddress?: string;
   loginTime: string;
   lastActive: string;
   status: 'HOẠT_ĐỘNG' | 'ĐÃ_ĐĂNG_XUẤT' | 'HẾT_PHIÊN';
   location: string;
+  userAgent?: string;
 }
 
 const statusConfig: Record<string, { label: string; cls: string }> = {
@@ -41,15 +43,18 @@ export function DeviceSessionsPage() {
   const data: DeviceSessionItem[] = useMemo(() => {
     return storeSessions.map((s) => ({
       id: s.id,
-      userId: 'U001',
+      deviceId: s.deviceId || `DEV-${s.id}`,
+      userId: s.userId || 'EMP-001',
       userName: s.userName,
       deviceInfo: s.deviceName,
-      deviceType: 'Máy tính',
+      deviceType: s.deviceType || 'Máy tính',
       ipAddress: s.ipAddress,
+      macAddress: s.macAddress,
       loginTime: s.loginTime,
-      lastActive: s.loginTime,
+      lastActive: s.lastActive || s.loginTime,
       status: s.status === 'ACTIVE' ? 'HOẠT_ĐỘNG' : 'ĐÃ_ĐĂNG_XUẤT',
-      location: 'Việt Nam',
+      location: s.location || 'Việt Nam',
+      userAgent: s.userAgent,
     }));
   }, [storeSessions]);
 
@@ -61,7 +66,12 @@ export function DeviceSessionsPage() {
 
   const filtered = data.filter((item) => {
     const q = search.toLowerCase();
-    const matchSearch = item.userName.toLowerCase().includes(q) || item.ipAddress.includes(q) || item.deviceInfo.toLowerCase().includes(q);
+    const matchSearch =
+      item.userName.toLowerCase().includes(q) ||
+      item.ipAddress.includes(q) ||
+      item.deviceInfo.toLowerCase().includes(q) ||
+      item.deviceId.toLowerCase().includes(q) ||
+      (item.macAddress && item.macAddress.toLowerCase().includes(q));
     const matchStatus = statusFilter === 'Tất cả' || item.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -86,6 +96,11 @@ export function DeviceSessionsPage() {
 
   const columns = useMemo<ColumnDef<DeviceSessionItem>[]>(() => [
     {
+      accessorKey: 'deviceId',
+      header: 'Mã thiết bị',
+      cell: (info) => <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded">{info.getValue() as string}</span>,
+    },
+    {
       accessorKey: 'userName',
       header: 'Nhân viên',
       cell: ({ row }) => (
@@ -97,13 +112,13 @@ export function DeviceSessionsPage() {
     },
     {
       accessorKey: 'deviceInfo',
-      header: 'Thiết bị',
+      header: 'Thiết bị & OS',
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
           <span className="text-gray-400"><DeviceIcon type={row.original.deviceType} /></span>
           <div>
-            <p className="text-sm text-gray-700 dark:text-gray-300">{row.original.deviceInfo}</p>
-            <p className="text-xs text-gray-400">{row.original.deviceType}</p>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{row.original.deviceInfo}</p>
+            <p className="text-xs text-gray-400">{row.original.deviceType} {row.original.macAddress ? `• MAC: ${row.original.macAddress}` : ''}</p>
           </div>
         </div>
       ),
@@ -111,7 +126,7 @@ export function DeviceSessionsPage() {
     {
       accessorKey: 'ipAddress',
       header: 'Địa chỉ IP',
-      cell: (info) => <span className="font-mono text-sm text-blue-600 dark:text-blue-400">{info.getValue() as string}</span>,
+      cell: (info) => <span className="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">{info.getValue() as string}</span>,
     },
     {
       accessorKey: 'lastActive',
@@ -177,7 +192,7 @@ export function DeviceSessionsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} isLoading={isLoading} />
       </div>
 
-      <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết phiên: ${selected.userName}` : ''} width="max-w-lg">
+      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết phiên: ${selected.userName}` : ''} width="max-w-lg">
         {selected && (
           <div className="space-y-5">
             <div className={`p-4 rounded-xl border flex items-center gap-3 ${selected.status === 'HOẠT_ĐỘNG' ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-gray-50 dark:bg-gray-900/30 border-gray-200 dark:border-gray-700'}`}>
@@ -191,9 +206,11 @@ export function DeviceSessionsPage() {
               {[
                 { label: 'Nhân viên', value: selected.userName },
                 { label: 'Mã nhân viên', value: selected.userId },
+                { label: 'Mã thiết bị (Device ID)', value: selected.deviceId },
                 { label: 'Loại thiết bị', value: selected.deviceType },
-                { label: 'Thông tin thiết bị', value: selected.deviceInfo },
+                { label: 'Thông tin thiết bị & Browser', value: selected.deviceInfo },
                 { label: 'Địa chỉ IP', value: selected.ipAddress },
+                { label: 'Địa chỉ MAC', value: selected.macAddress || 'N/A' },
                 { label: 'Vị trí địa lý', value: selected.location },
                 { label: 'Thời gian đăng nhập', value: selected.loginTime },
                 { label: 'Hoạt động cuối', value: selected.lastActive },
@@ -211,7 +228,7 @@ export function DeviceSessionsPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal isOpen={!!revokingItem} onClose={() => setRevokingItem(null)} title="Xác nhận thu hồi phiên" isDestructive width="max-w-md">
         <div className="space-y-4">

@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, Calendar, Star, User, ClipboardList, CheckCircle2, Award, AwardIcon, TrendingUp } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -223,7 +224,7 @@ export function SupplierEvaluationsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Đánh giá nhà cung cấp (vendor evaluation)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Đánh giá nhà cung cấp (Vendor Evaluation)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Thực hiện xếp hạng, chấm điểm nhà cung cấp dựa trên các tiêu chí giao hàng trễ, chất lượng hàng hóa lỗi hỏng, và giá cả sản phẩm.
             </p>
@@ -279,7 +280,7 @@ export function SupplierEvaluationsPage() {
       </div>
 
       {/* Drawer Chi tiết tiêu chí chấm điểm */}
-      <Drawer
+      <Modal
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
         title={selectedItem ? `Chi tiết Đánh giá: ${selectedItem.supplierName}` : 'Thông tin chi tiết'}
@@ -345,7 +346,7 @@ export function SupplierEvaluationsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal lập phiếu đánh giá nhà cung cấp */}
       <Modal

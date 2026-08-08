@@ -1,7 +1,6 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Plus, Edit, Trash2, Eye, Search } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
@@ -17,8 +16,6 @@ interface Campaign {
   status: 'ĐANG_LÊN_KẾ_HOẠCH' | 'ĐANG_CHẠY' | 'ĐÃ_KẾT_THÚC' | 'TẠM_DỪNG';
 }
 
-const MOCK_CAMPAIGNS: Campaign[] = [];
-
 const statusStyles: Record<Campaign['status'], string> = {
   ĐANG_LÊN_KẾ_HOẠCH: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
   ĐANG_CHẠY: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
@@ -29,7 +26,6 @@ const statusStyles: Record<Campaign['status'], string> = {
 import { axiosClient } from '@/shared/lib/axiosClient';
 
 export function MarketingCampaignsPage() {
-  const setData = (_fn: any) => {};
   const [isLoading, setIsLoading] = useState(false);
   const {
     marketingCampaigns: storeCampaigns,
@@ -40,62 +36,33 @@ export function MarketingCampaignsPage() {
   } = useCrmStore();
 
   useEffect(() => {
-    fetchMarketingCampaigns();
+    setIsLoading(true);
+    fetchMarketingCampaigns().finally(() => setIsLoading(false));
   }, [fetchMarketingCampaigns]);
 
   const data: Campaign[] = useMemo(() => {
-    return storeCampaigns.map((m) => ({
-      id: m.id,
-      code: m.code,
-      name: m.title,
-      budget: 150000000,
-      startDate: m.startDate,
-      endDate: m.endDate,
-      status: m.status === 'RUNNING' ? 'ĐANG_CHẠY' : m.status === 'COMPLETED' ? 'ĐÃ_KẾT_THÚC' : 'ĐANG_LÊN_KẾ_HOẠCH',
+    return (storeCampaigns || []).map((m: any) => ({
+      id: String(m.id || ''),
+      code: m.code || '',
+      name: m.title || m.name || '',
+      budget: Number(m.budget ?? 0),
+      startDate: m.startDate ? String(m.startDate).split('T')[0] : (m.scheduledDate ? String(m.scheduledDate).split('T')[0] : ''),
+      endDate: m.endDate ? String(m.endDate).split('T')[0] : '',
+      status: m.status === 'ACTIVE' || m.status === 'RUNNING' ? 'ĐANG_CHẠY' as const : m.status === 'COMPLETED' ? 'ĐÃ_KẾT_THÚC' as const : m.status === 'CANCELLED' || m.status === 'PAUSED' ? 'TẠM_DỪNG' as const : 'ĐANG_LÊN_KẾ_HOẠCH' as const,
     }));
   }, [storeCampaigns]);
+
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Campaign | null>(null);
   const [isModalOpen, setModalOpen] = useState(false);
   const [isEdit, setEdit] = useState(false);
 
-  const fetchCampaigns = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const res: any = await axiosClient.get('/crm/campaigns');
-      const list = Array.isArray(res) ? res : res?.content || res?.data || [];
-      if (list.length > 0) {
-        const mapped: Campaign[] = list.map((item: any) => ({
-          id: String(item.id),
-          code: item.campaignCode || `CAM${item.id}`,
-          name: item.name || 'Chiến dịch',
-          budget: Number(item.budget || 0),
-          startDate: item.startDate ? String(item.startDate).split('T')[0] : '2024-06-01',
-          endDate: item.endDate ? String(item.endDate).split('T')[0] : '2024-12-31',
-          status: item.status === 'ACTIVE' ? 'ĐANG_CHẠY' : item.status === 'COMPLETED' ? 'ĐÃ_KẾT_THÚC' : item.status === 'CANCELLED' ? 'TẠM_DỪNG' : 'ĐANG_LÊN_KẾ_HOẠCH',
-        }));
-        setData(mapped);
-      } else {
-        setData([]);
-      }
-    } catch (err) {
-      console.error('Error fetching campaigns:', err);
-      setData([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchCampaigns();
-  }, [fetchCampaigns]);
-
   const handleDelete = async (campaign: Campaign) => {
     if (!confirm(`Bạn có chắc muốn xóa chiến dịch ${campaign.name}?`)) return;
     try {
-      await axiosClient.delete(`/crm/campaigns/${campaign.id}`);
+      await deleteMarketingCampaign(campaign.id);
       toast.success(`Đã xóa chiến dịch ${campaign.name}`);
-      setData((prev) => prev.filter((d) => d.id !== campaign.id));
+      fetchMarketingCampaigns();
     } catch (err) {
       console.error('Error deleting campaign:', err);
       toast.error('Lỗi khi xóa chiến dịch');
@@ -105,9 +72,9 @@ export function MarketingCampaignsPage() {
   const filtered = data.filter((c) => {
     const q = search.toLowerCase();
     return (
-      c.code.toLowerCase().includes(q) ||
-      c.name.toLowerCase().includes(q) ||
-      c.status.toLowerCase().includes(q)
+      (c.code || '').toLowerCase().includes(q) ||
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.status || '').toLowerCase().includes(q)
     );
   });
 
@@ -120,18 +87,18 @@ export function MarketingCampaignsPage() {
         header: 'Ngân sách',
         cell: (info) => (
           <span className="font-medium text-gray-900 dark:text-white">
-            {info.getValue<number>().toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}
+            {Number(info.getValue() ?? 0).toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}
           </span>
         ),
       },
-      { accessorKey: 'startDate', header: 'Bắt đầu', cell: (info) => <span>{info.getValue<string>()}</span> },
-      { accessorKey: 'endDate', header: 'Kết thúc', cell: (info) => <span>{info.getValue<string>()}</span> },
+      { accessorKey: 'startDate', header: 'Bắt đầu', cell: (info) => <span>{String(info.getValue() || '')}</span> },
+      { accessorKey: 'endDate', header: 'Kết thúc', cell: (info) => <span>{String(info.getValue() || '')}</span> },
       {
         accessorKey: 'status',
         header: 'Trạng thái',
         cell: (info) => (
           <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusStyles[info.getValue<Campaign['status']>()] || 'bg-gray-100 text-gray-800'}`}>
-            {info.getValue<string>().replace('_', ' ')}
+            {String(info.getValue() || '').replace(/_/g, ' ')}
           </span>
         ),
       },
@@ -160,6 +127,20 @@ export function MarketingCampaignsPage() {
     e.preventDefault();
     if (!selected?.code || !selected?.name) return toast.error('Vui lòng nhập Mã và Tên chiến dịch');
 
+    if (!selected.startDate) {
+      return toast.error('Vui lòng chọn ngày bắt đầu chiến dịch!');
+    }
+
+    if (!selected.endDate) {
+      return toast.error('Vui lòng chọn ngày kết thúc chiến dịch!');
+    }
+
+    // Validate: ngày kết thúc phải >= ngày bắt đầu
+    if (selected.startDate && selected.endDate && selected.endDate < selected.startDate) {
+      toast.error('❌ Ngày kết thúc không thể nhỏ hơn ngày bắt đầu! Vui lòng kiểm tra lại.');
+      return;
+    }
+
     const statusMap: Record<string, string> = {
       ĐANG_LÊN_KẾ_HOẠCH: 'PLANNING',
       ĐANG_CHẠY: 'ACTIVE',
@@ -168,22 +149,26 @@ export function MarketingCampaignsPage() {
     };
 
     const payload = {
+      code: selected.code,
       campaignCode: selected.code,
+      title: selected.name,
       name: selected.name,
       budget: selected.budget,
+      startDate: selected.startDate,
+      endDate: selected.endDate,
       status: statusMap[selected.status] || 'PLANNING',
     };
 
     try {
-      if (isEdit) {
-        await axiosClient.put(`/crm/campaigns/${selected.id}`, payload);
+      if (isEdit && selected.id) {
+        await updateMarketingCampaign(selected.id, payload as any);
         toast.success(`Cập nhật chiến dịch ${selected.name} thành công!`);
       } else {
-        await axiosClient.post('/crm/campaigns', payload);
+        await addMarketingCampaign(payload as any);
         toast.success(`Tạo mới chiến dịch ${selected.name} thành công!`);
       }
       setModalOpen(false);
-      fetchCampaigns();
+      fetchMarketingCampaigns();
     } catch (err) {
       console.error('Error saving campaign:', err);
       toast.error('Không thể lưu chiến dịch');
@@ -213,17 +198,17 @@ export function MarketingCampaignsPage() {
       <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row: any) => setSelected(row)} />
 
       {/* Drawer chi tiết */}
-      <Drawer isOpen={!!selected && !isModalOpen} onClose={() => setSelected(null)} title="Chi tiết chiến dịch">
+      <Modal isOpen={!!selected && !isModalOpen} onClose={() => setSelected(null)} title="Chi tiết chiến dịch" width="max-w-lg">
         {selected && (
           <div className="space-y-2 text-sm">
             <p><strong>Mã:</strong> {selected.code}</p>
             <p><strong>Tên:</strong> {selected.name}</p>
-            <p><strong>Ngân sách:</strong> {selected.budget.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</p>
+            <p><strong>Ngân sách:</strong> {Number(selected.budget || 0).toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</p>
             <p><strong>Thời gian:</strong> {selected.startDate} → {selected.endDate}</p>
-            <p><strong>Trạng thái:</strong> {selected.status.replace('_', ' ')}</p>
+            <p><strong>Trạng thái:</strong> {(selected.status || '').replace(/_/g, ' ')}</p>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Thêm / Sửa */}
       <Modal isOpen={isModalOpen} onClose={() => setModalOpen(false)} title={isEdit ? 'Chỉnh sửa chiến dịch' : 'Thêm chiến dịch'} width="max-w-lg">
@@ -291,6 +276,7 @@ export function MarketingCampaignsPage() {
               <label className="block text-sm font-medium mb-1">Ngày kết thúc *</label>
               <input
                 type="date"
+                min={selected?.startDate || undefined}
                 value={selected?.endDate || ''}
                 onChange={e => setSelected({ ...selected!, endDate: e.target.value })}
                 className="w-full border rounded px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
@@ -309,4 +295,3 @@ export function MarketingCampaignsPage() {
 }
 
 export default MarketingCampaignsPage;
-

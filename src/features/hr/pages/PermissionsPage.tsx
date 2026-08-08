@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, ShieldAlert, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePermissionStore, type Permission as PermissionItem } from '../store/permissionStore';
@@ -212,10 +211,11 @@ export function PermissionsPage() {
       </div>
 
       {/* Drawer Chi tiết */}
-      <Drawer
+      <Modal
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
         title={selectedItem ? `Chi tiết quyền: ${selectedItem.permissionCode}` : 'Thông tin chi tiết'}
+        width="max-w-lg"
       >
         {selectedItem && (
           <div className="space-y-6">
@@ -263,7 +263,7 @@ export function PermissionsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Khai báo / Sửa */}
       <Modal
@@ -331,7 +331,7 @@ export function PermissionsPage() {
               type="submit"
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              {modalMode === 'create' ? 'Tạo mới' : 'Lưu cập nhật'}
+              {modalMode === 'create' ? 'Tạo Mới' : 'Lưu cập nhật'}
             </button>
           </div>
         </form>

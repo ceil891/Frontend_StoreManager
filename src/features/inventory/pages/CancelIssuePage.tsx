@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, AlertCircle, Building2, Calendar, FileText, CheckCircle2, Edit, Trash2, X, User, ImageIcon, RefreshCw } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { exportToCsv } from '@/shared/utils/exportCsv';
 import { useInventoryStore, type CancelIssueRecord } from '../store/inventoryStore';
@@ -281,7 +282,7 @@ export function CancelIssuePage() {
               }}
               className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
             >
-              <Download className="w-4 h-4" /> Xuất dữ liệu
+              <Download className="w-4 h-4" /> Xuất Dữ Liệu
             </button>
             <button
               onClick={handleOpenCreate}
@@ -346,7 +347,7 @@ export function CancelIssuePage() {
       </div>
 
       {/* Drawer chi tiết */}
-      <Drawer
+      <Modal
         isOpen={!!selectedIssue}
         onClose={() => setSelectedIssue(null)}
         title={selectedIssue ? `Chi tiết Hủy hàng: ${selectedIssue.issueCode}` : 'Chi tiết phiếu'}
@@ -473,7 +474,7 @@ export function CancelIssuePage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isFormOpen}
@@ -523,7 +524,8 @@ export function CancelIssuePage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chọn sản phẩm (SKU) *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chọn sản phẩm *</label>
+
               <select
                 value={editingIssue.sku || ''}
                 onChange={(e) => {

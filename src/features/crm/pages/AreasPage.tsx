@@ -202,20 +202,20 @@ export function AreasPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Khu vực địa lý (địa bàn kinh doanh)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Khu vực địa lý</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Quản lý phân cấp địa lý hành chính phục vụ định tuyến giao hàng, phân công nhân sự và phân tích doanh thu khu vực.
             </p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Xuất dữ liệu
+              <Download className="w-4 h-4" /> Xuất Dữ Liệu
             </button>
             <button
               onClick={handleOpenCreate}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
             >
-              <Plus className="w-4 h-4" /> Thêm khu vực
+              <Plus className="w-4 h-4" /> Thêm Khu Vực
             </button>
           </div>
         </div>
@@ -265,36 +265,35 @@ export function AreasPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedItem(row)} isLoading={isLoading}/>
       </div>
 
-      {/* Drawer Chi tiết */}
-      <Drawer
+      {/* Modal Xem chi tiết khu vực căn giữa (TC-ALL-1) */}
+      <Modal
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
-        title={selectedItem ? `Chi tiết địa bàn: ${selectedItem.name}` : 'Thông tin chi tiết'}
+        title={selectedItem ? `Hồ sơ địa bàn: ${selectedItem.name}` : 'Thông tin địa bàn'}
+        width="max-w-md"
       >
         {selectedItem && (
-          <div className="space-y-6">
-            <div className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
-              <MapPin className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 p-3.5 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
+              <div className="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold">
+                <Globe className="w-5 h-5" />
+              </div>
               <div>
-                <p className="text-xs text-gray-500">Mã định danh khu vực</p>
-                <p className="text-base font-bold text-emerald-800 dark:text-emerald-400">{selectedItem.areaCode}</p>
+                <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">{selectedItem.areaCode}</span>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white">{selectedItem.name}</h3>
               </div>
             </div>
 
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500">Tên khu vực:</span>
-                <span className="font-bold text-gray-900 dark:text-white">{selectedItem.name}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500">Cấp quản lý hành chính:</span>
+                <span className="text-gray-500">Cấp phân loại:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">
-                  {selectedItem.level === 'TỈNH_THÀNH' ? 'Tỉnh / Thành phố' : selectedItem.level === 'QUẬN_HUYỆN' ? 'Quận / huyện' : 'Phường / xã'}
+                  {selectedItem.level === 'TỈNH_THÀNH' ? 'Tỉnh / Thành phố' : selectedItem.level === 'QUẬN_HUYỆN' ? 'Quận / Huyện' : 'Phường / Xã'}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500">Khu vực quản lý cấp trên (Cha):</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedItem.parentName || 'Không có (Cấp cao nhất)'}</span>
+                <span className="text-gray-500">Khu vực cha:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{selectedItem.parentName || '— (Trực thuộc trung ương)'}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500">Ngày tạo:</span>
@@ -317,15 +316,25 @@ export function AreasPage() {
                 <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedItem.description || 'Chưa có mô tả chi tiết cho khu vực này.'}</p>
               </div>
             </div>
+
+            <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => setSelectedItem(null)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-sm"
+              >
+                Đóng Hộp Thoại
+              </button>
+            </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Thêm / Sửa */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm khu vực mới' : 'Cập nhật khu vực'}
+        title={modalMode === 'create' ? 'Thêm Khu Vực mới' : 'Cập nhật khu vực'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div>
@@ -419,7 +428,7 @@ export function AreasPage() {
               type="submit"
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              {modalMode === 'create' ? 'Tạo mới' : 'Lưu cập nhật'}
+              {modalMode === 'create' ? 'Tạo Mới' : 'Lưu cập nhật'}
             </button>
           </div>
         </form>

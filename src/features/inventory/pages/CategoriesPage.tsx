@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Tag, Layers, CheckCircle2, FileText, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import { TreeSelect } from '@/shared/components/ui/TreeSelect';
 import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
@@ -213,10 +214,10 @@ export function CategoriesPage() {
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0">
-              <Download className="w-4 h-4" /> Xuất dữ liệu
+              <Download className="w-4 h-4" /> Xuất Dữ Liệu
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm whitespace-nowrap shrink-0">
-              <Plus className="w-4 h-4" /> Tạo danh mục
+              <Plus className="w-4 h-4" /> Tạo Danh Mục
             </button>
           </div>
         </div>
@@ -266,7 +267,7 @@ export function CategoriesPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedCategory(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedCategory}
         onClose={() => setSelectedCategory(null)}
         title={selectedCategory ? `Thẻ danh mục: ${selectedCategory.code}` : 'Chi tiết danh mục'}
@@ -355,23 +356,24 @@ export function CategoriesPage() {
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
               <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                <FileText className="w-4 h-4" /> View Associated Products
+                <FileText className="w-4 h-4" /> Xem sản phẩm thuộc danh mục
               </button>
               {selectedCategory.status !== 'ACTIVE' && (
                 <button className="px-4 py-2.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 font-semibold rounded-lg hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors text-sm">
-                  <CheckCircle2 className="w-4 h-4 inline mr-1" /> Restore Active Status
+                  <CheckCircle2 className="w-4 h-4 inline mr-1" /> Khôi phục trạng thái hoạt động
                 </button>
               )}
             </div>
+
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Form Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm danh mục sản phẩm' : 'Cập nhật danh mục'}
+        title={modalMode === 'create' ? 'Thêm Danh Mục sản phẩm' : 'Cập nhật danh mục'}
         size="erp"
       >
         <form onSubmit={handleSaveCategory}>
@@ -400,7 +402,8 @@ export function CategoriesPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục cấp trên (Tree Hierarchy)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục cấp trên</label>
+
                 <TreeSelect
                   value={editingCategory.parentId}
                   onChange={(val) => setEditingCategory({ ...editingCategory, parentId: val || undefined })}
@@ -500,11 +503,12 @@ export function CategoriesPage() {
                   value={editingCategory.department || ''}
                   onChange={(e) => setEditingCategory({ ...editingCategory, department: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                  placeholder="Ví dụ: Fashion, Electronics..."
+                  placeholder="Ví dụ: Thời trang, Điện tử..."
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người quản lý (Lead Manager)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người quản lý</label>
+
                 <input
                   type="text"
                   value={editingCategory.manager || ''}
@@ -536,7 +540,7 @@ export function CategoriesPage() {
               type="submit"
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              {modalMode === 'create' ? 'Tạo danh mục' : 'Lưu thay đổi'}
+              {modalMode === 'create' ? 'Tạo Danh Mục' : 'Lưu thay đổi'}
             </button>
           </div>
         </form>

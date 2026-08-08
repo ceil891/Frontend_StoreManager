@@ -4,7 +4,9 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
+import { toast } from 'sonner';
 import { useInventoryStore, type ProductCombo, type ComboDetailItem } from '../store/inventoryStore';
+
 
 export function CombosPage() {
   const { combos: data, addCombo, updateCombo, deleteCombo, products, fetchCombos, fetchProducts } = useInventoryStore();
@@ -72,13 +74,24 @@ export function CombosPage() {
 
   const handleSaveCombo = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingCombo.comboCode || !editingCombo.comboName) return;
+    if (!editingCombo.comboCode?.trim()) {
+      toast.error('Vui lòng nhập Mã Combo (VD: CB-1001)!');
+      return;
+    }
+    if (!editingCombo.comboName?.trim()) {
+      toast.error('Vui lòng nhập Tên Combo sản phẩm!');
+      return;
+    }
+    if (editingDetails.length === 0) {
+      toast.error('Vui lòng thêm ít nhất một sản phẩm thành phần cho gói Combo!');
+      return;
+    }
 
     const payload: Omit<ProductCombo, 'id'> = {
-      comboCode: editingCombo.comboCode,
+      comboCode: editingCombo.comboCode.trim(),
       comboBarcode: editingCombo.comboBarcode || '',
       comboType: editingCombo.comboType || 'PRE_ASSEMBLED',
-      comboName: editingCombo.comboName,
+      comboName: editingCombo.comboName.trim(),
       description: editingCombo.description || '',
       comboPrice: Number(editingCombo.comboPrice) || 0,
       status: editingCombo.status || 'ACTIVE',
@@ -89,8 +102,10 @@ export function CombosPage() {
 
     if (modalMode === 'create') {
       addCombo(payload);
+      toast.success(`Đã tạo thành công Combo: ${payload.comboName}`);
     } else if (editingCombo.id) {
       updateCombo(editingCombo.id, payload);
+      toast.success(`Đã cập nhật Combo: ${payload.comboName}`);
     }
     setIsModalOpen(false);
   };
@@ -157,7 +172,8 @@ export function CombosPage() {
           const t = info.getValue() as string;
           return (
             <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-              {t === 'PRE_ASSEMBLED' ? 'Đóng gói sẵn' : 'Gom động (POS)'}
+              {t === 'PRE_ASSEMBLED' ? 'Đóng gói sẵn' : 'Gom động'}
+
             </span>
           );
         },
@@ -489,7 +505,8 @@ export function CombosPage() {
                   {editingDetails.map((d) => (
                     <div key={d.id} className="bg-white border p-2 rounded relative flex flex-col gap-2 shadow-sm">
                       <div>
-                        <label className="block text-[10px] text-gray-500 font-bold">Chọn Sản phẩm (SKU)</label>
+                        <label className="block text-[10px] text-gray-500 font-bold">Chọn Sản phẩm</label>
+
                         <select 
                           value={d.sku}
                           onChange={(e) => handleDetailSkuChange(d.id, e.target.value)}

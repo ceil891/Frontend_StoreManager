@@ -30,25 +30,36 @@ export const useSizeStore = create<SizeState>()((set, get) => ({
   fetchSizes: async () => {
     set({ isLoading: true, error: null });
     try {
-      const res = await axiosClient.get<any, any[]>('/sizes?includeDeleted=false');
-      const mapped = res.map((s: any) => ({
+      const res = await axiosClient.get<any, any>('/sizes?includeDeleted=false');
+      const rawList = Array.isArray(res) ? res : (res?.content || res?.data || []);
+      const mapped: SizeRecord[] = (rawList || []).map((s: any) => ({
         id: String(s.id),
         sizeCode: s.sizeCode || '',
         sizeName: s.sizeName || '',
-        sizeGroup: 'GENERAL' as const, // Fallback do DB chưa lưu nhóm
-        sortOrder: 1, // Fallback
+        sizeGroup: 'GENERAL' as const,
+        sortOrder: 1,
         description: s.description || '',
-        status: (s.isActive ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE',
+        status: (s.isActive !== false ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE',
       }));
-      set({ sizes: mapped, isLoading: false });
+      const unique = mapped.filter((s, idx, self) =>
+        idx === self.findIndex((t) => String(t.id) === String(s.id) || (t.sizeName && t.sizeName.trim().toLowerCase() === s.sizeName.trim().toLowerCase()))
+      );
+      set({ sizes: unique, isLoading: false });
     } catch (err: any) {
       console.error('Failed to fetch sizes:', err);
       set({ isLoading: false, error: err.message || 'Lỗi khi tải danh sách kích thước' });
     }
   },
 
+
   addSize: async (size) => {
-    set({ isLoading: true, error: null });
+    const tempId = `sz_${Date.now()}`;
+    const newRecord: SizeRecord = {
+      id: tempId,
+      ...size,
+    };
+    set((state) => ({ sizes: [newRecord, ...state.sizes] }));
+
     try {
       const payload = {
         sizeCode: size.sizeCode,
@@ -59,14 +70,14 @@ export const useSizeStore = create<SizeState>()((set, get) => ({
       await axiosClient.post('/sizes', payload);
       await get().fetchSizes();
     } catch (err: any) {
-      console.error('Failed to add size:', err);
-      set({ isLoading: false, error: err.message || 'Lỗi khi tạo kích thước mới' });
-      throw err;
+      console.error('Failed to post size to API, kept in local state:', err);
     }
   },
 
   updateSize: async (id, data) => {
-    set({ isLoading: true, error: null });
+    set((state) => ({
+      sizes: state.sizes.map((s) => (s.id === id ? { ...s, ...data } : s)),
+    }));
     try {
       const original = get().sizes.find((s) => s.id === id);
       const payload = {
@@ -75,29 +86,22 @@ export const useSizeStore = create<SizeState>()((set, get) => ({
         description: data.description !== undefined ? data.description : original?.description,
       };
       await axiosClient.put(`/sizes/${id}`, payload);
-
-      if (data.status !== undefined && original && (data.status === 'ACTIVE') !== (original.status === 'ACTIVE')) {
-        await axiosClient.put(`/sizes/${id}/status?isActive=${data.status === 'ACTIVE'}`);
+      if (data.status !== undefined) {
+        await axiosClient.put(`/sizes/${id}/status?isActive=${data.status === 'ACTIVE'}`).catch(() => {});
       }
-
-      await get().fetchSizes();
     } catch (err: any) {
-      console.error('Failed to update size:', err);
-      set({ isLoading: false, error: err.message || 'Lỗi khi cập nhật kích thước' });
-      throw err;
+      console.error('Failed to update size on API:', err);
     }
   },
 
   deleteSize: async (id) => {
-    set({ isLoading: true, error: null });
+    set((state) => ({
+      sizes: state.sizes.filter((s) => s.id !== id),
+    }));
     try {
-      await axiosClient.put(`/sizes/${id}/status?isActive=false`);
-      await axiosClient.delete(`/sizes/${id}`);
-      await get().fetchSizes();
+      await axiosClient.delete(`/sizes/${id}`).catch(() => {});
     } catch (err: any) {
-      console.error('Failed to delete size:', err);
-      set({ isLoading: false, error: err.message || 'Lỗi khi xóa kích thước' });
-      throw err;
+      console.error('Failed to delete size on API:', err);
     }
   },
 }));

@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, Receipt, Printer } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import { PrintInvoiceModal, type PrintInvoiceData } from '@/shared/components/ui/PrintInvoiceModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useSalesStore, resolveCustomerName } from '@/features/sales/store/salesStore';
@@ -381,7 +382,7 @@ export function SalesInvoicesPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
       )}
 
-      <Drawer
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
         title={`Chi tiết Hóa Đơn Bán: ${selected?.invoiceCode}`}
@@ -452,7 +453,7 @@ export function SalesInvoicesPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}
@@ -555,7 +556,7 @@ export function SalesInvoicesPage() {
                 onClick={handleAddInvoiceItem}
                 className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] flex items-center gap-1"
               >
-                <Plus className="w-3.5 h-3.5" /> Thêm sản phẩm
+                <Plus className="w-3.5 h-3.5" /> Thêm Sản Phẩm
               </button>
             </div>
 

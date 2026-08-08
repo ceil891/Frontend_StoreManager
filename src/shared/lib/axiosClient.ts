@@ -154,9 +154,24 @@ axiosClient.interceptors.response.use(
     }
 
     const errorBody = error.response?.data as any;
+    let detailMsg = errorBody?.message || errorBody?.error || errorBody?.details;
+    if (errorBody?.errors && typeof errorBody.errors === 'object') {
+      const errList = Object.values(errorBody.errors).flat().join(', ');
+      if (errList) detailMsg = errList;
+    }
+    if (errorBody?.constraint) {
+      detailMsg = `Lỗi ràng buộc dữ liệu: ${errorBody.constraint}`;
+    }
+
+    const traceId = error.response?.headers?.['x-trace-id'] || errorBody?.traceId;
+    if (traceId && detailMsg && !detailMsg.includes(traceId)) {
+      detailMsg = `${detailMsg} [Trace ID: ${traceId}]`;
+    }
+
     const apiError = {
-      code: errorBody?.errorCode || 'API_ERROR',
-      message: errorBody?.message || error.message || 'An unexpected error occurred.',
+      code: errorBody?.errorCode || errorBody?.status || 'API_ERROR',
+      message: detailMsg || error.message || 'Đã xảy ra lỗi không xác định từ hệ thống.',
+      traceId: traceId,
     };
 
     return Promise.reject(apiError);

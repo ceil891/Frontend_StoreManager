@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Search, Eye, Building, RefreshCw } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
+import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type InventoryResponse } from '@/features/inventory/store/inventoryStore';
 
@@ -150,7 +150,7 @@ export function ProductWarehousesPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
       )}
 
-      <Drawer
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
         title={`Tồn kho: ${selected?.productName}`}
@@ -208,7 +208,7 @@ export function ProductWarehousesPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
     </div>
   );
 }

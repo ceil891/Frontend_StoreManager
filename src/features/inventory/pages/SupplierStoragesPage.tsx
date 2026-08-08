@@ -1,3 +1,4 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { useInventoryStore } from '../store/inventoryStore';
 import { 
@@ -6,8 +7,8 @@ import {
   ArrowRightLeft, Database, Sparkles 
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
@@ -259,7 +260,7 @@ export function SupplierStoragesPage() {
       <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
 
       {/* Drawer: Xem chi tiết phân khu đối tác */}
-      <Drawer
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
         title={`Chi tiết Phân Khu: ${selected?.storageCode}`}
@@ -356,13 +357,13 @@ export function SupplierStoragesPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Thêm/Sửa Khu vực */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? '📦 Thêm khu vực lưu trữ mới' : '⚙️ Sửa thông tin khu vực'}
+        title={modalMode === 'create' ? '📦 Thêm Khu Vực lưu trữ mới' : '⚙️ Sửa thông tin khu vực'}
         width="max-w-xl"
       >
         <form onSubmit={handleSave} className="space-y-4 text-sm">

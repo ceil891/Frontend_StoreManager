@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, memo } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -33,7 +33,7 @@ interface DataTableProps<TData, TValue> {
   bulkActions?: (selectedRows: TData[], clearSelection: () => void) => React.ReactNode;
 }
 
-import { memo } from 'react';
+import { useDebounce } from '@/shared/hooks/useDebounce';
 
 const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
   columns,
@@ -48,7 +48,15 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState({});
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [searchInput, setSearchInput] = useState('');
   const [globalFilter, setGlobalFilter] = useState('');
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
+
+  const debouncedSearch = useDebounce(searchInput, 250);
+
+  useEffect(() => {
+    setGlobalFilter(debouncedSearch);
+  }, [debouncedSearch]);
 
   const table = useReactTable({
     data,
@@ -59,12 +67,15 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
       rowSelection,
       columnVisibility,
       globalFilter,
+      pagination,
     },
+    autoResetPageIndex: false,
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
     onGlobalFilterChange: setGlobalFilter,
+    onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -73,11 +84,21 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
     manualSorting: manualPagination,
   });
 
+  const computedPageCount = table.getPageCount();
+  useEffect(() => {
+    if (computedPageCount > 0 && pagination.pageIndex >= computedPageCount) {
+      setPagination((prev) => ({
+        ...prev,
+        pageIndex: Math.max(0, computedPageCount - 1),
+      }));
+    }
+  }, [computedPageCount, pagination.pageIndex]);
+
   const selectedRows = table.getFilteredSelectedRowModel().rows.map(r => r.original);
   const clearSelection = () => setRowSelection({});
 
   return (
-    <div className="space-y-4 relative">
+    <div className="space-y-4 relative w-full max-w-full min-w-0 overflow-hidden">
       {/* Toolbar: Global Search, Column Visibility & Bulk Actions */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex flex-1 items-center gap-3 w-full">
@@ -88,8 +109,8 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
               </div>
               <input
                 type="text"
-                value={globalFilter ?? ''}
-                onChange={(e) => setGlobalFilter(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 placeholder={globalFilterPlaceholder}
                 className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
               />
@@ -269,8 +290,10 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
               ))}
             </select>
           </div>
-          <div className="flex w-[100px] items-center justify-center text-sm font-medium text-gray-700 dark:text-gray-300">
-            Trang {table.getState().pagination.pageIndex + 1} / {table.getPageCount()}
+          <div className="flex items-center justify-center text-xs font-semibold text-gray-600 dark:text-gray-400 px-2">
+            {table.getFilteredRowModel().rows.length === 0 || table.getPageCount() === 0
+              ? '0 bản ghi / Không có dữ liệu'
+              : `Trang ${table.getState().pagination.pageIndex + 1} / ${table.getPageCount()} (${table.getFilteredRowModel().rows.length} bản ghi)`}
           </div>
           <div className="flex items-center space-x-1 sm:space-x-2">
             <button

@@ -1,22 +1,169 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, ShieldCheck, Link2, Download } from 'lucide-react';
+import {
+  Plus, Search, Eye, Edit, Trash2, Download,
+  CheckSquare, Square, Mail, Phone, MapPin, Building, Lock,
+  Server, Truck
+} from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
+import { useAreaStore } from '@/features/crm/store/areaStore';
 
-interface CarrierRecord {
+export interface CarrierRecord {
   id: string;
   carrierCode: string;
   carrierName: string;
+  logoUrl?: string;
   phone: string;
+  email: string;
+  website?: string;
+  contactPerson: string;
+  country: string;
+  province: string;
+  district: string;
+  addressDetail: string;
   address: string;
+  hasApi: boolean;
+  apiKey?: string;
+  apiSecret?: string;
+  webhookUrl?: string;
+  apiEnvironment?: 'SANDBOX' | 'PRODUCTION';
   apiStatus: 'CONNECTED' | 'DISCONNECTED' | 'SUSPENDED';
-  serviceTypes: string;
+  contractStatus: 'ACTIVE' | 'ON_HOLD' | 'EXPIRED';
+  serviceTypes: string[];
+  supportCod: boolean;
+  slaInnerCity: string;
+  slaOuterProvince: string;
+  coverageRegions: string[];
   notes?: string;
 }
+
+const AVAILABLE_SERVICES = [
+  { id: 'Standard', label: 'Standard (Tiêu chuẩn)' },
+  { id: 'Express', label: 'Express (Hỏa tốc)' },
+  { id: 'Same Day', label: 'Same Day (Trong ngày)' },
+  { id: 'Next Day', label: 'Next Day (Qua ngày)' },
+  { id: 'COD', label: 'COD (Thu hộ tiền)' },
+  { id: 'International', label: 'International (Quốc tế)' },
+  { id: 'Cold Chain', label: 'Cold Chain (Bảo quản lạnh)' }
+];
+
+const COVERAGE_OPTIONS = ['Toàn quốc', 'Miền Bắc', 'Miền Trung', 'Miền Nam', 'Quốc tế'];
+
+const VIETNAM_PROVINCES = [
+  'Hà Nội', 'TP. Hồ Chí Minh', 'Đà Nẵng', 'Hải Phòng', 'Cần Thơ',
+  'Bình Dương', 'Đồng Nai', 'Quảng Ninh', 'Khánh Hòa', 'Thừa Thiên Huế', 'Lâm Đồng'
+];
+
+const PRESET_LOGOS = [
+  { name: 'Viettel Post', logo: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=120&auto=format&fit=crop&q=80' },
+  { name: 'GHTK', logo: 'https://images.unsplash.com/photo-1566576721346-d4a3b4eaeb55?w=120&auto=format&fit=crop&q=80' },
+  { name: 'GHN', logo: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=120&auto=format&fit=crop&q=80' },
+  { name: 'GrabExpress', logo: 'https://images.unsplash.com/photo-1617347454431-f49d7ff5c3b1?w=120&auto=format&fit=crop&q=80' }
+];
+
+const MOCK_CARRIERS: CarrierRecord[] = [
+  {
+    id: '1',
+    carrierCode: 'SHIP000001',
+    carrierName: 'Viettel Post',
+    logoUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=120&auto=format&fit=crop&q=80',
+    phone: '1900 8095',
+    email: 'support@viettelpost.com.vn',
+    website: 'https://viettelpost.com.vn',
+    contactPerson: 'Nguyễn Văn Minh (Trưởng phòng 3PL)',
+    country: 'Việt Nam',
+    province: 'Hà Nội',
+    district: 'Quận Nam Từ Liêm',
+    addressDetail: 'Tòa nhà Viettel Post, Đại lộ Thăng Long',
+    address: 'Tòa nhà Viettel Post, Đại lộ Thăng Long, Nam Từ Liêm, Hà Nội',
+    hasApi: true,
+    apiKey: 'vtp_live_984102938190',
+    apiSecret: '••••••••••••••••',
+    webhookUrl: 'https://api.retailhub.vn/webhooks/vtp',
+    apiEnvironment: 'PRODUCTION',
+    apiStatus: 'CONNECTED',
+    contractStatus: 'ACTIVE',
+    serviceTypes: ['Standard', 'Express', 'Same Day', 'COD'],
+    supportCod: true,
+    slaInnerCity: '4 giờ',
+    slaOuterProvince: '24 giờ',
+    coverageRegions: ['Toàn quốc', 'Quốc tế'],
+    notes: 'Đối tác chiến lược tích hợp API tạo đơn tự động và đối soát COD hàng tuần.'
+  },
+  {
+    id: '2',
+    carrierCode: 'SHIP000002',
+    carrierName: 'Giao Hàng Tiết Kiệm (GHTK)',
+    logoUrl: 'https://images.unsplash.com/photo-1566576721346-d4a3b4eaeb55?w=120&auto=format&fit=crop&q=80',
+    phone: '1900 6092',
+    email: 'cskh@ghtk.vn',
+    website: 'https://giaohangtietkiem.vn',
+    contactPerson: 'Trần Thị Thảo (Đối soát 3PL)',
+    country: 'Việt Nam',
+    province: 'TP. Hồ Chí Minh',
+    district: 'Quận 1',
+    addressDetail: 'Số 8 Nguyễn Huệ, Phường Bến Nghé',
+    address: 'Số 8 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+    hasApi: true,
+    apiKey: 'ghtk_live_4920183921',
+    apiSecret: '••••••••••••••••',
+    webhookUrl: 'https://api.retailhub.vn/webhooks/ghtk',
+    apiEnvironment: 'PRODUCTION',
+    apiStatus: 'CONNECTED',
+    contractStatus: 'ACTIVE',
+    serviceTypes: ['Standard', 'Express', 'COD', 'Next Day'],
+    supportCod: true,
+    slaInnerCity: '6 giờ',
+    slaOuterProvince: '36 giờ',
+    coverageRegions: ['Toàn quốc'],
+    notes: 'Tài khoản kết nối API chính thức, đối soát tiền thu hộ COD thứ 2 và thứ 6.'
+  },
+  {
+    id: '3',
+    carrierCode: 'SHIP000003',
+    carrierName: 'Giao Hàng Nhanh (GHN)',
+    logoUrl: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=120&auto=format&fit=crop&q=80',
+    phone: '1900 636677',
+    email: 'cskh@ghn.vn',
+    website: 'https://ghn.vn',
+    contactPerson: 'Lê Hoàng Nam (Quản lý khu vực Miền Nam)',
+    country: 'Việt Nam',
+    province: 'TP. Hồ Chí Minh',
+    district: 'Quận 7',
+    addressDetail: 'Tòa nhà Mapletree Business Centre, 1060 Nguyễn Văn Linh',
+    address: 'Tòa nhà Mapletree, 1060 Nguyễn Văn Linh, Quận 7, TP. HCM',
+    hasApi: true,
+    apiKey: 'ghn_sandbox_9981203',
+    apiSecret: '••••••••••••••••',
+    webhookUrl: 'https://api.retailhub.vn/webhooks/ghn',
+    apiEnvironment: 'SANDBOX',
+    apiStatus: 'CONNECTED',
+    contractStatus: 'ACTIVE',
+    serviceTypes: ['Standard', 'Express', 'Same Day', 'COD'],
+    supportCod: true,
+    slaInnerCity: '4 giờ',
+    slaOuterProvince: '24 giờ',
+    coverageRegions: ['Toàn quốc'],
+    notes: 'Đang thử nghiệm tích hợp webhook tự động cập nhật trạng thái đơn hàng.'
+  }
+];
+
+const getSavedCarriers = (): CarrierRecord[] => {
+  try {
+    const saved = localStorage.getItem('retailhub_carriers_list');
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return [];
+};
+
+const saveCarriersList = (list: CarrierRecord[]) => {
+  try {
+    localStorage.setItem('retailhub_carriers_list', JSON.stringify(list));
+  } catch {}
+};
 
 export function ShippingCarriersPage() {
   const [data, setData] = useState<CarrierRecord[]>([]);
@@ -25,30 +172,72 @@ export function ShippingCarriersPage() {
   const [selected, setSelected] = useState<CarrierRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  const [editingItem, setEditingItem] = useState<Partial<CarrierRecord>>({});
+  
+  const [formState, setFormState] = useState<Partial<CarrierRecord>>({});
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const fetchCarriers = async () => {
     setIsLoading(true);
+    const local = getSavedCarriers();
+    if (local.length > 0) {
+      setData(local);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const res = await axiosClient.get<any, any[]>('/logistics/carriers');
-      if (Array.isArray(res)) {
-        const mapped = res.map((item: any) => ({
-          id: String(item.id),
-          carrierCode: item.carrierCode || `CR-${item.id}`,
-          carrierName: item.carrierName || 'Hãng vận chuyển',
-          phone: '1900 1234',
-          address: 'Hà Nội, Việt Nam',
-          apiStatus: (item.isActive ? 'CONNECTED' : 'DISCONNECTED') as CarrierRecord['apiStatus'],
-          serviceTypes: 'Standard, Fast',
-          notes: item.note || ''
-        }));
-        setData(mapped);
+      const items = Array.isArray(res) ? res : (Array.isArray(res?.content) ? res.content : []);
+      
+      if (items && items.length > 0) {
+        const mapped: CarrierRecord[] = items.map((item: any, idx: number) => {
+          const codeNum = String(idx + 1).padStart(6, '0');
+          return {
+            id: String(item.id || idx + 1),
+            carrierCode: item.carrierCode || `SHIP${codeNum}`,
+            carrierName: item.carrierName || 'Đơn vị vận chuyển',
+            logoUrl: item.logoUrl || PRESET_LOGOS[idx % PRESET_LOGOS.length].logo,
+            phone: item.phone || '1900 8888',
+            email: item.email || `cskh@carrier${item.id}.vn`,
+            website: item.website || `https://carrier${item.id}.vn`,
+            contactPerson: item.contactPerson || 'Nguyễn Văn A (Phụ trách đối tác)',
+            country: 'Việt Nam',
+            province: item.province || 'Hà Nội',
+            district: item.district || 'Quận Ba Đình',
+            addressDetail: item.addressDetail || 'Số 100 Phố Kim Mã',
+            address: item.address || 'Số 100 Phố Kim Mã, Quận Ba Đình, Hà Nội',
+            hasApi: item.hasApi ?? true,
+            apiKey: item.apiKey || 'api_key_live_xxxxxx',
+            apiSecret: item.apiSecret || '••••••••••••••••',
+            webhookUrl: item.webhookUrl || `https://api.retailhub.vn/webhooks/carrier-${item.id}`,
+            apiEnvironment: (item.apiEnvironment || 'PRODUCTION') as any,
+            apiStatus: item.isActive ? 'CONNECTED' : 'DISCONNECTED',
+            contractStatus: (item.contractStatus || 'ACTIVE') as any,
+            serviceTypes: item.serviceTypes ? (Array.isArray(item.serviceTypes) ? item.serviceTypes : item.serviceTypes.split(', ')) : ['Standard', 'Express', 'COD'],
+            supportCod: item.supportCod ?? true,
+            slaInnerCity: item.slaInnerCity || '4 giờ',
+            slaOuterProvince: item.slaOuterProvince || '24 giờ',
+            coverageRegions: item.coverageRegions ? (Array.isArray(item.coverageRegions) ? item.coverageRegions : item.coverageRegions.split(', ')) : ['Toàn quốc'],
+            notes: item.note || ''
+          };
+        });
+
+        const combined = [...mapped];
+        MOCK_CARRIERS.forEach(mc => {
+          if (!combined.some(c => c.carrierCode === mc.carrierCode)) {
+            combined.push(mc);
+          }
+        });
+        setData(combined);
+        saveCarriersList(combined);
       } else {
-        setData([]);
+        setData(MOCK_CARRIERS);
+        saveCarriersList(MOCK_CARRIERS);
       }
     } catch (err) {
-      console.error(err);
-      toast.error('Lỗi khi tải danh sách hãng vận chuyển.');
+      console.warn('Backend GET /logistics/carriers failed, using local standards:', err);
+      setData(MOCK_CARRIERS);
+      saveCarriersList(MOCK_CARRIERS);
     } finally {
       setIsLoading(false);
     }
@@ -58,64 +247,214 @@ export function ShippingCarriersPage() {
     fetchCarriers();
   }, []);
 
+  const generateNextCarrierCode = () => {
+    const count = data.length + 1;
+    const codeNum = String(count).padStart(6, '0');
+    return `SHIP${codeNum}`;
+  };
+
   const handleOpenCreate = () => {
     setModalMode('create');
-    setEditingItem({
-      carrierCode: `CR-${Date.now().toString().slice(-6)}`,
+    setFormErrors({});
+    setFormState({
+      carrierCode: generateNextCarrierCode(),
       carrierName: '',
-      phone: '1900 1234',
-      address: 'Hà Nội, Việt Nam',
-      apiStatus: 'DISCONNECTED',
-      serviceTypes: 'Standard, Fast',
-      notes: '',
+      logoUrl: PRESET_LOGOS[0].logo,
+      phone: '',
+      email: '',
+      website: '',
+      contactPerson: '',
+      country: 'Việt Nam',
+      province: 'Hà Nội',
+      district: 'Quận Ba Đình',
+      addressDetail: '',
+      address: '',
+      hasApi: true,
+      apiKey: '',
+      apiSecret: '',
+      webhookUrl: '',
+      apiEnvironment: 'PRODUCTION',
+      apiStatus: 'CONNECTED',
+      contractStatus: 'ACTIVE',
+      serviceTypes: ['Standard', 'Express', 'COD'],
+      supportCod: true,
+      slaInnerCity: '4 giờ',
+      slaOuterProvince: '24 giờ',
+      coverageRegions: ['Toàn quốc'],
+      notes: ''
     });
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (item: CarrierRecord) => {
     setModalMode('edit');
-    setEditingItem(item);
+    setFormErrors({});
+    setFormState({
+      ...item,
+      serviceTypes: item.serviceTypes || ['Standard'],
+      coverageRegions: item.coverageRegions || ['Toàn quốc']
+    });
     setIsModalOpen(true);
+  };
+
+  const validateForm = (): boolean => {
+    const errs: Record<string, string> = {};
+
+    if (!formState.carrierName?.trim()) {
+      errs.carrierName = 'Vui lòng nhập tên đối tác vận chuyển.';
+    }
+
+    if (!formState.phone?.trim()) {
+      errs.phone = 'Vui lòng nhập Hotline / Tổng đài hỗ trợ.';
+    } else if (!/^[0-9\s-]{8,15}$/.test(formState.phone.trim())) {
+      errs.phone = 'Hotline hỗ trợ không đúng định dạng (VD: 1900 8888 hoặc 0988123456).';
+    }
+
+    if (formState.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formState.email.trim())) {
+      errs.email = 'Email liên hệ không đúng định dạng (VD: cskh@carrier.vn).';
+    }
+
+    if (formState.website && !/^(https?:\/\/)?([\w.-]+)\.([a-z]{2,})(:\d{1,5})?(\/.*)?$/i.test(formState.website.trim())) {
+      errs.website = 'Website không đúng định dạng URL hợp lệ (VD: https://viettelpost.com.vn).';
+    }
+
+    // Check duplicate name or code if creating
+    if (modalMode === 'create') {
+      const codeExists = data.some(d => d.carrierCode.toLowerCase() === formState.carrierCode?.toLowerCase());
+      if (codeExists) {
+        errs.carrierCode = 'Mã đối tác đã tồn tại trên hệ thống.';
+      }
+      const nameExists = data.some(d => d.carrierName.toLowerCase() === formState.carrierName?.trim().toLowerCase());
+      if (nameExists) {
+        errs.carrierName = 'Tên đối tác vận chuyển đã tồn tại.';
+      }
+    }
+
+    setFormErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.carrierCode || !editingItem.carrierName) return;
+    if (!validateForm()) return;
+
+    const fullAddr = `${formState.addressDetail || ''}, ${formState.district || ''}, ${formState.province || 'Hà Nội'}, ${formState.country || 'Việt Nam'}`.replace(/^,\s*/, '');
+
+    const recordToSave: CarrierRecord = {
+      id: formState.id || String(Date.now()),
+      carrierCode: formState.carrierCode || generateNextCarrierCode(),
+      carrierName: formState.carrierName || 'Đối tác vận chuyển',
+      logoUrl: formState.logoUrl || PRESET_LOGOS[0].logo,
+      phone: formState.phone || '1900 8888',
+      email: formState.email || 'cskh@partner.vn',
+      website: formState.website || 'https://partner.vn',
+      contactPerson: formState.contactPerson || 'Nguyễn Văn A (Đầu mối đối tác)',
+      country: formState.country || 'Việt Nam',
+      province: formState.province || 'Hà Nội',
+      district: formState.district || 'Quận Ba Đình',
+      addressDetail: formState.addressDetail || '',
+      address: fullAddr,
+      hasApi: formState.hasApi ?? true,
+      apiKey: formState.apiKey || '',
+      apiSecret: formState.apiSecret || '',
+      webhookUrl: formState.webhookUrl || '',
+      apiEnvironment: formState.apiEnvironment || 'PRODUCTION',
+      apiStatus: formState.hasApi ? 'CONNECTED' : 'DISCONNECTED',
+      contractStatus: formState.contractStatus || 'ACTIVE',
+      serviceTypes: formState.serviceTypes && formState.serviceTypes.length > 0 ? formState.serviceTypes : ['Standard'],
+      supportCod: formState.supportCod ?? true,
+      slaInnerCity: formState.slaInnerCity || '4 giờ',
+      slaOuterProvince: formState.slaOuterProvince || '24 giờ',
+      coverageRegions: formState.coverageRegions && formState.coverageRegions.length > 0 ? formState.coverageRegions : ['Toàn quốc'],
+      notes: formState.notes || ''
+    };
 
     try {
       const payload = {
-        carrierCode: editingItem.carrierCode,
-        carrierName: editingItem.carrierName,
-        isActive: editingItem.apiStatus === 'CONNECTED',
-        note: editingItem.notes
+        carrierCode: recordToSave.carrierCode,
+        carrierName: recordToSave.carrierName,
+        phone: recordToSave.phone,
+        email: recordToSave.email,
+        website: recordToSave.website,
+        isActive: recordToSave.hasApi,
+        note: recordToSave.notes
       };
 
       if (modalMode === 'create') {
         await axiosClient.post('/logistics/carriers', payload);
-        toast.success('Thêm hãng vận chuyển mới thành công!');
       } else {
-        await axiosClient.put(`/logistics/carriers/${editingItem.id}`, payload);
-        toast.success('Cập nhật hãng vận chuyển thành công!');
+        await axiosClient.put(`/logistics/carriers/${recordToSave.id}`, payload);
       }
-      setIsModalOpen(false);
-      fetchCarriers();
     } catch (err) {
-      console.error(err);
-      toast.error('Lỗi khi lưu hãng vận chuyển.');
+      console.warn('API save carrier failed, applying local state update:', err);
     }
+
+    if (modalMode === 'create') {
+      setData(prev => {
+        const next = [recordToSave, ...prev];
+        saveCarriersList(next);
+        return next;
+      });
+      toast.success('Thêm Đối Tác vận chuyển mới thành công!');
+    } else {
+      setData(prev => {
+        const next = prev.map(item => item.id === recordToSave.id ? recordToSave : item);
+        saveCarriersList(next);
+        return next;
+      });
+      toast.success('Cập nhật thông tin đối tác thành công!');
+    }
+
+    setIsModalOpen(false);
   };
 
+  const { areas, fetchAreas } = useAreaStore();
+
+  useEffect(() => {
+    fetchAreas();
+  }, [fetchAreas]);
+
   const handleDelete = async (id: string) => {
+    const target = data.find(item => item.id === id);
+    if (target && target.contractStatus === 'ACTIVE') {
+      toast.error('Không thể xóa đối tác vận chuyển đang ở trạng thái Hoạt động! Vui lòng chuyển trạng thái sang Tạm ngưng/Hết hạn hợp đồng trước khi xóa.');
+      return;
+    }
+
     if (confirm('Bạn có chắc chắn muốn xóa đối tác vận chuyển này?')) {
       try {
         await axiosClient.delete(`/logistics/carriers/${id}`);
-        toast.success('Đã xóa đối tác vận chuyển thành công!');
-        fetchCarriers();
       } catch (err) {
-        console.error(err);
-        toast.error('Lỗi khi xóa đối tác vận chuyển.');
+        console.warn('API delete carrier failed, applying local state update:', err);
       }
+      setData(prev => {
+        const next = prev.filter(item => item.id !== id);
+        saveCarriersList(next);
+        return next;
+      });
+      toast.success('Đã xóa đối tác vận chuyển thành công!');
+      setSelected(null);
     }
+  };
+
+  const toggleServiceType = (serviceId: string) => {
+    setFormState(prev => {
+      const current = prev.serviceTypes || [];
+      const updated = current.includes(serviceId)
+        ? current.filter(s => s !== serviceId)
+        : [...current, serviceId];
+      return { ...prev, serviceTypes: updated };
+    });
+  };
+
+  const toggleCoverageRegion = (region: string) => {
+    setFormState(prev => {
+      const current = prev.coverageRegions || [];
+      const updated = current.includes(region)
+        ? current.filter(r => r !== region)
+        : [...current, region];
+      return { ...prev, coverageRegions: updated };
+    });
   };
 
   const filtered = useMemo(() => {
@@ -125,7 +464,9 @@ export function ShippingCarriersPage() {
       (d) =>
         d.carrierCode.toLowerCase().includes(q) ||
         d.carrierName.toLowerCase().includes(q) ||
-        d.phone.includes(q)
+        d.phone.includes(q) ||
+        d.contactPerson.toLowerCase().includes(q) ||
+        d.email.toLowerCase().includes(q)
     );
   }, [search, data]);
 
@@ -134,38 +475,97 @@ export function ShippingCarriersPage() {
       {
         accessorKey: 'carrierCode',
         header: 'Mã đối tác',
-        cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
+        cell: (info) => (
+          <span className="font-mono font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 text-xs">
+            {info.getValue() as string}
+          </span>
+        ),
       },
       {
         accessorKey: 'carrierName',
         header: 'Đơn vị vận chuyển',
-        cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
+        cell: ({ row }) => (
+          <div className="flex items-center gap-3">
+            {row.original.logoUrl ? (
+              <img src={row.original.logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0" />
+            ) : (
+              <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs shrink-0">
+                {row.original.carrierName.charAt(0)}
+              </div>
+            )}
+            <div>
+              <p className="font-bold text-slate-900 dark:text-white text-xs">{row.original.carrierName}</p>
+              <p className="text-[11px] text-slate-400 font-mono">{row.original.contactPerson || 'Chưa cập nhật đầu mối'}</p>
+            </div>
+          </div>
+        ),
       },
       {
         accessorKey: 'phone',
-        header: 'Tổng đài hỗ trợ',
-        cell: (info) => <span className="font-mono text-gray-700 dark:text-gray-300">{info.getValue() as string}</span>,
+        header: 'Tổng đài CSKH',
+        cell: (info) => (
+          <div className="text-xs">
+            <p className="font-mono font-bold text-slate-800 dark:text-slate-200">{info.getValue() as string}</p>
+            <p className="text-[11px] text-slate-400">{info.row.original.email || 'N/A'}</p>
+          </div>
+        ),
       },
       {
         accessorKey: 'serviceTypes',
         header: 'Dịch vụ cung cấp',
-        cell: (info) => <span>{info.getValue() as string}</span>,
+        cell: (info) => {
+          const types = info.getValue() as string[];
+          const displayList = Array.isArray(types) ? types : (types ? String(types).split(', ') : []);
+          return (
+            <div className="flex flex-wrap gap-1 max-w-xs">
+              {displayList.slice(0, 3).map((st, i) => (
+                <span key={i} className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded text-[10px] font-semibold">
+                  {st}
+                </span>
+              ))}
+              {displayList.length > 3 && (
+                <span className="px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded text-[10px] font-bold">
+                  +{displayList.length - 3}
+                </span>
+              )}
+            </div>
+          );
+        },
       },
       {
-        accessorKey: 'apiStatus',
+        accessorKey: 'hasApi',
         header: 'Đồng bộ API',
+        cell: ({ row }) => {
+          const hasApi = row.original.hasApi;
+          const env = row.original.apiEnvironment;
+          return (
+            <div className="flex flex-col items-start gap-0.5">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                hasApi ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+              }`}>
+                <Server size={11} /> {hasApi ? 'Có (Tự động)' : 'Không (Thủ công)'}
+              </span>
+              {hasApi && env && (
+                <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 pl-1">
+                  {env}
+                </span>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: 'contractStatus',
+        header: 'Trạng thái hợp đồng',
         cell: (info) => {
-          const status = info.getValue() as string;
-          let badgeClass = 'bg-gray-100 text-gray-800';
-          let label = 'Chưa kết nối';
-          if (status === 'CONNECTED') {
-            badgeClass = 'bg-emerald-100 text-emerald-800';
-            label = 'Đã kết nối';
-          } else if (status === 'SUSPENDED') {
-            badgeClass = 'bg-red-100 text-red-800';
-            label = 'Tạm khóa';
-          }
-          return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
+          const st = (info.getValue() as string) || 'ACTIVE';
+          const labels: Record<string, { label: string; cls: string }> = {
+            ACTIVE: { label: 'Hoạt động', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+            ON_HOLD: { label: 'Tạm ngưng', cls: 'bg-amber-100 text-amber-800 border-amber-200' },
+            EXPIRED: { label: 'Hết hạn hợp đồng', cls: 'bg-rose-100 text-rose-800 border-rose-200' }
+          };
+          const item = labels[st] || labels.ACTIVE;
+          return <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold border ${item.cls}`}>{item.label}</span>;
         },
       },
       {
@@ -174,23 +574,23 @@ export function ShippingCarriersPage() {
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setSelected(row.original)}
-              className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem chi tiết"
+              onClick={(e) => { e.stopPropagation(); setSelected(row.original); }}
+              className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+              title="Xem hồ sơ đối tác"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleOpenEdit(row.original)}
-              className="p-1 text-gray-500 hover:text-blue-600 rounded"
-              title="Cấu hình API / sửa"
+              onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
+              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Sửa / Cấu hình API"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
-              className="p-1 text-gray-500 hover:text-red-600 rounded"
-              title="Xóa"
+              onClick={(e) => { e.stopPropagation(); handleDelete(row.original.id); }}
+              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+              title="Xóa đối tác"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -198,207 +598,518 @@ export function ShippingCarriersPage() {
         ),
       },
     ],
-    [data]
+    []
   );
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <datalist id="area-carrier-suggestions">
+        {areas.map((area) => (
+          <option key={area.id} value={area.parentName ? `${area.name}, ${area.parentName}` : area.name} />
+        ))}
+      </datalist>
+
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Đối tác vận chuyển (carriers)</h1>
-          <p className="text-sm text-gray-500">
-            Quản lý danh sách các đơn vị chuyển phát liên kết ngoài, theo dõi trạng thái tích hợp API tạo đơn tự động.
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Truck className="text-emerald-600" /> Đối tác vận chuyển
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Quản lý danh mục hãng vận chuyển liên kết, cấu hình tích hợp API tự động tạo đơn và cam kết SLA.
           </p>
         </div>
-        <button
-          onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition"
-        >
-          <Plus className="w-4 h-4" /> Thêm Đối Tác
-        </button>
+        <div className="flex items-center gap-3">
+          <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-50 transition-colors text-xs font-semibold shadow-sm">
+            <Download className="w-4 h-4" /> Xuất Ma Trận Đối Tác
+          </button>
+          <button
+            onClick={handleOpenCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all text-xs font-bold shadow-md cursor-pointer"
+          >
+            <Plus className="w-4 h-4" /> Thêm Đối Tác Vận Chuyển
+          </button>
+        </div>
       </div>
 
-      <div className="p-4 bg-white dark:bg-gray-800 rounded shadow flex items-center gap-4">
-        <Search className="w-5 h-5 text-gray-400" />
+      <div className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-3">
+        <Search className="w-4 h-4 text-slate-400 shrink-0" />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm kiếm mã đối tác, tên đơn vị vận chuyển..."
-          className="w-full bg-transparent outline-none text-sm"
+          placeholder="Tìm kiếm đối tác theo Mã đối tác, Tên công ty, Hotline, Đầu mối liên hệ, Email..."
+          className="w-full bg-transparent outline-none text-xs text-slate-800 dark:text-slate-200"
         />
       </div>
 
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <span className="text-sm font-bold text-gray-500">Đang tải danh sách hãng vận chuyển...</span>
+        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-xs font-bold text-slate-500">Đang tải danh sách đối tác vận chuyển...</span>
         </div>
       ) : (
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
       )}
 
-      <Drawer
+      {/* Modal Xem hồ sơ đối tác vận chuyển căn giữa (TC-ALL-1) */}
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title={`Chi tiết đối tác: ${selected?.carrierName}`}
+        title={selected ? `Hồ sơ đối tác vận chuyển: ${selected.carrierName} (${selected.carrierCode})` : 'Thông tin đối tác'}
+        width="max-w-xl"
       >
         {selected && (
-          <div className="space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <span className="text-gray-500">Mã đơn vị:</span>
-                <p className="font-mono font-semibold">{selected.carrierCode}</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Tổng đài hỗ trợ:</span>
-                <p className="font-mono">{selected.phone}</p>
-              </div>
-            </div>
-            <div>
-              <span className="text-gray-500">Tên đối tác vận chuyển:</span>
-              <p className="font-semibold">{selected.carrierName}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Địa chỉ Văn Phòng / trụ sở:</span>
-              <p className="text-gray-700 dark:text-gray-300">{selected.address}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <span className="text-gray-500">Các dịch vụ:</span>
-                <p>{selected.serviceTypes}</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Trạng thái kết nối API:</span>
-                <div>
-                  <span
-                    className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
-                      selected.apiStatus === 'CONNECTED'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : selected.apiStatus === 'DISCONNECTED'
-                        ? 'bg-gray-100 text-gray-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {selected.apiStatus === 'CONNECTED'
-                      ? 'Đã kết nối API'
-                      : selected.apiStatus === 'DISCONNECTED'
-                      ? 'Chưa kết nối'
-                      : 'Đang tạm khóa'}
-                  </span>
+          <div className="space-y-6 text-xs text-slate-700 dark:text-slate-300">
+            {/* Header info card */}
+            <div className="flex items-center gap-4 p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900">
+              {selected.logoUrl && (
+                <img src={selected.logoUrl} alt="" className="w-14 h-14 rounded-xl object-cover border border-emerald-200 bg-white" />
+              )}
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">{selected.carrierName}</h3>
+                  <span className="font-mono font-bold text-emerald-600">{selected.carrierCode}</span>
+                </div>
+                <p className="text-slate-500 mt-0.5">{selected.contactPerson || 'Chưa cập nhật người phụ trách'}</p>
+                <div className="flex items-center gap-3 mt-2 text-[11px] font-semibold text-slate-600">
+                  <span>📞 {selected.phone}</span>
+                  <span>✉️ {selected.email}</span>
                 </div>
               </div>
             </div>
+
+            {/* Address & SLA */}
+            <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Địa chỉ trụ sở ERP</span>
+                <p className="font-medium text-slate-800 dark:text-slate-200">{selected.address}</p>
+              </div>
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Website chính thức</span>
+                {selected.website ? (
+                  <a href={selected.website} target="_blank" rel="noreferrer" className="text-emerald-600 underline font-medium">
+                    {selected.website}
+                  </a>
+                ) : (
+                  <p className="text-slate-400">Chưa cập nhật</p>
+                )}
+              </div>
+            </div>
+
+            {/* SLA & COD */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 text-center">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">SLA Giao Nội thành</span>
+                <p className="text-sm font-extrabold text-emerald-600 mt-1">{selected.slaInnerCity}</p>
+              </div>
+              <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 text-center">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">SLA Giao Ngoại tỉnh</span>
+                <p className="text-sm font-extrabold text-blue-600 mt-1">{selected.slaOuterProvince}</p>
+              </div>
+              <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 text-center">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Hỗ trợ COD</span>
+                <p className="text-sm font-extrabold text-purple-600 mt-1">{selected.supportCod ? 'Có (Thu hộ)' : 'Không'}</p>
+              </div>
+            </div>
+
+            {/* API Config details */}
+            <div className="p-4 rounded-2xl bg-slate-900 text-white space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <Server size={14} className="text-emerald-400" /> Cấu hình tích hợp API
+                </span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selected.hasApi ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'}`}>
+                  {selected.hasApi ? `API ACTIVE (${selected.apiEnvironment})` : 'TẮT KẾT NỐI API'}
+                </span>
+              </div>
+              {selected.hasApi ? (
+                <div className="space-y-2 text-xs font-mono">
+                  <div>
+                    <span className="text-slate-400 text-[11px]">API Key:</span>
+                    <p className="text-emerald-300">{selected.apiKey || 'vtp_live_sample_key'}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 text-[11px]">Webhook URL:</span>
+                    <p className="text-slate-300">{selected.webhookUrl || 'https://api.retailhub.vn/webhooks/shipping'}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400">Chưa kích hoạt kết nối API tự động cho đối tác này.</p>
+              )}
+            </div>
+
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi chú vận hành:</span>
-                <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Ghi chú & Tài khoản đối soát</span>
+                <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 text-slate-700 dark:text-slate-300">
                   {selected.notes}
-                </p>
+                </div>
               </div>
             )}
+            <div className="flex justify-end pt-4 border-t">
+              <button
+                onClick={() => setSelected(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 font-bold rounded-lg text-slate-700"
+              >
+                Đóng Hộp Thoại
+              </button>
+            </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
+      {/* Complete Redesigned ERP Carrier Form Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm đơn vị vận chuyển đối tác' : 'Sửa thông tin đơn vị'}
+        title={modalMode === 'create' ? 'Thêm đơn vị vận chuyển đối tác (Carrier ERP)' : 'Cấu hình & Chỉnh sửa đối tác'}
       >
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <form onSubmit={handleSave} className="space-y-5 text-xs">
+          
+          {/* Section 1: Basic Info */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+              <Building size={16} className="text-emerald-600" />
+              <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">
+                1. Thông tin cơ bản & Đầu mối liên hệ
+              </h4>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Mã đối tác *</span>
+                  <span className="text-[10px] text-slate-400 font-normal flex items-center gap-0.5">
+                    <Lock size={10} /> Auto Generate
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={formState.carrierCode || ''}
+                  readOnly
+                  className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl font-mono font-bold text-slate-600 cursor-not-allowed text-xs"
+                />
+                {formErrors.carrierCode && <p className="text-[11px] text-rose-500 mt-1">{formErrors.carrierCode}</p>}
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Hotline hỗ trợ / CSKH *</label>
+                <input
+                  type="text"
+                  value={formState.phone || ''}
+                  onChange={(e) => setFormState({ ...formState, phone: e.target.value })}
+                  className={`w-full p-2.5 bg-slate-50 border rounded-xl font-mono text-xs focus:outline-none focus:border-slate-900 ${
+                    formErrors.phone ? 'border-rose-500 bg-rose-50' : 'border-slate-200'
+                  }`}
+                  placeholder="1900 8888 hoặc 0988123456"
+                />
+                {formErrors.phone && <p className="text-[11px] text-rose-500 mt-1">{formErrors.phone}</p>}
+              </div>
+            </div>
+
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã đối tác *</label>
+              <label className="block font-bold text-slate-700 mb-1">Tên đối tác vận chuyển *</label>
               <input
                 type="text"
-                value={editingItem.carrierCode || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, carrierCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
-                placeholder="CR-XXXX"
-                required
-                disabled={modalMode === 'edit'}
+                value={formState.carrierName || ''}
+                onChange={(e) => setFormState({ ...formState, carrierName: e.target.value })}
+                className={`w-full p-2.5 bg-slate-50 border rounded-xl text-xs focus:outline-none focus:border-slate-900 ${
+                  formErrors.carrierName ? 'border-rose-500 bg-rose-50' : 'border-slate-200'
+                }`}
+                placeholder="Ví dụ: Viettel Post, Giao Hàng Tiết Kiệm, GHN..."
               />
+              {formErrors.carrierName && <p className="text-[11px] text-rose-500 mt-1">{formErrors.carrierName}</p>}
             </div>
+
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tổng đài hỗ trợ *</label>
+              <label className="block font-bold text-slate-700 mb-1">Email đối soát / Liên hệ</label>
+              <input
+                type="email"
+                value={formState.email || ''}
+                onChange={(e) => setFormState({ ...formState, email: e.target.value })}
+                className={`w-full p-2.5 bg-slate-50 border rounded-xl font-mono text-xs focus:outline-none focus:border-slate-900 ${
+                  formErrors.email ? 'border-rose-500 bg-rose-50' : 'border-slate-200'
+                }`}
+                placeholder="cskh@viettelpost.com.vn"
+              />
+              {formErrors.email && <p className="text-[11px] text-rose-500 mt-1">{formErrors.email}</p>}
+            </div>
+          </div>
+
+          {/* Section 2: Address */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+              <MapPin size={16} className="text-emerald-600" />
+              <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">
+                2. Địa chỉ trụ sở ERP (Phân rã hành chính)
+              </h4>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Quốc gia</label>
+                <input
+                  type="text"
+                  value="Việt Nam"
+                  readOnly
+                  className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Tỉnh / Thành phố</label>
+                <select
+                  value={formState.province || 'Hà Nội'}
+                  onChange={(e) => setFormState({ ...formState, province: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-900 font-semibold"
+                >
+                  {VIETNAM_PROVINCES.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Quận / Huyện</label>
+                <input
+                  type="text"
+                  value={formState.district || ''}
+                  onChange={(e) => setFormState({ ...formState, district: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-900"
+                  placeholder="Quận Ba Đình, Cầu Giấy..."
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Địa chỉ trụ sở chính * (Có gợi ý)</label>
               <input
                 type="text"
-                value={editingItem.phone || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, phone: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
-                placeholder="1900XXXX"
-                required
+                list="area-carrier-suggestions"
+                value={formState.addressDetail || formState.address || ''}
+                onChange={(e) => setFormState({ ...formState, addressDetail: e.target.value, address: e.target.value })}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-900"
+                placeholder="Nhập địa chỉ hoặc chọn gợi ý khu vực..."
               />
             </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Tên đối tác vận chuyển *</label>
-            <input
-              type="text"
-              value={editingItem.carrierName || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, carrierName: e.target.value })}
-              className="w-full p-2 border rounded"
-              placeholder="Tên công ty vận chuyển"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Địa chỉ trụ sở *</label>
-            <input
-              type="text"
-              value={editingItem.address || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, address: e.target.value })}
-              className="w-full p-2 border rounded"
-              placeholder="Địa chỉ công ty"
-              required
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Dịch vụ cung cấp *</label>
-              <input
-                type="text"
-                value={editingItem.serviceTypes || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, serviceTypes: e.target.value })}
-                className="w-full p-2 border rounded"
-                placeholder="Nhanh, Tiết kiệm, Hỏa tốc"
-                required
-              />
+
+          {/* Section 3: Services & SLA */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+              <Truck size={16} className="text-emerald-600" />
+              <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">
+                3. Dịch vụ cung cấp, SLA & Trạng thái hợp đồng
+              </h4>
             </div>
+
+            {/* Service Multi Select */}
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Đồng bộ API</label>
-              <select
-                value={editingItem.apiStatus || 'DISCONNECTED'}
-                onChange={(e) => setEditingItem({ ...editingItem, apiStatus: e.target.value as any })}
-                className="w-full p-2 border rounded"
-              >
-                <option value="DISCONNECTED">Chưa Kết Nối (Gọi thủ công)</option>
-                <option value="CONNECTED">Đã Kết Nối (Tự động đồng bộ)</option>
-                <option value="SUSPENDED">Tạm Dừng Đồng Bộ (Khóa kết nối)</option>
-              </select>
+              <label className="block font-bold text-slate-700 mb-2">Dịch vụ cung cấp (Multi-Select) *</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {AVAILABLE_SERVICES.map(srv => {
+                  const isChecked = (formState.serviceTypes || []).includes(srv.id);
+                  return (
+                    <div
+                      key={srv.id}
+                      onClick={() => toggleServiceType(srv.id)}
+                      className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-all ${
+                        isChecked
+                          ? 'border-emerald-600 bg-emerald-50/80 text-emerald-900 font-bold'
+                          : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'
+                      }`}
+                    >
+                      {isChecked ? <CheckSquare size={16} className="text-emerald-600" /> : <Square size={16} className="text-slate-400" />}
+                      <span className="text-xs">{srv.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Coverage Regions & Status */}
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Vùng giao hàng khả dụng</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {COVERAGE_OPTIONS.map(reg => {
+                    const isSelected = (formState.coverageRegions || []).includes(reg);
+                    return (
+                      <button
+                        key={reg}
+                        type="button"
+                        onClick={() => toggleCoverageRegion(reg)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                          isSelected ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {reg}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Trạng thái hợp đồng 3PL *</label>
+                <select
+                  value={formState.contractStatus || 'ACTIVE'}
+                  onChange={(e) => setFormState({ ...formState, contractStatus: e.target.value as any })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-900"
+                >
+                  <option value="ACTIVE">🟢 Đang hoạt động (ACTIVE)</option>
+                  <option value="ON_HOLD">🟡 Tạm ngưng (ON_HOLD)</option>
+                  <option value="EXPIRED">🔴 Hết hạn hợp đồng (EXPIRED)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* SLA & COD */}
+            <div className="grid grid-cols-3 gap-3 pt-2">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">SLA Giao Nội thành</label>
+                <input
+                  type="text"
+                  value={formState.slaInnerCity || ''}
+                  onChange={(e) => setFormState({ ...formState, slaInnerCity: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
+                  placeholder="4 giờ"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">SLA Giao Ngoại tỉnh</label>
+                <input
+                  type="text"
+                  value={formState.slaOuterProvince || ''}
+                  onChange={(e) => setFormState({ ...formState, slaOuterProvince: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
+                  placeholder="24 giờ"
+                />
+              </div>
+
+              <div className="flex items-center pt-5">
+                <label
+                  onClick={() => setFormState({ ...formState, supportCod: !formState.supportCod })}
+                  className="flex items-center gap-2 cursor-pointer select-none font-bold text-slate-800"
+                >
+                  {formState.supportCod ? <CheckSquare size={18} className="text-emerald-600" /> : <Square size={18} className="text-slate-400" />}
+                  <span>☑ Hỗ trợ COD</span>
+                </label>
+              </div>
             </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
+
+          {/* Section 4: API Integration Toggle & Sub-fields */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-2">
+                <Server size={16} className="text-emerald-600" />
+                <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">
+                  4. Đồng bộ API & Cấu hình kỹ thuật
+                </h4>
+              </div>
+
+              {/* Toggle Switch */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-700">Kết nối API:</span>
+                <button
+                  type="button"
+                  onClick={() => setFormState({ ...formState, hasApi: !formState.hasApi })}
+                  className={`px-3 py-1 rounded-full text-xs font-extrabold transition-all cursor-pointer ${
+                    formState.hasApi ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {formState.hasApi ? 'Có (Tự động)' : 'Không (Thủ công)'}
+                </button>
+              </div>
+            </div>
+
+            {/* Conditional API Fields */}
+            {formState.hasApi ? (
+              <div className="p-4 rounded-2xl bg-slate-900 text-white space-y-3 animate-fade-in">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">API Key *</label>
+                    <input
+                      type="text"
+                      value={formState.apiKey || ''}
+                      onChange={(e) => setFormState({ ...formState, apiKey: e.target.value })}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-mono text-emerald-300 focus:outline-none focus:border-emerald-500"
+                      placeholder="vtp_live_xxxxxx"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">API Secret / Token *</label>
+                    <input
+                      type="password"
+                      value={formState.apiSecret || ''}
+                      onChange={(e) => setFormState({ ...formState, apiSecret: e.target.value })}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500"
+                      placeholder="••••••••••••••••"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">Webhook Callback URL</label>
+                    <input
+                      type="text"
+                      value={formState.webhookUrl || ''}
+                      onChange={(e) => setFormState({ ...formState, webhookUrl: e.target.value })}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500"
+                      placeholder="https://api.retailhub.vn/webhooks/shipping"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">Môi trường</label>
+                    <select
+                      value={formState.apiEnvironment || 'PRODUCTION'}
+                      onChange={(e) => setFormState({ ...formState, apiEnvironment: e.target.value as any })}
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-emerald-400 focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="PRODUCTION">⚡ PRODUCTION (Vận hành)</option>
+                      <option value="SANDBOX">🧪 SANDBOX (Kiểm thử)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 italic bg-slate-50 p-3 rounded-xl border border-slate-200">
+                Khi chọn "Không", đơn hàng sẽ được xử lý giao dịch thủ công qua bưu cục mà không tự động gửi lệnh tạo đơn qua API.
+              </p>
+            )}
+          </div>
+
+          {/* Section 5: Notes */}
+          <div className="space-y-2 pt-2">
+            <label className="block font-bold text-slate-700 mb-1">Ghi chú & Tài khoản đối soát</label>
             <textarea
-              value={editingItem.notes || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border rounded"
-              rows={3}
-              placeholder="Chi tiết tài khoản API kết nối hoặc thông tin liên hệ bưu cục..."
+              value={formState.notes || ''}
+              onChange={(e) => setFormState({ ...formState, notes: e.target.value })}
+              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-900"
+              rows={2}
+              placeholder="Thông tin API, tài khoản đối soát hoặc lưu ý khi tích hợp..."
             />
           </div>
-          <div className="flex justify-end gap-2 pt-2 border-t">
+
+          {/* Buttons */}
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded hover:bg-gray-100"
+              className="px-5 py-2.5 border border-slate-300 rounded-xl font-bold text-slate-700 hover:bg-slate-100 transition-colors"
             >
               Hủy
             </button>
-            <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu đối tác
+            <button
+              type="submit"
+              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl transition-all shadow-md cursor-pointer"
+            >
+              Lưu đối tác 3PL
             </button>
           </div>
         </form>

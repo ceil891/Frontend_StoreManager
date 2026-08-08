@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, AlertOctagon, Terminal, ShieldAlert, Cpu, CheckCircle2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
+import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -354,7 +354,7 @@ export function SystemErrorLogPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedError(row)} isLoading={isLoading} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedError}
         onClose={() => setSelectedError(null)}
         title={selectedError ? `Chi tiết sự cố: ${selectedError.errorHash}` : 'Exception Specification'}
@@ -459,7 +459,7 @@ export function SystemErrorLogPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
     </>
   );
 }

@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
@@ -228,7 +227,7 @@ export function ProductWarrantiesPage() {
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
-              <Download className="w-4 h-4" /> Xuất dữ liệu
+              <Download className="w-4 h-4" /> Xuất Dữ Liệu
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg">
               <Plus className="w-4 h-4" /> Thêm sổ bảo hành
@@ -263,7 +262,7 @@ export function ProductWarrantiesPage() {
       </div>
 
       {/* Drawer chi tiết */}
-      <Drawer isOpen={!!selectedItem} onClose={() => setSelectedItem(null)} title={selectedItem ? `Chi tiết sổ bảo hành: ${selectedItem.warrantyCode}` : ''}>
+      <Modal isOpen={!!selectedItem} onClose={() => setSelectedItem(null)} title={selectedItem ? `Chi tiết sổ bảo hành: ${selectedItem.warrantyCode}` : ''} width="max-w-lg">
         {selectedItem && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -298,7 +297,7 @@ export function ProductWarrantiesPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal tạo / sửa */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalMode === 'create' ? 'Thêm sổ bảo hành mới' : 'Cập nhật sổ bảo hành'}>
@@ -381,7 +380,7 @@ export function ProductWarrantiesPage() {
               Hủy bỏ
             </button>
             <button type="submit" className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded text-sm font-medium">
-              {modalMode === 'create' ? 'Thêm mới' : 'Lưu thay đổi'}
+              {modalMode === 'create' ? 'Thêm Mới' : 'Lưu thay đổi'}
             </button>
           </div>
         </form>

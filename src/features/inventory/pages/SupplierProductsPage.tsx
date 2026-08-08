@@ -7,8 +7,10 @@ import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
+import { toast } from 'sonner';
 import { useInventoryStore, type SupplierProductRecord } from '@/features/inventory/store/inventoryStore';
 import { usePurchaseStore } from '@/features/purchase/store/purchaseStore';
+
 
 export function SupplierProductsPage() {
   const {
@@ -67,6 +69,7 @@ export function SupplierProductsPage() {
   };
 
   const handleOpenEdit = (item: SupplierProductRecord) => {
+    setSelected(null);
     setModalMode('edit');
     setEditingItem(item);
     setIsModalOpen(true);
@@ -74,7 +77,14 @@ export function SupplierProductsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.productId || !editingItem.supplierId) return;
+    if (!editingItem.productId) {
+      toast.error('Vui lòng chọn Sản phẩm cần liên kết!');
+      return;
+    }
+    if (!editingItem.supplierId) {
+      toast.error('Vui lòng chọn Nhà cung cấp!');
+      return;
+    }
 
     const payload = {
       productId: editingItem.productId,
@@ -88,17 +98,24 @@ export function SupplierProductsPage() {
       isActive: editingItem.isActive !== false,
     };
 
-    if (modalMode === 'create') {
-      await addSupplierProduct(payload);
-    } else {
-      await updateSupplierProduct(editingItem.id!, payload);
+    try {
+      if (modalMode === 'create') {
+        await addSupplierProduct(payload);
+        toast.success('Đã tạo liên kết mặt hàng với Nhà cung cấp thành công!');
+      } else {
+        await updateSupplierProduct(editingItem.id!, payload);
+        toast.success('Đã cập nhật thông tin liên kết Nhà cung cấp thành công!');
+      }
+      setIsModalOpen(false);
+    } catch {
+      toast.error('Lỗi khi lưu liên kết mặt hàng!');
     }
-    setIsModalOpen(false);
   };
 
   const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa liên kết nhà cung cấp này?')) {
       await deleteSupplierProduct(id);
+      toast.success('Đã xóa liên kết nhà cung cấp thành công!');
     }
   };
 
@@ -177,21 +194,21 @@ export function SupplierProductsPage() {
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setSelected(row.original)}
+              onClick={(e) => { e.stopPropagation(); setSelected(row.original); }}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
               title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleOpenEdit(row.original)}
+              onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
               className="p-1 text-gray-500 hover:text-blue-600 rounded"
               title="Sửa"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={(e) => { e.stopPropagation(); handleDelete(row.original.id); }}
               className="p-1 text-gray-500 hover:text-red-600 rounded"
               title="Xóa"
             >
@@ -234,74 +251,62 @@ export function SupplierProductsPage() {
 
       <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
 
-      <Drawer
+      {/* Modal Xem chi tiết sản phẩm NCC cấp căn giữa (TC-ALL-1) */}
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title={`Chi tiết liên kết sản phẩm: ${selected?.productName}`}
+        title={selected ? `Chi tiết hàng NCC: ${selected.productName}` : 'Thông tin liên kết sản phẩm NCC'}
+        width="max-w-md"
       >
         {selected && (
           <div className="space-y-4 text-sm">
-            <div className="flex items-center gap-4">
-              {selected.mainImageUrl && (
-                <img src={selected.mainImageUrl} alt={selected.productName} className="w-16 h-16 rounded object-cover border" />
-              )}
+            <div className="flex items-center gap-3 border-b pb-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 font-bold shrink-0">
+                <Star className="w-5 h-5" />
+              </div>
               <div>
-                <h4 className="font-semibold text-base text-gray-900 dark:text-white">{selected.productName}</h4>
-                <p className="text-xs font-mono text-gray-500">Mã SKU Hệ Thống: {selected.productCode}</p>
+                <h3 className="font-bold text-gray-900 dark:text-white">{selected.productName}</h3>
+                <p className="text-xs font-mono text-gray-500">SKU Hệ Thống: {selected.productCode}</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 border-t pt-2">
+            <div className="grid grid-cols-2 gap-4 border-b pb-2">
               <div>
-                <span className="text-gray-500">Nhà cung cấp:</span>
+                <span className="text-xs text-gray-500">Nhà cung cấp:</span>
                 <p className="font-semibold text-blue-600">{selected.supplierName} ({selected.supplierCode})</p>
               </div>
               <div>
-                <span className="text-gray-500">Mã SKU đối tác NCC:</span>
+                <span className="text-xs text-gray-500">Mã SKU đối tác NCC:</span>
                 <p className="font-mono font-semibold">{selected.supplierSku || 'N/A'}</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 border-t pt-2">
+            <div className="grid grid-cols-3 gap-4 border-b pb-2">
               <div>
-                <span className="text-gray-500">Giá thỏa thuận:</span>
+                <span className="text-xs text-gray-500">Giá thỏa thuận:</span>
                 <p className="font-mono text-emerald-600 font-bold">{formatCurrency(selected.unitPrice || 0, selected.currency)}</p>
               </div>
               <div>
-                <span className="text-gray-500">Đặt tối thiểu (MOQ):</span>
+                <span className="text-xs text-gray-500">Đặt tối thiểu:</span>
                 <p className="font-mono font-semibold">{selected.moq || 0}</p>
               </div>
               <div>
-                <span className="text-gray-500">Thời gian Giao:</span>
+                <span className="text-xs text-gray-500">Thời gian Giao:</span>
                 <p className="font-mono font-semibold">{selected.leadTimeDays || 0} ngày</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-6 border-t pt-2">
-              <div>
-                <span className="text-gray-500 block mb-1">Preferred Supplier:</span>
-                {selected.isPreferred ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                    <Star className="w-3 h-3 fill-current" /> Nhà Cung Cấp Ưu Tiên
-                  </span>
-                ) : (
-                  <span className="text-xs text-gray-400">Không</span>
-                )}
-              </div>
-              <div>
-                <span className="text-gray-500 block mb-1">Trạng thái:</span>
-                <span
-                  className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
-                    selected.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                  }`}
-                >
-                  {selected.isActive ? 'Đang cung cấp' : 'Tạm ngưng'}
-                </span>
-              </div>
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button
+                onClick={() => setSelected(null)}
+                className="px-4 py-2 bg-gray-100 font-bold rounded-lg text-sm"
+              >
+                Đóng
+              </button>
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}
@@ -351,17 +356,17 @@ export function SupplierProductsPage() {
                 type="text"
                 value={editingItem.supplierSku || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, supplierSku: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full h-[42px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
                 placeholder="SKU đối tác định nghĩa..."
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thời gian giao hàng chuẩn (Lead Time - Ngày) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thời gian giao hàng chuẩn (ngày) *</label>
               <input
                 type="number"
                 value={editingItem.leadTimeDays || 3}
                 onChange={(e) => setEditingItem({ ...editingItem, leadTimeDays: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full h-[42px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
                 required
               />
             </div>
@@ -370,17 +375,19 @@ export function SupplierProductsPage() {
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá nhập thỏa thuận hợp đồng *</label>
-              <div className="flex gap-2">
-                <CurrencyInput
-                  value={editingItem.unitPrice || 0}
-                  onChange={(val) => setEditingItem(prev => ({ ...prev, unitPrice: val }))}
-                  currencySymbol={editingItem.currency === 'USD' ? '$' : '₫'}
-                  placeholder="0"
-                />
+              <div className="flex gap-2 items-center">
+                <div className="flex-1 h-[42px]">
+                  <CurrencyInput
+                    value={editingItem.unitPrice || 0}
+                    onChange={(val) => setEditingItem(prev => ({ ...prev, unitPrice: val }))}
+                    currencySymbol={editingItem.currency === 'USD' ? '$' : '₫'}
+                    placeholder="0"
+                  />
+                </div>
                 <select
                   value={editingItem.currency || 'VND'}
                   onChange={(e) => setEditingItem({ ...editingItem, currency: e.target.value })}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  className="h-[42px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-semibold"
                 >
                   <option value="VND">VND</option>
                   <option value="USD">USD</option>
@@ -388,35 +395,38 @@ export function SupplierProductsPage() {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lượng đặt tối thiểu (MOQ) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lượng đặt tối thiểu *</label>
               <input
                 type="number"
                 value={editingItem.moq || 1}
                 onChange={(e) => setEditingItem({ ...editingItem, moq: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full h-[42px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
                 required
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center pt-2">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={!!editingItem.isPreferred}
-                  onChange={(e) => setEditingItem({ ...editingItem, isPreferred: e.target.checked })}
-                  className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                />
-                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Nhà cung cấp ưu tiên chính</span>
-              </label>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Quyền ưu tiên</label>
+              <div className="h-[42px] px-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 flex items-center">
+                <label className="flex items-center gap-2 cursor-pointer select-none w-full">
+                  <input
+                    type="checkbox"
+                    checked={!!editingItem.isPreferred}
+                    onChange={(e) => setEditingItem({ ...editingItem, isPreferred: e.target.checked })}
+                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                  />
+                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Nhà cung cấp ưu tiên chính</span>
+                </label>
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái hoạt động *</label>
               <select
                 value={editingItem.isActive === false ? 'false' : 'true'}
                 onChange={(e) => setEditingItem({ ...editingItem, isActive: e.target.value === 'true' })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                className="w-full h-[42px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
               >
                 <option value="true">Đang cung cấp hàng</option>
                 <option value="false">Tạm ngưng cung cấp</option>
@@ -426,9 +436,10 @@ export function SupplierProductsPage() {
 
           <div>
             <FileDropzone
-              label="Bản báo giá & Hợp đồng cung ứng đính kèm (PDF/Image)"
+              label="Bản báo giá & Hợp đồng cung ứng đính kèm"
             />
           </div>
+
 
           <div className="flex justify-end gap-2 pt-2 border-t">
             <button

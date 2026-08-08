@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Search, Download, Eye, Plus, Edit, Trash2, DollarSign } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore } from '../store/financeStore';
 
@@ -90,7 +91,7 @@ export function TaxDutiesPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)}/>
       </div>
 
-      <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết: ${selected.type}`:''}>
+      <Modal isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`Chi tiết: ${selected.type}`:''} width="max-w-lg">
         {selected && (
           <div className="space-y-4 p-4">
             <div className="grid grid-cols-2 gap-4">
@@ -100,7 +101,7 @@ export function TaxDutiesPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title={form.id?`Cập nhật Nghĩa Vụ Thuế`:`Thêm Nghĩa Vụ Thuế`} width="max-w-lg">
         <form onSubmit={handleSave} className="space-y-4">

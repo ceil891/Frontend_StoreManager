@@ -129,7 +129,7 @@ export function BranchManagementPage() {
         entityType: 'Branch',
         entityId: editingBranch.branchCode || 'NEW',
         entityLabel: editingBranch.name,
-        description: `Thêm chi nhánh ${editingBranch.name}, QL ${managerName}.`,
+        description: `Thêm Chi Nhánh ${editingBranch.name}, QL ${managerName}.`,
         changedFields: ['name', 'location', 'manager', 'status'],
       });
     } else {
@@ -330,14 +330,14 @@ export function BranchManagementPage() {
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium">
               <Download className="w-4 h-4" />
-              Xuất excel
+              Xuất Excel
             </button>
             <button
               onClick={handleOpenCreate}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
             >
               <Plus className="w-4 h-4" />
-              Thêm chi nhánh
+              Thêm Chi Nhánh
             </button>
           </div>
         </div>

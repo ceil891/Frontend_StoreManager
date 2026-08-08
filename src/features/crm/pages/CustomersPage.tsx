@@ -1,11 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
-  UserPlus, Download, Search, Star, Eye, Mail, Phone, MapPin, Award,
-  Gift, Clock, Edit, Trash2, ShoppingBag, TrendingUp, CheckCircle, Loader2,
-  Plus, Minus, AlertCircle, Users, DollarSign
+  UserPlus, Download, Star, Eye, Edit, Trash2, Award, Gift, Zap, BadgeCheck, Users, Camera, Upload,
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -18,15 +15,13 @@ import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
+import { compressImage } from '@/shared/utils/imageCompressor';
 
-// ─── Tier config ────────────────────────────────────────────────────────────
-// NOTE: lifetimeSpent trong store dùng đơn vị USD ($).
-// Ngưỡng thăng hạng tương đương: 5 000 000 VNĐ ≈ 200$, 20 000 000 VNĐ ≈ 800$, 100 000 000 VNĐ ≈ 4 000$
 const TIER_THRESHOLDS = {
-  BRONZE: 0,     // < 200$
-  SILVER: 200,   // 200$ – 800$   (~5 000 000 – 20 000 000 VNĐ)
-  GOLD: 800,     // 800$ – 4 000$ (~20 000 000 – 100 000 000 VNĐ)
-  DIAMOND: 4000, // > 4 000$      (> 100 000 000 VNĐ)
+  BRONZE: 0,
+  SILVER: 200,
+  GOLD: 800,
+  DIAMOND: 4000,
 } as const;
 
 function calcTier(spent: number): CustomerProfile['loyaltyTier'] {
@@ -43,45 +38,22 @@ const tierColors: Record<string, string> = {
   DIAMOND: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300',
   ELITE_CLUB: 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/40 dark:text-purple-300',
 };
+
 const tierLabel: Record<string, string> = {
   BRONZE: 'Đồng', SILVER: 'Bạc', GOLD: 'Vàng', DIAMOND: 'Kim Cương', ELITE_CLUB: 'Elite Club',
 };
 
-// ─── Transaction history ────────────────────────────────────────────────
-type Transaction = {
-  id: string;
-  orderId: string;
-  date: string;
-  summary: string;
-  total: number;
-  status: 'Hoàn thành' | 'Đang xử lý';
-};
-
-// ─── Loyalty point history ──────────────────────────────────────────────
-type PointRecord = {
-  id: string;
-  date: string;
-  type: 'Tích điểm' | 'Dùng điểm' | 'Hết hạn';
-  points: number;
-  balance: number;
-};
-
-// ─── Drawer tab type ─────────────────────────────────────────────────────────
-type DrawerTab = 'info' | 'transactions' | 'points';
-
-// ─────────────────────────────────────────────────────────────────────────────
 export function CustomersPage() {
   const { customers: data, addCustomer, updateCustomer, deleteCustomer, fetchCustomers, isLoadingCustomers } = useCrmStore();
   
   useEffect(() => {
     fetchCustomers();
   }, [fetchCustomers]);
+
   const [search, setSearch] = useState('');
   const [selectedTier, setSelectedTier] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerProfile | null>(null);
-  const [drawerTab, setDrawerTab] = useState<DrawerTab>('info');
 
-  // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAutoCode, setIsAutoCode] = useState(true);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
@@ -98,13 +70,6 @@ export function CustomersPage() {
     return matchesSearch && matchesTier;
   });
 
-  // ── KPI stats ───────────────────────────────────────────────────────────────
-  const totalRevenue = data.reduce((acc, c) => acc + c.lifetimeSpent, 0);
-  const activeCount  = data.filter(c => c.status === 'ACTIVE').length;
-  const vipCount     = data.filter(c => c.loyaltyTier === 'DIAMOND' || c.loyaltyTier === 'GOLD').length;
-  const totalPoints  = data.reduce((acc, c) => acc + c.loyaltyPoints, 0);
-
-  // ── Handlers ────────────────────────────────────────────────────────────────
   const handleOpenCreate = () => {
     setModalMode('create');
     setIsAutoCode(true);
@@ -130,17 +95,44 @@ export function CustomersPage() {
 
   const handleSaveCustomer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingCustomer.name || !editingCustomer.phone) return;
+    const cleanName = editingCustomer.name?.trim();
+    const cleanPhone = editingCustomer.phone?.trim().replace(/\s+/g, '');
 
-    // Tự động tính lại loyaltyTier dựa vào lifetimeSpent (đơn vị USD $)
+    if (!cleanName) {
+      toast.error('Vui lòng nhập Họ & Tên khách hàng!');
+      return;
+    }
+    const nameRegex = /^[a-zA-ZÀ-ỹ\s'.-]+$/u;
+    if (!nameRegex.test(cleanName)) {
+      toast.error('Họ & Tên không được chứa chữ số hoặc ký tự đặc biệt!');
+      return;
+    }
+    if (cleanName.length < 2) {
+      toast.error('Họ & Tên khách hàng phải có tối thiểu 2 ký tự!');
+      return;
+    }
+    if (!cleanPhone || !/^[0-9]{10,11}$/.test(cleanPhone)) {
+      toast.error('Số điện thoại không hợp lệ! Vui lòng nhập từ 10 đến 11 chữ số.');
+      return;
+    }
+
+    if (editingCustomer.dateOfBirth) {
+      const dob = new Date(editingCustomer.dateOfBirth);
+      const today = new Date();
+      if (dob > today) {
+        toast.error('Ngày sinh không được lớn hơn ngày hiện tại!');
+        return;
+      }
+    }
+
     const autoTier = calcTier(editingCustomer.lifetimeSpent ?? 0);
 
     if (modalMode === 'create') {
       const newCust: Omit<CustomerProfile, 'id'> = {
         customerCode:   editingCustomer.customerCode || `CUST-${Math.floor(10000 + Math.random() * 90000)}`,
-        name:           editingCustomer.name || '',
-        phone:          editingCustomer.phone || '',
-        email:          editingCustomer.email || '',
+        name:           cleanName,
+        phone:          cleanPhone,
+        email:          editingCustomer.email?.trim() || '',
         address:        editingCustomer.address || '',
         taxCode:        editingCustomer.taxCode || '',
         gender:         editingCustomer.gender || 'OTHER',
@@ -148,8 +140,8 @@ export function CustomersPage() {
         creditLimit:    editingCustomer.creditLimit || 0,
         groupId:        editingCustomer.groupId || '',
         areaId:         editingCustomer.areaId || '',
-        avatarUrl:      editingCustomer.avatarUrl?.trim() || buildUserAvatarUrl(editingCustomer.email || editingCustomer.name || 'customer'),
-        loyaltyTier:    autoTier,           // ← tự động thăng hạng
+        avatarUrl:      editingCustomer.avatarUrl?.trim() || buildUserAvatarUrl(editingCustomer.email || cleanName || 'customer'),
+        loyaltyTier:    autoTier,
         loyaltyPoints:  editingCustomer.loyaltyPoints || 0,
         lifetimeSpent:  editingCustomer.lifetimeSpent || 0,
         registeredDate: editingCustomer.registeredDate || new Date().toISOString().split('T')[0],
@@ -158,19 +150,50 @@ export function CustomersPage() {
         notes:          editingCustomer.notes,
       };
       addCustomer(newCust);
+      toast.success(`Đã thêm khách hàng mới: ${cleanName}`);
     } else if (editingCustomer.id) {
-      updateCustomer(editingCustomer.id, { ...editingCustomer, loyaltyTier: autoTier });
+      updateCustomer(editingCustomer.id, { ...editingCustomer, name: cleanName, phone: cleanPhone, loyaltyTier: autoTier });
+      toast.success(`Đã cập nhật thông tin khách hàng: ${cleanName}`);
     }
     setIsModalOpen(false);
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Vui lòng chọn tệp hình ảnh (JPG, PNG, WebP)!');
+      return;
+    }
+    try {
+      const compressed = await compressImage(file, { maxWidth: 400, maxHeight: 400, quality: 0.85 });
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64Url = event.target?.result as string;
+        if (base64Url) {
+          setEditingCustomer((prev) => ({ ...prev, avatarUrl: base64Url }));
+          toast.success('Đã chọn & tải ảnh đại diện thành công!');
+        }
+      };
+      reader.readAsDataURL(compressed);
+    } catch (err) {
+      console.error('Error processing avatar image:', err);
+      toast.error('Lỗi khi xử lý hình ảnh!');
+    }
+  };
+
   const handleDeleteConfirm = () => {
     if (!deletingCustomer) return;
+    if (deletingCustomer.status === 'ACTIVE') {
+      toast.error(`❌ Không thể xóa khách hàng "${deletingCustomer.name}" vì đang ở trạng thái Đang hoạt động.\nVui lòng chuyển trạng thái sang Tạm ngưng hoặc Đã rời đi trước khi xóa!`);
+      setDeletingCustomer(null);
+      return;
+    }
     deleteCustomer(deletingCustomer.id);
+    toast.success(`Đã xóa hồ sơ khách hàng ${deletingCustomer.name}`);
     setDeletingCustomer(null);
   };
 
-  // ── Table columns ────────────────────────────────────────────────────────────
   const columns = useMemo<ColumnDef<CustomerProfile>[]>(
     () => [
       {
@@ -184,30 +207,39 @@ export function CustomersPage() {
       },
       {
         accessorKey: 'name',
-        header: 'Tên & email khách hàng',
+        header: 'Khách hàng',
         cell: ({ row }) => (
           <div className="flex items-center gap-3">
-            <UserAvatar name={row.original.name} avatarUrl={row.original.avatarUrl} seed={row.original.email} size="sm" />
+            <UserAvatar
+              src={row.original.avatarUrl}
+              name={row.original.name}
+              size="md"
+            />
             <div>
-              <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.name}</p>
-              <p className="text-xs text-gray-500">{row.original.email}</p>
+              <p className="font-bold text-gray-900 dark:text-white hover:text-primary transition-colors">{row.original.name}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">{row.original.phone}</p>
             </div>
           </div>
         ),
       },
       {
-        accessorKey: 'phone',
-        header: 'Số điện thoại',
-        cell: (info) => <span className="font-mono text-sm">{info.getValue() as string}</span>,
+        accessorKey: 'email',
+        header: 'Email / Địa chỉ',
+        cell: ({ row }) => (
+          <div>
+            <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">{row.original.email || 'N/A'}</p>
+            <p className="text-[11px] text-gray-400 truncate max-w-[180px]">{row.original.address || 'N/A'}</p>
+          </div>
+        ),
       },
       {
         accessorKey: 'loyaltyTier',
-        header: 'Hạng thành viên',
+        header: 'Hạng thẻ',
         cell: (info) => {
-          const tier = info.getValue() as keyof typeof tierColors;
+          const tier = info.getValue() as string;
           return (
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${tierColors[tier]}`}>
-              <Star className="w-3 h-3" />
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${tierColors[tier] || tierColors.BRONZE}`}>
+              <Award className="w-3 h-3" />
               {tierLabel[tier] || tier}
             </span>
           );
@@ -215,19 +247,10 @@ export function CustomersPage() {
       },
       {
         accessorKey: 'loyaltyPoints',
-        header: 'Điểm tích lũy',
+        header: 'Điểm khả dụng',
         cell: (info) => (
-          <span className="font-mono text-primary font-semibold">
-            {info.getValue() as number} điểm
-          </span>
-        ),
-      },
-      {
-        accessorKey: 'lifetimeSpent',
-        header: 'Tổng chi tiêu',
-        cell: (info) => (
-          <span className="font-bold text-gray-900 dark:text-white">
-            ${(info.getValue() as number).toFixed(2)}
+          <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+            {(info.getValue() as number).toLocaleString()} điểm
           </span>
         ),
       },
@@ -237,10 +260,10 @@ export function CustomersPage() {
         cell: (info) => {
           const status = info.getValue() as string;
           const statusMap: Record<string, string> = {
-            ACTIVE: 'Hoạt động', DORMANT: 'Không hoạt động', CHURNED: 'Đã rời đi',
+            ACTIVE: 'Đang hoạt động', DORMANT: 'Tạm ngưng', CHURNED: 'Đã rời đi', INACTIVE: 'Ngừng hoạt động',
           };
           return (
-            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
               status === 'ACTIVE'  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
               status === 'DORMANT' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' :
               'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
@@ -256,7 +279,7 @@ export function CustomersPage() {
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
-              onClick={(e) => { e.stopPropagation(); setDrawerTab('info'); setSelectedCustomer(row.original); }}
+              onClick={(e) => { e.stopPropagation(); setSelectedCustomer(row.original); }}
               title="Xem chi tiết"
               className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
             >
@@ -283,22 +306,14 @@ export function CustomersPage() {
     [data]
   );
 
-  // ── Tier progress helper ─────────────────────────────────────────────────────
-  function getTierProgress(spent: number) {
-    if (spent >= TIER_THRESHOLDS.DIAMOND) return { label: 'Kim Cương – Hạng tối đa', percent: 100, next: null };
-    if (spent >= TIER_THRESHOLDS.GOLD)   return { label: 'Lên kim Cương', percent: Math.round((spent - TIER_THRESHOLDS.GOLD) / (TIER_THRESHOLDS.DIAMOND - TIER_THRESHOLDS.GOLD) * 100), next: 'DIAMOND' };
-    if (spent >= TIER_THRESHOLDS.SILVER) return { label: 'Lên vàng', percent: Math.round((spent - TIER_THRESHOLDS.SILVER) / (TIER_THRESHOLDS.GOLD - TIER_THRESHOLDS.SILVER) * 100), next: 'GOLD' };
-    return { label: 'Lên bạc', percent: Math.round(spent / TIER_THRESHOLDS.SILVER * 100), next: 'SILVER' };
-  }
+  const vipCount = data.filter(c => c.loyaltyTier === 'DIAMOND' || c.loyaltyTier === 'GOLD').length;
 
-  // ────────────────────────────────────────────────────────────────────────────
   return (
     <>
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Khách hàng (CRM)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Khách hàng</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Quản lý hồ sơ khách hàng, theo dõi điểm thưởng tích lũy và giám sát lịch sử chi tiêu. Nhấp vào dòng để xem chi tiết.
             </p>
@@ -313,8 +328,7 @@ export function CustomersPage() {
                   { header: 'Hạng thẻ', accessor: r => tierLabel[r.loyaltyTier] || r.loyaltyTier },
                   { header: 'Điểm tích lũy', accessor: r => r.loyaltyPoints },
                   { header: 'Tổng chi tiêu ($)', accessor: r => r.lifetimeSpent },
-                  { header: 'Tổng số đơn', accessor: r => r.totalOrders },
-                  { header: 'Lần mua cuối', accessor: r => r.lastVisit },
+                  { header: 'Lần mua cuối', accessor: r => r.lastActive },
                 ]);
                 toast.success('Đã xuất danh sách khách hàng dạng CSV!');
               }}
@@ -326,12 +340,11 @@ export function CustomersPage() {
               onClick={handleOpenCreate}
               className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap"
             >
-              <UserPlus className="w-4 h-4" /> Thêm khách hàng mới
+              <UserPlus className="w-4 h-4" /> Thêm Khách Hàng mới
             </button>
           </div>
         </div>
 
-        {/* KPI Cards – 5 cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
@@ -344,408 +357,150 @@ export function CustomersPage() {
           <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <Star className="w-4 h-4 text-blue-400" />
-              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Khách VIP (kim Cương & vàng)</h3>
+              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Khách VIP (Kim Cương & Vàng)</h3>
             </div>
             <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{vipCount}</p>
           </div>
-
-          <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            <div className="flex items-center gap-2 mb-1">
-              <Award className="w-4 h-4 text-primary" />
-              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Tổng quỹ điểm thưởng</h3>
-            </div>
-            <p className="text-2xl font-bold text-primary">{totalPoints.toLocaleString()}</p>
-          </div>
-
-          {/* NEW: Doanh thu tổng */}
-          <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            <div className="flex items-center gap-2 mb-1">
-              <DollarSign className="w-4 h-4 text-emerald-500" />
-              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Doanh thu tổng</h3>
-            </div>
-            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-              ${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-            </p>
-          </div>
-
-          {/* NEW: Hoạt động hôm nay */}
-          <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            <div className="flex items-center gap-2 mb-1">
-              <TrendingUp className="w-4 h-4 text-amber-500" />
-              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Đang hoạt động</h3>
-            </div>
-            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{activeCount}</p>
-          </div>
         </div>
 
-        {/* Table */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative max-w-md">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-gray-400" />
-              </div>
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Tìm kiếm khách hàng theo tên, số điện thoại, email hoặc mã..."
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary sm:text-sm transition-all"
-              />
-            </div>
+        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="w-full sm:w-80">
+            <input
+              type="text"
+              placeholder="Tìm theo tên, SĐT, email..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div className="w-full sm:w-auto flex items-center gap-3">
             <select
               value={selectedTier}
               onChange={(e) => setSelectedTier(e.target.value)}
-              className="border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary"
             >
-              <option value="">Tất cả hạng thành viên</option>
-              <option value="DIAMOND">VIP kim Cương</option>
-              <option value="GOLD">Thành viên Vàng</option>
-              <option value="SILVER">Thành viên Bạc</option>
-              <option value="BRONZE">Thành viên Đồng</option>
+              <option value="">-- Tất cả hạng thẻ --</option>
+              <option value="BRONZE">Đồng</option>
+              <option value="SILVER">Bạc</option>
+              <option value="GOLD">Vàng</option>
+              <option value="DIAMOND">Kim Cương</option>
             </select>
           </div>
-          <div className="p-4">
-            <ReusableDataTable
-              columns={columns}
-              data={filtered}
-              onRowClick={(row) => { setDrawerTab('info'); setSelectedCustomer(row); }}
-              isLoading={isLoadingCustomers}
-            />
-          </div>
         </div>
+
+        <ReusableDataTable
+          data={filtered}
+          columns={columns}
+          isLoading={isLoadingCustomers}
+          onRowClick={(row) => setSelectedCustomer(row)}
+        />
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          DRAWER: Xem chi tiết khách hàng (với Tab navigation)
-      ════════════════════════════════════════════════════════════════════════ */}
-      <Drawer
-        isOpen={!!selectedCustomer}
-        onClose={() => setSelectedCustomer(null)}
-        title={selectedCustomer ? `Thẻ Khách Hàng: ${selectedCustomer.customerCode}` : 'Hồ sơ khách hàng'}
-        width="max-w-lg"
-      >
-        {selectedCustomer && (() => {
-          const progress = getTierProgress(selectedCustomer.lifetimeSpent);
-          return (
-            <div className="space-y-4">
-              {/* Avatar + Tier badge */}
-              <div className="flex items-center justify-between p-4 bg-primary/10 rounded-xl border border-primary/20">
-                <div className="flex items-center gap-3">
-                  <UserAvatar name={selectedCustomer.name} avatarUrl={selectedCustomer.avatarUrl} seed={selectedCustomer.email} size="lg" />
-                  <div>
-                    <p className="text-xl font-bold text-gray-900 dark:text-white">{selectedCustomer.name}</p>
-                    <p className="text-xs text-primary font-mono">{selectedCustomer.email}</p>
-                  </div>
+      {/* Customer Detail View Modal */}
+      {selectedCustomer && (
+        <Modal
+          isOpen={Boolean(selectedCustomer)}
+          onClose={() => setSelectedCustomer(null)}
+          title={`Chi tiết Khách hàng: ${selectedCustomer.name}`}
+          size="lg"
+        >
+          <div className="space-y-4 p-2">
+            <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
+              <UserAvatar src={selectedCustomer.avatarUrl} name={selectedCustomer.name} size="lg" />
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">{selectedCustomer.name}</h3>
+                <p className="text-xs text-gray-500 font-mono">{selectedCustomer.customerCode} | {selectedCustomer.phone}</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${tierColors[selectedCustomer.loyaltyTier] || tierColors.BRONZE}`}>
+                    {tierLabel[selectedCustomer.loyaltyTier] || selectedCustomer.loyaltyTier}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                    {selectedCustomer.status === 'ACTIVE' ? 'Đang hoạt động' : selectedCustomer.status === 'DORMANT' ? 'Tạm ngưng' : 'Đã rời đi'}
+                  </span>
                 </div>
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${tierColors[selectedCustomer.loyaltyTier]}`}>
-                  <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                  {tierLabel[selectedCustomer.loyaltyTier]}
-                </span>
               </div>
-
-              {/* Tab navigation */}
-              <div className="flex gap-1 bg-gray-100 dark:bg-gray-900 p-1 rounded-lg">
-                {([
-                  { key: 'info' as DrawerTab, label: 'Thông tin' },
-                  { key: 'transactions' as DrawerTab, label: 'Lịch sử GD' },
-                  { key: 'points' as DrawerTab, label: 'Điểm thưởng' },
-                ] as { key: DrawerTab; label: string }[]).map(tab => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setDrawerTab(tab.key)}
-                    className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${
-                      drawerTab === tab.key
-                        ? 'bg-white dark:bg-gray-800 text-primary shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* ── TAB: Thông tin ── */}
-              {drawerTab === 'info' && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-                      <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                        <Award className="w-4 h-4 text-primary" /> Điểm thưởng khả dụng
-                      </div>
-                      <p className="text-lg font-mono font-bold text-primary truncate">{selectedCustomer.loyaltyPoints} điểm</p>
-                    </div>
-                    <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-                      <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                        <Gift className="w-4 h-4 text-emerald-500" /> Tổng chi tiêu
-                      </div>
-                      <p className="text-lg font-bold text-gray-900 dark:text-white truncate">${selectedCustomer.lifetimeSpent.toFixed(2)}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 text-sm">
-                    <div className="flex items-center gap-2.5 text-gray-700 dark:text-gray-300">
-                      <Phone className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                      <span className="font-mono">{selectedCustomer.phone}</span>
-                    </div>
-                    <div className="flex items-center gap-2.5 text-gray-700 dark:text-gray-300">
-                      <Mail className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                      <span className="truncate">{selectedCustomer.email}</span>
-                    </div>
-                    <div className="flex items-start gap-2.5 text-gray-700 dark:text-gray-300">
-                      <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
-                      <span>{selectedCustomer.address}</span>
-                    </div>
-                    <div className="flex items-center gap-2.5 text-gray-700 dark:text-gray-300 pt-2 border-t border-gray-200 dark:border-gray-700">
-                      <Clock className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                      <span>Hoạt động lần cuối: <strong className="text-gray-900 dark:text-white">{selectedCustomer.lastActive}</strong></span>
-                    </div>
-                    {selectedCustomer.notes && (
-                      <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
-                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Ghi chú từ bộ phận CSKH</span>
-                        <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedCustomer.notes}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex gap-3">
-                    <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                      <Gift className="w-4 h-4" /> Cấp voucher đặc quyền
-                    </button>
-                    <button
-                      onClick={() => setDrawerTab('transactions')}
-                      className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
-                    >
-                      <ShoppingBag className="w-4 h-4 inline mr-1" /> Giao dịch
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── TAB: Lịch sử giao dịch ── */}
-              {drawerTab === 'transactions' && (
-                <div className="space-y-3">
-                  <p className="text-xs text-gray-400 dark:text-gray-500 font-medium uppercase tracking-wider">
-                    5 giao dịch gần nhất
-                  </p>
-                  {([] as Transaction[]).map((tx) => (
-                    <div
-                      key={tx.id}
-                      className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3.5 shadow-sm hover:border-primary/40 transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <ShoppingBag className="w-4 h-4 text-primary" />
-                          </div>
-                          <div>
-                            <p className="font-mono text-xs font-bold text-primary">{tx.orderId}</p>
-                            <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 line-clamp-1">{tx.summary}</p>
-                          </div>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="font-bold text-sm text-gray-900 dark:text-white">${tx.total.toFixed(2)}</p>
-                          <span className={`inline-flex items-center gap-1 text-xs font-medium mt-0.5 ${
-                            tx.status === 'Hoàn thành'
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-amber-600 dark:text-amber-400'
-                          }`}>
-                            {tx.status === 'Hoàn thành'
-                              ? <CheckCircle className="w-3 h-3" />
-                              : <Loader2 className="w-3 h-3 animate-spin" />
-                            }
-                            {tx.status}
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 pl-11">
-                        <Clock className="w-3 h-3 inline mr-1" />{tx.date}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* ── TAB: Điểm thưởng ── */}
-              {drawerTab === 'points' && (
-                <div className="space-y-4">
-                  {/* Progress bar lên hạng tiếp theo */}
-                  <div className="bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                        Tiến độ {progress.label}
-                      </span>
-                      <span className="text-xs font-bold text-primary">{progress.percent}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 overflow-hidden">
-                      <div
-                        className="h-2.5 rounded-full bg-gradient-to-r from-primary to-primary/70 transition-all duration-500"
-                        style={{ width: `${Math.min(progress.percent, 100)}%` }}
-                      />
-                    </div>
-                    {progress.next && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                        Còn <strong className="text-gray-700 dark:text-gray-200">
-                          ${(TIER_THRESHOLDS[progress.next as keyof typeof TIER_THRESHOLDS] - selectedCustomer.lifetimeSpent).toFixed(0)}
-                        </strong> nữa để lên hạng <strong className="text-primary">{tierLabel[progress.next]}</strong>
-                      </p>
-                    )}
-                    {!progress.next && (
-                      <p className="text-xs text-primary font-semibold mt-2">🎉 Bạn đã đạt hạng tối đa – Kim Cương!</p>
-                    )}
-                  </div>
-
-                  {/* Point balance */}
-                  <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800">
-                    <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-                      <Award className="w-4 h-4 text-primary" />
-                      <span>Số dư điểm hiện tại</span>
-                    </div>
-                    <span className="font-mono font-bold text-xl text-primary">
-                      {selectedCustomer.loyaltyPoints.toLocaleString()} điểm
-                    </span>
-                  </div>
-
-                  {/* History list */}
-                  <p className="text-xs text-gray-400 dark:text-gray-500 font-medium uppercase tracking-wider">
-                    Lịch sử tích / tiêu điểm
-                  </p>
-                  <div className="space-y-2">
-                    {([] as PointRecord[]).map((rec) => (
-                      <div
-                        key={rec.id}
-                        className="flex items-center justify-between bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 px-3.5 py-2.5 hover:border-primary/30 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
-                            rec.type === 'Tích điểm' ? 'bg-emerald-100 dark:bg-emerald-900/40' :
-                            rec.type === 'Dùng điểm' ? 'bg-blue-100 dark:bg-blue-900/40' :
-                            'bg-red-100 dark:bg-red-900/40'
-                          }`}>
-                            {rec.type === 'Tích điểm' && <Plus className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
-                            {rec.type === 'Dùng điểm' && <Minus className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
-                            {rec.type === 'Hết hạn'   && <AlertCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />}
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{rec.type}</p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500">{rec.date}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className={`font-mono font-bold text-sm ${
-                            rec.points > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'
-                          }`}>
-                            {rec.points > 0 ? `+${rec.points}` : rec.points}
-                          </p>
-                          <p className="text-xs text-gray-400 dark:text-gray-500">Dư: {rec.balance}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
-          );
-        })()}
-      </Drawer>
 
-      {/* Modal: Thêm / Sửa */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm khách hàng mới' : 'Chỉnh sửa hồ sơ khách hàng'}
-        size="erp"
-      >
-        <form onSubmit={handleSaveCustomer}>
-          <div className="erp-form-body">
-            {/* Section 1: Thông tin cá nhân & Liên hệ */}
-            <div className="erp-form-section space-y-4" style={{gridColumn: 'span 2'}}>
-              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-150 dark:border-gray-700 pb-2 mb-4">Thông tin cá nhân & Liên hệ</h3>
-              
-              <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800">
-                <UserAvatar
-                  name={editingCustomer.name || 'Khách mới'}
-                  avatarUrl={editingCustomer.avatarUrl}
-                  seed={editingCustomer.email || editingCustomer.name}
-                  size="lg"
-                />
-                <div className="flex-1 w-full space-y-2">
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Ảnh đại diện</label>
-                  <div className="flex items-center gap-3">
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800">
+                <span className="text-gray-400 block font-semibold mb-1">EMAIL & ĐỊA CHỈ</span>
+                <p className="font-medium text-gray-900 dark:text-white">{selectedCustomer.email || 'Chưa cập nhật'}</p>
+                <p className="text-gray-500 mt-1">{selectedCustomer.address || 'Chưa cập nhật'}</p>
+              </div>
+              <div className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800">
+                <span className="text-gray-400 block font-semibold mb-1">TÍCH ĐIỂM & CHI TIÊU</span>
+                <p className="font-bold text-emerald-600 text-sm">{selectedCustomer.loyaltyPoints} điểm khả dụng</p>
+                <p className="text-gray-500 mt-1">Tổng chi tiêu: ${(selectedCustomer.lifetimeSpent || 0).toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Customer Create/Edit Modal */}
+      {isModalOpen && (
+        <Modal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          title={modalMode === 'create' ? 'Thêm Khách Hàng Mới' : 'Chỉnh Sửa Hồ Sơ Khách Hàng'}
+          size="2xl"
+        >
+          <form onSubmit={handleSaveCustomer} className="space-y-6">
+            <div className="erp-form-section space-y-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-150 dark:border-gray-700 pb-2 mb-4">Thông tin cơ bản & Định danh</h3>
+
+              {/* Avatar Upload Block */}
+              <div className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 mb-4">
+                <div className="relative group shrink-0">
+                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-emerald-500 bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm">
+                    {editingCustomer.avatarUrl ? (
+                      <img src={editingCustomer.avatarUrl} alt="Avatar Customer" className="w-full h-full object-cover" />
+                    ) : (
+                      <UserAvatar name={editingCustomer.name || 'Khách hàng'} size="lg" />
+                    )}
+                  </div>
+                  <label className="absolute bottom-0 right-0 p-1 bg-emerald-600 text-white rounded-full cursor-pointer shadow hover:bg-emerald-700 transition-all hover:scale-110">
+                    <Camera className="w-3.5 h-3.5" />
+                    <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
+                  </label>
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white">Ảnh đại diện khách hàng</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Nhấp để chọn tệp ảnh từ máy tính (PNG, JPG, WebP) hoặc dán liên kết ảnh bên dưới.</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs font-semibold cursor-pointer hover:bg-emerald-100 transition-colors">
+                      <Upload className="w-3.5 h-3.5" />
+                      Tải ảnh lên
+                      <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
+                    </label>
                     <input
-                      type="file"
-                      accept="image/*"
-                      id="customer-avatar-input"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = () => {
-                            setEditingCustomer(prev => ({ ...prev, avatarUrl: reader.result as string }));
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
+                      type="text"
+                      value={editingCustomer.avatarUrl || ''}
+                      onChange={(e) => setEditingCustomer((prev) => ({ ...prev, avatarUrl: e.target.value }))}
+                      placeholder="Hoặc dán URL ảnh..."
+                      className="flex-1 px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono"
                     />
-                    <button
-                      type="button"
-                      onClick={() => document.getElementById('customer-avatar-input')?.click()}
-                      className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-750 text-xs font-semibold shadow-sm"
-                    >
-                      Tải ảnh
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setEditingCustomer((p) => ({
-                          ...p,
-                          avatarUrl: buildUserAvatarUrl(p.email || p.name || 'customer'),
-                        }))
-                      }
-                      className="text-xs text-primary font-semibold hover:underline"
-                    >
-                      Mặc định
-                    </button>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã khách hàng *</label>
-                    {modalMode === 'create' && (
-                      <label className="flex items-center gap-1 text-[10px] text-primary cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={isAutoCode}
-                          onChange={(e) => {
-                            setIsAutoCode(e.target.checked);
-                            if (e.target.checked) {
-                              setEditingCustomer(prev => ({
-                                ...prev,
-                                customerCode: `CUST-${Math.floor(10000 + Math.random() * 90000)}`
-                              }));
-                            }
-                          }}
-                          className="rounded text-primary focus:ring-primary w-3 h-3"
-                        />
-                        <span>Tự động sinh</span>
-                      </label>
-                    )}
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã KH *</label>
                   </div>
                   <input
                     type="text"
                     value={editingCustomer.customerCode || ''}
                     onChange={(e) => setEditingCustomer({ ...editingCustomer, customerCode: e.target.value })}
                     disabled={modalMode === 'create' && isAutoCode}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-60"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary disabled:opacity-60"
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Họ và tên khách hàng *</label>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Họ và Tên khách hàng *</label>
                   <input
                     type="text"
                     value={editingCustomer.name || ''}
@@ -764,8 +519,8 @@ export function CustomersPage() {
                     type="text"
                     value={editingCustomer.phone || ''}
                     onChange={(e) => setEditingCustomer({ ...editingCustomer, phone: e.target.value })}
-                    placeholder="+84 9xx xxx xxx"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary font-mono"
+                    placeholder="09xx xxx xxx"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary font-mono"
                     required
                   />
                 </div>
@@ -786,7 +541,7 @@ export function CustomersPage() {
                       }));
                     }}
                     placeholder="email@example.com"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
                   />
                 </div>
                 <div>
@@ -836,10 +591,9 @@ export function CustomersPage() {
               </div>
             </div>
 
-            {/* Section 2: Tài chính, Phân loại & CSKH */}
             <div className="erp-form-section space-y-4">
-              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-150 dark:border-gray-700 pb-2 mb-4">Tài chính, Phân loại & CSKH</h3>
-              
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-150 dark:border-gray-700 pb-2 mb-4">Tài chính, phân loại & CSKH</h3>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhóm khách hàng</label>
@@ -912,85 +666,78 @@ export function CustomersPage() {
                   onChange={(e) => setEditingCustomer({ ...editingCustomer, status: e.target.value as any })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
                 >
-                  <option value="ACTIVE">Hoạt động (ACTIVE)</option>
+                  <option value="ACTIVE">Đang hoạt động (ACTIVE)</option>
                   <option value="DORMANT">Tạm ngưng (DORMANT)</option>
                   <option value="CHURNED">Đã rời đi (CHURNED)</option>
                 </select>
               </div>
 
               <div>
-                <FileDropzone
-                  label="Hồ sơ & Giấy tờ đính kèm (Hợp đồng, Đăng ký kinh doanh...)"
-                />
+                <FileDropzone label="Hồ sơ & Giấy tờ đính kèm" />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú từ CSKH & Lưu ý đặc biệt</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú & Lưu ý</label>
                 <textarea
                   rows={3}
                   value={editingCustomer.notes || ''}
                   onChange={(e) => setEditingCustomer({ ...editingCustomer, notes: e.target.value })}
-                  placeholder="Lịch sử trao đổi, sở thích hoặc lưu ý chăm sóc..."
+                  placeholder="Ghi chú thêm..."
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary resize-none"
                 />
               </div>
             </div>
-          </div>
 
-          {/* Footer Buttons */}
-          <div className="erp-form-footer border-t border-gray-200 dark:border-gray-700 pt-4">
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors text-sm"
-            >
-              Hủy bỏ
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow transition-colors text-sm"
-            >
-              {modalMode === 'create' ? 'Tạo mới' : 'Lưu thay đổi'}
-            </button>
-          </div>
-        </form>
-      </Modal>
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-bold shadow transition-all active:scale-95"
+              >
+                {modalMode === 'create' ? 'Thêm Khách Hàng' : 'Lưu Thay Đổi'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
-      {/* Modal: Xác nhận xóa */}
-      <Modal
-        isOpen={!!deletingCustomer}
-        onClose={() => setDeletingCustomer(null)}
-        title="Xác nhận xóa khách hàng"
-        isDestructive
-        width="max-w-md"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-            Bạn có chắc chắn muốn xóa khách hàng{' '}
-            <strong className="text-gray-900 dark:text-white">{deletingCustomer?.name}</strong>{' '}
-            (Mã: <code className="text-red-600 font-semibold">{deletingCustomer?.customerCode}</code>)?
-          </p>
-          <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2.5 rounded-lg border border-red-200 dark:border-red-800/40">
-            Hành động này sẽ gỡ bỏ hoàn toàn dữ liệu hồ sơ và điểm thưởng của khách hàng này khỏi hệ thống.
-          </p>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <button
-              type="button"
-              onClick={() => setDeletingCustomer(null)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors text-sm"
-            >
-              Hủy bỏ
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteConfirm}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
-            >
-              Đồng ý xóa
-            </button>
+      {/* Delete Confirmation Modal */}
+      {deletingCustomer && (
+        <Modal
+          isOpen={Boolean(deletingCustomer)}
+          onClose={() => setDeletingCustomer(null)}
+          title="Xác Nhận Xóa Khách Hàng"
+          size="sm"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Bạn có chắc chắn muốn xóa hồ sơ khách hàng <strong className="text-gray-900 dark:text-white">{deletingCustomer.name}</strong> không?
+            </p>
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => setDeletingCustomer(null)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteConfirm}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-bold shadow transition-all active:scale-95"
+              >
+                Xóa Khách Hàng
+              </button>
+            </div>
           </div>
-        </div>
-      </Modal>
+        </Modal>
+      )}
     </>
   );
 }

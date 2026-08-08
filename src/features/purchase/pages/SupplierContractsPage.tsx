@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Download, Search, Eye, Calendar, FileCheck, Landmark, ShieldAlert, Award, FileText, CheckCircle2, Clock, XCircle, UserCheck } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -217,7 +218,7 @@ export function SupplierContractsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hợp đồng nhà cung cấp (supplier contract)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hợp đồng nhà cung cấp (Supplier Contract)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Lưu trữ hợp đồng pháp lý, điều khoản thanh toán, hạn mức nợ và sản lượng chiết khấu cam kết với đối tác phân phối.
             </p>
@@ -273,7 +274,7 @@ export function SupplierContractsPage() {
       </div>
 
       {/* Drawer chi tiết hợp đồng */}
-      <Drawer
+      <Modal
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
         title={selectedItem ? `Chi tiết Hợp đồng: ${selectedItem.contractNumber}` : 'Thông tin chi tiết'}
@@ -357,7 +358,7 @@ export function SupplierContractsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal lập hợp đồng mới */}
       <Modal

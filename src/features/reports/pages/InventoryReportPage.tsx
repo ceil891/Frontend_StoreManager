@@ -105,7 +105,7 @@ export function InventoryReportPage() {
           </select>
           <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
             <Download className="w-4 h-4" />
-            Xuất excel
+            Xuất Excel
           </button>
         </div>
       </div>

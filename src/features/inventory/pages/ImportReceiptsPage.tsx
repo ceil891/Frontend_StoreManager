@@ -119,6 +119,25 @@ export function ImportReceiptsPage() {
     { id: '4', name: 'Smart TV Samsung QLED 4K 65 inch', sku: 'SS-TV-65QLED', price: 15000000 },
   ];
 
+  const allSelectableProducts = useMemo(() => {
+    const list: any[] = [];
+    const ids = new Set<string>();
+
+    (products || []).forEach((p: any) => {
+      ids.add(String(p.id));
+      list.push({ id: String(p.id), name: p.name || p.productName || 'Sản phẩm', sku: p.sku || p.productCode || `SKU-${p.id}`, price: p.costPrice || p.price || 0 });
+    });
+
+    defaultProductsList.forEach((p: any) => {
+      if (!ids.has(String(p.id))) {
+        ids.add(String(p.id));
+        list.push(p);
+      }
+    });
+
+    return list;
+  }, [products, defaultProductsList]);
+
   const handleOpenCreate = () => {
     setModalMode('create');
     const firstProd = defaultProductsList[0];
@@ -264,14 +283,17 @@ export function ImportReceiptsPage() {
     // Resolve supplierId từ suppliersList nếu chưa có
     const resolvedSupplierId = (receipt as any).supplierId ||
       suppliersList.find((s: any) =>
+        String(s.id) === String((receipt as any).supplierId) ||
         (s.name || s.supplierName || s.companyName) === receipt.supplierName
       )?.id || undefined;
 
     // Resolve branchId từ branchesList nếu chưa có
     const resolvedBranchId = (receipt as any).branchId ||
       branchesList.find((b: any) =>
-        (b.branchName || b.name) === receipt.receivingStore
-      )?.id || 1;
+        String(b.id) === String((receipt as any).branchId) ||
+        (b.branchName || b.name) === receipt.receivingStore ||
+        (b.branchCode || b.code) === receipt.receivingStore
+      )?.id || undefined;
 
     setEditingReceipt({
       ...receipt,
@@ -293,7 +315,9 @@ export function ImportReceiptsPage() {
         grnNumber: editingReceipt.grnNumber,
         poNumber: editingReceipt.poNumber || '',
         supplierName: editingReceipt.supplierName,
+        supplierId: (editingReceipt as any).supplierId,
         receivingStore: editingReceipt.receivingStore || 'Main Flagship / HQ',
+        branchId: (editingReceipt as any).branchId || 1,
         receivedDate: editingReceipt.receivedDate || new Date().toISOString().split('T')[0],
         totalItems: Number(editingReceipt.totalItems) || 0,
         acceptedItems: Number(editingReceipt.acceptedItems) || 0,
@@ -436,12 +460,12 @@ export function ImportReceiptsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu Nhập kho (GRN)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu nhập kho (GRN)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Ghi nhận và kiểm duyệt các đợt hàng nhập kho từ nhà cung cấp. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => toast.success('Xuất dữ liệu Excel nhập kho thành công!')}
+              onClick={() => toast.success('Xuất Dữ Liệu Excel nhập kho thành công!')}
               className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0"
             >
               <Download className="w-4 h-4" /> Xuất Excel
@@ -729,19 +753,31 @@ export function ImportReceiptsPage() {
               <input
                 type="text"
                 value={editingReceipt.grnNumber || ''}
-                onChange={(e) => setEditingReceipt({ ...editingReceipt, grnNumber: e.target.value })}
+                onChange={(e) => setEditingReceipt(prev => ({ ...prev, grnNumber: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã PO Đối chiếu</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã PO Đối chiếu</label>
+                <button
+                  type="button"
+                  onClick={() => setEditingReceipt(prev => ({
+                    ...prev,
+                    poNumber: `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+                  }))}
+                  className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
+                >
+                  ⚡ Tự sinh mã
+                </button>
+              </div>
               <input
                 type="text"
                 value={editingReceipt.poNumber || ''}
-                onChange={(e) => setEditingReceipt({ ...editingReceipt, poNumber: e.target.value })}
+                onChange={(e) => setEditingReceipt(prev => ({ ...prev, poNumber: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-                placeholder="Ví dụ: PO-2024-..."
+                placeholder="Ví dụ: PO-2026-8492..."
               />
             </div>
           </div>
@@ -753,7 +789,15 @@ export function ImportReceiptsPage() {
                 title="Chọn Nhà Cung Cấp"
                 iconType="building"
                 placeholder="Chọn nhà cung cấp..."
-                value={String((editingReceipt as any).supplierId || '')}
+                value={(() => {
+                  const sId = (editingReceipt as any).supplierId;
+                  if (sId) return String(sId);
+                  const matched = suppliersList.find((s: any) =>
+                    (s.name || s.supplierName || s.companyName) === editingReceipt.supplierName ||
+                    (s.code || s.supplierCode) === editingReceipt.supplierName
+                  );
+                  return matched ? String(matched.id) : '';
+                })()}
                 options={suppliersList.length > 0
                   ? suppliersList.map((s: any) => ({
                       id: String(s.id),
@@ -783,7 +827,15 @@ export function ImportReceiptsPage() {
                 title="Chọn Kho Hàng Tiếp Nhận"
                 iconType="location"
                 placeholder="Chọn kho / chi nhánh..."
-                value={String((editingReceipt as any).branchId || '')}
+                value={(() => {
+                  const bId = (editingReceipt as any).branchId;
+                  if (bId) return String(bId);
+                  const matched = branchesList.find((b: any) =>
+                    (b.branchName || b.name) === editingReceipt.receivingStore ||
+                    (b.branchCode || b.code) === editingReceipt.receivingStore
+                  );
+                  return matched ? String(matched.id) : '';
+                })()}
                 options={branchesList.length > 0
                   ? branchesList.map((b: any) => ({
                       id: String(b.id),
@@ -815,7 +867,7 @@ export function ImportReceiptsPage() {
               <input
                 type="date"
                 value={editingReceipt.receivedDate || ''}
-                onChange={(e) => setEditingReceipt({ ...editingReceipt, receivedDate: e.target.value })}
+                onChange={(e) => setEditingReceipt(prev => ({ ...prev, receivedDate: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
               />
             </div>
@@ -823,10 +875,13 @@ export function ImportReceiptsPage() {
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người kiểm tra (QA)</label>
               <select
                 value={editingReceipt.inspectedBy || ''}
-                onChange={(e) => setEditingReceipt({ ...editingReceipt, inspectedBy: e.target.value })}
+                onChange={(e) => setEditingReceipt(prev => ({ ...prev, inspectedBy: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
               >
                 <option value="">-- Chọn người kiểm tra --</option>
+                {editingReceipt.inspectedBy && !usersList.some((u: any) => (u.fullName || u.username || u.name) === editingReceipt.inspectedBy) && (
+                  <option value={editingReceipt.inspectedBy}>{editingReceipt.inspectedBy}</option>
+                )}
                 {usersList.length > 0 ? (
                   usersList.map((u: any) => {
                     const name = u.fullName || u.username || u.name;
@@ -850,7 +905,7 @@ export function ImportReceiptsPage() {
               <input
                 type="number"
                 value={editingReceipt.totalItems || 0}
-                onChange={(e) => setEditingReceipt({ ...editingReceipt, totalItems: parseInt(e.target.value) || 0 })}
+                onChange={(e) => setEditingReceipt(prev => ({ ...prev, totalItems: parseInt(e.target.value) || 0 }))}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
               />
             </div>
@@ -859,7 +914,7 @@ export function ImportReceiptsPage() {
               <input
                 type="number"
                 value={editingReceipt.acceptedItems || 0}
-                onChange={(e) => setEditingReceipt({ ...editingReceipt, acceptedItems: parseInt(e.target.value) || 0 })}
+                onChange={(e) => setEditingReceipt(prev => ({ ...prev, acceptedItems: parseInt(e.target.value) || 0 }))}
                 className="w-full px-3 py-2 border border-emerald-300 dark:border-emerald-700 rounded-lg bg-emerald-50 dark:bg-emerald-900/10 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
               />
             </div>
@@ -868,7 +923,7 @@ export function ImportReceiptsPage() {
               <input
                 type="number"
                 value={editingReceipt.rejectedItems || 0}
-                onChange={(e) => setEditingReceipt({ ...editingReceipt, rejectedItems: parseInt(e.target.value) || 0 })}
+                onChange={(e) => setEditingReceipt(prev => ({ ...prev, rejectedItems: parseInt(e.target.value) || 0 }))}
                 className="w-full px-3 py-2 border border-red-300 dark:border-red-700 rounded-lg bg-red-50 dark:bg-red-900/10 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-red-500"
               />
             </div>
@@ -879,7 +934,7 @@ export function ImportReceiptsPage() {
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái kiểm tra</label>
               <select
                 value={editingReceipt.status || 'PENDING_INSPECTION'}
-                onChange={(e) => setEditingReceipt({ ...editingReceipt, status: e.target.value as any })}
+                onChange={(e) => setEditingReceipt(prev => ({ ...prev, status: e.target.value as any }))}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
               >
                 <option value="PENDING_INSPECTION">Chờ kiểm tra (QA)</option>
@@ -894,7 +949,7 @@ export function ImportReceiptsPage() {
                 type="number"
                 step="1"
                 value={editingReceipt.totalValuation || 0}
-                onChange={(e) => setEditingReceipt({ ...editingReceipt, totalValuation: parseFloat(e.target.value) || 0 })}
+                onChange={(e) => setEditingReceipt(prev => ({ ...prev, totalValuation: parseFloat(e.target.value) || 0 }))}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500 font-bold"
               />
             </div>
@@ -941,7 +996,7 @@ export function ImportReceiptsPage() {
                           onChange={(e) => handleLineChange(idx, 'productVariantId', Number(e.target.value))}
                           className="w-full mt-0.5 px-2 py-1 text-xs border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                         >
-                          {defaultProductsList.map((p) => (
+                          {allSelectableProducts.map((p) => (
                             <option key={p.id} value={p.id}>
                               {p.name} ({p.sku})
                             </option>
@@ -1030,7 +1085,7 @@ export function ImportReceiptsPage() {
             <textarea
               rows={2}
               value={editingReceipt.notes || ''}
-              onChange={(e) => setEditingReceipt({ ...editingReceipt, notes: e.target.value })}
+              onChange={(e) => setEditingReceipt(prev => ({ ...prev, notes: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"
               placeholder="Ghi rõ lý do nếu có hàng lỗi, hàng thiếu..."
             />

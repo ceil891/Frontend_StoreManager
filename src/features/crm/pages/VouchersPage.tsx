@@ -1,13 +1,11 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Ticket, Calendar, CheckCircle2, Clock, Tag, Copy, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { useCrmStore } from '../store/crmStore';
 
-import { useCallback } from 'react';
 import { axiosClient } from '@/shared/lib/axiosClient';
 
 export interface RewardVoucherRecord {
@@ -40,7 +38,6 @@ const scopeMap: Record<string, string> = {
 };
 
 export function VouchersPage() {
-  const setData = (_fn: any) => {};
   const {
     vouchers: storeVouchers,
     fetchVouchers,
@@ -102,7 +99,7 @@ export function VouchersPage() {
     try {
       await axiosClient.delete(`/crm/vouchers/${voucher.id}`);
       toast.success(`Đã xóa voucher ${voucher.voucherCode}`);
-      setData((prev) => prev.filter((v) => v.id !== voucher.id));
+      fetchVouchers();
     } catch (err) {
       console.error('Error deleting voucher:', err);
       toast.error('Không thể xóa voucher trên máy chủ');
@@ -167,7 +164,7 @@ export function VouchersPage() {
         toast.success(`Cập nhật voucher ${formData.voucherCode} thành công!`);
       } else {
         await axiosClient.post('/crm/vouchers', payload);
-        toast.success(`Tạo mới voucher ${formData.voucherCode} thành công!`);
+        toast.success(`Tạo Mới voucher ${formData.voucherCode} thành công!`);
       }
       setIsModalOpen(false);
       fetchVouchers();
@@ -406,7 +403,7 @@ export function VouchersPage() {
       </div>
 
       {/* Detail Drawer */}
-      <Drawer
+      <Modal
         isOpen={!!selectedVoucher}
         onClose={() => setSelectedVoucher(null)}
         title={selectedVoucher ? `Chiến Dịch: ${selectedVoucher.voucherCode}` : 'Chi tiết mã khuyến mãi'}
@@ -505,10 +502,10 @@ export function VouchersPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Create / Edit Modal */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Chỉnh sửa Voucher' : 'Tạo mới Voucher'} width="max-w-lg">
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Chỉnh sửa Voucher' : 'Tạo Mới Voucher'} width="max-w-lg">
         <form onSubmit={handleSave} className="p-4 space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã Voucher</label>
@@ -539,7 +536,7 @@ export function VouchersPage() {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               >
                 <option value="PERCENTAGE">Phần trăm (%)</option>
-                <option value="FIXED_AMOUNT">Số tiền cố định ($)</option>
+                <option value="FIXED_AMOUNT">Số tiền cố định (VNĐ)</option>
                 <option value="FREE_SHIPPING">Miễn phí vận chuyển</option>
                 <option value="FREE_ITEM">Tặng quà</option>
               </select>
@@ -556,7 +553,7 @@ export function VouchersPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn tối thiểu ($)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn tối thiểu (VNĐ)</label>
               <input
                 type="number"
                 value={formData.minOrderValue}
@@ -565,7 +562,7 @@ export function VouchersPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giảm tối đa ($)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giảm tối đa (VNĐ)</label>
               <input
                 type="number"
                 value={formData.maxDiscount}

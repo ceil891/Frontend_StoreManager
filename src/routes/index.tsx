@@ -251,7 +251,7 @@ const router = createBrowserRouter([
     children: [
       {
         path: '',
-        element: <RoleGuard requiredPermission="catalog:pricelist:view" />,
+        element: <RoleGuard requiredPermission="pos:terminal:access" />,
         children: [{ index: true, element: <L><PosTerminalPage /></L> }],
       },
     ],

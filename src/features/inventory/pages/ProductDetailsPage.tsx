@@ -155,29 +155,22 @@ export function ProductDetailsPage() {
       },
       {
         id: 'actions',
-        header: 'Thao tác',
+        header: 'Hành động',
         cell: ({ row }) => (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setSelected(row.original)}
-              className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem chi tiết sản phẩm"
+              className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+              title="Xem thông tin chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleOpenEdit(row.original)}
-              className="p-1 text-gray-500 hover:text-blue-600 rounded"
-              title="Sửa"
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Chỉnh sửa chi tiết"
             >
               <Edit className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(row.original.id)}
-              className="p-1 text-gray-500 hover:text-red-600 rounded"
-              title="Xóa"
-            >
-              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         ),
@@ -190,17 +183,11 @@ export function ProductDetailsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Danh mục sản phẩm chi tiết</h1>
-          <p className="text-sm text-gray-500">
-            Quản lý cơ sở dữ liệu hàng hóa, thông tin mã vạch, giá nhập/bán, thương hiệu và trạng thái kinh doanh của cửa hàng.
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Chi tiết sản phẩm kho</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Tra cứu và cập nhật thông tin chi tiết từng sản phẩm, mã vạch barcode, giá vốn, giá bán và thuộc tính lưu kho.
           </p>
         </div>
-        <button
-          onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap"
-        >
-          <Plus className="w-4 h-4" /> Thêm Sản Phẩm Mới
-        </button>
       </div>
 
       <div className="p-4 bg-white dark:bg-gray-800 rounded shadow flex items-center gap-4">
@@ -216,69 +203,77 @@ export function ProductDetailsPage() {
 
       <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
 
-      <Drawer
+      {/* Modal Xem chi tiết sản phẩm kho căn giữa (TC-ALL-1) */}
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title={`Chi tiết sản phẩm: ${selected?.productName}`}
+        title={selected ? `Thông tin chi tiết: ${selected.productName}` : 'Hồ sơ sản phẩm kho'}
+        width="max-w-md"
       >
         {selected && (
           <div className="space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 bg-gray-50 dark:bg-gray-900 p-3 rounded-xl">
               <div>
-                <span className="text-gray-500">Mã vạch / barcode:</span>
-                <p className="font-mono font-semibold">{selected.barcode}</p>
+                <span className="text-xs text-gray-500">Mã vạch (Barcode):</span>
+                <p className="font-mono font-bold text-emerald-600">{selected.barcode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Thương hiệu:</span>
+                <span className="text-xs text-gray-500">Thương hiệu:</span>
                 <p className="font-semibold">{selected.brand}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Tên sản phẩm:</span>
-              <p className="font-semibold text-base">{selected.productName}</p>
+              <span className="text-xs text-gray-500">Tên sản phẩm:</span>
+              <p className="font-bold text-base text-gray-900 dark:text-white">{selected.productName}</p>
             </div>
             <div>
-              <span className="text-gray-500">Danh mục phân loại:</span>
+              <span className="text-xs text-gray-500">Danh mục phân loại:</span>
               <p className="font-semibold text-emerald-600">{selected.categoryName}</p>
             </div>
             <div className="grid grid-cols-2 gap-4 border-t pt-2">
               <div>
-                <span className="text-gray-500">Giá nhập (VND):</span>
+                <span className="text-xs text-gray-500">Giá nhập (VND):</span>
                 <p className="font-mono text-red-500 font-bold">{formatCurrency(selected.costPrice)}</p>
               </div>
               <div>
-                <span className="text-gray-500">Giá bán lẻ (VND):</span>
-                <p className="font-mono text-emerald-600 font-bold text-lg">{formatCurrency(selected.sellingPrice)}</p>
+                <span className="text-xs text-gray-500">Giá bán lẻ (VND):</span>
+                <p className="font-mono text-emerald-600 font-bold text-base">{formatCurrency(selected.sellingPrice)}</p>
               </div>
             </div>
             <div className="border-t pt-2">
-              <span className="text-gray-500">Trạng thái kinh doanh:</span>
-              <div>
+              <span className="text-xs text-gray-500">Trạng thái kinh doanh:</span>
+              <div className="mt-1">
                 <span
-                  className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
+                  className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${
                     selected.status === 'DANG_KINH_DOANH' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
                   }`}
                 >
-                  {selected.status === 'DANG_KINH_DOANH' ? 'Đang kinh doanh' : 'Ngừng kinh doanh'}
+                  {selected.status === 'DANG_KINH_DOANH' ? 'Đang kinh doanh' : 'Ngưng kinh doanh'}
                 </span>
               </div>
             </div>
-            {selected.notes && (
-              <div>
-                <span className="text-gray-500">Mô tả / ghi chú:</span>
-                <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
-                  {selected.notes}
-                </p>
-              </div>
-            )}
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button
+                onClick={() => handleOpenEdit(selected)}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-sm"
+              >
+                Chỉnh Sửa Chi Tiết
+              </button>
+              <button
+                onClick={() => setSelected(null)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-sm"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm sản phẩm mới' : 'Sửa thông tin sản phẩm'}
+        title={modalMode === 'create' ? 'Thêm Sản Phẩm mới' : 'Sửa thông tin sản phẩm'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -376,7 +371,7 @@ export function ProductDetailsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục phân cấp (Parent Category) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục sản phẩm *</label>
               <TreeSelect
                 value={editingItem.categoryName}
                 onChange={(val) => setEditingItem({ ...editingItem, categoryName: val })}
@@ -422,7 +417,7 @@ export function ProductDetailsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá nhập chi phí (Cost Price) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá vốn mặc định (Cost Price) *</label>
               <CurrencyInput
                 value={editingItem.costPrice || 0}
                 onChange={(val) => setEditingItem({ ...editingItem, costPrice: val })}
@@ -430,7 +425,7 @@ export function ProductDetailsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá bán lẻ đề xuất (Selling Price) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá bán lẻ đề xuất (List Price) *</label>
               <CurrencyInput
                 value={editingItem.sellingPrice || 0}
                 onChange={(val) => setEditingItem({ ...editingItem, sellingPrice: val })}
@@ -439,26 +434,29 @@ export function ProductDetailsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Định mức tồn tối thiểu (Reorder Level)</label>
-              <input
-                type="number"
-                value={editingItem.reorderPoint ?? 10}
-                onChange={(e) => setEditingItem({ ...editingItem, reorderPoint: parseInt(e.target.value) || 0 })}
-                placeholder="10"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tồn kho an toàn (Safety Stock)</label>
-              <input
-                type="number"
-                value={editingItem.safetyStock ?? 5}
-                onChange={(e) => setEditingItem({ ...editingItem, safetyStock: parseInt(e.target.value) || 0 })}
-                placeholder="5"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
-              />
+          <div className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/60">
+            <span className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Định mức Kho & Tồn kho an toàn</span>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Định mức đặt hàng lại (Reorder Level)</label>
+                <input
+                  type="number"
+                  value={editingItem.reorderPoint ?? 10}
+                  onChange={(e) => setEditingItem({ ...editingItem, reorderPoint: parseInt(e.target.value) || 0 })}
+                  placeholder="10"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tồn kho an toàn tối thiểu (Safety Stock)</label>
+                <input
+                  type="number"
+                  value={editingItem.safetyStock ?? 5}
+                  onChange={(e) => setEditingItem({ ...editingItem, safetyStock: parseInt(e.target.value) || 0 })}
+                  placeholder="5"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
+                />
+              </div>
             </div>
           </div>
 

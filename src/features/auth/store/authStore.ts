@@ -14,6 +14,7 @@ import type { User, RoleType, LoginCredentials, ApiError } from '../types';
 import { mockAuthApi } from '../api/mockAuthApi';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { recordActivity } from '@/shared/utils/activityLogger';
+import { useCartStore } from '@/features/cart/store/cartStore';
 
 // ----------------------------------------------------------------
 // State & Actions interface
@@ -60,17 +61,21 @@ export const useAuthStore = create<AuthState & AuthActions>()(
           localStorage.setItem('access_token', response.accessToken);
           localStorage.setItem('refresh_token', response.refreshToken);
 
-          // Lấy danh sách quyền thực từ backend
-          // axiosClient interceptor đã unwrap ApiResponse.data rồi → permRes là string[] trực tiếp
+          // Ưu tiên lấy permissions từ login response (backend đã resolve từ role)
           let permissions: string[] = [];
-          try {
-            const permRes = await axiosClient.get<any, string[]>('/auth/me/permissions');
-            console.log('[AuthStore] /auth/me/permissions raw response:', permRes);
-            permissions = Array.isArray(permRes) ? permRes : [];
-            console.log('[AuthStore] Parsed permissions:', permissions);
-          } catch (permErr) {
-            console.error('[AuthStore] Failed to fetch permissions:', permErr);
-            permissions = [];
+          if (response.user.permissions && Array.isArray(response.user.permissions) && response.user.permissions.length > 0) {
+            permissions = response.user.permissions;
+            console.log('[AuthStore] Permissions từ login response (role-based):', permissions);
+          } else {
+            // Fallback: gọi API riêng nếu login response không trả permissions
+            try {
+              const permRes = await axiosClient.get<any, string[]>('/auth/me/permissions');
+              console.log('[AuthStore] /auth/me/permissions fallback response:', permRes);
+              permissions = Array.isArray(permRes) ? permRes : [];
+            } catch (permErr) {
+              console.error('[AuthStore] Failed to fetch permissions:', permErr);
+              permissions = [];
+            }
           }
 
           set({
@@ -90,6 +95,16 @@ export const useAuthStore = create<AuthState & AuthActions>()(
             entityLabel: response.user.email,
             description: `Đăng nhập thành công với vai trò ${response.user.role}.`,
           });
+
+          // Merge guest cart → user cart (non-critical: lỗi không block login)
+          const guestToken = localStorage.getItem('guest_cart_token');
+          if (guestToken) {
+            try {
+              await useCartStore.getState().mergeAndSync(guestToken);
+            } catch (mergeErr) {
+              console.warn('[AuthStore] Cart merge failed (non-critical):', mergeErr);
+            }
+          }
         } catch (err) {
           const apiError = err as ApiError;
           set({
@@ -125,6 +140,9 @@ export const useAuthStore = create<AuthState & AuthActions>()(
           // Xóa token khỏi localStorage
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
+
+          // Reset cart store khi logout
+          useCartStore.getState().reset();
 
           set({
             user: null,

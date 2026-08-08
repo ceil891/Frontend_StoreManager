@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation, Link } from 'react-router';
-import { LogOut, Search, Menu, Store, ChevronRight, X, Moon, Sun, Command } from 'lucide-react';
+import { LogOut, Search, Menu, Store, ChevronRight, X, Moon, Sun, Command, ShoppingCart } from 'lucide-react';
 import { useAuthStore, useAuthUser, useAuthPermissions } from '@/features/auth/store/authStore';
 import { NAV_GROUPS, type NavItem } from '@/shared/config/navigation';
 import { UserAvatar } from '@/shared/components/ui/UserAvatar';
@@ -8,6 +8,8 @@ import { useThemeStore } from '@/shared/store/themeStore';
 import { CommandPalette, useCommandPalette } from '@/shared/components/ui/CommandPalette';
 import { AIAlerts } from '@/components/AI/AIAlerts';
 import { AIAssistant } from '@/components/AI/AIAssistant';
+import { CartDrawer } from '@/features/cart/components/CartDrawer';
+import { useCartTotalQuantity } from '@/features/cart/store/cartStore';
 
 function getAllHrefs(items: NavItem[]): string[] {
   const hrefs: string[] = [];
@@ -59,6 +61,8 @@ function filterNavItem(item: NavItem, permissions: string[]): NavItem | null {
 export function MainLayout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
+  const cartTotalQty = useCartTotalQuantity();
 
   const allHrefs = useMemo(() => {
     const list: string[] = [];
@@ -295,6 +299,9 @@ export function MainLayout() {
       {/* Command Palette — rendered at root level for correct z-index */}
       <CommandPalette isOpen={cmdOpen} onClose={closeCmd} />
 
+      {/* Cart Drawer */}
+      <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} />
+
       <div className="h-screen flex overflow-hidden bg-gray-50 dark:bg-gray-950">
         {/* Mobile overlay */}
         {sidebarOpen && (
@@ -400,7 +407,7 @@ export function MainLayout() {
               className="flex-1 max-w-sm flex items-center gap-2.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg text-sm text-gray-400 dark:text-gray-500 transition-colors group"
             >
               <Search className="w-4 h-4 shrink-0" />
-              <span className="hidden sm:block">Search or jump to...</span>
+              <span className="hidden sm:block">Tìm kiếm hoặc điều hướng...</span>
               <span className="ml-auto hidden sm:flex items-center gap-1">
                 <kbd className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium bg-white dark:bg-gray-700 text-gray-400 rounded border border-gray-200 dark:border-gray-600">
                   <Command className="w-2.5 h-2.5" />K
@@ -409,10 +416,20 @@ export function MainLayout() {
             </button>
 
             <div className="ml-auto flex items-center gap-1">
+              {/* Quick POS Terminal Button */}
+              <Link
+                to="/pos"
+                title="Mở máy bán hàng POS"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all active:scale-95 mr-1"
+              >
+                <ShoppingCart className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Bán hàng POS</span>
+              </Link>
+
               {/* Dark Mode Toggle */}
               <button
                 onClick={toggleTheme}
-                title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                title={theme === 'dark' ? 'Chuyển sang Chế độ Sáng' : 'Chuyển sang Chế độ Tối'}
                 className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -424,12 +441,12 @@ export function MainLayout() {
           </header>
 
           {/* Page Content */}
-          <main className="flex-1 overflow-y-auto">
-            <div className="p-4 sm:p-6 lg:p-8 max-w-screen-2xl mx-auto">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 w-full">
+            <div className="p-4 sm:p-6 lg:p-8 max-w-screen-2xl mx-auto w-full min-w-0">
               {currentGroup && currentItem && (
                 <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-6 font-medium flex-wrap">
                   <Link to="/" className="hover:text-gray-900 dark:hover:text-gray-200 transition-colors">
-                    Home
+                    Trang chủ
                   </Link>
                   <ChevronRight className="w-3 h-3 text-gray-400" />
                   <span>{currentGroup}</span>

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Search, Download, Eye, Edit, Trash2, Plus, FileText, ChevronRight, HelpCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
@@ -126,7 +125,7 @@ export default function ChartOfAccountsPage() {
         toast.success('Cập nhật tài khoản thành công');
       } else {
         await axiosClient.post('/accounting/chart-of-accounts', payload);
-        toast.success('Thêm tài khoản thành công');
+        toast.success('Thêm Tài Khoản thành công');
       }
       setIsModal(false);
       await fetchAccounts();
@@ -270,7 +269,7 @@ export default function ChartOfAccountsPage() {
       </div>
 
       {/* Drawer Chi Tiết */}
-      <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Tài khoản: ${selected.accountNumber} - ${selected.accountName}` : ''}>
+      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Tài khoản: ${selected.accountNumber} - ${selected.accountName}` : ''} width="max-w-lg">
         {selected && (
           <div className="space-y-6 p-5">
             <div className="bg-emerald-50 dark:bg-emerald-950/20 p-4 rounded-lg flex items-start gap-3">
@@ -300,10 +299,10 @@ export default function ChartOfAccountsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Thêm / Sửa */}
-      <Modal isOpen={isModal} onClose={() => setIsModal(false)} title={form.id ? `Cập nhật tài khoản kế toán` : `Thêm tài khoản mới`} width="max-w-lg">
+      <Modal isOpen={isModal} onClose={() => setIsModal(false)} title={form.id ? `Cập nhật tài khoản kế toán` : `Thêm Tài Khoản mới`} width="max-w-lg">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>

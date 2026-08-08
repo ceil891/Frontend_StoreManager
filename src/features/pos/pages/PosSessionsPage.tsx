@@ -40,9 +40,9 @@ const statusBadgeStyles = {
 
 const statusMap = {
   IN_PROGRESS: 'Đang hoạt động',
-  CLOSED_VERIFIED: 'Đã đóng (Khớp)',
+  CLOSED_VERIFIED: 'Đã kết thúc',
   PENDING_AUDIT_VERIFICATION: 'Chờ đối soát',
-  DISCREPANCY_FLAGGED: 'Có chênh lệch',
+  DISCREPANCY_FLAGGED: 'Đã kết thúc (Có chênh lệch)',
 };
 
 import { usePosSessionStore } from '../store/posSessionStore';
@@ -51,6 +51,9 @@ export function PosSessionsPage() {
   const {
     sessions: storeSessions,
     fetchSessions,
+    addSession,
+    updateSession,
+    closeSession,
   } = usePosSessionStore();
 
   useEffect(() => {
@@ -105,10 +108,6 @@ export function PosSessionsPage() {
   // Edit Session Modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<PosSessionRecord | null>(null);
-
-  // Delete Confirmation Modal state
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [sessionToDelete, setSessionToDelete] = useState<PosSessionRecord | null>(null);
 
   // Z-Report aggregate summary modal state
   const [isZReportModalOpen, setIsZReportModalOpen] = useState(false);
@@ -180,28 +179,10 @@ export function PosSessionsPage() {
     const newStatus = discrepancy === 0 ? 'CLOSED_VERIFIED' : 'DISCREPANCY_FLAGGED';
     
     try {
-      await axiosClient.put(`/pos/sessions/${selectedSession.id}/close`, null, {
-        params: { actualClosingCash: parsedActualCash }
-      });
+      await closeSession(selectedSession.id, parsedActualCash);
     } catch (e) {
       console.error('Failed to close POS session:', e);
     }
-
-    setData(prev => 
-      prev.map(item => {
-        if (item.id === selectedSession.id) {
-          return {
-            ...item,
-            closedTimestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
-            actualClosingCashVnd: parsedActualCash,
-            cashDiscrepancyVnd: discrepancy,
-            status: newStatus,
-            supervisorSignoff: discrepancy !== 0 ? 'PENDING_INVESTIGATION' : 'Hệ thống tự chốt'
-          };
-        }
-        return item;
-      })
-    );
     
     setIsCloseShiftModalOpen(false);
     
@@ -222,35 +203,22 @@ export function PosSessionsPage() {
     const sessionCode = `SESS-${todayStr}-${nextSessionNum}`;
     
     try {
-      await axiosClient.post('/pos/sessions', {
+      await addSession({
         sessionCode,
         terminalCode: newTerminalId,
         cashierName: newCashierName,
-        openingCash: openingCash,
-        expectedClosingCash: openingCash,
-        totalTxCount: 0,
-        totalRevenue: 0,
+        openingTime: new Date().toISOString().replace('T', ' ').slice(0, 19),
+        openingCash,
+        expectedCash: openingCash,
+        actualCash: 0,
+        cashDifference: 0,
+        status: 'OPEN',
       });
+      setIsCreateModalOpen(false);
+      toast.success(`Đã mở thành công ca làm việc mới: ${sessionCode} tại quầy ${newTerminalId}!`);
     } catch (err) {
       console.error('Failed to create POS session:', err);
     }
-
-    const newRecord: PosSessionRecord = {
-      id: String(data.length + 100),
-      sessionCode,
-      terminalId: newTerminalId,
-      cashierName: newCashierName,
-      openedTimestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
-      openingCashFloatVnd: openingCash,
-      expectedClosingCashVnd: openingCash, // initializes expected to opening float
-      totalTransactionsCount: 0,
-      totalGrossRevenueVnd: 0,
-      status: 'IN_PROGRESS'
-    };
-    
-    setData([newRecord, ...data]);
-    setIsCreateModalOpen(false);
-    toast.success(`Đã mở thành công ca làm việc mới: ${newRecord.sessionCode} tại quầy ${newTerminalId}!`);
   };
 
   // 4. Edit Session handlers
@@ -259,30 +227,21 @@ export function PosSessionsPage() {
     setIsEditModalOpen(true);
   };
 
-  const handleSaveEdit = (e: React.FormEvent) => {
+  const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingSession) return;
     
-    setData(prev => prev.map(item => item.id === editingSession.id ? editingSession : item));
-    setIsEditModalOpen(false);
-    toast.success(`Cập nhật thông tin ca ${editingSession.sessionCode} thành công!`);
-  };
-
-  // 5. Delete Session handlers
-  const handleOpenDelete = (session: PosSessionRecord) => {
-    setSessionToDelete(session);
-    setIsDeleteModalOpen(true);
-  };
-
-  const handleConfirmDelete = () => {
-    if (!sessionToDelete) return;
-    
-    setData(prev => prev.filter(item => item.id !== sessionToDelete.id));
-    if (selectedSessionId === sessionToDelete.id) {
-      setSelectedSessionId(null);
+    try {
+      await updateSession(editingSession.id, {
+        cashierName: editingSession.cashierName,
+        terminalCode: editingSession.terminalId,
+        openingCash: editingSession.openingCashFloatVnd,
+      });
+      toast.success(`Cập nhật thông tin ca ${editingSession.sessionCode} thành công!`);
+    } catch (err) {
+      console.error('Failed to edit session:', err);
     }
-    setIsDeleteModalOpen(false);
-    toast.success(`Đã xóa thành công phiên làm việc ${sessionToDelete.sessionCode}!`);
+    setIsEditModalOpen(false);
   };
 
   // 6. Export simulation handler
@@ -396,13 +355,6 @@ export function PosSessionsPage() {
               className="p-2 text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors border border-transparent hover:border-blue-500/20 dark:text-gray-400"
             >
               <Edit className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleOpenDelete(row.original); }}
-              title="Xóa"
-              className="p-2 text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors border border-transparent hover:border-red-500/20 dark:text-gray-400"
-            >
-              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         ),
@@ -941,35 +893,6 @@ export function PosSessionsPage() {
             </div>
           </form>
         )}
-      </Modal>
-
-      {/* Custom Destructive Delete Confirmation Modal */}
-      <Modal
-        isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
-        title="Xác nhận xóa phiên làm việc"
-        isDestructive={true}
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Bạn có chắc chắn muốn xóa vĩnh viễn phiên làm việc <span className="font-mono font-bold text-gray-900 dark:text-white">{sessionToDelete?.sessionCode}</span>? Hành động này sẽ loại bỏ dữ liệu khỏi bảng quản trị và không thể thu hồi.
-          </p>
-
-          <div className="flex gap-3 pt-3">
-            <button
-              onClick={() => setIsDeleteModalOpen(false)}
-              className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 text-gray-700 dark:text-gray-200 font-bold rounded-xl transition-all text-sm"
-            >
-              Hủy bỏ
-            </button>
-            <button
-              onClick={handleConfirmDelete}
-              className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-all text-sm shadow-md shadow-red-500/10"
-            >
-              Đồng ý xóa
-            </button>
-          </div>
-        </div>
       </Modal>
 
       {/* Aggregate Daily Z-Report Modal */}

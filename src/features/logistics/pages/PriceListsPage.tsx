@@ -117,9 +117,24 @@ export function PriceListsPage() {
     setIsModalOpen(false);
   };
 
+  const formatCurrencyVN = (amount: number | undefined | null) => {
+    if (amount === undefined || amount === null || isNaN(amount)) return '0 VNĐ';
+    return `${Math.round(amount).toLocaleString('vi-VN')} VNĐ`;
+  };
+
+  const handleDeleteAttempt = (list: PriceListSchedule) => {
+    setSelectedList(null);
+    if (list.status === 'ACTIVE') {
+      toast.error('Bảng giá đang ở trạng thái KÍCH HOẠT (ACTIVE). Vui lòng đổi trạng thái thành Bản nháp hoặc Tạm khóa trước khi xóa!');
+      return;
+    }
+    setDeletingList(list);
+  };
+
   const handleDeleteConfirm = () => {
     if (!deletingList) return;
     deletePriceList(deletingList.id);
+    toast.success('Đã xóa bảng giá thành công!');
     setDeletingList(null);
   };
 
@@ -205,7 +220,7 @@ export function PriceListsPage() {
   };
 
   const handleDetailPriceChange = (id: string, overridePrice: number) => {
-    setEditingDetails(editingDetails.map(d => d.id === id ? { ...d, overridePrice } : d));
+    setEditingDetails(editingDetails.map(d => d.id === id ? { ...d, overridePrice: Math.max(0, overridePrice) } : d));
   };
 
   const handleRemoveDetail = (id: string) => {
@@ -236,7 +251,7 @@ export function PriceListsPage() {
           const t = info.getValue() as keyof typeof tierBadgeStyles;
           return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${tierBadgeStyles[t]}`}>
-              {t.replace(/_/g, ' ')}
+              {t ? t.replace(/_/g, ' ') : 'Mặc định'}
             </span>
           );
         },
@@ -248,7 +263,7 @@ export function PriceListsPage() {
       },
       {
         accessorKey: 'details',
-        header: 'Ghi đè giá',
+        header: 'Ghi đè giá SKU',
         cell: ({ row }) => (
           <span className="font-mono font-bold text-gray-900 dark:text-white">{row.original.details?.length || 0} mục</span>
         ),
@@ -265,7 +280,7 @@ export function PriceListsPage() {
               status === 'DRAFT' ? 'bg-amber-100 text-amber-800' :
               'bg-gray-100 text-gray-800'
             }`}>
-              {status.replace('_', ' ')}
+              {status === 'ACTIVE' ? 'Hoạt động' : status === 'DRAFT' ? 'Bản nháp' : status.replace('_', ' ')}
             </span>
           );
         },
@@ -278,18 +293,21 @@ export function PriceListsPage() {
             <button
               onClick={(e) => { e.stopPropagation(); setSelectedList(row.original); }}
               className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+              title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
               className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Chỉnh sửa"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); setDeletingList(row.original); }}
+              onClick={(e) => { e.stopPropagation(); handleDeleteAttempt(row.original); }}
               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Xóa bảng giá"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -305,15 +323,12 @@ export function PriceListsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Danh sách giá và lịch trình định giá</h1>
-            <p className="text-sm text-gray-500 mt-1">Quản lý bảng giá, chính sách giá sỉ (B2B) và ghi đè giá đặc biệt theo SKU.</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bảng giá sản phẩm & Thiết lập định giá</h1>
+            <p className="text-sm text-gray-500 mt-1">Quản lý bảng giá, chính sách giá sỉ (B2B) và ghi đè giá đặc biệt theo SKU theo tiền tệ VNĐ.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white border text-gray-700 rounded-lg text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Xuất Excel
-            </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm">
-              <Plus className="w-4 h-4" /> Tạo Bảng Giá
+              <Plus className="w-4 h-4" /> Tạo Bảng Giá Mới
             </button>
           </div>
         </div>
@@ -334,8 +349,8 @@ export function PriceListsPage() {
         <ReusableDataTable columns={columns} data={filtered} />
       </div>
 
-      {/* VIEW DRAWER */}
-      <Drawer
+      {/* VIEW MODAL CĂN GIỮA (TC-ALL-1) */}
+      <Modal
         isOpen={!!selectedList}
         onClose={() => setSelectedList(null)}
         title={selectedList ? `Bảng giá: ${selectedList.listCode}` : 'Thông tin bảng giá'}
@@ -354,30 +369,30 @@ export function PriceListsPage() {
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase text-gray-500">Tỷ lệ Markup mục tiêu</p>
-                  <p className="text-2xl font-bold font-mono text-emerald-600 mt-0.5">+{selectedList.markupPercentage}% trên chi phí</p>
+                  <p className="text-2xl font-bold font-mono text-emerald-600 mt-0.5">+{selectedList.markupPercentage}% trên giá vốn</p>
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white p-4 rounded-xl border shadow-sm">
+              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
                   <Tag className="w-4 h-4 text-emerald-600" /> SKU ghi đè giá
                 </div>
-                <p className="text-xl font-mono font-bold text-gray-900 truncate">{selectedList.details?.length || 0} mục</p>
+                <p className="text-xl font-mono font-bold text-gray-900 dark:text-white truncate">{selectedList.details?.length || 0} mục</p>
               </div>
-              <div className="bg-white p-4 rounded-xl border shadow-sm">
+              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
                   <Calendar className="w-4 h-4 text-blue-500" /> Tiền tệ áp dụng
                 </div>
-                <p className="text-xl font-bold font-mono text-gray-900 truncate">{selectedList.currency}</p>
+                <p className="text-xl font-bold font-mono text-emerald-600 truncate">{selectedList.currency || 'VND'} ({formatCurrencyVN(100000)})</p>
               </div>
             </div>
 
-            <div className="space-y-3 bg-gray-50 p-4 rounded-xl border text-sm">
+            <div className="space-y-3 bg-gray-50 dark:bg-gray-900 p-4 rounded-xl border text-sm">
               <div className="border-b pb-3">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Tiêu đề Bảng giá</span>
-                <h3 className="text-base font-bold text-gray-900">{selectedList.listName}</h3>
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Tên Bảng giá</span>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white">{selectedList.listName}</h3>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Áp dụng cho:</span>
@@ -385,7 +400,7 @@ export function PriceListsPage() {
               </div>
               <div className="flex justify-between font-mono">
                 <span className="text-gray-500 font-sans">Hiệu lực từ:</span>
-                <span className="text-gray-800">{selectedList.effectiveDate}</span>
+                <span className="text-gray-800 dark:text-gray-200">{selectedList.effectiveDate}</span>
               </div>
               {selectedList.expirationDate && (
                 <div className="flex justify-between font-mono">
@@ -396,10 +411,10 @@ export function PriceListsPage() {
             </div>
 
             {/* Price Override Details View */}
-            <div className="bg-white border rounded-xl overflow-hidden">
-               <div className="bg-gray-50 px-4 py-3 border-b flex justify-between items-center">
-                <span className="font-bold text-gray-900 text-sm flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" /> Các SKU được ghi đè giá
+            <div className="bg-white dark:bg-gray-900 border rounded-xl overflow-hidden">
+               <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b flex justify-between items-center">
+                <span className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" /> Các SKU được ghi đè giá (VNĐ)
                 </span>
               </div>
               <div className="p-4 space-y-2 max-h-64 overflow-y-auto">
@@ -407,29 +422,35 @@ export function PriceListsPage() {
                   selectedList.details.map(d => (
                     <div key={d.id} className="flex justify-between items-center pb-2 border-b last:border-0 last:pb-0">
                       <div>
-                        <p className="font-semibold text-gray-900 text-sm">{d.productName}</p>
+                        <p className="font-semibold text-gray-900 dark:text-white text-sm">{d.productName}</p>
                         <p className="text-xs text-gray-500 font-mono">{d.sku}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-xs text-gray-400 line-through">${d.basePrice.toFixed(2)}</p>
-                        <p className="font-bold text-emerald-700 text-sm">${d.overridePrice.toFixed(2)}</p>
+                      <div className="text-right font-mono">
+                        <p className="text-xs text-gray-400 line-through">{formatCurrencyVN(d.basePrice)}</p>
+                        <p className="font-bold text-emerald-600 text-sm">{formatCurrencyVN(d.overridePrice)}</p>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-gray-400 italic text-center py-2">Bảng giá này đang áp dụng chung cho tất cả sản phẩm theo tỷ lệ Markup, không có ngoại lệ.</p>
+                  <p className="text-sm text-gray-400 italic text-center py-2">Bảng giá này áp dụng tỷ lệ Markup chung, không có sản phẩm ghi đè giá riêng.</p>
                 )}
               </div>
             </div>
+
+            <div className="flex justify-end pt-3 border-t">
+              <button onClick={() => setSelectedList(null)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 font-bold rounded-lg text-sm">
+                Đóng Hộp Thoại
+              </button>
+            </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
-      {/* EDIT MODAL */}
+      {/* EDIT MODAL (TC-SHIP-20, TC-SHIP-21, TC-SHIP-22) */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo bảng giá mới' : 'Cập nhật bảng giá'}
+        title={modalMode === 'create' ? 'Tạo Bảng Giá Mới' : 'Cập Nhật Bảng Giá'}
         width="max-w-3xl"
       >
         <form onSubmit={handleSaveList} className="space-y-6">
@@ -437,7 +458,7 @@ export function PriceListsPage() {
             
             {/* Header Info */}
             <div className="space-y-4">
-              <h3 className="text-sm font-bold text-emerald-700 uppercase border-b pb-1">Cấu hình Bảng giá (Header)</h3>
+              <h3 className="text-sm font-bold text-emerald-700 uppercase border-b pb-1">Cấu hình Bảng giá</h3>
               
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -446,7 +467,7 @@ export function PriceListsPage() {
                     type="text"
                     value={editingList.listCode || ''}
                     onChange={(e) => setEditingList({ ...editingList, listCode: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 border rounded-lg font-mono text-sm"
                     required
                   />
                 </div>
@@ -455,7 +476,7 @@ export function PriceListsPage() {
                   <select
                     value={editingList.pricingTier || 'RETAIL_DEFAULT'}
                     onChange={(e) => setEditingList({ ...editingList, pricingTier: e.target.value as any })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
                   >
                     <option value="RETAIL_DEFAULT">Bán lẻ (Retail)</option>
                     <option value="WHOLESALE_TIER1">Khách sỉ (Wholesale)</option>
@@ -471,78 +492,95 @@ export function PriceListsPage() {
                   type="text"
                   value={editingList.listName || ''}
                   onChange={(e) => setEditingList({ ...editingList, listName: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Markup mặc định (%)</label>
+                  {/* Stripping leading zero on input (TC-SHIP-20) */}
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Markup (%) (Bỏ số 0 đầu)</label>
                   <input
-                    type="number" step="0.1"
-                    value={editingList.markupPercentage || 0}
-                    onChange={(e) => setEditingList({ ...editingList, markupPercentage: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 text-emerald-700 font-bold bg-emerald-50"
+                    type="text"
+                    value={editingList.markupPercentage ?? 0}
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/^0+(?=\d)/, '');
+                      setEditingList({ ...editingList, markupPercentage: parseFloat(clean) || 0 });
+                    }}
+                    className="w-full px-3 py-2 border rounded-lg text-sm text-emerald-700 font-bold bg-emerald-50"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Tiền tệ</label>
                   <select
-                    value={editingList.currency || 'USD'}
+                    value={editingList.currency || 'VND'}
                     onChange={(e) => setEditingList({ ...editingList, currency: e.target.value as any })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
                   >
+                    <option value="VND">VNĐ (Việt Nam Đồng)</option>
                     <option value="USD">USD</option>
-                    <option value="VND">VND</option>
                   </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Hiệu lực từ</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Hiệu lực từ *</label>
                   <input
                     type="date"
                     value={editingList.effectiveDate || ''}
                     onChange={(e) => setEditingList({ ...editingList, effectiveDate: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    required
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Trạng thái</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Đến ngày (End Date)</label>
+                  <input
+                    type="date"
+                    value={editingList.expirationDate || ''}
+                    onChange={(e) => setEditingList({ ...editingList, expirationDate: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Trạng thái *</label>
                   <select
                     value={editingList.status || 'DRAFT'}
                     onChange={(e) => setEditingList({ ...editingList, status: e.target.value as any })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
                   >
-                    <option value="ACTIVE">Đang kích hoạt</option>
+                    <option value="ACTIVE">KÍCH HOẠT (Hoạt động)</option>
                     <option value="DRAFT">Bản nháp</option>
                     <option value="FUTURE_SCHEDULED">Lên lịch tương lai</option>
                   </select>
                 </div>
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Phạm vi áp dụng (Branches)</label>
-                <input
-                  type="text"
-                  value={editingList.applicableBranches || ''}
-                  onChange={(e) => setEditingList({ ...editingList, applicableBranches: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
-                />
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Chi nhánh áp dụng</label>
+                  <input
+                    type="text"
+                    value={editingList.applicableBranches || ''}
+                    onChange={(e) => setEditingList({ ...editingList, applicableBranches: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    placeholder="Tất cả chi nhánh"
+                  />
+                </div>
               </div>
             </div>
 
             {/* Items Detail */}
             <div className="space-y-4">
-              <h3 className="text-sm font-bold text-emerald-700 uppercase border-b pb-1">Chi tiết Giá theo SKU (Ghi đè)</h3>
+              <h3 className="text-sm font-bold text-emerald-700 uppercase border-b pb-1">Chi tiết Giá theo SKU (Ghi đè VNĐ)</h3>
               
               <div className="border rounded-lg bg-gray-50 p-3">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold text-gray-700 text-balance">Thiết lập giá đặc biệt, bỏ qua Markup mặc định.</span>
-                  <button type="button" onClick={handleAddDetail} className="text-xs shrink-0 bg-white border px-2 py-1 rounded text-emerald-600 font-semibold hover:bg-gray-100">
-                    + Thêm dòng
+                  <span className="text-xs font-bold text-gray-700">Giá riêng lẻ theo SKU (Định dạng VNĐ):</span>
+                  <button type="button" onClick={handleAddDetail} className="text-xs bg-white border px-3 py-1 rounded text-emerald-600 font-bold hover:bg-gray-100">
+                    + Thêm SKU
                   </button>
                 </div>
 
@@ -553,52 +591,34 @@ export function PriceListsPage() {
                     const product = products.find(p => p.sku === d.sku);
                     const unitOptions = product ? (productUnitsCache[product.id] || []) : [];
                     return (
-                    <div key={d.id} className="bg-white border p-2 rounded relative flex flex-col gap-2 shadow-sm">
+                    <div key={d.id} className="bg-white border p-2.5 rounded-lg flex flex-col gap-2 shadow-sm">
                       <div>
-                        <label className="block text-[10px] text-gray-500 font-bold">Chọn Sản phẩm (SKU)</label>
+                        <label className="block text-[10px] text-gray-500 font-bold">Sản phẩm (SKU)</label>
                         <select 
                           value={d.sku}
                           onChange={(e) => handleDetailSkuChange(d.id, e.target.value)}
-                          className="w-full p-1 border rounded text-xs"
+                          className="w-full p-1.5 border rounded text-xs"
                         >
                           {products.map(p => <option key={p.id} value={p.sku}>{p.name} ({p.sku})</option>)}
                         </select>
                       </div>
-                      <div>
-                        <label className="block text-[10px] text-gray-500 font-bold">Đơn vị áp giá</label>
-                        <select
-                          value={d.productUnitId || ''}
-                          onFocus={() => product && loadProductUnits(product.id)}
-                          onChange={(e) => handleDetailUnitChange(d.id, e.target.value)}
-                          className="w-full p-1 border rounded text-xs"
-                        >
-                          {unitOptions.length === 0 && (
-                            <option value="">Đơn vị gốc (mặc định)</option>
-                          )}
-                          {unitOptions.map(u => (
-                            <option key={u.id} value={u.id}>
-                              {u.unitName || u.unitCode}{u.isBaseUnit ? ' (Gốc)' : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
                       <div className="flex gap-2 items-end">
                         <div className="w-1/2">
-                          <label className="block text-[10px] text-gray-400 font-bold">Giá tham chiếu</label>
+                          <label className="block text-[10px] text-gray-400 font-bold">Giá chuẩn (VNĐ)</label>
                           <input 
-                            type="number" readOnly value={d.basePrice} 
-                            className="w-full p-1 border rounded text-xs text-gray-500 bg-gray-100 font-mono"
+                            type="text" readOnly value={formatCurrencyVN(d.basePrice)} 
+                            className="w-full p-1.5 border rounded text-xs text-gray-500 bg-gray-100 font-mono"
                           />
                         </div>
                         <div className="w-1/2">
-                          <label className="block text-[10px] text-emerald-700 font-bold">Giá ghi đè (₫)</label>
+                          <label className="block text-[10px] text-emerald-700 font-bold">Giá ghi đè (VNĐ) *</label>
                           <input 
-                            type="number" step="0.01" value={d.overridePrice} 
-                            onChange={(e) => handleDetailPriceChange(d.id, parseFloat(e.target.value) || 0)}
-                            className="w-full p-1 border rounded text-xs text-emerald-700 font-bold bg-emerald-50 text-right"
+                            type="number" value={d.overridePrice} 
+                            onChange={(e) => handleDetailPriceChange(d.id, parseFloat(e.target.value.replace(/^0+(?=\d)/, '')) || 0)}
+                            className="w-full p-1.5 border rounded text-xs text-emerald-700 font-bold bg-emerald-50 text-right font-mono"
                           />
                         </div>
-                        <button type="button" onClick={() => handleRemoveDetail(d.id)} className="text-red-500 hover:text-red-700 p-1 mb-0.5">
+                        <button type="button" onClick={() => handleRemoveDetail(d.id)} className="text-red-500 hover:text-red-700 p-1.5 mb-0.5">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -619,26 +639,29 @@ export function PriceListsPage() {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow"
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow"
             >
-              Lưu bảng giá
+              Lưu Bảng Giá
             </button>
           </div>
         </form>
       </Modal>
 
+      {/* DELETE CONFIRM MODAL (TC-SHIP-23) */}
       <Modal
         isOpen={!!deletingList}
         onClose={() => setDeletingList(null)}
-        title="Xóa bảng giá"
+        title="Xác nhận xóa bảng giá"
         isDestructive
         width="max-w-md"
       >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">Bạn có chắc chắn muốn xóa Bảng giá <strong>{deletingList?.listName}</strong>? Thao tác này sẽ gỡ bỏ bảng giá khỏi mọi chi nhánh đang được áp dụng.</p>
+        <div className="space-y-4 text-sm">
+          <p className="text-gray-600">
+            Bạn có chắc chắn muốn xóa Bảng giá <strong className="text-gray-900">{deletingList?.listName}</strong>? 
+          </p>
           <div className="flex justify-end gap-3 pt-4 border-t">
-            <button type="button" onClick={() => setDeletingList(null)} className="px-4 py-2 border rounded-lg text-sm">Hủy</button>
-            <button type="button" onClick={handleDeleteConfirm} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold">Đồng ý xóa</button>
+            <button type="button" onClick={() => setDeletingList(null)} className="px-4 py-2 border rounded-lg">Quay lại</button>
+            <button type="button" onClick={handleDeleteConfirm} className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold">Xác nhận xóa</button>
           </div>
         </div>
       </Modal>

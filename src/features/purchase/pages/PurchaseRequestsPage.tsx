@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Plus, Download, Search, Eye, Calendar, User, ClipboardList, Briefcase, FileText, CheckCircle2, Clock, XCircle, ChevronRight } from 'lucide-react';
-import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { useEffect, useMemo, useState } from 'react';
+import { Plus, Download, Search, Eye, Calendar, User, ClipboardList, Briefcase, FileText, CheckCircle2, Clock, XCircle, ChevronRight, Trash2 } from 'lucide-react';
+import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -301,7 +302,7 @@ export function PurchaseRequestsPage() {
       </div>
 
       {/* Drawer Chi tiết và mặt hàng mua */}
-      <Drawer
+      <Modal
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
         title={selectedItem ? `Chi tiết Yêu cầu: ${selectedItem.requestCode}` : 'Thông tin chi tiết'}
@@ -393,7 +394,7 @@ export function PurchaseRequestsPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}

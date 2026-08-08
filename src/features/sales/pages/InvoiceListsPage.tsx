@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, FileText, Download, Filter } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { useSalesStore } from '@/features/sales/store/salesStore';
 import { axiosClient } from '@/shared/lib/axiosClient';
@@ -278,7 +279,7 @@ export function InvoiceListsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
       )}
 
-      <Drawer
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
         title={`Chi tiết hóa đơn: ${selected?.invoiceCode}`}
@@ -349,7 +350,7 @@ export function InvoiceListsPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}
@@ -375,7 +376,8 @@ export function InvoiceListsPage() {
                 onChange={(e) => setEditingItem({ ...editingItem, invoiceType: e.target.value as any })}
                 className="w-full p-2 border rounded"
               >
-                <option value="BAN_LE">Bán lẻ (POS)</option>
+                <option value="BAN_LE">Bán lẻ</option>
+
                 <option value="BAN_SI">Bán sỉ (hợp đồng)</option>
                 <option value="TRA_HANG">Hoàn trả / hủy hàng</option>
               </select>

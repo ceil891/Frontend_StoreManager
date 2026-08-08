@@ -1,8 +1,9 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Eye, Edit, Trash2, Search, Ruler } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import type { ColumnDef } from '@tanstack/react-table';
 import { useSizeStore, type SizeRecord } from '../store/sizeStore';
 
@@ -164,7 +165,7 @@ export function SizesPage() {
               <Download className="w-4 h-4" /> Xuất danh sách
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm">
-              <Plus className="w-4 h-4" /> Thêm kích thước
+              <Plus className="w-4 h-4" /> Thêm Kích Thước
             </button>
           </div>
         </div>
@@ -203,7 +204,7 @@ export function SizesPage() {
       </div>
 
       {/* Drawer */}
-      <Drawer isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết: ${selected.sizeName}` : ''}>
+      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết: ${selected.sizeName}` : ''}>
         {selected && (
           <div className="space-y-4 p-4">
             <div className="flex items-center gap-4">
@@ -225,10 +226,10 @@ export function SizesPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* Modal Create/Edit */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalMode === 'create' ? 'Thêm kích thước mới' : 'Chỉnh sửa kích thước'} width="max-w-md">
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalMode === 'create' ? 'Thêm Kích Thước mới' : 'Chỉnh sửa kích thước'} width="max-w-md">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -268,7 +269,7 @@ export function SizesPage() {
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg text-sm">Hủy bỏ</button>
-            <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm">{modalMode === 'create' ? 'Tạo mới' : 'Lưu thay đổi'}</button>
+            <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm">{modalMode === 'create' ? 'Tạo Mới' : 'Lưu thay đổi'}</button>
           </div>
         </form>
       </Modal>

@@ -1,9 +1,10 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { useInventoryStore } from '../store/inventoryStore';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, MapPin, Building2, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
+
+
 import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
@@ -196,7 +197,7 @@ export function SupplierWarehousesPage() {
 
       <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
 
-      <Drawer
+      <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
         title={`Chi tiết kho đối tác: ${selected?.warehouseName}`}
@@ -255,12 +256,12 @@ export function SupplierWarehousesPage() {
             )}
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm kho đối tác NCC mới' : 'Sửa kho đối tác'}
+        title={modalMode === 'create' ? 'Thêm Kho đối tác NCC mới' : 'Sửa kho đối tác'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">

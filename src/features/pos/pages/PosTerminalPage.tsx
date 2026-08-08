@@ -12,13 +12,18 @@ import { Modal } from '@/shared/components/ui/Modal';
 import { PrintInvoiceModal, type PrintInvoiceData } from '@/shared/components/ui/PrintInvoiceModal';
 import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
 import { useSalesStore, BRANCH_NAME_BY_ID, deriveShiftId, WALK_IN_CUSTOMER_ID } from '@/features/sales/store/salesStore';
-import { useAuthStore } from '@/features/auth/store/authStore';
+import { useAuthStore, useAuthPermissions } from '@/features/auth/store/authStore';
 import { Link } from 'react-router';
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 import { useCrmStore } from '@/features/crm/store/crmStore';
+import { useLoyaltyConfigStore } from '@/features/crm/store/loyaltyConfigStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
+import { useDebounce } from '@/shared/hooks/useDebounce';
 import { toast } from 'sonner';
 
+import { axiosClient } from '@/shared/lib/axiosClient';
 
+// ─── POS Vouchers ─────────────────────────────────────────────
 
 const VOUCHERS: Record<string, { type: 'PERCENT' | 'FLAT'; value: number }> = {
   'HELLOSUMMER': { type: 'PERCENT', value: 15 },
@@ -55,45 +60,142 @@ const FALLBACK_PAYMENTS: DisplayPayment[] = [
 
 const fmt = (n: number) => n.toLocaleString('vi-VN') + 'đ';
 
+function SafeProductImage({ src, alt, className, iconClassName }: { src?: string; alt?: string; className?: string; iconClassName?: string }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  if (!src || failed) {
+    return <ImageIcon className={iconClassName || "w-8 h-8 text-gray-300"} />;
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      onError={() => setFailed(true)}
+      className={className}
+    />
+  );
+}
+
 export function PosTerminalPage() {
-  const { items, addItem, removeItem, updateQuantity, getTotal, clearCart } = usePosCartStore();
+  const user = useAuthStore((s) => s.user);
+  const {
+    items,
+    addItem,
+    removeItem,
+    updateQuantity,
+    getTotal,
+    clearCart,
+    tabs,
+    activeTabId,
+    createTab,
+    switchTab,
+    closeTab,
+    customer: activeCustomer,
+    setCustomer: setActiveCustomer,
+    customerPhone,
+    setCustomerPhone,
+    selectedPaymentId,
+    setSelectedPaymentId,
+    appliedVoucher,
+    setAppliedVoucher,
+    usedPoints,
+    setUsedPoints,
+    cashGiven,
+    setCashGiven,
+  } = usePosCartStore();
+
   const paymentMethodsFromConfig = usePosConfigStore((s) => s.paymentMethods);
   const addSaleOrder = useSalesStore((s) => s.addSaleOrder);
   const { products, fetchProducts, categories, fetchCategories } = useInventoryStore();
   const { customers, fetchCustomers, addCustomer } = useCrmStore();
+  const { branches, fetchBranches } = useBranchStore();
 
   useEffect(() => {
     fetchProducts();
     fetchCategories();
     fetchCustomers();
-  }, [fetchProducts, fetchCategories, fetchCustomers]);
+    fetchBranches();
+  }, [fetchProducts, fetchCategories, fetchCustomers, fetchBranches]);
+
+  const [selectedPosBranchId, setSelectedPosBranchId] = useState<string>('');
+
+  const permissions = useAuthPermissions();
+  const canChangeBranch = user?.role === 'SUPER_ADMIN' || permissions.includes('pos:branch:change');
+
+  const { activeBranchId, activeBranchName, isBranchUnassigned } = useMemo(() => {
+    const targetId = selectedPosBranchId || (user?.branchId ? String(user.branchId) : (branches[0] ? String(branches[0].id) : '1'));
+    const matched = (branches || []).find((b) => String(b.id) === targetId || b.branchCode === targetId || `BR-${String(b.id).padStart(3, '0')}` === targetId);
+    const resolvedId = matched ? String(matched.id) : targetId;
+    return {
+      activeBranchId: resolvedId,
+      activeBranchName: matched?.name || BRANCH_NAME_BY_ID[resolvedId] || `Chi nhánh ${resolvedId}`,
+      isBranchUnassigned: !user?.branchId && !selectedPosBranchId && user?.role !== 'SUPER_ADMIN',
+    };
+  }, [branches, user, selectedPosBranchId]);
+
+  // Branch stock mapping for POS
+  const [branchStockMap, setBranchStockMap] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!activeBranchId) return;
+    axiosClient.get<any, any>(`/inventories/branches/${activeBranchId}/inventory`)
+      .then((res) => {
+        const list: any[] = Array.isArray(res) ? res : (res?.data || res?.content || res || []);
+        const map: Record<string, number> = {};
+        list.forEach((b: any) => {
+          const qty = Number(b.availableQuantity ?? b.onHandQuantity ?? 0);
+          if (b.productId) map[String(b.productId)] = qty;
+          if (b.productVariantId) map[String(b.productVariantId)] = qty;
+          if (b.sku) map[b.sku] = qty;
+        });
+        setBranchStockMap(map);
+      })
+      .catch((err) => {
+        console.warn('Failed to fetch POS branch inventory:', err);
+      });
+  }, [activeBranchId]);
 
   const productsList = useMemo(() => {
-    return (products || []).map((p) => {
-      const cat = (categories || []).find((c) => c.categoryName === p.category);
-      const tc = (cat?.taxClass || 'VAT_8') as string;
-      let rate = 0.08;
-      if (tc === 'VAT_5') rate = 0.05;
-      else if (tc === 'VAT_10') rate = 0.10;
-      else if (tc === 'EXEMPT') rate = 0.00;
-      return {
-        id: String(p.id),
-        name: p.name || '',
-        price: Number(p.price || 0),
-        image: p.mainImage || 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=200&q=80',
-        sku: p.sku || '',
-        category: p.category || 'Tất cả',
-        unit: p.unit || 'Cái',
-        stock: Number(p.onHand || 0),
-        taxRate: rate,
-      };
-    });
-  }, [products, categories]);
+    return (products || [])
+      .filter((p) => p.status === 'ACTIVE' && (p as any).isActive !== false)
+      .map((p) => {
+        const cat = (categories || []).find((c) => c.categoryName === p.category);
+        const tc = (cat?.taxClass || 'VAT_8') as string;
+        let rate = 0.08;
+        if (tc === 'VAT_5') rate = 0.05;
+        else if (tc === 'VAT_10') rate = 0.10;
+        else if (tc === 'EXEMPT') rate = 0.00;
+        const barcode = p.barcodes && p.barcodes.length > 0 ? p.barcodes[0] : (p.sku || String(p.id));
+
+        // Tồn kho hiển thị POS = Tồn kho khả dụng chuẩn tại Chi nhánh được chọn
+        const bStock = branchStockMap[String(p.id)] ?? branchStockMap[p.sku] ?? (p as any).branchStocks?.[activeBranchId] ?? 0;
+
+        return {
+          id: String(p.id),
+          name: p.name || '',
+          price: Number(p.price || 0),
+          image: p.mainImage || (p as any).mainImageUrl || 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=200&q=80',
+          sku: p.sku || '',
+          barcode,
+          category: p.category || 'Tất cả',
+          unit: p.unit || 'Cái',
+          stock: Number(bStock),
+          taxRate: rate,
+        };
+      });
+  }, [products, categories, branchStockMap, activeBranchId]);
 
   const categoryTabs = useMemo(() => {
-    const cats = (categories || []).map((c) => c.categoryName).filter(Boolean);
+    const dbCats = (categories || []).map((c) => c.categoryName).filter(Boolean);
+    if (dbCats.length > 0) {
+      return Array.from(new Set(['Tất cả', ...dbCats]));
+    }
     const productCats = productsList.map((p) => p.category).filter((c) => Boolean(c) && c !== 'Tất cả');
-    return Array.from(new Set(['Tất cả', ...cats, ...productCats]));
+    return Array.from(new Set(['Tất cả', ...productCats]));
   }, [categories, productsList]);
 
   const displayPayments = useMemo<DisplayPayment[]>(() => {
@@ -106,13 +208,9 @@ export function PosTerminalPage() {
       isCash: m.providerType === 'CASH_DRAWER',
     }));
   }, [paymentMethodsFromConfig]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('Tất cả');
-
-  // Customer
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [activeCustomer, setActiveCustomer] = useState<{ id: string; name: string; phone: string; points: number } | null>(null);
-  const [usedPoints, setUsedPoints] = useState(0);
 
   // Quick Create Customer Modal State
   const [isQuickCustomerOpen, setIsQuickCustomerOpen] = useState(false);
@@ -122,6 +220,7 @@ export function PosTerminalPage() {
   const [newCustomerEmail, setNewCustomerEmail] = useState('');
   const [newCustomerTaxCode, setNewCustomerTaxCode] = useState('');
   const [newCustomerType, setNewCustomerType] = useState<'INDIVIDUAL' | 'BUSINESS'>('INDIVIDUAL');
+  const [isSubmittingQuickCustomer, setIsSubmittingQuickCustomer] = useState(false);
   const [newCustomerNotes, setNewCustomerNotes] = useState('');
   const [newCustomerAddress, setNewCustomerAddress] = useState({
     province: '',
@@ -132,23 +231,41 @@ export function PosTerminalPage() {
 
   const handleQuickCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCustomerName.trim() || !newCustomerPhoneInput.trim()) {
-      toast.error('Vui lòng nhập Tên và Số điện thoại khách hàng!');
+    if (isSubmittingQuickCustomer) return;
+    setIsSubmittingQuickCustomer(true);
+    try {
+      const cleanName = newCustomerName.trim();
+      const cleanPhone = newCustomerPhoneInput.trim().replace(/\s+/g, '');
+
+    if (!cleanName) {
+      toast.error('Vui lòng nhập Họ & Tên khách hàng!');
       return;
     }
 
-    const fullAddress = [
-      newCustomerAddress.addressDetail,
-      newCustomerAddress.ward,
-      newCustomerAddress.district,
-      newCustomerAddress.province,
-    ].filter(Boolean).join(', ');
+    if (!/^[0-9]{10,11}$/.test(cleanPhone)) {
+      toast.error('Số điện thoại không hợp lệ! Vui lòng nhập từ 10 đến 11 chữ số.');
+      return;
+    }
+
+    // Nếu SĐT đã tồn tại -> Chọn ngay khách hàng đó
+    const existing = customers.find(c => c.phone === cleanPhone);
+    if (existing) {
+      setActiveCustomer({
+        id: existing.id,
+        name: existing.name,
+        phone: existing.phone,
+        points: existing.loyaltyPoints || 0,
+      });
+      setIsQuickCustomerOpen(false);
+      toast.info(`SĐT đã tồn tại trong hệ thống! Đã chọn khách hàng: ${existing.name}`);
+      return;
+    }
 
     const customerId = 'CUST-POS-' + Math.floor(10000 + Math.random() * 90000);
     const newCust = {
       id: customerId,
-      name: newCustomerName.trim(),
-      phone: newCustomerPhoneInput.trim(),
+      name: cleanName,
+      phone: cleanPhone,
       points: 100, // Điểm thưởng tặng khi mở thẻ mới tại POS
     };
 
@@ -185,17 +302,17 @@ export function PosTerminalPage() {
     setNewCustomerTaxCode('');
     setNewCustomerNotes('');
     setNewCustomerAddress({ province: '', district: '', ward: '', addressDetail: '' });
+    } finally {
+      setIsSubmittingQuickCustomer(false);
+    }
   };
 
   // Voucher
   const [voucherCode, setVoucherCode] = useState('');
-  const [appliedVoucher, setAppliedVoucher] = useState<{ code: string; type: 'PERCENT' | 'FLAT'; value: number } | null>(null);
   const [voucherError, setVoucherError] = useState('');
 
   // Payment modal
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
-  const [selectedPaymentId, setSelectedPaymentId] = useState(FALLBACK_PAYMENTS[0].id);
-  const [cashGiven, setCashGiven] = useState('');
   const [paymentState, setPaymentState] = useState<'idle' | 'processing' | 'success'>('idle');
   const [currentOrderCode, setCurrentOrderCode] = useState('');
 
@@ -216,10 +333,26 @@ export function PosTerminalPage() {
 
   // Time & Shift logic
   const [currentTime, setCurrentTime] = useState(new Date());
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Keyboard shortcuts (F2 to focus search box)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const getShift = (date: Date) => {
     const hour = date.getHours();
     if (hour >= 6 && hour < 14) return 'Ca sáng (06:00 - 14:00)';
@@ -266,15 +399,17 @@ export function PosTerminalPage() {
   };
 
   // ── Filtered products ───────────────────────────────────────────────────────
+  const debouncedSearchQuery = useDebounce(searchQuery, 200);
+
   const filteredProducts = useMemo(() => {
     return productsList.filter(p => {
       const matchCat = activeCategory === 'Tất cả' || p.category === activeCategory;
       const matchQ =
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.sku.toLowerCase().includes(searchQuery.toLowerCase());
+        p.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        p.sku.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
       return matchCat && matchQ;
     });
-  }, [productsList, activeCategory, searchQuery]);
+  }, [productsList, activeCategory, debouncedSearchQuery]);
 
   // ── Customer ────────────────────────────────────────────────────────────────
   const handleSearchCustomer = (e: React.FormEvent) => {
@@ -315,8 +450,9 @@ export function PosTerminalPage() {
   };
 
   // ── Calculations ─────────────────────────────────────────────────────────────
+  const loyaltyConfig = useLoyaltyConfigStore((s) => s.config);
   const subtotal = getTotal();
-  const pointsDiscount = usedPoints * 10; // 1 điểm = 10đ
+  const pointsDiscount = usedPoints * (loyaltyConfig?.redeemRateValue || 100);
   let voucherDiscount = 0;
   if (appliedVoucher) {
     voucherDiscount = appliedVoucher.type === 'PERCENT'
@@ -364,8 +500,8 @@ export function PosTerminalPage() {
       .join(', ')
       .slice(0, 240);
 
-    const branchId = user?.branchId ?? null;
-    const branchName = branchId ? (BRANCH_NAME_BY_ID[branchId] ?? branchId) : 'N/A';
+    const branchId = activeBranchId;
+    const branchName = activeBranchName;
     const cashierName = user?.name || 'Thu ngân POS';
     const customerDisplayName = activeCustomer
       ? activeCustomer.name
@@ -374,7 +510,10 @@ export function PosTerminalPage() {
     const performOrderCreation = () => {
       addSaleOrder({
         code,
-        customerId: activeCustomer?.id ?? WALK_IN_CUSTOMER_ID,
+        orderCode: code,
+        orderDate: new Date().toISOString(),
+        customerId: Number(activeCustomer?.id) || 1,
+        branchId: Number(branchId) || 1,
         customerName: customerDisplayName,
         date: dateStr,
         subTotal: Math.round(subtotal),
@@ -387,17 +526,29 @@ export function PosTerminalPage() {
         cashier: user?.name ?? 'Thu ngân',
         createdByName: user?.name ?? 'Thu ngân',
         createdByEmail: user?.email,
-        branchId,
         branchName,
         origin: 'POS',
         currency: 'VND',
         itemsSummary,
         orderLines,
+        details: items.map(i => ({
+          productVariantId: Number(i.id) || 1,
+          quantity: i.quantity,
+          unitPriceSnapshot: i.price
+        })),
         amountTendered: isCashPayment ? Math.round(cashGivenNum) : Math.round(totalAmount),
         changeAmount: isCashPayment ? Math.round(changeAmount) : 0,
         shiftId: deriveShiftId(now),
         promoCodeApplied: appliedVoucher?.code,
-      });
+      } as any);
+
+      // Tự động trừ tồn kho hiển thị (onHand) trên POS ngay lập tức & đồng bộ toàn hệ thống
+      try {
+        const deductions = items.map((it) => ({ productId: String(it.id), qty: it.quantity }));
+        (useInventoryStore.getState() as any).deductProductStock(deductions);
+      } catch (err) {
+        console.error('Failed to deduct local POS inventory state:', err);
+      }
 
       const printInvoicePayload: PrintInvoiceData = {
         documentTitle: 'HÓA ĐƠN BÁN LẺ (VAT)',
@@ -424,15 +575,14 @@ export function PosTerminalPage() {
       setPaymentState('success');
 
       setTimeout(() => {
-        clearCart();
-        setAppliedVoucher(null);
+        if (tabs.length > 1) {
+          closeTab(activeTabId);
+        } else {
+          clearCart();
+        }
         setVoucherError('');
-        setActiveCustomer(null);
-        setCustomerPhone('');
-        setUsedPoints(0);
         setPaymentState('idle');
         setIsPaymentOpen(false);
-        setCashGiven('');
         toast.success(`Thanh toán thành công đơn hàng ${code}!`);
       }, 1000);
     };
@@ -472,14 +622,18 @@ export function PosTerminalPage() {
                 <Search className="h-4 w-4 text-gray-400" />
               </div>
               <input
+                ref={searchInputRef}
                 type="text"
-                placeholder="Tìm sản phẩm theo tên hoặc SKU... (F2)"
+                placeholder="Nhập tên sản phẩm, SKU hoặc quét Barcode..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="block w-full pl-9 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
+                className="block w-full pl-9 pr-16 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all shadow-sm"
               />
-              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                <ScanBarcode className="h-4 w-4 text-gray-400" />
+              <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center gap-1.5 pointer-events-none">
+                <span className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono font-bold bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 rounded border border-gray-300 dark:border-gray-500">
+                  F2
+                </span>
+                <ScanBarcode className="h-4 w-4 text-emerald-600 dark:text-emerald-400 animate-pulse" />
               </div>
             </div>
           </div>
@@ -489,9 +643,39 @@ export function PosTerminalPage() {
               <Clock className="w-3.5 h-3.5" />
               <span>{currentTime.toLocaleDateString('vi-VN')} {currentTime.toLocaleTimeString('vi-VN')}</span>
             </div>
-            <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded border border-emerald-100 dark:border-emerald-800">
-              {getShift(currentTime)}
-            </p>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-lg text-[11px] font-bold shadow-xs">
+                <span className="hidden sm:inline">💻 POS 01 •</span>
+                {canChangeBranch ? (
+                  <select
+                    value={activeBranchId || ''}
+                    onChange={(e) => {
+                      setSelectedPosBranchId(e.target.value);
+                      const bName = branches.find(b => String(b.id) === e.target.value)?.name || e.target.value;
+                      toast.info(`Đã chuyển kho POS sang: ${bName}`);
+                    }}
+                    className="bg-transparent font-bold outline-none cursor-pointer text-indigo-900 dark:text-indigo-200"
+                  >
+                    {branches.length > 0 ? (
+                      branches.map((b) => (
+                        <option key={b.id} value={String(b.id)} className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                          {b.name} ({b.branchCode || `CN-${b.id}`})
+                        </option>
+                      ))
+                    ) : (
+                      <option value="1">CH Quận 1 (Trụ sở chính)</option>
+                    )}
+                  </select>
+                ) : (
+                  <span className="font-bold text-indigo-900 dark:text-indigo-200">
+                    {activeBranchName}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded border border-emerald-100 dark:border-emerald-800">
+                {getShift(currentTime)}
+              </p>
+            </div>
           </div>
         </header>
 
@@ -532,45 +716,44 @@ export function PosTerminalPage() {
                     key={product.id}
                     type="button"
                     disabled={disabled}
-                    aria-label={`Thêm sản phẩm ${product.name}. Giá ${fmt(product.price)}. Tồn kho ${product.stock}. Đang chọn ${inCart}.`}
+                    aria-label={`Thêm Sản Phẩm ${product.name}. Giá ${fmt(product.price)}. Tồn kho ${product.stock}. Đang chọn ${inCart}.`}
                     onClick={() => handleAddProduct(product)}
-                    className={`relative bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-all shadow-sm select-none flex flex-col group text-left ${
+                    className={`relative bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-all duration-150 select-none flex flex-col group text-left ${
                       cartItem
-                        ? 'border-emerald-400 dark:border-emerald-500 ring-1 ring-emerald-300 dark:ring-emerald-600'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-emerald-400 dark:hover:border-emerald-500'
-                    } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-md active:scale-95'}`}
+                        ? 'border-emerald-500 dark:border-emerald-500 ring-2 ring-emerald-400/30 dark:ring-emerald-500/40 shadow-sm'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-emerald-500 dark:hover:border-emerald-500 hover:scale-[1.01] hover:shadow-md'
+                    } ${outOfStock ? 'opacity-70 grayscale-[25%] bg-gray-50 dark:bg-gray-900/60 cursor-not-allowed' : disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer active:scale-95'}`}
                   >
                     {cartItem && (
-                      <div className="absolute top-1.5 right-1.5 w-5 h-5 bg-emerald-500 text-white text-[10px] font-black rounded-full flex items-center justify-center z-10 shadow">
+                      <div className="absolute top-1.5 right-1.5 w-5 h-5 bg-emerald-600 text-white text-[10px] font-black rounded-full flex items-center justify-center z-10 shadow-sm">
                         {cartItem.quantity}
                       </div>
                     )}
                     {outOfStock && (
-                      <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black z-10">
-                        HẾT
+                      <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md bg-red-600 text-white text-[10px] font-black z-10 tracking-wider shadow-sm">
+                        HẾT HÀNG
                       </div>
                     )}
                     {atLimit && !outOfStock && (
-                      <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black z-10">
+                      <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md bg-amber-500 text-white text-[10px] font-black z-10 shadow-sm">
                         TỐI ĐA
                       </div>
                     )}
-                    <div className="h-20 bg-gray-50 dark:bg-gray-900/40 flex items-center justify-center p-2 shrink-0">
-                      {product.image ? (
-                        <img src={product.image} alt={product.name} className="h-full object-contain rounded" />
-                      ) : (
-                        <ImageIcon className="w-8 h-8 text-gray-300" />
-                      )}
+                    {/* Compact Image 96x96 centered */}
+                    <div className="h-24 bg-gray-50 dark:bg-gray-900/40 flex items-center justify-center p-1.5 shrink-0 border-b border-gray-100 dark:border-gray-750">
+                      <SafeProductImage src={product.image} alt={product.name} className="h-full max-h-24 w-full object-contain rounded-lg" />
                     </div>
                     <div className="p-2 flex-1 flex flex-col justify-between">
-                      <h3 className="text-xs font-bold text-gray-900 dark:text-white line-clamp-2 mb-1 group-hover:text-emerald-600 transition-colors">
+                      <h3 className="text-xs font-bold text-gray-900 dark:text-white line-clamp-2 leading-tight group-hover:text-emerald-600 transition-colors">
                         {product.name}
                       </h3>
-                      <div>
-                        <p className="text-[10px] text-gray-400 font-mono mb-0.5">{product.sku}</p>
-                        <div className="flex justify-between items-baseline">
+                      <div className="mt-1">
+                        <p className="text-[10px] text-gray-400 font-mono leading-none mb-1">
+                          SKU: {product.sku} {product.barcode && product.barcode !== product.sku ? `• Barcode: ${product.barcode}` : ''}
+                        </p>
+                        <div className="flex items-baseline justify-between gap-1 flex-wrap">
                           <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">{fmt(product.price)}</span>
-                          <span className="text-[9px] text-gray-400">Tồn: {product.stock}</span>
+                          <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">• Tồn: {product.stock}</span>
                         </div>
                       </div>
                     </div>
@@ -584,6 +767,72 @@ export function PosTerminalPage() {
 
       {/* ═══ RIGHT PANEL: Cart & Customer ═══ */}
       <div className="flex flex-col w-[32%] h-full bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700">
+        {/* Multi-Tab Order Holding Bar (Lưu tạm đơn bán dở) */}
+        <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 overflow-x-auto shrink-0">
+          {tabs.map((t) => {
+            const isActive = t.id === activeTabId;
+            return (
+              <div
+                key={t.id}
+                onClick={() => {
+                  if (isPaymentOpen) {
+                    setIsPaymentOpen(false);
+                    setPaymentState('idle');
+                  }
+                  switchTab(t.id);
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all select-none ${
+                  isActive
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'
+                }`}
+              >
+                <span>{t.name}</span>
+                {t.items.length > 0 && (
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                      isActive ? 'bg-white text-emerald-700' : 'bg-emerald-100 text-emerald-800'
+                    }`}
+                  >
+                    {t.items.length}
+                  </span>
+                )}
+                {tabs.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isPaymentOpen && isActive) {
+                        setIsPaymentOpen(false);
+                        setPaymentState('idle');
+                      }
+                      closeTab(t.id);
+                    }}
+                    className="opacity-60 hover:opacity-100 p-0.5 rounded hover:bg-black/10 transition-opacity"
+                    title="Hủy đơn tạm này"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => {
+              if (isPaymentOpen) {
+                setIsPaymentOpen(false);
+                setPaymentState('idle');
+              }
+              createTab();
+            }}
+            className="flex items-center gap-1 px-2 py-1 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 border border-emerald-300 dark:border-emerald-800 rounded-lg text-xs font-bold whitespace-nowrap transition-colors"
+            title="⚡ Mở giỏ/đơn bán dở mới"
+          >
+            <Plus className="w-3.5 h-3.5" /> Mở đơn
+          </button>
+        </div>
+
         {/* Customer Section */}
         <div className="p-3 border-b border-gray-200 dark:border-gray-700 shrink-0 space-y-2 bg-gray-50 dark:bg-gray-900/20">
           {!activeCustomer ? (
@@ -628,27 +877,56 @@ export function PosTerminalPage() {
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-                  <Gift className="w-3.5 h-3.5" />
-                  <span>{activeCustomer.points} điểm khả dụng</span>
+              <div className="space-y-1.5 mt-1.5">
+                <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                  <span className="flex items-center gap-1">
+                    <Gift className="w-3.5 h-3.5" />
+                    {activeCustomer.points} điểm khả dụng
+                  </span>
+                  <span className="text-[11px] font-mono text-gray-500 dark:text-gray-400">
+                    (~{fmt(activeCustomer.points * (loyaltyConfig?.redeemRateValue || 100))})
+                  </span>
                 </div>
-                <div className="flex-1 flex gap-1">
-                  <input
-                    type="text"
-                    value={usedPoints === 0 ? '' : usedPoints}
-                    onChange={e => {
-                      const val = e.target.value.replace(/\D/g, '');
-                      const num = val === '' ? 0 : parseInt(val, 10);
-                      setUsedPoints(Math.min(num, activeCustomer.points));
-                    }}
-                    placeholder="Điểm dùng..."
-                    className="flex-1 px-2 py-1 border border-emerald-200 dark:border-emerald-800/50 rounded-lg text-xs bg-emerald-50 dark:bg-emerald-900/10 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none"
-                  />
-                </div>
+                {activeCustomer.points > 0 ? (
+                  <div className="flex gap-1.5 items-center">
+                    <input
+                      type="text"
+                      value={usedPoints === 0 ? '' : usedPoints}
+                      onChange={e => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        const num = val === '' ? 0 : parseInt(val, 10);
+                        const maxAllowedPoints = Math.min(
+                          activeCustomer.points,
+                          Math.floor((subtotal * ((loyaltyConfig?.maxDiscountPercent || 50) / 100)) / (loyaltyConfig?.redeemRateValue || 100))
+                        );
+                        setUsedPoints(Math.min(num, maxAllowedPoints));
+                      }}
+                      placeholder="Gõ số điểm muốn đổi..."
+                      className="flex-1 px-2.5 py-1 border border-emerald-300 dark:border-emerald-800 rounded-lg text-xs bg-emerald-50 dark:bg-emerald-900/10 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const maxAllowedPoints = Math.min(
+                          activeCustomer.points,
+                          Math.floor((subtotal * ((loyaltyConfig?.maxDiscountPercent || 50) / 100)) / (loyaltyConfig?.redeemRateValue || 100))
+                        );
+                        setUsedPoints(maxAllowedPoints);
+                      }}
+                      className="px-2 py-1 bg-emerald-600 text-white text-[11px] font-bold rounded-lg hover:bg-emerald-700 transition-colors shadow-sm shrink-0"
+                    >
+                      Dùng hết
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[11px] italic text-gray-400 mt-1">Chưa có điểm khả dụng (Sẽ tự động tích điểm sau khi hoàn tất đơn hàng)</p>
+                )}
               </div>
               {usedPoints > 0 && (
-                <p className="text-[10px] text-emerald-600 font-semibold mt-1">-{fmt(usedPoints * 10)} từ điểm thưởng</p>
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold mt-1.5 flex justify-between items-center bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded border border-emerald-200 dark:border-emerald-900/40">
+                  <span>Trừ điểm thưởng ({usedPoints} điểm):</span>
+                  <span>-{fmt(pointsDiscount)}</span>
+                </p>
               )}
             </div>
           )}
@@ -657,18 +935,32 @@ export function PosTerminalPage() {
         {/* Cart Items */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {items.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-gray-300 dark:text-gray-600">
-              <ShoppingCartIcon className="w-12 h-12 mb-2 opacity-30" />
-              <p className="text-sm">Giỏ hàng trống</p>
-              <p className="text-xs mt-1">Click vào sản phẩm để thêm</p>
+            <div className="h-full flex flex-col items-center justify-center p-4 text-center text-gray-400 dark:text-gray-500 select-none">
+              <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3 border border-emerald-100 dark:border-emerald-900/40 shadow-sm">
+                <ShoppingCartIcon className="w-8 h-8" />
+              </div>
+              <h3 className="text-sm font-black text-gray-800 dark:text-gray-200 mb-1">Giỏ hàng đang trống</h3>
+              <p className="text-xs text-gray-400 mb-4">Thực hiện 1 trong các cách sau để lên đơn:</p>
+
+              <div className="w-full bg-gray-50 dark:bg-gray-900/60 rounded-xl p-3 border border-gray-200 dark:border-gray-700/60 text-left space-y-2 text-xs">
+                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                  <span>Click chọn sản phẩm bên trái</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                  <span>Quét mã vạch bằng đầu đọc Barcode</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                  <span>Nhấn <kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">F2</kbd> để tìm kiếm nhanh</span>
+                </div>
+              </div>
             </div>
           ) : items.map(item => (
             <div key={item.id} className="flex gap-2.5 bg-gray-50 dark:bg-gray-700/40 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700">
               <div className="w-10 h-10 shrink-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden flex items-center justify-center">
-                {item.image
-                  ? <img src={item.image} alt={item.name} className="w-full h-full object-contain" />
-                  : <ImageIcon className="w-4 h-4 text-gray-300" />
-                }
+                <SafeProductImage src={item.image} alt={item.name} className="w-full h-full object-contain" iconClassName="w-4 h-4 text-gray-300" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start gap-1 mb-1">
@@ -754,9 +1046,9 @@ export function PosTerminalPage() {
               <span>Thuế VAT (8%)</span>
               <span>{fmt(vatAmount)}</span>
             </div>
-            <div className="flex justify-between text-base font-black text-gray-900 dark:text-white pt-2 border-t border-gray-200 dark:border-gray-700">
-              <span>Tổng cộng</span>
-              <span className="text-emerald-600 dark:text-emerald-400">{fmt(totalAmount)}</span>
+            <div className="flex justify-between items-baseline pt-2.5 mt-2 border-t-2 border-dashed border-gray-200 dark:border-gray-700">
+              <span className="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">TỔNG CỘNG</span>
+              <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">{fmt(totalAmount)}</span>
             </div>
           </div>
 
@@ -764,7 +1056,7 @@ export function PosTerminalPage() {
             <button
               onClick={() => { clearCart(); setAppliedVoucher(null); setVoucherError(''); setUsedPoints(0); }}
               disabled={items.length === 0}
-              className="p-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-xl hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-xl hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               title="Xóa giỏ hàng"
             >
               <Trash2 className="w-5 h-5" />
@@ -772,113 +1064,49 @@ export function PosTerminalPage() {
             <button
               onClick={() => setIsPaymentOpen(true)}
               disabled={items.length === 0}
-              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow"
+              className="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-emerald-600/30"
             >
               <CreditCard className="w-5 h-5" />
-              Thanh toán {fmt(totalAmount)}
+              THANH TOÁN {fmt(totalAmount)}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Quick Create Customer Modal for POS */}
+      {/* Quick Create Customer Modal for POS (Tối ưu siêu nhanh: Chỉ cần SĐT & Tên) */}
       <Modal
         isOpen={isQuickCustomerOpen}
         onClose={() => setIsQuickCustomerOpen(false)}
-        title="Tạo Nhanh Khách Hàng Tại Quầy POS"
-        width="max-w-xl"
+        title="⚡ Đăng ký Nhanh Khách Hàng Tại Quầy POS"
+        width="max-w-md"
       >
         <form onSubmit={handleQuickCreateCustomer} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại khách hàng *</label>
-              <select
-                value={newCustomerType}
-                onChange={(e) => setNewCustomerType(e.target.value as any)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="INDIVIDUAL">Cá nhân (Hộ gia đình)</option>
-                <option value="BUSINESS">Doanh nghiệp (Công ty)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại liên hệ *</label>
-              <input
-                type="text"
-                required
-                value={newCustomerPhoneInput}
-                onChange={(e) => setNewCustomerPhoneInput(e.target.value)}
-                placeholder="0901234567..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Họ & Tên khách hàng *</label>
-              <input
-                type="text"
-                required
-                value={newCustomerName}
-                onChange={(e) => setNewCustomerName(e.target.value)}
-                placeholder="Nguyễn Văn A..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên ngắn / Gọi tắt</label>
-              <input
-                type="text"
-                value={newCustomerShortName}
-                onChange={(e) => setNewCustomerShortName(e.target.value)}
-                placeholder="Anh A..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
-              <input
-                type="email"
-                value={newCustomerEmail}
-                onChange={(e) => setNewCustomerEmail(e.target.value)}
-                placeholder="khachhang@gmail.com"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã số thuế (Xuất HĐ GTGT)</label>
-              <input
-                type="text"
-                value={newCustomerTaxCode}
-                onChange={(e) => setNewCustomerTaxCode(e.target.value)}
-                placeholder="MST Doanh nghiệp..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
           <div>
-            <AddressCascadeSelect
-              province={newCustomerAddress.province}
-              district={newCustomerAddress.district}
-              ward={newCustomerAddress.ward}
-              addressDetail={newCustomerAddress.addressDetail}
-              onChange={(addr) => setNewCustomerAddress(addr)}
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+              Số điện thoại liên hệ <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="tel"
+              required
+              autoFocus
+              value={newCustomerPhoneInput}
+              onChange={(e) => setNewCustomerPhoneInput(e.target.value)}
+              placeholder="0901234567..."
+              className="w-full px-3 py-2 border-2 border-emerald-300 dark:border-emerald-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-base focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú sở thích / Yêu cầu xuất hóa đơn</label>
-            <textarea
-              rows={2}
-              value={newCustomerNotes}
-              onChange={(e) => setNewCustomerNotes(e.target.value)}
-              placeholder="Nhập lưu ý của khách..."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+              Họ & Tên khách hàng <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={newCustomerName}
+              onChange={(e) => setNewCustomerName(e.target.value)}
+              placeholder="Nguyễn Văn A..."
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
             />
           </div>
 
@@ -886,15 +1114,17 @@ export function PosTerminalPage() {
             <button
               type="button"
               onClick={() => setIsQuickCustomerOpen(false)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               Hủy
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold shadow transition-colors"
+              disabled={isSubmittingQuickCustomer}
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-md transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              ✓ Tạo & Áp dụng ngay
+              {isSubmittingQuickCustomer && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <UserPlus className="w-4 h-4" /> ✓ Đăng ký & Chọn ngay
             </button>
           </div>
         </form>
@@ -1037,9 +1267,17 @@ export function PosTerminalPage() {
                       />
                       <div className="flex gap-2 mt-2">
                         {QUICK_CASH.map(q => (
-                          <button key={q} onClick={() => setCashGiven(q.toLocaleString('vi-VN'))}
-                            className="flex-1 py-1.5 text-xs font-semibold bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-650 rounded-lg text-gray-700 dark:text-gray-300 transition-colors">
-                            {fmt(q)}
+                          <button
+                            key={q}
+                            type="button"
+                            onClick={() => {
+                              const currentNum = cashGivenNum || 0;
+                              const newTotal = currentNum + q;
+                              setCashGiven(newTotal.toLocaleString('vi-VN'));
+                            }}
+                            className="flex-1 py-1.5 text-xs font-semibold bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-650 rounded-lg text-gray-700 dark:text-gray-300 transition-colors"
+                          >
+                            + {fmt(q)}
                           </button>
                         ))}
                       </div>

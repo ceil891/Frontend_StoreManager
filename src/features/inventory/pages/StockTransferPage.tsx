@@ -1,56 +1,114 @@
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
-import { 
-  Plus, Download, Search, Eye, ArrowRightLeft, Building2, FileText, 
-  CheckCircle2, Truck, Edit, Trash2, X, AlertTriangle, ShieldAlert, 
-  HelpCircle, Info, Calendar, Sparkles, Tag, Layers 
+import {
+  Plus, Search, Eye, Edit, Trash2, ArrowRightLeft, Calendar, FileText,
+  Download, Printer, Package, Layers, AlertCircle, CheckCircle2, XCircle,
+  Truck, Building2, User, ShieldAlert, PlusCircle, X, Check, RefreshCw
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
-import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
-import { useInventoryStore, type StockTransferOrder } from '../store/inventoryStore';
+import { useInventoryStore, type StockTransferOrder, type StockTransferItem } from '../store/inventoryStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
+import { useAuthStore } from '@/features/auth/store/authStore';
+import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 
+export enum StockTransferExecutionStatus {
+  DRAFT = 'DRAFT',
+  READY_TO_SHIP = 'READY_TO_SHIP',
+  IN_TRANSIT = 'IN_TRANSIT',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
+const STATUS_MAP: Record<StockTransferExecutionStatus | string, { label: string; cls: string }> = {
+  [StockTransferExecutionStatus.DRAFT]: { label: 'Bản nháp', cls: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-300' },
+  [StockTransferExecutionStatus.READY_TO_SHIP]: { label: 'Chờ xuất kho', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 font-semibold' },
+  [StockTransferExecutionStatus.IN_TRANSIT]: { label: 'Đang vận chuyển (Đã xuất nguồn)', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 font-bold' },
+  [StockTransferExecutionStatus.COMPLETED]: { label: 'Đã hoàn thành (Đã nhập đích)', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 font-bold' },
+  [StockTransferExecutionStatus.CANCELLED]: { label: 'Đã hủy', cls: 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 border-red-200' },
+};
+
 export function StockTransferPage() {
-  const { 
-    stockTransfers: data, 
-    addStockTransfer, 
-    updateStockTransfer, 
-    deleteStockTransfer, 
+  const {
+    stockTransfers: data,
     fetchStockTransfers,
-    approveStockTransfer,
+    addStockTransfer,
+    updateStockTransfer,
+    deleteStockTransfer,
     shipStockTransfer,
-    completeStockTransfer
+    completeStockTransfer,
+    products,
+    fetchProducts,
   } = useInventoryStore();
 
-  useEffect(() => {
-    fetchStockTransfers();
-  }, [fetchStockTransfers]);
+  const { branches, fetchBranches } = useBranchStore();
+  const currentUser = useAuthStore((s) => s.user);
 
+  const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [selectedTransfer, setSelectedTransfer] = useState<StockTransferOrder | null>(null);
-
-  // Filter states
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
+  const [selected, setSelected] = useState<StockTransferOrder | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  const [editingTransfer, setEditingTransfer] = useState<Partial<StockTransferOrder>>({});
-  const [deletingTransfer, setDeletingTransfer] = useState<StockTransferOrder | null>(null);
 
-  const filtered = data.filter((item) => {
-    let matchesSearch = true;
-    const q = search.toLowerCase();
-    if (q) {
-      matchesSearch = (
+  // Dynamic API Users
+  const [usersList, setUsersList] = useState<any[]>([]);
+
+  // Editing state
+  const [editingHeader, setEditingHeader] = useState<Partial<StockTransferOrder>>({});
+  const [editingLines, setEditingLines] = useState<StockTransferItem[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        await Promise.all([
+          fetchStockTransfers(),
+          fetchProducts(),
+          fetchBranches(),
+        ]);
+      } catch (err) {
+        console.error('API fetchStockTransfers error:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+
+    // Fetch active users from Backend API
+    axiosClient.get('/users?status=ACTIVE&size=200')
+      .then((res: any) => {
+        const list = Array.isArray(res) ? res : (res?.content || res?.data || res || []);
+        if (Array.isArray(list) && list.length > 0) {
+          setUsersList(list);
+        }
+      })
+      .catch(() => {});
+  }, [fetchStockTransfers, fetchProducts, fetchBranches]);
+
+  const filtered = useMemo(() => {
+    return data.filter((item) => {
+      const q = search.toLowerCase();
+      const matchesSearch =
+        !q ||
         item.transferNumber.toLowerCase().includes(q) ||
+        (item.requestRefCode && item.requestRefCode.toLowerCase().includes(q)) ||
         item.sourceHub.toLowerCase().includes(q) ||
-        item.destinationHub.toLowerCase().includes(q)
-      );
-    }
-    const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+        item.destinationHub.toLowerCase().includes(q) ||
+        (item.requestedBy && item.requestedBy.toLowerCase().includes(q));
+
+      const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [search, statusFilter, data]);
+
+  const generateNextTransferCode = () => {
+    const count = data.length + 501;
+    return `STX-2026-${count}`;
+  };
 
   const handleOpenCreate = () => {
     setModalMode('create');
@@ -58,174 +116,305 @@ export function StockTransferPage() {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    setEditingTransfer({
-      transferNumber: `STX-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
-      sourceHub: 'Main Flagship / HQ',
-      destinationHub: '',
-      dispatchDate: today,
-      estArrivalDate: tomorrow.toISOString().split('T')[0],
-      totalUnits: 0,
-      totalValuation: 0,
-      status: 'DRAFT',
-      logisticsPartner: 'Internal Express Fleet',
-      trackingRef: '',
-      requestedBy: 'System User',
-      approvedBy: '',
-      notes: '',
+    const defaultSource = branches.length > 0 ? branches[0].name : 'Chi nhánh Hà Nội (Kho chính)';
+    const defaultDest = branches.length > 1 ? branches[1].name : 'Chi nhánh TP. Hồ Chí Minh';
+    const defaultUser = currentUser?.name || (usersList.length > 0 ? (usersList[0].fullName || usersList[0].username) : 'System User');
+
+    setEditingHeader({
+      transferNumber: generateNextTransferCode(),
+      requestRefCode: 'STR-2026-001',
+      sourceHub: defaultSource,
+      destinationHub: defaultDest,
       priority: 'MEDIUM',
       reason: 'REBALANCE',
+      requestedBy: defaultUser,
+      dispatchDate: today,
+      estArrivalDate: tomorrow.toISOString().split('T')[0],
+      logisticsPartner: 'Nội bộ (Đội xe công ty)',
+      trackingRef: '',
+      notes: 'Phiếu thực hiện chuyển kho theo yêu cầu đã duyệt.',
+      status: StockTransferExecutionStatus.READY_TO_SHIP,
     });
+
+    const firstProduct = products.length > 0 ? products[0] : null;
+    setEditingLines([
+      {
+        id: `line-${Date.now()}`,
+        productName: firstProduct ? firstProduct.name : 'Nước giải khát Coca-Cola 330ml',
+        variant: firstProduct && firstProduct.variants && firstProduct.variants.length > 0 
+          ? `${firstProduct.variants[0].color || ''} ${firstProduct.variants[0].size || ''}`.trim() 
+          : 'Lon 330ml Original Taste',
+        sku: firstProduct ? firstProduct.sku : 'SKU-COCA-330ML',
+        requestedQuantity: 50,
+        quantity: 50,
+        receivedQuantity: 0,
+        unitPrice: firstProduct ? (firstProduct.costPrice || firstProduct.price || 20000) : 20000,
+        amount: firstProduct ? (firstProduct.costPrice || firstProduct.price || 20000) * 50 : 1000000,
+      },
+    ]);
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (transfer: StockTransferOrder) => {
     setModalMode('edit');
-    setEditingTransfer({
-      ...transfer,
-      priority: transfer.priority || 'MEDIUM',
-      reason: transfer.reason || 'REBALANCE',
-    });
+    setEditingHeader(transfer);
+    setEditingLines(transfer.items && transfer.items.length > 0 ? transfer.items : []);
     setIsModalOpen(true);
   };
 
-  const handleSaveTransfer = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingTransfer.transferNumber || !editingTransfer.destinationHub) return;
-
-    if (modalMode === 'create') {
-      const newTransfer: Omit<StockTransferOrder, 'id'> = {
-        transferNumber: editingTransfer.transferNumber,
-        sourceHub: editingTransfer.sourceHub || 'HQ',
-        destinationHub: editingTransfer.destinationHub,
-        dispatchDate: editingTransfer.dispatchDate || '',
-        estArrivalDate: editingTransfer.estArrivalDate || '',
-        totalUnits: Number(editingTransfer.totalUnits) || 0,
-        totalValuation: Number(editingTransfer.totalValuation) || 0,
-        status: editingTransfer.status as any || 'DRAFT',
-        logisticsPartner: editingTransfer.logisticsPartner || 'Internal',
-        trackingRef: editingTransfer.trackingRef || '',
-        requestedBy: editingTransfer.requestedBy || 'User',
-        approvedBy: editingTransfer.approvedBy || '',
-        notes: editingTransfer.notes || '',
-        priority: editingTransfer.priority || 'MEDIUM',
-        reason: editingTransfer.reason || 'REBALANCE',
-      };
-      addStockTransfer(newTransfer);
-      toast.success('Đã khởi tạo lệnh chuyển kho mới!');
-    } else if (editingTransfer.id) {
-      updateStockTransfer(editingTransfer.id, editingTransfer);
-      toast.success('Đã lưu cập nhật phiếu chuyển kho!');
-    }
-    setIsModalOpen(false);
+  const handleAddLineItem = () => {
+    const firstProduct = products.length > 0 ? products[0] : null;
+    const newLine: StockTransferItem = {
+      id: `line-${Date.now()}`,
+      productName: firstProduct ? firstProduct.name : 'Sản phẩm mới',
+      variant: firstProduct && firstProduct.variants && firstProduct.variants.length > 0 
+        ? `${firstProduct.variants[0].color || ''} ${firstProduct.variants[0].size || ''}`.trim() 
+        : 'Phiên bản chuẩn',
+      sku: firstProduct ? firstProduct.sku : `SKU-TR-${Math.floor(100 + Math.random() * 900)}`,
+      requestedQuantity: 10,
+      quantity: 10,
+      receivedQuantity: 0,
+      unitPrice: firstProduct ? (firstProduct.costPrice || firstProduct.price || 50000) : 50000,
+      amount: firstProduct ? (firstProduct.costPrice || firstProduct.price || 50000) * 10 : 500000,
+    };
+    setEditingLines((prev) => [...prev, newLine]);
   };
 
-  const handleDeleteConfirm = () => {
-    if (!deletingTransfer) return;
-    deleteStockTransfer(deletingTransfer.id);
-    toast.success('Đã hủy phiếu chuyển kho thành công.');
-    setDeletingTransfer(null);
+  const handleSelectProductForLine = (index: number, selectedProductId: string) => {
+    const p = products.find((prod) => String(prod.id) === selectedProductId);
+    if (!p) return;
+
+    setEditingLines((prev) => {
+      const next = [...prev];
+      const qty = Number(next[index].quantity || 1);
+      const price = Number(p.costPrice || p.price || 0);
+      next[index] = {
+        ...next[index],
+        productName: p.name,
+        sku: p.sku || next[index].sku,
+        variant: p.variants && p.variants.length > 0 
+          ? `${p.variants[0].color || ''} ${p.variants[0].size || ''}`.trim() 
+          : 'Mẫu tiêu chuẩn',
+        unitPrice: price,
+        amount: qty * price,
+      };
+      return next;
+    });
+  };
+
+  const handleUpdateLine = (index: number, field: keyof StockTransferItem, value: any) => {
+    setEditingLines((prev) => {
+      const next = [...prev];
+      const target = { ...next[index], [field]: value };
+      if (field === 'quantity' || field === 'unitPrice') {
+        const qty = Number(target.quantity || 0);
+        const price = Number(target.unitPrice || 0);
+        target.amount = qty * price;
+      }
+      next[index] = target;
+      return next;
+    });
+  };
+
+  const handleRemoveLine = (index: number) => {
+    setEditingLines((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const formTotals = useMemo(() => {
+    const totalVariants = editingLines.length;
+    const totalUnits = editingLines.reduce((acc, line) => acc + Number(line.quantity || 0), 0);
+    const totalValuation = editingLines.reduce((acc, line) => acc + Number(line.amount || 0), 0);
+    return { totalVariants, totalUnits, totalValuation };
+  }, [editingLines]);
+
+  const handleSaveTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingHeader.transferNumber || !editingHeader.sourceHub || !editingHeader.destinationHub) {
+      toast.error('Vui lòng điền đầy đủ Mã phiếu, Kho xuất và Kho nhận!');
+      return;
+    }
+
+    if (editingHeader.sourceHub === editingHeader.destinationHub) {
+      toast.error('Kho xuất và Kho nhận không được giống nhau!');
+      return;
+    }
+
+    const recordToSave: StockTransferOrder = {
+      id: editingHeader.id || String(Date.now()),
+      transferNumber: editingHeader.transferNumber || generateNextTransferCode(),
+      requestRefCode: editingHeader.requestRefCode || '',
+      sourceHub: editingHeader.sourceHub || 'Chi nhánh Hà Nội (Kho chính)',
+      destinationHub: editingHeader.destinationHub || 'Chi nhánh TP. Hồ Chí Minh',
+      dispatchDate: editingHeader.dispatchDate || new Date().toISOString().split('T')[0],
+      estArrivalDate: editingHeader.estArrivalDate || '',
+      totalUnits: formTotals.totalUnits,
+      totalValuation: formTotals.totalValuation,
+      status: editingHeader.status as any || StockTransferExecutionStatus.READY_TO_SHIP,
+      logisticsPartner: editingHeader.logisticsPartner || 'Nội bộ (Đội xe công ty)',
+      trackingRef: editingHeader.trackingRef || '',
+      requestedBy: editingHeader.requestedBy || currentUser?.name || 'System User',
+      approvedBy: editingHeader.approvedBy || '',
+      notes: editingHeader.notes || '',
+      items: editingLines,
+    };
+
+    try {
+      if (modalMode === 'create') {
+        await addStockTransfer(recordToSave);
+        toast.success(`Đã tạo Phiếu Chuyển Kho ${recordToSave.transferNumber}!`);
+      } else if (editingHeader.id) {
+        await updateStockTransfer(editingHeader.id, recordToSave);
+        toast.success(`Đã cập nhật Phiếu Chuyển Kho ${recordToSave.transferNumber}!`);
+      }
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error('API save stock transfer error:', err);
+      toast.error('Lỗi khi lưu phiếu chuyển kho.');
+    }
+  };
+
+  // Workflow Execution Steps with Tồn Kho Modification
+  const handleShipStock = async (item: StockTransferOrder) => {
+    try {
+      await shipStockTransfer(item.id);
+      toast.success(`ĐÃ XUẤT KHO NGUỒN! Đã trừ tồn kho tại ${item.sourceHub} và chuyển trạng thái Đang vận chuyển.`);
+      fetchStockTransfers();
+      if (selected?.id === item.id) {
+        setSelected({ ...item, status: 'IN_TRANSIT' });
+      }
+    } catch (err) {
+      console.error('API ship stock error:', err);
+      toast.error('Lỗi khi thực hiện xuất kho nguồn.');
+    }
+  };
+
+  const handleCompleteStock = async (item: StockTransferOrder) => {
+    try {
+      await completeStockTransfer(item.id, 'Đã nhận đủ hàng tại kho nhận');
+      toast.success(`ĐÃ NHẬP KHO ĐÍCH! Đã cộng tồn kho tại ${item.destinationHub} và ghi nhận StockLedger.`);
+      fetchStockTransfers();
+      if (selected?.id === item.id) {
+        setSelected({ ...item, status: 'COMPLETED' });
+      }
+    } catch (err) {
+      console.error('API complete stock error:', err);
+      toast.error('Lỗi khi thực hiện nhập kho đích.');
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (deletingId) {
+      try {
+        await deleteStockTransfer(deletingId);
+        toast.success('Đã xóa phiếu chuyển kho!');
+        setDeletingId(null);
+        if (selected?.id === deletingId) setSelected(null);
+      } catch (err) {
+        console.error('API delete stock transfer error:', err);
+        toast.error('Lỗi khi xóa phiếu chuyển kho.');
+      }
+    }
+  };
+
+  const formatCurrency = (val?: number) => {
+    return (val || 0).toLocaleString('vi-VN') + ' ₫';
   };
 
   const columns = useMemo<ColumnDef<StockTransferOrder>[]>(
     () => [
       {
         accessorKey: 'transferNumber',
-        header: 'Mã phiếu chuyển',
-        cell: (info) => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 hover:underline">{info.getValue() as string}</span>,
+        header: 'Mã phiếu xuất',
+        cell: (info) => (
+          <div>
+            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 text-xs block w-fit">
+              {info.getValue() as string}
+            </span>
+            {info.row.original.requestRefCode && (
+              <span className="text-[10px] text-gray-400 font-mono mt-0.5 block">
+                Từ YC: {info.row.original.requestRefCode}
+              </span>
+            )}
+          </div>
+        ),
       },
       {
         accessorKey: 'sourceHub',
-        header: 'Kho xuất',
-        cell: (info) => <span className="font-medium text-gray-905 dark:text-gray-150">{info.getValue() as string}</span>,
+        header: 'Kho xuất (Nguồn)',
+        cell: (info) => <span className="font-medium text-gray-900 dark:text-white text-xs">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'destinationHub',
-        header: 'Kho nhập',
-        cell: (info) => <span className="font-medium text-gray-905 dark:text-gray-150">{info.getValue() as string}</span>,
-      },
-      {
-        accessorKey: 'priority',
-        header: 'Độ ưu tiên',
-        cell: (info) => {
-          const val = info.getValue() as string;
-          let colorCls = 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50';
-          let label = 'Trung bình';
-          if (val === 'HIGH') {
-            colorCls = 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/50';
-            label = 'Cao';
-          } else if (val === 'LOW') {
-            colorCls = 'bg-gray-55 text-gray-600 border-gray-200 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-800';
-            label = 'Thấp';
-          }
-          return (
-            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${colorCls}`}>
-              <span className="w-1.5 h-1.5 rounded-full bg-current" />
-              {label}
-            </span>
-          );
-        }
+        header: 'Kho nhận (Đích)',
+        cell: (info) => <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-xs">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'totalUnits',
-        header: 'Số lượng',
-        cell: (info) => <span className="font-bold text-gray-900 dark:text-white">{info.getValue() as number} items</span>,
+        header: 'Số lượng thực xuất',
+        cell: ({ row }) => (
+          <div className="text-xs">
+            <span className="font-mono font-bold text-gray-900 dark:text-white">{row.original.totalUnits} sản phẩm</span>
+            <span className="text-[11px] text-gray-400 block font-semibold">
+              {row.original.items ? row.original.items.length : 1} variant
+            </span>
+          </div>
+        ),
       },
       {
         accessorKey: 'totalValuation',
         header: 'Tổng giá trị',
-        cell: (info) => <span className="font-bold text-emerald-600 dark:text-emerald-400">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(info.getValue() as number)}</span>,
+        cell: (info) => <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold text-sm">{formatCurrency(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'status',
         header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
-          const statusMap: Record<string, string> = {
-            DRAFT: 'Bản nháp',
-            PENDING_APPROVAL: 'Chờ duyệt',
-            IN_TRANSIT: 'Đang vận chuyển',
-            COMPLETED: 'Đã hoàn thành',
-            REJECTED: 'Từ chối',
-            DISCREPANCY_HELD: 'Sai lệch',
-            CANCELLED: 'Đã hủy',
-          };
-          let colorCls = 'bg-gray-100 text-gray-800';
-          if (status === 'COMPLETED') colorCls = 'bg-emerald-100 text-emerald-800 border-emerald-250';
-          else if (status === 'IN_TRANSIT') colorCls = 'bg-blue-100 text-blue-800 border-blue-250';
-          else if (status === 'PENDING_APPROVAL') colorCls = 'bg-amber-100 text-amber-800 border-amber-250';
-          else if (status === 'DISCREPANCY_HELD') colorCls = 'bg-rose-100 text-rose-800 border-rose-250';
-          else if (status === 'REJECTED' || status === 'CANCELLED') colorCls = 'bg-red-100 text-red-800 border-red-250';
-
-          return (
-            <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold border ${colorCls}`}>
-              {statusMap[status] || status}
-            </span>
-          );
+          const cfg = STATUS_MAP[status] || { label: status, cls: 'bg-gray-100 text-gray-800 border-gray-200' };
+          return <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold border ${cfg.cls}`}>{cfg.label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Thao tác',
+        header: 'Thao tác thực hiện',
         cell: ({ row }) => (
-          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-1">
             <button
-              onClick={() => setSelectedTransfer(row.original)}
-              className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem chi tiết"
+              onClick={(e) => { e.stopPropagation(); setSelected(row.original); }}
+              className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg transition-colors"
+              title="Xem chi tiết chứng từ"
             >
               <Eye className="w-4 h-4" />
             </button>
+            {row.original.status === StockTransferExecutionStatus.READY_TO_SHIP && (
+              <button
+                onClick={(e) => { e.stopPropagation(); handleShipStock(row.original); }}
+                className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-lg shadow-sm flex items-center gap-1"
+                title="Xuất kho nguồn (Trừ tồn nguồn)"
+              >
+                <Truck className="w-3.5 h-3.5" /> Xuất kho
+              </button>
+            )}
+            {row.original.status === StockTransferExecutionStatus.IN_TRANSIT && (
+              <button
+                onClick={(e) => { e.stopPropagation(); handleCompleteStock(row.original); }}
+                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg shadow-sm flex items-center gap-1"
+                title="Nhập kho đích (Cộng tồn đích)"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" /> Nhập kho
+              </button>
+            )}
             <button
-              onClick={() => handleOpenEdit(row.original)}
-              className="p-1 text-gray-500 hover:text-blue-600 rounded"
-              title="Sửa"
+              onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-lg transition-colors"
+              title="Chỉnh sửa phiếu"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setDeletingTransfer(row.original)}
-              className="p-1 text-gray-500 hover:text-red-600 rounded"
-              title="Hủy đơn"
+              onClick={(e) => { e.stopPropagation(); setDeletingId(row.original.id); }}
+              className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors"
+              title="Xóa phiếu"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -238,454 +427,598 @@ export function StockTransferPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <ArrowRightLeft className="w-6 h-6 text-emerald-600" />
-            Lệnh điều chuyển vị trí kho (Transfers)
+            <Truck className="text-emerald-600" /> Quản lý Phiếu Chuyển Kho Thực Hiện (Stock Transfer Execution)
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Điều động luân chuyển hàng hóa nội bộ giữa các bãi kho, chi nhánh hoặc khu vực lưu trữ.
+            Chứng từ thực hiện xuất kho nguồn (Trừ tồn `InventoryBalance` & ghi `StockLedger`) ➔ Vận chuyển ➔ Nhập kho đích.
           </p>
         </div>
-        <button
-          onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition font-semibold text-sm shadow-sm whitespace-nowrap self-start"
-        >
-          <Plus className="w-4 h-4" /> Tạo Yêu Cầu Chuyển Kho
-        </button>
-      </div>
-
-      <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="flex flex-col sm:flex-row items-center gap-3 mb-4">
-          <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-750 flex-1 w-full">
-            <Search className="w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm kiếm mã phiếu, kho xuất, kho nhập..."
-              className="bg-transparent outline-none text-xs text-gray-800 dark:text-gray-100 placeholder-gray-400 w-full"
-            />
-          </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-            >
-              <option value="all">Tất cả trạng thái</option>
-              <option value="DRAFT">Bản nháp</option>
-              <option value="PENDING_APPROVAL">Chờ duyệt</option>
-              <option value="IN_TRANSIT">Đang vận chuyển</option>
-              <option value="COMPLETED">Đã hoàn thành</option>
-              <option value="REJECTED">Từ chối</option>
-            </select>
-          </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleOpenCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all text-xs font-bold shadow-md cursor-pointer"
+          >
+            <Plus className="w-4 h-4" /> Lập Phiếu Chuyển Kho Mới
+          </button>
         </div>
-
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedTransfer(row)} />
       </div>
 
-      {/* Drawer Xem Chi Tiết */}
-      <Drawer
-        isOpen={!!selectedTransfer}
-        onClose={() => setSelectedTransfer(null)}
-        title={selectedTransfer ? `Lệnh điều chuyển: ${selectedTransfer.transferNumber}` : 'Chi tiết lệnh chuyển kho'}
-        width="max-w-lg"
+      {/* Filter / Search Bar */}
+      <div className="p-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex flex-col sm:flex-row items-center gap-3 justify-between">
+        <div className="flex items-center gap-3 w-full sm:w-2/3">
+          <Search className="w-4 h-4 text-gray-400 shrink-0" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm kiếm phiếu chuyển kho theo Mã phiếu, Yêu cầu liên kết, Kho xuất, Kho nhận..."
+            className="w-full bg-transparent outline-none text-xs text-gray-900 dark:text-white"
+          />
+        </div>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <span className="text-xs text-gray-400 whitespace-nowrap">Trạng thái:</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="p-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-semibold"
+          >
+            <option value="all">Tất cả trạng thái</option>
+            <option value={StockTransferExecutionStatus.READY_TO_SHIP}>Chờ xuất kho</option>
+            <option value={StockTransferExecutionStatus.IN_TRANSIT}>Đang vận chuyển (Đã xuất nguồn)</option>
+            <option value={StockTransferExecutionStatus.COMPLETED}>Đã hoàn thành (Đã nhập đích)</option>
+            <option value={StockTransferExecutionStatus.CANCELLED}>Đã hủy</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Data Table */}
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 shadow-sm">
+          <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-xs font-bold text-gray-500">Đang tải danh sách phiếu chuyển kho từ API...</span>
+        </div>
+      ) : (
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
+      )}
+
+      {/* ── Modal Xem Chi Tiết Phiếu Chuyển Kho Thực Hiện ──────────────────────── */}
+      <Modal
+        isOpen={!!selected}
+        onClose={() => setSelected(null)}
+        title={selected ? `Chứng Từ Chuyển Kho: ${selected.transferNumber}` : 'Chi Tiết Phiếu'}
+        width="max-w-3xl"
       >
-        {selectedTransfer && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold animate-pulse">
-                  <ArrowRightLeft className="w-5 h-5" />
+        {selected && (
+          <div className="space-y-6 text-xs text-gray-700 dark:text-gray-300">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-gray-800/60 border border-slate-200 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-extrabold text-sm text-emerald-600 dark:text-emerald-400">
+                  {selected.transferNumber}
+                </span>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${STATUS_MAP[selected.status]?.cls}`}>
+                  {STATUS_MAP[selected.status]?.label || selected.status}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {selected.status === StockTransferExecutionStatus.READY_TO_SHIP && (
+                  <button
+                    onClick={() => handleShipStock(selected)}
+                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs shadow-md flex items-center gap-1.5"
+                  >
+                    <Truck className="w-4 h-4" /> Xuất Kho Nguồn (Trừ Tồn Nguồn)
+                  </button>
+                )}
+                {selected.status === StockTransferExecutionStatus.IN_TRANSIT && (
+                  <button
+                    onClick={() => handleCompleteStock(selected)}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-md flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-4 h-4" /> Nhập Kho Đích (Cộng Tồn Đích)
+                  </button>
+                )}
+                <button
+                  onClick={() => toast.success(`Đang gửi lệnh in chứng từ ${selected.transferNumber}...`)}
+                  className="px-3 py-1.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1"
+                >
+                  <Printer className="w-3.5 h-3.5 text-emerald-600" /> In Chứng Từ
+                </button>
+              </div>
+            </div>
+
+            {/* 1. Header Information */}
+            <div>
+              <h4 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-[11px] mb-2.5 flex items-center gap-1.5">
+                <FileText className="w-4 h-4 text-emerald-600" /> 1. Thông tin chứng từ chuyển kho
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 bg-gray-50 dark:bg-gray-900/60 rounded-xl border border-gray-200 dark:border-gray-800">
+                <div>
+                  <span className="text-gray-400 text-[11px] block mb-0.5">Mã phiếu xuất</span>
+                  <span className="font-mono font-bold text-gray-900 dark:text-white">{selected.transferNumber}</span>
                 </div>
                 <div>
-                  <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">Trị giá luân chuyển</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(selectedTransfer.totalValuation)}</p>
+                  <span className="text-gray-400 text-[11px] block mb-0.5">Theo Yêu cầu số</span>
+                  <span className="font-mono font-bold text-amber-600 dark:text-amber-400">{selected.requestRefCode || 'Không có'}</span>
                 </div>
-              </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                selectedTransfer.status === 'COMPLETED' || selectedTransfer.status === 'RECEIVED' ? 'bg-emerald-250 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
-                selectedTransfer.status === 'IN_TRANSIT' || selectedTransfer.status === 'SHIPPED' ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100' :
-                selectedTransfer.status === 'PENDING_APPROVAL' ? 'bg-amber-250 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
-                selectedTransfer.status === 'APPROVED' ? 'bg-indigo-200 text-indigo-900 dark:bg-indigo-850 dark:text-indigo-100' :
-                'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
-              }`}>
-                {selectedTransfer.status === 'COMPLETED' || selectedTransfer.status === 'RECEIVED' ? 'ĐÃ HOÀN THÀNH' :
-                 selectedTransfer.status === 'IN_TRANSIT' || selectedTransfer.status === 'SHIPPED' ? 'ĐANG VẬN CHUYỂN' :
-                 selectedTransfer.status === 'PENDING_APPROVAL' ? 'CHỜ DUYỆT' :
-                 selectedTransfer.status === 'APPROVED' ? 'ĐÃ DUYỆT' : selectedTransfer.status}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Bãi kho xuất
+                <div>
+                  <span className="text-gray-400 text-[11px] block mb-0.5">Kho / Chi nhánh xuất</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">{selected.sourceHub}</span>
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedTransfer.sourceHub}</p>
-              </div>
-              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Building2 className="w-4 h-4 text-blue-500" /> Bãi kho đích
+                <div>
+                  <span className="text-gray-400 text-[11px] block mb-0.5">Kho / Chi nhánh nhận</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">{selected.destinationHub}</span>
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedTransfer.destinationHub}</p>
+                <div>
+                  <span className="text-gray-400 text-[11px] block mb-0.5">Ngày xuất hàng</span>
+                  <span className="font-mono text-gray-900 dark:text-white">{selected.dispatchDate}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-[11px] block mb-0.5">Người thực hiện xuất</span>
+                  <span className="font-medium text-gray-800 dark:text-gray-200">{selected.shippedBy || selected.requestedBy}</span>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 text-xs">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Độ ưu tiên:</span>
-                <span className={`font-bold ${selectedTransfer.priority === 'HIGH' ? 'text-red-600' : 'text-gray-800'}`}>
-                  {selectedTransfer.priority === 'HIGH' ? '🔴 Cao' : selectedTransfer.priority === 'LOW' ? '🔵 Thấp' : '🟡 Trung bình'}
-                </span>
+            {/* 2. Item details table with Shipped & Received Qty */}
+            <div>
+              <h4 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-[11px] mb-2.5 flex items-center gap-1.5">
+                <Package className="w-4 h-4 text-emerald-600" /> 2. Danh mục sản phẩm & Số lượng thực xuất / thực nhập
+              </h4>
+              <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100 dark:bg-gray-800/80 text-gray-600 dark:text-gray-300 text-[11px] font-bold uppercase tracking-wider">
+                      <th className="p-2.5 border-b">#</th>
+                      <th className="p-2.5 border-b">Sản phẩm</th>
+                      <th className="p-2.5 border-b">Variant / SKU</th>
+                      <th className="p-2.5 border-b text-right">SL Yêu cầu</th>
+                      <th className="p-2.5 border-b text-right">SL Thực xuất</th>
+                      <th className="p-2.5 border-b text-right">SL Thực nhận</th>
+                      <th className="p-2.5 border-b text-right">Đơn giá</th>
+                      <th className="p-2.5 border-b text-right">Thành tiền</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-xs">
+                    {(selected.items || []).map((item, idx) => (
+                      <tr key={item.id || idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/30">
+                        <td className="p-2.5 text-gray-400 font-mono">{idx + 1}</td>
+                        <td className="p-2.5 font-bold text-gray-900 dark:text-white">{item.productName}</td>
+                        <td className="p-2.5 font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                          <div>{item.variant}</div>
+                          <div className="text-[10px] text-gray-400">{item.sku}</div>
+                        </td>
+                        <td className="p-2.5 text-right font-mono text-gray-500 font-semibold">
+                          {item.requestedQuantity ?? item.quantity} sp
+                        </td>
+                        <td className="p-2.5 text-right font-mono font-bold text-blue-600 dark:text-blue-400">
+                          {item.quantity} sp
+                        </td>
+                        <td className="p-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                          {selected.status === 'COMPLETED' ? item.quantity : (item.receivedQuantity || 0)} sp
+                        </td>
+                        <td className="p-2.5 text-right font-mono text-gray-600 dark:text-gray-400">{formatCurrency(item.unitPrice)}</td>
+                        <td className="p-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(item.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Lý do điều chuyển:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">
-                  {selectedTransfer.reason === 'RESTOCK' ? 'Bổ sung tồn kho' :
-                   selectedTransfer.reason === 'REBALANCE' ? 'Điều chuyển nội bộ' :
-                   selectedTransfer.reason === 'PROMO' ? 'Chương trình khuyến mãi' :
-                   selectedTransfer.reason === 'LAYOUT_CHANGE' ? 'Thay đổi Layout' : 'Khác'}
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-sm border-t dark:border-gray-700 pt-2">
-                <span className="text-gray-500 dark:text-gray-400">Số lượng điều động:</span>
-                <span className="font-bold text-gray-900 dark:text-white">{selectedTransfer.totalUnits} sản phẩm</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Ngày xuất departure:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedTransfer.dispatchDate}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">ETA Dự kiến đến:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedTransfer.estArrivalDate}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Đơn vị vận chuyển:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">
-                  {selectedTransfer.logisticsPartner} {selectedTransfer.trackingRef && <span className="font-mono text-xs text-gray-500">({selectedTransfer.trackingRef})</span>}
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
-                <span className="text-gray-500 dark:text-gray-400">Nhân viên đề xuất:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedTransfer.requestedBy}</span>
-              </div>
-              {selectedTransfer.approvedBy && (
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">Quản trị duyệt:</span>
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">{selectedTransfer.approvedBy}</span>
-                </div>
-              )}
-
-              {selectedTransfer.notes && (
-                <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Ghi chú & Chỉ dẫn</span>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 italic">"{selectedTransfer.notes}"</p>
-                </div>
-              )}
             </div>
 
-            <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
-              {selectedTransfer.status === 'PENDING_APPROVAL' && (
-                <button
-                  onClick={async () => {
-                    try {
-                      await approveStockTransfer(selectedTransfer.id);
-                      setSelectedTransfer(prev => prev ? { ...prev, status: 'APPROVED' } : null);
-                      toast.success('Đã duyệt lệnh điều chuyển!');
-                    } catch (err) {
-                      toast.error('Lỗi khi duyệt lệnh điều chuyển');
-                    }
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
-                >
-                  <CheckCircle2 className="w-4 h-4" /> Phê duyệt lệnh xuất
-                </button>
-              )}
-              {selectedTransfer.status === 'APPROVED' && (
-                <button
-                  onClick={async () => {
-                    try {
-                      await shipStockTransfer(selectedTransfer.id);
-                      setSelectedTransfer(prev => prev ? { ...prev, status: 'SHIPPED' } : null);
-                      toast.success('Đã xuất kho và bắt đầu vận chuyển!');
-                    } catch (err) {
-                      toast.error('Lỗi khi xuất kho vận chuyển');
-                    }
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
-                >
-                  <Truck className="w-4 h-4" /> Bắt đầu xuất kho vận chuyển
-                </button>
-              )}
-              {(selectedTransfer.status === 'IN_TRANSIT' || selectedTransfer.status === 'SHIPPED') && (
-                <button
-                  onClick={async () => {
-                    try {
-                      await completeStockTransfer(selectedTransfer.id);
-                      setSelectedTransfer(prev => prev ? { ...prev, status: 'RECEIVED' } : null);
-                      toast.success('Đã xác nhận nhận hàng và nhập kho đích thành công!');
-                    } catch (err) {
-                      toast.error('Lỗi khi nhận hàng nhập kho');
-                    }
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
-                >
-                  <CheckCircle2 className="w-4 h-4" /> Xác nhận đã nhận hàng
-                </button>
-              )}
-              <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
-                <FileText className="w-4 h-4 inline mr-1" /> In phiếu bàn giao
+            {/* 3. Totals summary */}
+            <div className="grid grid-cols-3 gap-3 p-4 bg-emerald-50/70 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-900/50 text-center">
+              <div className="p-2 bg-white dark:bg-gray-900 rounded-lg border border-emerald-100 dark:border-emerald-800">
+                <span className="text-[11px] font-semibold text-gray-500 block uppercase">Tổng số variant</span>
+                <p className="text-lg font-bold text-gray-900 dark:text-white mt-0.5">
+                  {selected.items ? selected.items.length : 0} variant
+                </p>
+              </div>
+              <div className="p-2 bg-white dark:bg-gray-900 rounded-lg border border-emerald-100 dark:border-emerald-800">
+                <span className="text-[11px] font-semibold text-gray-500 block uppercase">Tổng số lượng thực xuất</span>
+                <p className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 font-mono">
+                  {selected.totalUnits} sản phẩm
+                </p>
+              </div>
+              <div className="p-2 bg-white dark:bg-gray-900 rounded-lg border border-emerald-100 dark:border-emerald-800">
+                <span className="text-[11px] font-semibold text-gray-500 block uppercase">Tổng giá trị xuất kho</span>
+                <p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5 font-mono">
+                  {formatCurrency(selected.totalValuation)}
+                </p>
+              </div>
+            </div>
+
+            {/* 4. Logistics */}
+            <div>
+              <h4 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-[11px] mb-2.5 flex items-center gap-1.5">
+                <Truck className="w-4 h-4 text-emerald-600" /> 3. Thông tin vận chuyển & Tracking
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-gray-50 dark:bg-gray-900/60 rounded-xl border border-gray-200 dark:border-gray-800">
+                <div>
+                  <span className="text-gray-400 text-[11px] block mb-0.5">Đối tác vận chuyển</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">{selected.logisticsPartner || 'Nội bộ'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-[11px] block mb-0.5">Mã vận đơn / Tracking</span>
+                  <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{selected.trackingRef || 'Không có'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-[11px] block mb-0.5">ETA nhận hàng</span>
+                  <span className="font-mono text-gray-900 dark:text-white">{selected.estArrivalDate || 'Chưa cập nhật'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-[11px] block mb-0.5">Trạng thái tồn kho</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                    {selected.status === 'COMPLETED' ? 'Đã tác động tồn kho' : 'Đang xử lý'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-gray-200 dark:border-gray-800">
+              <button
+                onClick={() => setSelected(null)}
+                className="px-5 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 font-bold rounded-xl text-xs"
+              >
+                Đóng Hộp Thoại
               </button>
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
-      {/* Form Modal (Góp ý 4 + 5) */}
+      {/* ── Modal Lập / Chỉnh sửa Phiếu Chuyển Kho Thực Hiện ──────────────────────── */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? '📦 Khởi tạo yêu cầu chuyển kho mới' : '⚙️ Cập nhật phiếu chuyển kho'}
-        width="max-w-2xl"
+        title={modalMode === 'create' ? 'Lập Phiếu Chuyển Kho Mới (Goods Transfer Note)' : 'Chỉnh Sửa Chứng Từ Chuyển Kho'}
+        width="max-w-3xl"
       >
-        <form onSubmit={handleSaveTransfer} className="space-y-4 text-xs">
-          
-          {/* Card 1: Thông tin chung */}
-          <div className="p-3 bg-gray-50/70 dark:bg-gray-900/30 rounded-xl border border-gray-200 dark:border-gray-800 space-y-3">
-            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-              <Info className="w-3.5 h-3.5 text-emerald-600" /> Thông tin chung phiếu điều động
+        <form onSubmit={handleSaveTransfer} className="space-y-5 text-xs">
+          <div className="space-y-3 p-4 bg-gray-50 dark:bg-gray-900/60 rounded-xl border border-gray-200 dark:border-gray-800">
+            <h4 className="font-bold text-gray-900 dark:text-white uppercase tracking-wider text-[11px] border-b pb-1">
+              1. Thông tin chứng từ chuyển kho
             </h4>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã phiếu (transfer number) *</label>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Mã phiếu xuất *</label>
                 <input
                   type="text"
-                  value={editingTransfer.transferNumber || ''}
-                  onChange={(e) => setEditingTransfer({ ...editingTransfer, transferNumber: e.target.value })}
-                  className="w-full mt-1 p-2 border rounded font-mono dark:bg-gray-950 dark:border-gray-700"
+                  value={editingHeader.transferNumber || ''}
+                  onChange={(e) => setEditingHeader({ ...editingHeader, transferNumber: e.target.value })}
                   required
+                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-mono font-bold text-emerald-600"
                 />
               </div>
+
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Nhân viên lên đơn</label>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Theo Yêu cầu số</label>
                 <input
                   type="text"
-                  value={editingTransfer.requestedBy || ''}
-                  onChange={(e) => setEditingTransfer({ ...editingTransfer, requestedBy: e.target.value })}
-                  className="w-full mt-1 p-2 border rounded dark:bg-gray-950 dark:border-gray-700"
+                  value={editingHeader.requestRefCode || ''}
+                  onChange={(e) => setEditingHeader({ ...editingHeader, requestRefCode: e.target.value })}
+                  placeholder="STR-2026-xxx"
+                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-mono font-bold text-amber-600"
                 />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Người lập phiếu *</label>
+                {usersList.length > 0 ? (
+                  <select
+                    value={editingHeader.requestedBy || currentUser?.name || ''}
+                    onChange={(e) => setEditingHeader({ ...editingHeader, requestedBy: e.target.value })}
+                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-medium"
+                  >
+                    {usersList.map((u) => (
+                      <option key={u.id} value={u.fullName || u.username}>
+                        {u.fullName || u.username} ({u.role || 'User'})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={editingHeader.requestedBy || currentUser?.name || 'System User'}
+                    onChange={(e) => setEditingHeader({ ...editingHeader, requestedBy: e.target.value })}
+                    required
+                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-medium"
+                  />
+                )}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Bãi kho xuất (Origin Hub) *</label>
-                <input
-                  type="text"
-                  value={editingTransfer.sourceHub || ''}
-                  onChange={(e) => setEditingTransfer({ ...editingTransfer, sourceHub: e.target.value })}
-                  className="w-full mt-1 p-2 border rounded dark:bg-gray-950 dark:border-gray-700"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Bãi kho đích (Destination Hub) *</label>
-                <input
-                  type="text"
-                  value={editingTransfer.destinationHub || ''}
-                  onChange={(e) => setEditingTransfer({ ...editingTransfer, destinationHub: e.target.value })}
-                  className="w-full mt-1 p-2 border rounded dark:bg-gray-950 dark:border-gray-700"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* WMS: Priority and Transfer Reason */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mức độ ưu tiên (Priority) *</label>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Kho / Chi nhánh xuất *</label>
                 <select
-                  value={editingTransfer.priority || 'MEDIUM'}
-                  onChange={(e) => setEditingTransfer({ ...editingTransfer, priority: e.target.value as any })}
-                  className="w-full mt-1 p-2 border rounded dark:bg-gray-950 dark:border-gray-700"
+                  value={editingHeader.sourceHub || ''}
+                  onChange={(e) => setEditingHeader({ ...editingHeader, sourceHub: e.target.value })}
+                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-bold text-gray-900 dark:text-white"
                 >
-                  <option value="HIGH">🔴 Cao (Xử lý gấp)</option>
-                  <option value="MEDIUM">🟡 Trung bình</option>
-                  <option value="LOW">🔵 Thấp (Bổ sung kho thường)</option>
+                  {branches.length > 0 ? (
+                    branches.map((b) => (
+                      <option key={b.id} value={b.name}>
+                        {b.name} ({b.branchCode})
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Chi nhánh Hà Nội (Kho chính)">Chi nhánh Hà Nội (Kho chính)</option>
+                      <option value="Tổng kho TP. Hồ Chí Minh">Tổng kho TP. Hồ Chí Minh</option>
+                      <option value="Chi nhánh Đà Nẵng">Chi nhánh Đà Nẵng</option>
+                    </>
+                  )}
                 </select>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Lý do điều chuyển hàng *</label>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Kho / Chi nhánh nhận *</label>
                 <select
-                  value={editingTransfer.reason || 'REBALANCE'}
-                  onChange={(e) => setEditingTransfer({ ...editingTransfer, reason: e.target.value as any })}
-                  className="w-full mt-1 p-2 border rounded dark:bg-gray-950 dark:border-gray-700"
+                  value={editingHeader.destinationHub || ''}
+                  onChange={(e) => setEditingHeader({ ...editingHeader, destinationHub: e.target.value })}
+                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-bold text-emerald-600 dark:text-emerald-400"
                 >
-                  <option value="RESTOCK">Bổ sung tồn kho</option>
-                  <option value="REBALANCE">Dịch chuyển layout / Nội bộ</option>
-                  <option value="PROMO">Phục vụ chương trình khuyến mãi</option>
-                  <option value="LAYOUT_CHANGE">Đổi sơ đồ kệ (Layout Change)</option>
-                  <option value="OTHER">Lý do khác</option>
+                  {branches.length > 0 ? (
+                    branches.map((b) => (
+                      <option key={b.id} value={b.name}>
+                        {b.name} ({b.branchCode})
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Chi nhánh TP. Hồ Chí Minh">Chi nhánh TP. Hồ Chí Minh</option>
+                      <option value="Chi nhánh Hà Nội (Kho chính)">Chi nhánh Hà Nội (Kho chính)</option>
+                      <option value="Chi nhánh Đà Nẵng">Chi nhánh Đà Nẵng</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Trạng thái xử lý</label>
+                <select
+                  value={editingHeader.status || StockTransferExecutionStatus.READY_TO_SHIP}
+                  onChange={(e) => setEditingHeader({ ...editingHeader, status: e.target.value as StockTransferExecutionStatus })}
+                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-bold"
+                >
+                  <option value={StockTransferExecutionStatus.READY_TO_SHIP}>Chờ xuất kho</option>
+                  <option value={StockTransferExecutionStatus.IN_TRANSIT}>Đang vận chuyển (Đã xuất nguồn)</option>
+                  <option value={StockTransferExecutionStatus.COMPLETED}>Đã hoàn thành (Đã nhập đích)</option>
+                  <option value={StockTransferExecutionStatus.CANCELLED}>Đã hủy</option>
                 </select>
               </div>
             </div>
           </div>
 
-          {/* Card 2: Logistics */}
-          <div className="p-3 bg-gray-50/70 dark:bg-gray-900/30 rounded-xl border border-gray-200 dark:border-gray-800 space-y-3">
-            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Truck className="w-3.5 h-3.5 text-blue-500" /> Logistics & Đội vận chuyển
-            </h4>
+          {/* Section 2: Items list */}
+          <div className="space-y-3 p-4 bg-gray-50 dark:bg-gray-900/60 rounded-xl border border-gray-200 dark:border-gray-800">
+            <div className="flex items-center justify-between border-b pb-2">
+              <h4 className="font-bold text-gray-900 dark:text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <Package className="w-4 h-4 text-emerald-600" /> 2. Chi tiết mặt hàng xuất chuyển kho
+              </h4>
+              <button
+                type="button"
+                onClick={handleAddLineItem}
+                className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-sm cursor-pointer"
+              >
+                <PlusCircle className="w-3.5 h-3.5" /> Thêm sản phẩm
+              </button>
+            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="text-gray-500 text-[10px] font-bold uppercase tracking-wider border-b">
+                    <th className="pb-1 w-48">Sản phẩm</th>
+                    <th className="pb-1 w-32">Variant / SKU</th>
+                    <th className="pb-1 text-right w-24">SL Yêu cầu</th>
+                    <th className="pb-1 text-right w-24">SL Thực xuất *</th>
+                    <th className="pb-1 text-right w-28">Đơn giá (đ)</th>
+                    <th className="pb-1 text-right w-32">Thành tiền (đ)</th>
+                    <th className="pb-1 w-8 text-center"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                  {editingLines.map((line, idx) => (
+                    <tr key={line.id || idx}>
+                      <td className="py-2 pr-2">
+                        {products.length > 0 ? (
+                          <select
+                            value={products.find((p) => p.name === line.productName)?.id || ''}
+                            onChange={(e) => handleSelectProductForLine(idx, e.target.value)}
+                            className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-bold text-gray-900 dark:text-white"
+                          >
+                            <option value="">-- Chọn sản phẩm --</option>
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} ({p.sku})
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={line.productName}
+                            onChange={(e) => handleUpdateLine(idx, 'productName', e.target.value)}
+                            className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-bold"
+                            placeholder="Tên sản phẩm"
+                            required
+                          />
+                        )}
+                      </td>
+                      <td className="py-2 pr-2">
+                        <input
+                          type="text"
+                          value={line.variant}
+                          onChange={(e) => handleUpdateLine(idx, 'variant', e.target.value)}
+                          className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs text-emerald-600 font-semibold mb-1"
+                          placeholder="Variant"
+                          required
+                        />
+                        <input
+                          type="text"
+                          value={line.sku}
+                          onChange={(e) => handleUpdateLine(idx, 'sku', e.target.value)}
+                          className="w-full p-1 bg-white dark:bg-gray-800 border rounded text-[10px] font-mono text-gray-500"
+                          placeholder="SKU"
+                        />
+                      </td>
+                      <td className="py-2 pr-2 text-right font-mono text-gray-500 font-semibold">
+                        {line.requestedQuantity ?? line.quantity}
+                      </td>
+                      <td className="py-2 pr-2">
+                        <input
+                          type="number"
+                          min={1}
+                          value={line.quantity}
+                          onChange={(e) => handleUpdateLine(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                          className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-mono font-bold text-right"
+                          required
+                        />
+                      </td>
+                      <td className="py-2 pr-2">
+                        <input
+                          type="number"
+                          min={0}
+                          step={1000}
+                          value={line.unitPrice}
+                          onChange={(e) => handleUpdateLine(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-mono text-right"
+                          required
+                        />
+                      </td>
+                      <td className="py-2 text-right font-mono font-bold text-emerald-600">
+                        {formatCurrency(line.amount)}
+                      </td>
+                      <td className="py-2 text-center">
+                        {editingLines.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveLine(idx)}
+                            className="p-1 text-gray-400 hover:text-rose-600 rounded"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 p-3 bg-emerald-50/70 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-900/50 text-center">
+              <div className="p-2 bg-white dark:bg-gray-900 rounded-lg border border-emerald-100 dark:border-emerald-800">
+                <span className="text-[11px] font-semibold text-gray-500 block uppercase">Tổng số variant</span>
+                <p className="text-base font-bold text-gray-900 dark:text-white mt-0.5">
+                  {formTotals.totalVariants} variant
+                </p>
+              </div>
+              <div className="p-2 bg-white dark:bg-gray-900 rounded-lg border border-emerald-100 dark:border-emerald-800">
+                <span className="text-[11px] font-semibold text-gray-500 block uppercase">Tổng số lượng thực xuất</span>
+                <p className="text-base font-bold text-gray-900 dark:text-white mt-0.5 font-mono">
+                  {formTotals.totalUnits} sản phẩm
+                </p>
+              </div>
+              <div className="p-2 bg-white dark:bg-gray-900 rounded-lg border border-emerald-100 dark:border-emerald-800">
+                <span className="text-[11px] font-semibold text-gray-500 block uppercase">Tổng giá trị xuất kho</span>
+                <p className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5 font-mono">
+                  {formatCurrency(formTotals.totalValuation)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Logistics */}
+          <div className="space-y-3 p-4 bg-gray-50 dark:bg-gray-900/60 rounded-xl border border-gray-200 dark:border-gray-800">
+            <h4 className="font-bold text-gray-900 dark:text-white uppercase tracking-wider text-[11px] border-b pb-1">
+              3. Vận chuyển & Tracking (Optional)
+            </h4>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Ngày xuất bãi</label>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Đối tác vận chuyển</label>
+                <input
+                  type="text"
+                  value={editingHeader.logisticsPartner || ''}
+                  onChange={(e) => setEditingHeader({ ...editingHeader, logisticsPartner: e.target.value })}
+                  placeholder="Nội bộ / Viettel Post..."
+                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Mã vận đơn / Tracking</label>
+                <input
+                  type="text"
+                  value={editingHeader.trackingRef || ''}
+                  onChange={(e) => setEditingHeader({ ...editingHeader, trackingRef: e.target.value })}
+                  placeholder="Nhập mã vận đơn..."
+                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-mono text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Ngày xuất kho</label>
                 <input
                   type="date"
-                  value={editingTransfer.dispatchDate || ''}
-                  onChange={(e) => setEditingTransfer({ ...editingTransfer, dispatchDate: e.target.value })}
-                  className="w-full mt-1 p-2 border rounded dark:bg-gray-950 dark:border-gray-700"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Ngày đến dự kiến (ETA)</label>
-                <input
-                  type="date"
-                  value={editingTransfer.estArrivalDate || ''}
-                  onChange={(e) => setEditingTransfer({ ...editingTransfer, estArrivalDate: e.target.value })}
-                  className="w-full mt-1 p-2 border rounded dark:bg-gray-950 dark:border-gray-700"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Đối tác vận chuyển</label>
-                <input
-                  type="text"
-                  value={editingTransfer.logisticsPartner || ''}
-                  onChange={(e) => setEditingTransfer({ ...editingTransfer, logisticsPartner: e.target.value })}
-                  placeholder="Ví dụ: Internal Express Fleet..."
-                  className="w-full mt-1 p-2 border rounded dark:bg-gray-950 dark:border-gray-700"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã vận đơn / Tracking Ref</label>
-                <input
-                  type="text"
-                  value={editingTransfer.trackingRef || ''}
-                  onChange={(e) => setEditingTransfer({ ...editingTransfer, trackingRef: e.target.value })}
-                  placeholder="Ví dụ: FLT-XXXX"
-                  className="w-full mt-1 p-2 border rounded font-mono dark:bg-gray-950 dark:border-gray-700"
+                  value={editingHeader.dispatchDate || ''}
+                  onChange={(e) => setEditingHeader({ ...editingHeader, dispatchDate: e.target.value })}
+                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
                 />
               </div>
             </div>
           </div>
 
-          {/* Card 3: Chi tiết hàng & Ghi chú */}
-          <div className="p-3 bg-gray-50/70 dark:bg-gray-900/30 rounded-xl border border-gray-200 dark:border-gray-800 space-y-3">
-            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-amber-500" /> Số lượng hàng hóa & Trạng thái duyệt
-            </h4>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Số lượng chuyển</label>
-                <input
-                  type="number"
-                  value={editingTransfer.totalUnits || 0}
-                  onChange={(e) => setEditingTransfer({ ...editingTransfer, totalUnits: parseInt(e.target.value) || 0 })}
-                  className="w-full mt-1 p-2 border rounded font-mono dark:bg-gray-950 dark:border-gray-700"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Tổng trị giá (VNĐ)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={editingTransfer.totalValuation || 0}
-                  onChange={(e) => setEditingTransfer({ ...editingTransfer, totalValuation: parseFloat(e.target.value) || 0 })}
-                  className="w-full mt-1 p-2 border rounded font-mono dark:bg-gray-950 dark:border-gray-700"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Trạng thái luân chuyển *</label>
-                <select
-                  value={editingTransfer.status || 'DRAFT'}
-                  onChange={(e) => setEditingTransfer({ ...editingTransfer, status: e.target.value as any })}
-                  className="w-full mt-1 p-2 border rounded dark:bg-gray-950 dark:border-gray-700 font-semibold"
-                >
-                  <option value="DRAFT">Bản nháp (Draft)</option>
-                  <option value="PENDING_APPROVAL">Chờ duyệt xuất</option>
-                  <option value="IN_TRANSIT">Đang vận chuyển</option>
-                  <option value="COMPLETED">Đã hoàn thành</option>
-                  <option value="REJECTED">Từ chối (Rejected)</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ghi chú & Chỉ dẫn xếp dỡ</label>
-              <textarea
-                rows={2}
-                value={editingTransfer.notes || ''}
-                onChange={(e) => setEditingTransfer({ ...editingTransfer, notes: e.target.value })}
-                className="w-full p-2 border rounded dark:bg-gray-950 dark:border-gray-700 text-xs resize-none"
-                placeholder="Ví dụ: Hàng dễ vỡ, giữ thăng bằng..."
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-800">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors text-sm"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-xs font-semibold"
             >
-              Hủy bỏ
+              Hủy
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
+              className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-md cursor-pointer"
             >
-              {modalMode === 'create' ? 'Tạo phiếu' : 'Lưu cập nhật'}
+              Lưu Phiếu Chuyển Kho
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* Delete Confirmation */}
+      {/* Delete confirmation modal */}
       <Modal
-        isOpen={!!deletingTransfer}
-        onClose={() => setDeletingTransfer(null)}
-        title="Xác nhận hủy Phiếu Chuyển Kho"
+        isOpen={!!deletingId}
+        onClose={() => setDeletingId(null)}
+        title="Xác nhận xóa phiếu chuyển kho"
         isDestructive
         width="max-w-md"
       >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-300">
-            Bạn có chắc chắn muốn hủy / xóa lệnh chuyển kho <strong className="text-gray-900 dark:text-white">{deletingTransfer?.transferNumber}</strong> không? Cảnh báo: Các mặt hàng sẽ được trả lại kho xuất.
+        <div className="space-y-4 text-xs">
+          <p className="text-gray-700 dark:text-gray-300">
+            Bạn có chắc chắn muốn xóa phiếu chuyển kho này?
           </p>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
-              onClick={() => setDeletingTransfer(null)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors text-sm"
+              onClick={() => setDeletingId(null)}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
             >
-              Hủy bỏ
+              Hủy
             </button>
             <button
               type="button"
               onClick={handleDeleteConfirm}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
+              className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 cursor-pointer"
             >
-              Đồng ý xóa
+              Xóa phiếu
             </button>
           </div>
         </div>
@@ -693,4 +1026,3 @@ export function StockTransferPage() {
     </div>
   );
 }
-export default StockTransferPage;

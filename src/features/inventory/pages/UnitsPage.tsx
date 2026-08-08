@@ -1,8 +1,7 @@
-import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Eye, Scale, CheckCircle2, Sliders, Edit, Trash2, X } from 'lucide-react';
-import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { useMemo, useState, useEffect } from 'react';
+import { Plus, Download, Search, Eye, Scale, Edit, Trash2, X } from 'lucide-react';
+import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type UnitOfMeasure } from '@/features/inventory/store/inventoryStore';
 
@@ -31,7 +30,6 @@ export function UnitsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Gọi fetchUnits lần đầu, kiểm tra xem statusFilter có cần lấy cả Đã xóa không
     fetchUnits(statusFilter === 'all' || statusFilter === 'DELETED');
   }, [fetchUnits, statusFilter]);
 
@@ -51,7 +49,7 @@ export function UnitsPage() {
       });
     } else if (editingId) {
       updateUnit(editingId, {
-        code: unitCode,          // BẮT BUỘC — backend @NotBlank unitCode
+        code: unitCode,
         unitName,
         type: unitType,
         conversionFactor,
@@ -65,7 +63,6 @@ export function UnitsPage() {
   };
 
   const filtered = unitsList.filter((item) => {
-    // 1. Text search
     let matchesSearch = true;
     const q = search.toLowerCase();
     if (q) {
@@ -75,10 +72,7 @@ export function UnitsPage() {
         item.type.toLowerCase().includes(q)
       );
     }
-
-    // 2. Status filter
     const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-
     return matchesSearch && matchesStatus;
   });
 
@@ -97,7 +91,20 @@ export function UnitsPage() {
       {
         accessorKey: 'type',
         header: 'Loại đo lường',
-        cell: (info) => <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded font-semibold">{String(info.getValue())}</span>,
+        cell: (info) => {
+          const typeVal = String(info.getValue());
+          const typeMap: Record<string, string> = {
+            QUANTITY: 'Số lượng',
+            WEIGHT: 'Trọng lượng',
+            VOLUME: 'Thể tích',
+            LENGTH: 'Chiều dài',
+          };
+          return (
+            <span className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-md font-semibold">
+              {typeMap[typeVal] || typeVal}
+            </span>
+          );
+        },
       },
       {
         accessorKey: 'conversionFactor',
@@ -117,14 +124,14 @@ export function UnitsPage() {
         accessorKey: 'status',
         header: 'Trạng thái',
         cell: (info) => {
-          const status = info.getValue() as string;
+          const s = info.getValue() as string;
           return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-              status === 'ACTIVE'     ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
-              status === 'DEPRECATED' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' :
-                                        'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 line-through'
+              s === 'ACTIVE'     ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
+              s === 'DEPRECATED' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' :
+                                   'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 line-through'
             }`}>
-              {status === 'ACTIVE' ? 'Hoạt động' : status === 'DEPRECATED' ? 'Đã ngưng' : 'Đã xóa'}
+              {s === 'ACTIVE' ? 'Hoạt động' : s === 'DEPRECATED' ? 'Đã ngưng' : 'Đã xóa'}
             </span>
           );
         },
@@ -144,7 +151,6 @@ export function UnitsPage() {
               >
                 <Eye className="w-4 h-4" />
               </button>
-              {/* Nút Sửa — ẩn khi đã xóa */}
               {!isDeleted && (
                 <button
                   onClick={(e) => {
@@ -167,16 +173,12 @@ export function UnitsPage() {
                   <Edit className="w-4 h-4" />
                 </button>
               )}
-              {/* Nút Xóa:
-                  - Ẩn nếu đã xóa rồi
-                  - Disable nếu đang ACTIVE (phải tắt hoạt động trước)
-              */}
               {!isDeleted && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     if (isActive) {
-                      alert(`❌ Không thể xóa đơn vị "'${row.original.code}'" vì đang HOẠT ĐỘNG.\n\nVui lòng tắt hoạt động trước khi xóa.`);
+                      alert(`❌ Không thể xóa đơn vị "${row.original.code}" vì đang HOẠT ĐỘNG.\n\nVui lòng tắt hoạt động trước khi xóa.`);
                       return;
                     }
                     setDeletingUnit(row.original);
@@ -209,7 +211,7 @@ export function UnitsPage() {
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Xuất dữ liệu
+              <Download className="w-4 h-4" /> Xuất Dữ Liệu
             </button>
             <button
               onClick={() => {
@@ -248,7 +250,6 @@ export function UnitsPage() {
             </div>
           </div>
 
-          {/* Quick Filters Row */}
           <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700/60">
             <div className="flex items-center gap-1.5 text-xs">
               <span className="text-gray-500 font-medium">Trạng thái đơn vị:</span>
@@ -257,8 +258,6 @@ export function UnitsPage() {
                 onChange={(e) => {
                   const val = e.target.value;
                   setStatusFilter(val);
-                  // Nếu chọn "Tất cả" hoặc "Đã xóa" → gọi fetchUnits(true) để lấy cả đã xóa từ backend
-                  // Nếu chọn "ACTIVE" hoặc "DEPRECATED" → gọi fetchUnits(false)
                   fetchUnits(val === 'all' || val === 'DELETED');
                 }}
                 className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs cursor-pointer"
@@ -284,10 +283,10 @@ export function UnitsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedUnit(row)} />
       </div>
 
-      <Drawer
+      <Modal
         isOpen={!!selectedUnit}
         onClose={() => setSelectedUnit(null)}
-        title={selectedUnit ? `Unit Spec: ${selectedUnit.code}` : 'Unit Details'}
+        title={selectedUnit ? `Chi tiết đơn vị: ${selectedUnit.code}` : 'Thông tin đơn vị tính'}
         width="max-w-lg"
       >
         {selectedUnit && (
@@ -298,104 +297,62 @@ export function UnitsPage() {
                   <Scale className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">{selectedUnit.type} Unit</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">{selectedUnit.unitName}</p>
+                  <h3 className="font-bold text-gray-900 dark:text-white text-base">{selectedUnit.unitName}</h3>
+                  <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-bold">{selectedUnit.code}</span>
                 </div>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                selectedUnit.status === 'ACTIVE' ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
-                'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100'
+              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                selectedUnit.status === 'ACTIVE'     ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
+                selectedUnit.status === 'DEPRECATED' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' :
+                                                      'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
               }`}>
-                {selectedUnit.status}
+                {selectedUnit.status === 'ACTIVE' ? 'Đang hoạt động' : selectedUnit.status === 'DEPRECATED' ? 'Ngưng sử dụng' : 'Đã xóa'}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Sliders className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Conversion Ratio
-                </div>
-                <p className="text-base font-mono font-bold text-gray-900 dark:text-white truncate">
-                  {selectedUnit.conversionFactor} × {selectedUnit.baseUnitCode}
-                </p>
+              <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                <span className="text-xs text-gray-500 block mb-1">Loại đo lường</span>
+                <span className="font-semibold text-gray-900 dark:text-white text-sm">{selectedUnit.type}</span>
               </div>
-              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  Decimal Precision
-                </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedUnit.precisionDecimals} decimal places</p>
+              <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                <span className="text-xs text-gray-500 block mb-1">Hệ số quy đổi cơ bản</span>
+                <span className="font-semibold text-gray-900 dark:text-white text-sm font-mono">{selectedUnit.conversionFactor} × {selectedUnit.baseUnitCode}</span>
               </div>
-            </div>
-
-            <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Assigned SKU Inventory:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedUnit.assignedSkusCount} products</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Base Anchor Unit:</span>
-                <span className="font-mono font-semibold text-gray-900 dark:text-white">{selectedUnit.baseUnitCode}</span>
-              </div>
-
-              {selectedUnit.notes && (
-                <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Counting Rules & Notes</span>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedUnit.notes}</p>
-                </div>
-              )}
-            </div>
-
-            <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
-              {selectedUnit.status !== 'ACTIVE' && (
-                <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                  <CheckCircle2 className="w-4 h-4" /> Restore Active Unit
-                </button>
-              )}
-              <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm w-full">
-                View SKU Usage Matrix
-              </button>
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
-      {/* Modal Thêm / Sửa Đơn vị */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm đơn vị đo lường mới' : 'Cập nhật đơn vị đo lường'}
-        size="erp"
+        title={modalMode === 'create' ? 'Đăng ký Đơn vị Đo lường mới' : `Chỉnh sửa Đơn vị: ${unitCode}`}
+        width="max-w-2xl"
       >
-        <form onSubmit={handleSave}>
-          <div className="erp-form-body">
-
-            {/* Section 1: Định danh */}
+        <form onSubmit={handleSave} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="erp-form-section space-y-4">
               <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Định danh đơn vị</h3>
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Mã đơn vị <span className="text-red-500">*</span>
-                </label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã đơn vị *</label>
                 <input
                   type="text"
                   value={unitCode}
                   onChange={(e) => setUnitCode(e.target.value.toUpperCase())}
-                  placeholder="VD: PCS, BOX, KG"
-                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 text-sm font-mono font-bold"
-                  disabled={modalMode === 'edit'}
+                  placeholder="VD: CAI, THUNG, HOP, KG"
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Tên đơn vị <span className="text-red-500">*</span>
-                </label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên đơn vị *</label>
                 <input
                   type="text"
                   value={unitName}
                   onChange={(e) => setUnitName(e.target.value)}
-                  placeholder="VD: cái, hộp, kilogam"
-                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 text-sm"
+                  placeholder="VD: Cái, Thùng, Hộp, Kilogram"
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
                   required
                 />
               </div>
@@ -404,50 +361,29 @@ export function UnitsPage() {
                 <select
                   value={unitType}
                   onChange={(e) => setUnitType(e.target.value as UnitOfMeasure['type'])}
-                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 text-sm"
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
                 >
-                  <option value="QUANTITY">Đếm số lượng (QUANTITY)</option>
-                  <option value="WEIGHT">Trọng lượng (WEIGHT)</option>
-                  <option value="VOLUME">Thể tích (VOLUME)</option>
-                  <option value="DIMENSION">Kích thước (DIMENSION)</option>
-                  <option value="PACKAGING">Đóng gói (PACKAGING)</option>
+                  <option value="QUANTITY">Số lượng</option>
+                  <option value="WEIGHT">Trọng lượng</option>
+                  <option value="VOLUME">Thể tích</option>
+                  <option value="LENGTH">Chiều dài / Kích thước</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as UnitOfMeasure['status'])}
-                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 text-sm"
-                >
-                  <option value="ACTIVE">Hoạt động (ACTIVE)</option>
-                  <option value="DEPRECATED">Ngưng sử dụng (DEPRECATED)</option>
-                </select>
-              </div>
+
             </div>
 
-            {/* Section 2: Quy đổi */}
             <div className="erp-form-section space-y-4">
-              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Quy đổi & Độ chính xác</h3>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Quy tắc quy đổi</h3>
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tỷ lệ quy đổi</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hệ số quy đổi *</label>
                 <input
                   type="number"
                   step="any"
-                  min={0}
+                  min="0.000001"
                   value={conversionFactor}
                   onChange={(e) => setConversionFactor(parseFloat(e.target.value) || 1)}
-                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 text-sm font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã đơn vị cơ bản</label>
-                <input
-                  type="text"
-                  value={baseUnitCode}
-                  onChange={(e) => setBaseUnitCode(e.target.value.toUpperCase())}
-                  placeholder="Mặc định là chính nó"
-                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 text-sm font-mono"
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  required
                 />
               </div>
               <div>
@@ -462,25 +398,9 @@ export function UnitsPage() {
                 />
               </div>
             </div>
-
-            {/* Section 3: Ghi chú */}
-            <div className="erp-form-section space-y-4">
-              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Ghi chú & Mô tả</h3>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú / Quy tắc quy đổi</label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Mô tả đơn vị, quy tắc kiểm đếm, điều kiện áp dụng..."
-                  rows={8}
-                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 text-sm resize-none"
-                />
-              </div>
-            </div>
-
           </div>
 
-          <div className="erp-form-footer border-t border-gray-200 dark:border-gray-700 pt-4">
+          <div className="erp-form-footer border-t border-gray-200 dark:border-gray-700 pt-4 flex justify-end gap-3">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
@@ -492,13 +412,12 @@ export function UnitsPage() {
               type="submit"
               className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
             >
-              {modalMode === 'create' ? 'Tạo mới' : 'Cập nhật'}
+              {modalMode === 'create' ? 'Tạo Mới' : 'Cập nhật'}
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* Modal Xác nhận Xóa */}
       <Modal
         isOpen={!!deletingUnit}
         onClose={() => setDeletingUnit(null)}
@@ -509,9 +428,6 @@ export function UnitsPage() {
         <div className="space-y-4">
           <p className="text-sm text-gray-600 dark:text-gray-300">
             Bạn có chắc chắn muốn xóa đơn vị đo lường <strong className="text-gray-900 dark:text-white">{deletingUnit?.unitName} ({deletingUnit?.code})</strong>?
-          </p>
-          <p className="text-xs text-red-500 dark:text-red-400 font-semibold bg-red-50 dark:bg-red-950/30 p-3 rounded-lg border border-red-200 dark:border-red-900">
-            Cảnh báo: Hành động này không thể hoàn tác và có thể ảnh hưởng đến các sản phẩm đang liên kết với đơn vị này.
           </p>
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700/50">
             <button

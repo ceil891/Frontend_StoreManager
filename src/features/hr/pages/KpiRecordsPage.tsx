@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Download, Eye, Edit, TrendingUp, TrendingDown } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useHrStore } from '../store/hrStore';
@@ -98,7 +97,6 @@ export function KpiRecordsPage() {
           </div>
         </div>
 
-        {/* Tổng quan xếp loại */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {Object.entries(ratingCfg).map(([k, v]) => {
             const count = data.filter((d) => d.rating === k).length;
@@ -115,7 +113,7 @@ export function KpiRecordsPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)}/>
       </div>
 
-      <Drawer isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`KPI: ${selected.userName}`:''}>
+      <Modal isOpen={!!selected} onClose={()=>setSelected(null)} title={selected?`KPI: ${selected.userName}`:''} width="max-w-lg">
         {selected&&(
           <div className="space-y-4">
             <div className={`p-4 rounded-xl border ${ratingCfg[selected.rating]?.cls.includes('purple')?'bg-purple-50 dark:bg-purple-900/20 border-purple-200':'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200'}`}>
@@ -140,7 +138,7 @@ export function KpiRecordsPage() {
             </div>
           </div>
         )}
-      </Drawer>
+      </Modal>
 
       <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title="Chấm điểm KPI nhân viên" width="max-w-lg">
         <form onSubmit={handleSave} className="space-y-4">
