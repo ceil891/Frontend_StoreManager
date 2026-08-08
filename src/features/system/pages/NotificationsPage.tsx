@@ -471,7 +471,7 @@ export function NotificationsPage() {
       <Modal
         isOpen={formOpen}
         onClose={() => setFormOpen(false)}
-        title={formMode === 'create' ? 'Tạo mới luật gửi thông báo cảnh báo' : 'Sửa đổi cấu trúc cảnh báo tự động'}
+        title={formMode === 'create' ? 'Tạo Mới luật gửi thông báo cảnh báo' : 'Sửa đổi cấu trúc cảnh báo tự động'}
         width="max-w-lg"
       >
         <form onSubmit={handleSave} className="space-y-5">

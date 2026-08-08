@@ -331,7 +331,7 @@ export function PermissionsPage() {
               type="submit"
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              {modalMode === 'create' ? 'Tạo mới' : 'Lưu cập nhật'}
+              {modalMode === 'create' ? 'Tạo Mới' : 'Lưu cập nhật'}
             </button>
           </div>
         </form>

@@ -198,7 +198,8 @@ export function PurchaseOrdersPage() {
           paymentStatus: editingPO.paymentStatus as any || 'UNPAID',
           orderedBy: editingPO.orderedBy || 'Admin User',
           itemsCount: Number(editingPO.itemsCount) || 1,
-          notes: editingPO.notes || ''
+          notes: editingPO.notes || '',
+          poLines: editingPO.poLines
         };
         await addPurchaseOrder(newPO);
         toast.success('Đã tạo đơn mua hàng thành công');
@@ -206,21 +207,30 @@ export function PurchaseOrdersPage() {
         await updatePurchaseOrder(editingPO.id, editingPO);
         toast.success('Đã cập nhật đơn mua hàng');
       }
+      fetchPurchaseOrders();
       setIsModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lưu đơn mua hàng thất bại');
+      toast.error(err?.message || 'Lưu đơn mua hàng thất bại');
     }
   };
 
   const handleDeleteConfirm = async () => {
     if (!deletingPO) return;
+
+    if (deletingPO.status === 'APPROVED' || deletingPO.status === 'DELIVERED' || deletingPO.status === 'DISPATCHED') {
+      toast.error(`Không thể xóa đơn mua hàng đang ở trạng thái ${STATUS_LABELS[deletingPO.status] || deletingPO.status}! Chỉ có thể hủy hoặc xóa đơn Nháp/Chờ duyệt.`);
+      setDeletingPO(null);
+      return;
+    }
+
     try {
       await deletePurchaseOrder(deletingPO.id);
       toast.success('Đã xóa đơn mua hàng');
-    } catch (err) {
+      fetchPurchaseOrders();
+    } catch (err: any) {
       console.error(err);
-      toast.error('Xóa đơn mua hàng thất bại');
+      toast.error(err?.response?.data?.message || err?.message || 'Xóa đơn mua hàng thất bại');
     }
     setDeletingPO(null);
   };
@@ -333,10 +343,10 @@ export function PurchaseOrdersPage() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => toast.success('Xuất dữ liệu đơn mua hàng thành công!')}
+              onClick={() => toast.success('Xuất Dữ Liệu đơn mua hàng thành công!')}
               className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0"
             >
-              <Download className="w-4 h-4" /> Xuất dữ liệu
+              <Download className="w-4 h-4" /> Xuất Dữ Liệu
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0">
               <Plus className="w-4 h-4" /> Tạo Đơn Mua Hàng Mới
@@ -437,6 +447,38 @@ export function PurchaseOrdersPage() {
               <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
                 <span className="text-gray-500 dark:text-gray-400">Nhân viên thu mua:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedPO.orderedBy}</span>
+              </div>
+
+              {/* Danh sách sản phẩm đặt mua */}
+              <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
+                <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider block mb-2">Danh sách sản phẩm đặt mua</span>
+                <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                      <tr>
+                        <th className="p-2">Tên sản phẩm</th>
+                        <th className="p-2 text-center">SL</th>
+                        <th className="p-2 text-right">Đơn giá</th>
+                        <th className="p-2 text-right">Thành tiền</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-800 bg-white dark:bg-gray-900">
+                      {((selectedPO as any).poLines || []).map((line: any, idx: number) => (
+                        <tr key={idx}>
+                          <td className="p-2 font-medium text-gray-900 dark:text-white">{line.productName}</td>
+                          <td className="p-2 text-center font-semibold">{line.quantity}</td>
+                          <td className="p-2 text-right text-gray-600 dark:text-gray-400">{line.unitPrice.toLocaleString('vi-VN')} ₫</td>
+                          <td className="p-2 text-right font-bold text-emerald-600 dark:text-emerald-400">{(line.quantity * line.unitPrice).toLocaleString('vi-VN')} ₫</td>
+                        </tr>
+                      ))}
+                      {(!selectedPO.poLines || selectedPO.poLines.length === 0) && (
+                        <tr>
+                          <td colSpan={4} className="p-3 text-center text-gray-400 italic">Không có dữ liệu chi tiết sản phẩm</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               {selectedPO.notes && (
@@ -628,7 +670,7 @@ export function PurchaseOrdersPage() {
                   onClick={handleAddPOLine}
                   className="px-2.5 py-1 text-xs bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors font-semibold"
                 >
-                  + Thêm sản phẩm đặt mua
+                  + Thêm Sản Phẩm đặt mua
                 </button>
               </div>
 

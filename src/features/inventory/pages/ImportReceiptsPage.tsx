@@ -441,7 +441,7 @@ export function ImportReceiptsPage() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => toast.success('Xuất dữ liệu Excel nhập kho thành công!')}
+              onClick={() => toast.success('Xuất Dữ Liệu Excel nhập kho thành công!')}
               className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0"
             >
               <Download className="w-4 h-4" /> Xuất Excel

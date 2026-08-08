@@ -129,10 +129,10 @@ export const NAV_GROUPS: NavGroup[] = [
         name: 'Quản lý Sản phẩm',
         icon: Package,
         children: [
-          { name: 'Danh sách Sản phẩm', href: '/inventory', icon: Package, permission: 'catalog:product:view' },
+          { name: 'Danh sách sản phẩm', href: '/inventory', icon: Package, permission: 'catalog:product:view' },
           { name: 'Chi tiết sản phẩm kho', href: '/inventory/details', icon: Package, permission: 'catalog:product:view' },
-          { name: 'Biến thể Sản phẩm', href: '/inventory/variants', icon: Boxes, permission: 'catalog:product:view' },
-          { name: 'Combo Sản phẩm', href: '/inventory/combos', icon: Boxes, permission: 'catalog:combo:view' },
+          { name: 'Biến thể sản phẩm', href: '/inventory/variants', icon: Boxes, permission: 'catalog:product:view' },
+          { name: 'Combo sản phẩm', href: '/inventory/combos', icon: Boxes, permission: 'catalog:combo:view' },
           { name: 'Lô hàng', href: '/inventory/batches', icon: Archive, permission: 'catalog:inventory:view' },
           { name: 'Số serial', href: '/inventory/serials', icon: Hash, permission: 'catalog:product:view' },
           { name: 'Danh mục', href: '/inventory/categories', icon: Tag, permission: 'catalog:category:view' },
@@ -192,7 +192,7 @@ export const NAV_GROUPS: NavGroup[] = [
         children: [
           { name: 'Nhà cung cấp', href: '/purchase/suppliers', icon: UserCheck, permission: 'catalog:product:view' },
           { name: 'Đơn mua hàng', href: '/purchase/orders', icon: ShoppingBag, permission: 'catalog:inventory:adjust' },
-          { name: 'Đề xuất Mua hàng', href: '/purchase/requests', icon: FileText, permission: 'catalog:inventory:adjust' },
+          { name: 'Đề xuất mua hàng', href: '/purchase/requests', icon: FileText, permission: 'catalog:inventory:adjust' },
           { name: 'Hợp đồng NCC', href: '/purchase/contracts', icon: ClipboardList, permission: 'catalog:product:view' },
           { name: 'Đánh giá NCC', href: '/purchase/evaluations', icon: UserCheck, permission: 'catalog:product:view' },
           { name: 'Yêu cầu báo giá NCC', href: '/purchase/supplier-requests', icon: FileText, permission: 'catalog:pricelist:view' },
@@ -203,7 +203,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: DollarSign,
         children: [
           { name: 'Lịch sử nhận hàng', href: '/purchase/deliveries', icon: Truck, permission: 'catalog:inventory:adjust' },
-          { name: 'Hóa đơn Mua hàng', href: '/purchase/invoices', icon: ClipboardList, permission: 'catalog:inventory:adjust' },
+          { name: 'Hóa đơn mua hàng', href: '/purchase/invoices', icon: ClipboardList, permission: 'catalog:inventory:adjust' },
           { name: 'Thanh toán NCC', href: '/purchase/payments', icon: DollarSign, permission: 'catalog:inventory:adjust' },
           { name: 'Phiếu trả hàng NCC', href: '/purchase/returns-list', icon: RotateCcw, permission: 'catalog:inventory:adjust' },
           { name: 'Lịch sử trả hàng NCC', href: '/purchase/returns-history', icon: RotateCcw, permission: 'catalog:inventory:adjust' },

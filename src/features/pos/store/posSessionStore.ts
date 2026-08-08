@@ -21,6 +21,7 @@ interface PosSessionState {
   fetchSessions: () => Promise<void>;
   addSession: (item: Omit<PosSessionRecord, 'id'>) => Promise<void>;
   updateSession: (id: string, data: Partial<PosSessionRecord>) => Promise<void>;
+  closeSession: (id: string, actualCash: number) => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
 }
 
@@ -74,6 +75,32 @@ export const usePosSessionStore = create<PosSessionState>()(
           await get().fetchSessions();
         } catch (e) {
           console.error('Failed to update pos session:', e);
+        }
+      },
+      closeSession: async (id, actualCash) => {
+        const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        set((state) => ({
+          sessions: state.sessions.map((s) => {
+            if (s.id === id) {
+              const diff = actualCash - (s.expectedCash || s.openingCash || 0);
+              return {
+                ...s,
+                actualCash,
+                cashDifference: diff,
+                closingTime: now,
+                status: 'CLOSED'
+              };
+            }
+            return s;
+          })
+        }));
+        try {
+          await axiosClient.put(`/pos/sessions/${id}/close`, null, {
+            params: { actualClosingCash: actualCash }
+          });
+          await get().fetchSessions();
+        } catch (e) {
+          console.error('Failed to close pos session in API, kept in local state:', e);
         }
       },
       deleteSession: async (id) => {

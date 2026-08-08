@@ -215,7 +215,7 @@ export function OperatingCostsPage() {
               }}
               className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
             >
-              <Download className="w-4 h-4" /> Xuất dữ liệu chi phí
+              <Download className="w-4 h-4" /> Xuất Dữ Liệu chi phí
             </button>
             <button
               onClick={handleOpenCreate}
@@ -470,7 +470,7 @@ export function OperatingCostsPage() {
               type="submit"
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              {modalMode === 'create' ? 'Tạo mới' : 'Lưu thay đổi'}
+              {modalMode === 'create' ? 'Tạo Mới' : 'Lưu thay đổi'}
             </button>
           </div>
         </form>

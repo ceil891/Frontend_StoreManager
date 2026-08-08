@@ -535,7 +535,7 @@ export function PrintTemplatesPage() {
       <Modal
         isOpen={formOpen}
         onClose={() => setFormOpen(false)}
-        title={formMode === 'create' ? 'Tạo mới bản vẽ mẫu in ấn' : 'Sửa đổi chi tiết bản vẽ mẫu in'}
+        title={formMode === 'create' ? 'Tạo Mới bản vẽ mẫu in ấn' : 'Sửa đổi chi tiết bản vẽ mẫu in'}
         width="max-w-lg"
       >
         <form onSubmit={handleSave} className="space-y-5">

@@ -186,7 +186,7 @@ export function ReturnsListsPage() {
 
       if (modalMode === 'create') {
         await addCustomerReturn(payload);
-        toast.success('Thêm phiếu trả hàng thành công!');
+        toast.success('Thêm Phiếu trả hàng thành công!');
       } else {
         await updateCustomerReturn(editingItem.id!, payload);
         toast.success('Cập nhật phiếu trả hàng thành công!');

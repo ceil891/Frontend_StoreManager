@@ -226,7 +226,7 @@ export function SaleOrdersPage() {
       { header: 'Giao hàng', accessor: (row) => row.deliveryStatus || '' },
       { header: 'Trạng thái', accessor: (row) => row.status },
     ]);
-    toast.success('Đã xuất file CSV');
+    toast.success('Đã Xuất File CSV');
   };
 
   const columns = useMemo<ColumnDef<SaleOrder>[]>(
@@ -383,7 +383,7 @@ export function SaleOrdersPage() {
               className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0"
             >
               <Download className="w-4 h-4" />
-              Xuất dữ liệu
+              Xuất Dữ Liệu
             </button>
             {canManage && (
               <button onClick={handleOpenCreate} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0">
@@ -618,7 +618,7 @@ export function SaleOrdersPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo đơn hàng mới' : 'Cập nhật đơn hàng'}
+        title={modalMode === 'create' ? 'Tạo Đơn Hàng mới' : 'Cập nhật đơn hàng'}
         size="erp"
       >
         <form onSubmit={handleSaveOrder}>
@@ -806,7 +806,7 @@ export function SaleOrdersPage() {
               type="submit"
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              {modalMode === 'create' ? 'Tạo mới' : 'Lưu thay đổi'}
+              {modalMode === 'create' ? 'Tạo Mới' : 'Lưu thay đổi'}
             </button>
           </div>
         </form>

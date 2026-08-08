@@ -214,10 +214,10 @@ export function CategoriesPage() {
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0">
-              <Download className="w-4 h-4" /> Xuất dữ liệu
+              <Download className="w-4 h-4" /> Xuất Dữ Liệu
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm whitespace-nowrap shrink-0">
-              <Plus className="w-4 h-4" /> Tạo danh mục
+              <Plus className="w-4 h-4" /> Tạo Danh Mục
             </button>
           </div>
         </div>
@@ -372,7 +372,7 @@ export function CategoriesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm danh mục sản phẩm' : 'Cập nhật danh mục'}
+        title={modalMode === 'create' ? 'Thêm Danh Mục sản phẩm' : 'Cập nhật danh mục'}
         size="erp"
       >
         <form onSubmit={handleSaveCategory}>
@@ -537,7 +537,7 @@ export function CategoriesPage() {
               type="submit"
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              {modalMode === 'create' ? 'Tạo danh mục' : 'Lưu thay đổi'}
+              {modalMode === 'create' ? 'Tạo Danh Mục' : 'Lưu thay đổi'}
             </button>
           </div>
         </form>

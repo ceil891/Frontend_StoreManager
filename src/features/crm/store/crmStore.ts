@@ -1,8 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import { buildUserAvatarUrl } from '@/shared/utils/userAvatar';
-import { axiosClient } from '@/shared/lib/axiosClient';
-import { extractPageContent, toFormData } from '@/shared/lib/apiHelpers';
+import { crmService } from '../services/crmService';
 
 export interface CustomerProfile {
   id: string;
@@ -99,19 +96,21 @@ export interface MarketingCampaignRecord {
   channel: 'SMS' | 'EMAIL' | 'PUSH';
   targetAudience: string;
   sentCount: number;
-  openRate: number;
-  startDate: string;
-  endDate: string;
-  status: 'DRAFT' | 'RUNNING' | 'COMPLETED' | 'CANCELLED';
+  openRatePercentage: number;
+  conversionRatePercentage: number;
+  status: 'ACTIVE' | 'COMPLETED' | 'SCHEDULED' | 'DRAFT' | 'PAUSED';
+  scheduledDate: string;
+  contentSnippet: string;
 }
 
 export interface PartnerGroupRecord {
   id: string;
   groupCode: string;
   groupName: string;
-  memberCount: number;
-  discountRate: number;
+  partnerType: 'CUSTOMER' | 'SUPPLIER';
   description: string;
+  membersCount: number;
+  defaultDiscountPercent: number;
   status: 'ACTIVE' | 'INACTIVE';
 }
 
@@ -120,33 +119,39 @@ export interface ProductWarrantyRecord {
   serialNumber: string;
   productName: string;
   customerName: string;
-  phone: string;
+  customerPhone: string;
   purchaseDate: string;
   expiryDate: string;
-  status: 'VALID' | 'EXPIRED' | 'CLAIMED';
+  warrantyMonths: number;
+  status: 'VALID' | 'EXPIRED' | 'VOIDED';
 }
 
 export interface WarrantyClaimRecord {
   id: string;
   claimCode: string;
   serialNumber: string;
+  productName: string;
   customerName: string;
+  customerPhone: string;
   issueDescription: string;
+  resolution: string;
   receivedDate: string;
+  completedDate?: string;
+  costAmount: number;
   status: 'RECEIVED' | 'IN_REPAIR' | 'COMPLETED' | 'REJECTED';
-  repairedBy?: string;
-  notes?: string;
 }
 
 export interface SupportTicketRecord {
   id: string;
   ticketCode: string;
   customerName: string;
+  customerPhone: string;
   subject: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
-  status: 'OPEN' | 'IN_PROGRESS' | 'CLOSED';
-  createdAt: string;
-  assignee?: string;
+  category: 'TECHNICAL' | 'BILLING' | 'COMPLAINT' | 'GENERAL';
+  assignedTo: string;
+  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+  createdDate: string;
 }
 
 export interface TicketMessageRecord {
@@ -159,39 +164,6 @@ export interface TicketMessageRecord {
 }
 
 export type CustomerInput = Omit<CustomerProfile, 'id'>;
-
-function normalizeCustomer(partial: Partial<CustomerProfile> & Pick<CustomerProfile, 'id' | 'name'>): CustomerProfile {
-  const seed = partial.email || partial.customerCode || partial.name;
-  return {
-    id: partial.id,
-    customerCode: partial.customerCode ?? `CUST-${Math.floor(10000 + Math.random() * 90000)}`,
-    name: partial.name,
-    phone: partial.phone ?? '',
-    email: partial.email ?? '',
-    address: partial.address ?? '',
-    avatarUrl: partial.avatarUrl?.trim() || buildUserAvatarUrl(seed),
-    loyaltyTier: partial.loyaltyTier ?? 'BRONZE',
-    loyaltyPoints: partial.loyaltyPoints ?? 0,
-    lifetimeSpent: partial.lifetimeSpent ?? 0,
-    registeredDate: partial.registeredDate ?? new Date().toISOString().split('T')[0],
-    lastActive: partial.lastActive ?? new Date().toISOString().split('T')[0],
-    status: partial.status ?? 'ACTIVE',
-    notes: partial.notes,
-  };
-}
-
-function mapCustomer(item: any): CustomerProfile {
-  return normalizeCustomer({
-    id: String(item.id),
-    customerCode: item.customerCode || `CUST-${item.id}`,
-    name: item.name || '',
-    phone: item.phone || '',
-    email: item.email || '',
-    address: item.address || '',
-    status: item.isActive === false ? 'DORMANT' : 'ACTIVE',
-    notes: item.notes || '',
-  });
-}
 
 interface CRMState {
   customers: CustomerProfile[];
@@ -207,6 +179,8 @@ interface CRMState {
   supportTickets: SupportTicketRecord[];
   ticketMessages: TicketMessageRecord[];
   isLoadingCustomers: boolean;
+  isLoading: boolean;
+  error: string | null;
 
   fetchCustomers: () => Promise<void>;
   addCustomer: (customer: CustomerInput) => Promise<void>;
@@ -260,389 +234,566 @@ interface CRMState {
   addTicketMessage: (item: Omit<TicketMessageRecord, 'id'>) => Promise<void>;
 }
 
-export const useCrmStore = create<CRMState>()(
-  persist(
-    (set, get) => ({
-      customers: [],
-      loyaltyTiers: [],
-      vouchers: [],
-      customerVouchers: [],
-      feedbacks: [],
-      loyaltyHistories: [],
-      marketingCampaigns: [],
-      partnerGroups: [],
-      productWarranties: [],
-      warrantyClaims: [],
-      supportTickets: [],
-      ticketMessages: [],
-      isLoadingCustomers: false,
+const getSavedLocalCustomers = (): CustomerProfile[] => {
+  try {
+    const saved = localStorage.getItem('retailhub_crm_customers');
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return [];
+};
 
-      fetchCustomers: async () => {
-        set({ isLoadingCustomers: true });
-        try {
-          const data = await axiosClient.get<any, unknown>('/partnerarea/customers?size=500');
-          const list = extractPageContent<any>(data);
-          if (list && list.length > 0) {
-            set({ customers: list.map(mapCustomer), isLoadingCustomers: false });
-          } else {
-            set({ isLoadingCustomers: false });
-          }
-        } catch {
-          set({ isLoadingCustomers: false });
-        }
-      },
+const saveLocalCustomers = (customers: CustomerProfile[]) => {
+  try {
+    localStorage.setItem('retailhub_crm_customers', JSON.stringify(customers));
+  } catch {}
+};
 
-      addCustomer: async (customer) => {
-        try {
-          const form = toFormData({
-            name: customer.name,
-            phone: customer.phone,
-            email: customer.email,
-            address: customer.address,
-            customerCode: customer.customerCode,
-            notes: customer.notes,
-            isActive: true,
-          });
-          await axiosClient.post('/partnerarea/customers', form, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
-          await get().fetchCustomers();
-        } catch (e) {
-          console.error(e);
-        }
-      },
+export const useCrmStore = create<CRMState>()((set) => ({
+  customers: [],
+  loyaltyTiers: [],
+  vouchers: [],
+  customerVouchers: [],
+  feedbacks: [],
+  loyaltyHistories: [],
+  marketingCampaigns: [],
+  partnerGroups: [],
+  productWarranties: [],
+  warrantyClaims: [],
+  supportTickets: [],
+  ticketMessages: [],
+  isLoadingCustomers: false,
+  isLoading: false,
+  error: null,
 
-      updateCustomer: async (id, data) => {
-        try {
-          const form = toFormData({
-            name: data.name,
-            phone: data.phone,
-            email: data.email,
-            address: data.address,
-            customerCode: data.customerCode,
-            notes: data.notes,
-            isActive: data.status ? data.status === 'ACTIVE' : true,
-          });
-          await axiosClient.put(`/partnerarea/customers/${id}`, form, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
-          await get().fetchCustomers();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-
-      deleteCustomer: async (id) => {
-        try {
-          await axiosClient.delete(`/partnerarea/customers/${id}`);
-          await get().fetchCustomers();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-
-      fetchVouchers: async () => {
-        try {
-          const res = await axiosClient.get<any, any[]>('/crm/vouchers');
-          set({ vouchers: res });
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      addVoucher: async (item) => {
-        try {
-          await axiosClient.post('/crm/vouchers', item);
-          await get().fetchVouchers();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      updateVoucher: async (id, data) => {
-        try {
-          await axiosClient.put(`/crm/vouchers/${id}`, data);
-          await get().fetchVouchers();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      deleteVoucher: async (id) => {
-        try {
-          await axiosClient.delete(`/crm/vouchers/${id}`);
-          await get().fetchVouchers();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-
-      fetchCustomerVouchers: async () => {
-        try {
-          const res = await axiosClient.get<any, any[]>('/crm/customer-vouchers');
-          set({ customerVouchers: res });
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      addCustomerVoucher: async (item) => {
-        try {
-          await axiosClient.post('/crm/customer-vouchers', item);
-          await get().fetchCustomerVouchers();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      updateCustomerVoucher: async (id, data) => {
-        try {
-          await axiosClient.put(`/crm/customer-vouchers/${id}`, data);
-          await get().fetchCustomerVouchers();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      deleteCustomerVoucher: async (id) => {
-        try {
-          await axiosClient.delete(`/crm/customer-vouchers/${id}`);
-          await get().fetchCustomerVouchers();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-
-      fetchFeedbacks: async () => {
-        try {
-          const res = await axiosClient.get<any, any[]>('/crm/feedback');
-          set({ feedbacks: res });
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      addFeedback: async (item) => {
-        try {
-          await axiosClient.post('/crm/feedback', item);
-          await get().fetchFeedbacks();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      updateFeedback: async (id, data) => {
-        try {
-          await axiosClient.put(`/crm/feedback/${id}`, data);
-          await get().fetchFeedbacks();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      deleteFeedback: async (id) => {
-        try {
-          await axiosClient.delete(`/crm/feedback/${id}`);
-          await get().fetchFeedbacks();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-
-      fetchLoyaltyHistories: async () => {
-        try {
-          const res = await axiosClient.get<any, any[]>('/crm/loyalty-history');
-          set({ loyaltyHistories: res });
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      addLoyaltyHistory: async (item) => {
-        try {
-          await axiosClient.post('/crm/loyalty-history', item);
-          await get().fetchLoyaltyHistories();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-
-      fetchMarketingCampaigns: async () => {
-        try {
-          const res = await axiosClient.get<any, any[]>('/crm/campaigns');
-          set({ marketingCampaigns: res });
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      addMarketingCampaign: async (item) => {
-        try {
-          await axiosClient.post('/crm/campaigns', item);
-          await get().fetchMarketingCampaigns();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      updateMarketingCampaign: async (id, data) => {
-        try {
-          await axiosClient.put(`/crm/campaigns/${id}`, data);
-          await get().fetchMarketingCampaigns();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      deleteMarketingCampaign: async (id) => {
-        try {
-          await axiosClient.delete(`/crm/campaigns/${id}`);
-          await get().fetchMarketingCampaigns();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-
-      fetchPartnerGroups: async () => {
-        try {
-          const res = await axiosClient.get<any, any[]>('/crm/partner-groups');
-          set({ partnerGroups: res });
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      addPartnerGroup: async (item) => {
-        try {
-          await axiosClient.post('/crm/partner-groups', item);
-          await get().fetchPartnerGroups();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      updatePartnerGroup: async (id, data) => {
-        try {
-          await axiosClient.put(`/crm/partner-groups/${id}`, data);
-          await get().fetchPartnerGroups();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      deletePartnerGroup: async (id) => {
-        try {
-          await axiosClient.delete(`/crm/partner-groups/${id}`);
-          await get().fetchPartnerGroups();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-
-      fetchProductWarranties: async () => {
-        try {
-          const res = await axiosClient.get<any, any[]>('/crm/warranties');
-          set({ productWarranties: res });
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      addProductWarranty: async (item) => {
-        try {
-          await axiosClient.post('/crm/warranties', item);
-          await get().fetchProductWarranties();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      updateProductWarranty: async (id, data) => {
-        try {
-          await axiosClient.put(`/crm/warranties/${id}`, data);
-          await get().fetchProductWarranties();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      deleteProductWarranty: async (id) => {
-        try {
-          await axiosClient.delete(`/crm/warranties/${id}`);
-          await get().fetchProductWarranties();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-
-      fetchWarrantyClaims: async () => {
-        try {
-          const res = await axiosClient.get<any, any[]>('/crm/warranty-claims');
-          set({ warrantyClaims: res });
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      addWarrantyClaim: async (item) => {
-        try {
-          await axiosClient.post('/crm/warranty-claims', item);
-          await get().fetchWarrantyClaims();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      updateWarrantyClaim: async (id, data) => {
-        try {
-          await axiosClient.put(`/crm/warranty-claims/${id}`, data);
-          await get().fetchWarrantyClaims();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      deleteWarrantyClaim: async (id) => {
-        try {
-          await axiosClient.delete(`/crm/warranty-claims/${id}`);
-          await get().fetchWarrantyClaims();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-
-      fetchSupportTickets: async () => {
-        try {
-          const res = await axiosClient.get<any, any[]>('/crm/tickets');
-          set({ supportTickets: res });
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      addSupportTicket: async (item) => {
-        try {
-          await axiosClient.post('/crm/tickets', item);
-          await get().fetchSupportTickets();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      updateSupportTicket: async (id, data) => {
-        try {
-          await axiosClient.put(`/crm/tickets/${id}`, data);
-          await get().fetchSupportTickets();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      deleteSupportTicket: async (id) => {
-        try {
-          await axiosClient.delete(`/crm/tickets/${id}`);
-          await get().fetchSupportTickets();
-        } catch (e) {
-          console.error(e);
-        }
-      },
-
-      fetchTicketMessages: async (ticketId) => {
-        try {
-          const url = ticketId ? `/crm/ticket-messages?ticketId=${ticketId}` : '/crm/ticket-messages';
-          const res = await axiosClient.get<any, any[]>(url);
-          set({ ticketMessages: res });
-        } catch (e) {
-          console.error(e);
-        }
-      },
-      addTicketMessage: async (item) => {
-        try {
-          await axiosClient.post('/crm/ticket-messages', item);
-          await get().fetchTicketMessages(item.ticketId);
-        } catch (e) {
-          console.error(e);
-        }
-      },
-    }),
-    {
-      name: 'retailhub-crm-storage',
-      storage: createJSONStorage(() => localStorage),
+  fetchCustomers: async () => {
+    set({ isLoadingCustomers: true, isLoading: true, error: null });
+    const local = getSavedLocalCustomers();
+    try {
+      const data = await crmService.fetchCustomers();
+      if (data && data.length > 0) {
+        const mergedMap = new Map<string, CustomerProfile>();
+        data.forEach(c => mergedMap.set(c.id, c));
+        local.forEach(c => mergedMap.set(c.id, c));
+        const merged = Array.from(mergedMap.values());
+        set({ customers: merged });
+        saveLocalCustomers(merged);
+      } else if (local.length > 0) {
+        set({ customers: local });
+      }
+      set({ isLoadingCustomers: false, isLoading: false });
+    } catch (e: any) {
+      if (local.length > 0) {
+        set({ customers: local, isLoadingCustomers: false, isLoading: false });
+      } else {
+        set({ isLoadingCustomers: false, isLoading: false, error: e.message || 'Lỗi khi tải khách hàng' });
+      }
     }
-  )
-);
+  },
+
+  addCustomer: async (customer) => {
+    set({ isLoading: true, error: null });
+    let created: CustomerProfile;
+    try {
+      created = await crmService.addCustomer(customer);
+    } catch (e: any) {
+      console.warn('API add customer failed, fallback local add:', e);
+      created = {
+        id: String(Date.now()),
+        customerCode: customer.customerCode || `CUST-${Math.floor(10000 + Math.random() * 90000)}`,
+        name: customer.name,
+        phone: customer.phone,
+        email: customer.email,
+        address: customer.address,
+        avatarUrl: customer.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+        loyaltyTier: customer.loyaltyTier || 'BRONZE',
+        loyaltyPoints: customer.loyaltyPoints || 0,
+        lifetimeSpent: customer.lifetimeSpent || 0,
+        registeredDate: customer.registeredDate || new Date().toISOString().split('T')[0],
+        lastActive: new Date().toISOString().split('T')[0],
+        status: customer.status || 'ACTIVE',
+        notes: customer.notes,
+      };
+    }
+    set((state) => {
+      const next = [created, ...state.customers];
+      saveLocalCustomers(next);
+      return { customers: next, isLoading: false };
+    });
+  },
+
+  updateCustomer: async (id, data) => {
+    set({ isLoading: true, error: null });
+    try {
+      await crmService.updateCustomer(id, data);
+    } catch (e: any) {
+      console.warn('API update customer failed, applying local update:', e);
+    }
+    set((state) => {
+      const next = state.customers.map((c) => (c.id === id ? { ...c, ...data } : c));
+      saveLocalCustomers(next);
+      return { customers: next, isLoading: false };
+    });
+  },
+
+  deleteCustomer: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await crmService.deleteCustomer(id);
+    } catch (e: any) {
+      console.warn('API delete customer failed, applying local delete:', e);
+    }
+    set((state) => {
+      const next = state.customers.filter((c) => c.id !== id);
+      saveLocalCustomers(next);
+      return { customers: next, isLoading: false };
+    });
+  },
+
+  fetchVouchers: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await crmService.fetchVouchers();
+      if (data.length > 0) set({ vouchers: data });
+      set({ isLoading: false });
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+    }
+  },
+
+  addVoucher: async (item) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await crmService.addVoucher(item);
+      set((state) => ({ vouchers: [created, ...state.vouchers], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  updateVoucher: async (id, data) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updated = await crmService.updateVoucher(id, data);
+      set((state) => ({
+        vouchers: state.vouchers.map((v) => (v.id === id ? { ...v, ...updated } : v)),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  deleteVoucher: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await crmService.deleteVoucher(id);
+      set((state) => ({ vouchers: state.vouchers.filter((v) => v.id !== id), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ vouchers: state.vouchers.filter((v) => v.id !== id), isLoading: false }));
+    }
+  },
+
+  fetchCustomerVouchers: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await crmService.fetchCustomerVouchers();
+      if (data.length > 0) set({ customerVouchers: data });
+      set({ isLoading: false });
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+    }
+  },
+
+  addCustomerVoucher: async (item) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await crmService.addCustomerVoucher(item);
+      set((state) => ({ customerVouchers: [created, ...state.customerVouchers], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  updateCustomerVoucher: async (id, data) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updated = await crmService.updateCustomerVoucher(id, data);
+      set((state) => ({
+        customerVouchers: state.customerVouchers.map((cv) => (cv.id === id ? { ...cv, ...updated } : cv)),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  deleteCustomerVoucher: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await crmService.deleteCustomerVoucher(id);
+      set((state) => ({ customerVouchers: state.customerVouchers.filter((cv) => cv.id !== id), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ customerVouchers: state.customerVouchers.filter((cv) => cv.id !== id), isLoading: false }));
+    }
+  },
+
+  fetchFeedbacks: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await crmService.fetchFeedbacks();
+      if (data.length > 0) set({ feedbacks: data });
+      set({ isLoading: false });
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+    }
+  },
+
+  addFeedback: async (item) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await crmService.addFeedback(item);
+      set((state) => ({ feedbacks: [created, ...state.feedbacks], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  updateFeedback: async (id, data) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updated = await crmService.updateFeedback(id, data);
+      set((state) => ({
+        feedbacks: state.feedbacks.map((f) => (f.id === id ? { ...f, ...updated } : f)),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  deleteFeedback: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await crmService.deleteFeedback(id);
+      set((state) => ({ feedbacks: state.feedbacks.filter((f) => f.id !== id), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ feedbacks: state.feedbacks.filter((f) => f.id !== id), isLoading: false }));
+    }
+  },
+
+  fetchLoyaltyHistories: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await crmService.fetchLoyaltyHistories();
+      if (data.length > 0) set({ loyaltyHistories: data });
+      set({ isLoading: false });
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+    }
+  },
+
+  addLoyaltyHistory: async (item) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await crmService.addLoyaltyHistory(item);
+      set((state) => ({ loyaltyHistories: [created, ...state.loyaltyHistories], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  fetchMarketingCampaigns: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await crmService.fetchMarketingCampaigns();
+      if (data.length > 0) set({ marketingCampaigns: data });
+      set({ isLoading: false });
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+    }
+  },
+
+  addMarketingCampaign: async (item) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await crmService.addMarketingCampaign(item);
+      set((state) => ({ marketingCampaigns: [created, ...state.marketingCampaigns], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  updateMarketingCampaign: async (id, data) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updated = await crmService.updateMarketingCampaign(id, data);
+      set((state) => ({
+        marketingCampaigns: state.marketingCampaigns.map((mc) => (mc.id === id ? { ...mc, ...updated } : mc)),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  deleteMarketingCampaign: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await crmService.deleteMarketingCampaign(id);
+      set((state) => ({ marketingCampaigns: state.marketingCampaigns.filter((mc) => mc.id !== id), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ marketingCampaigns: state.marketingCampaigns.filter((mc) => mc.id !== id), isLoading: false }));
+    }
+  },
+
+  fetchPartnerGroups: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await crmService.fetchPartnerGroups();
+      if (data.length > 0) set({ partnerGroups: data });
+      set({ isLoading: false });
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+    }
+  },
+
+  addPartnerGroup: async (item) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await crmService.addPartnerGroup(item);
+      set((state) => ({ partnerGroups: [created, ...state.partnerGroups], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  updatePartnerGroup: async (id, data) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updated = await crmService.updatePartnerGroup(id, data);
+      set((state) => ({
+        partnerGroups: state.partnerGroups.map((pg) => (pg.id === id ? { ...pg, ...updated } : pg)),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  deletePartnerGroup: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await crmService.deletePartnerGroup(id);
+      set((state) => ({ partnerGroups: state.partnerGroups.filter((pg) => pg.id !== id), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ partnerGroups: state.partnerGroups.filter((pg) => pg.id !== id), isLoading: false }));
+    }
+  },
+
+  fetchProductWarranties: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await crmService.fetchProductWarranties();
+      if (data.length > 0) set({ productWarranties: data });
+      set({ isLoading: false });
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+    }
+  },
+
+  addProductWarranty: async (item) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await crmService.addProductWarranty(item);
+      set((state) => ({ productWarranties: [created, ...state.productWarranties], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  updateProductWarranty: async (id, data) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updated = await crmService.updateProductWarranty(id, data);
+      set((state) => ({
+        productWarranties: state.productWarranties.map((pw) => (pw.id === id ? { ...pw, ...updated } : pw)),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  deleteProductWarranty: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await crmService.deleteProductWarranty(id);
+      set((state) => ({ productWarranties: state.productWarranties.filter((pw) => pw.id !== id), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ productWarranties: state.productWarranties.filter((pw) => pw.id !== id), isLoading: false }));
+    }
+  },
+
+  fetchWarrantyClaims: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await crmService.fetchWarrantyClaims();
+      if (data.length > 0) set({ warrantyClaims: data });
+      set({ isLoading: false });
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+    }
+  },
+
+  addWarrantyClaim: async (item) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await crmService.addWarrantyClaim(item);
+      set((state) => ({ warrantyClaims: [created, ...state.warrantyClaims], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  updateWarrantyClaim: async (id, data) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updated = await crmService.updateWarrantyClaim(id, data);
+      set((state) => ({
+        warrantyClaims: state.warrantyClaims.map((wc) => (wc.id === id ? { ...wc, ...updated } : wc)),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  deleteWarrantyClaim: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await crmService.deleteWarrantyClaim(id);
+      set((state) => ({ warrantyClaims: state.warrantyClaims.filter((wc) => wc.id !== id), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ warrantyClaims: state.warrantyClaims.filter((wc) => wc.id !== id), isLoading: false }));
+    }
+  },
+
+  fetchSupportTickets: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await crmService.fetchSupportTickets();
+      if (data.length > 0) set({ supportTickets: data });
+      set({ isLoading: false });
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+    }
+  },
+
+  addSupportTicket: async (item) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await crmService.addSupportTicket(item);
+      set((state) => ({ supportTickets: [created, ...state.supportTickets], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  updateSupportTicket: async (id, data) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updated = await crmService.updateSupportTicket(id, data);
+      set((state) => ({
+        supportTickets: state.supportTickets.map((st) => (st.id === id ? { ...st, ...updated } : st)),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  deleteSupportTicket: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await crmService.deleteSupportTicket(id);
+      set((state) => ({ supportTickets: state.supportTickets.filter((st) => st.id !== id), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ supportTickets: state.supportTickets.filter((st) => st.id !== id), isLoading: false }));
+    }
+  },
+
+  fetchTicketMessages: async (ticketId) => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await crmService.fetchTicketMessages(ticketId);
+      if (data.length > 0) set({ ticketMessages: data });
+      set({ isLoading: false });
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+    }
+  },
+
+  addTicketMessage: async (item) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await crmService.addTicketMessage(item);
+      set((state) => ({ ticketMessages: [...state.ticketMessages, created], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+}));

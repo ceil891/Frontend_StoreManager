@@ -407,7 +407,7 @@ export function MainLayout() {
               className="flex-1 max-w-sm flex items-center gap-2.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg text-sm text-gray-400 dark:text-gray-500 transition-colors group"
             >
               <Search className="w-4 h-4 shrink-0" />
-              <span className="hidden sm:block">Search or jump to...</span>
+              <span className="hidden sm:block">Tìm kiếm hoặc điều hướng...</span>
               <span className="ml-auto hidden sm:flex items-center gap-1">
                 <kbd className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium bg-white dark:bg-gray-700 text-gray-400 rounded border border-gray-200 dark:border-gray-600">
                   <Command className="w-2.5 h-2.5" />K
@@ -429,7 +429,7 @@ export function MainLayout() {
               {/* Dark Mode Toggle */}
               <button
                 onClick={toggleTheme}
-                title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                title={theme === 'dark' ? 'Chuyển sang Chế độ Sáng' : 'Chuyển sang Chế độ Tối'}
                 className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -446,7 +446,7 @@ export function MainLayout() {
               {currentGroup && currentItem && (
                 <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-6 font-medium flex-wrap">
                   <Link to="/" className="hover:text-gray-900 dark:hover:text-gray-200 transition-colors">
-                    Home
+                    Trang chủ
                   </Link>
                   <ChevronRight className="w-3 h-3 text-gray-400" />
                   <span>{currentGroup}</span>

@@ -178,7 +178,7 @@ const CostCentersPage: React.FC = () => {
           className="flex items-center space-x-1 px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition"
         >
           <Plus size={16} />
-          <span>Thêm mới</span>
+          <span>Thêm Mới</span>
         </button>
       </div>
       {isLoading ? (
@@ -207,7 +207,7 @@ const CostCentersPage: React.FC = () => {
       </Modal>
 
       {/* Modal thêm / sửa */}
-      <Modal isOpen={isModalOpen} onClose={() => setModalOpen(false)} title={isEditMode ? 'Chỉnh sửa Trung tâm chi phí' : 'Thêm mới Trung tâm chi phí'}>
+      <Modal isOpen={isModalOpen} onClose={() => setModalOpen(false)} title={isEditMode ? 'Chỉnh sửa Trung tâm chi phí' : 'Thêm Mới Trung tâm chi phí'}>
         <form onSubmit={handleSave} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Mã trung tâm</label>

@@ -151,8 +151,22 @@ const MOCK_CARRIERS: CarrierRecord[] = [
   }
 ];
 
+const getSavedCarriers = (): CarrierRecord[] => {
+  try {
+    const saved = localStorage.getItem('retailhub_carriers_list');
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return [];
+};
+
+const saveCarriersList = (list: CarrierRecord[]) => {
+  try {
+    localStorage.setItem('retailhub_carriers_list', JSON.stringify(list));
+  } catch {}
+};
+
 export function ShippingCarriersPage() {
-  const [data, setData] = useState<CarrierRecord[]>(MOCK_CARRIERS);
+  const [data, setData] = useState<CarrierRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<CarrierRecord | null>(null);
@@ -164,6 +178,13 @@ export function ShippingCarriersPage() {
 
   const fetchCarriers = async () => {
     setIsLoading(true);
+    const local = getSavedCarriers();
+    if (local.length > 0) {
+      setData(local);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const res = await axiosClient.get<any, any[]>('/logistics/carriers');
       const items = Array.isArray(res) ? res : (Array.isArray(res?.content) ? res.content : []);
@@ -201,7 +222,6 @@ export function ShippingCarriersPage() {
           };
         });
 
-        // Merge mapped items with MOCK_CARRIERS without duplicates
         const combined = [...mapped];
         MOCK_CARRIERS.forEach(mc => {
           if (!combined.some(c => c.carrierCode === mc.carrierCode)) {
@@ -209,12 +229,15 @@ export function ShippingCarriersPage() {
           }
         });
         setData(combined);
+        saveCarriersList(combined);
       } else {
         setData(MOCK_CARRIERS);
+        saveCarriersList(MOCK_CARRIERS);
       }
     } catch (err) {
       console.warn('Backend GET /logistics/carriers failed, using local standards:', err);
       setData(MOCK_CARRIERS);
+      saveCarriersList(MOCK_CARRIERS);
     } finally {
       setIsLoading(false);
     }
@@ -367,10 +390,18 @@ export function ShippingCarriersPage() {
     }
 
     if (modalMode === 'create') {
-      setData(prev => [recordToSave, ...prev]);
-      toast.success('Thêm đối tác vận chuyển mới thành công!');
+      setData(prev => {
+        const next = [recordToSave, ...prev];
+        saveCarriersList(next);
+        return next;
+      });
+      toast.success('Thêm Đối Tác vận chuyển mới thành công!');
     } else {
-      setData(prev => prev.map(item => item.id === recordToSave.id ? recordToSave : item));
+      setData(prev => {
+        const next = prev.map(item => item.id === recordToSave.id ? recordToSave : item);
+        saveCarriersList(next);
+        return next;
+      });
       toast.success('Cập nhật thông tin đối tác thành công!');
     }
 
@@ -396,7 +427,11 @@ export function ShippingCarriersPage() {
       } catch (err) {
         console.warn('API delete carrier failed, applying local state update:', err);
       }
-      setData(prev => prev.filter(item => item.id !== id));
+      setData(prev => {
+        const next = prev.filter(item => item.id !== id);
+        saveCarriersList(next);
+        return next;
+      });
       toast.success('Đã xóa đối tác vận chuyển thành công!');
       setSelected(null);
     }

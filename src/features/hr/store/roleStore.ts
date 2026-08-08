@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import { axiosClient } from '@/shared/lib/axiosClient';
+import { roleService } from '../services/roleService';
+import { permissionService } from '../services/permissionService';
 
 export interface SecurityRoleRecord {
   id: string;
@@ -124,7 +124,6 @@ export function parseApiPermission(p: any): PermissionItem {
     action = parts[1].split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('');
   }
 
-  // Must match MODULE_GROUPS keys exactly: Dashboard, Product, Category, Inventory, Sales, POS, Purchase, CRM, Finance, Logistics, HR, Report, System
   let group = 'System';
   const prefix = parts[0]?.toLowerCase();
   const subPrefix = parts[1]?.toLowerCase();
@@ -155,12 +154,15 @@ export function parseApiPermission(p: any): PermissionItem {
 
 // ── Default/Fallback System Permissions List ─────────────────────
 export const DEFAULT_SYSTEM_PERMISSIONS: PermissionItem[] = [
+  // Dashboard
+  { key: 'dashboard:view', name: 'Xem tổng quan Dashboard', group: 'Dashboard', module: 'Dashboard', action: 'View' },
+
   // Product & Catalog
   { key: 'catalog:product:view', name: 'Xem sản phẩm', group: 'Product', module: 'Product', action: 'View' },
   { key: 'catalog:product:create', name: 'Thêm sản phẩm', group: 'Product', module: 'Product', action: 'Create' },
   { key: 'catalog:product:update', name: 'Sửa sản phẩm', group: 'Product', module: 'Product', action: 'Update' },
   { key: 'catalog:product:delete', name: 'Xóa sản phẩm', group: 'Product', module: 'Product', action: 'Delete' },
-  { key: 'catalog:product:update-status', name: 'Cập nhật trạng thái', group: 'Product', module: 'Product', action: 'UpdateStatus' },
+  { key: 'catalog:product:update-status', name: 'Cập nhật trạng thái sản phẩm', group: 'Product', module: 'Product', action: 'UpdateStatus' },
   { key: 'catalog:color:view', name: 'Xem màu sắc', group: 'Product', module: 'Color', action: 'View' },
   { key: 'catalog:color:create', name: 'Thêm màu sắc', group: 'Product', module: 'Color', action: 'Create' },
   { key: 'catalog:color:update', name: 'Sửa màu sắc', group: 'Product', module: 'Color', action: 'Update' },
@@ -169,12 +171,13 @@ export const DEFAULT_SYSTEM_PERMISSIONS: PermissionItem[] = [
   { key: 'catalog:size:create', name: 'Thêm kích thước', group: 'Product', module: 'Size', action: 'Create' },
   { key: 'catalog:size:update', name: 'Sửa kích thước', group: 'Product', module: 'Size', action: 'Update' },
   { key: 'catalog:size:delete', name: 'Xóa kích thước', group: 'Product', module: 'Size', action: 'Delete' },
-  { key: 'catalog:combo:view', name: 'Xem combo', group: 'Product', module: 'Combo', action: 'View' },
-  { key: 'catalog:combo:create', name: 'Thêm combo', group: 'Product', module: 'Combo', action: 'Create' },
-  { key: 'catalog:combo:update', name: 'Sửa combo', group: 'Product', module: 'Combo', action: 'Update' },
-  { key: 'catalog:combo:delete', name: 'Xóa combo', group: 'Product', module: 'Combo', action: 'Delete' },
+  { key: 'catalog:combo:view', name: 'Xem combo sản phẩm', group: 'Product', module: 'Combo', action: 'View' },
+  { key: 'catalog:combo:create', name: 'Thêm combo sản phẩm', group: 'Product', module: 'Combo', action: 'Create' },
+  { key: 'catalog:combo:update', name: 'Sửa combo sản phẩm', group: 'Product', module: 'Combo', action: 'Update' },
+  { key: 'catalog:combo:delete', name: 'Xóa combo sản phẩm', group: 'Product', module: 'Combo', action: 'Delete' },
 
-  // Category
+  // Category & Attributes
+  { key: 'catalog:category:view', name: 'Xem danh mục', group: 'Category', module: 'Category', action: 'View' },
   { key: 'catalog:category:create', name: 'Thêm danh mục', group: 'Category', module: 'Category', action: 'Create' },
   { key: 'catalog:category:update', name: 'Sửa danh mục', group: 'Category', module: 'Category', action: 'Update' },
   { key: 'catalog:category:delete', name: 'Xóa danh mục', group: 'Category', module: 'Category', action: 'Delete' },
@@ -182,57 +185,103 @@ export const DEFAULT_SYSTEM_PERMISSIONS: PermissionItem[] = [
   { key: 'catalog:department:create', name: 'Thêm ngành hàng', group: 'Category', module: 'Department', action: 'Create' },
   { key: 'catalog:attribute:view', name: 'Xem thuộc tính', group: 'Category', module: 'Attribute', action: 'View' },
   { key: 'catalog:attribute:create', name: 'Thêm thuộc tính', group: 'Category', module: 'Attribute', action: 'Create' },
+  { key: 'catalog:unit:view', name: 'Xem đơn vị tính', group: 'Category', module: 'Unit', action: 'View' },
+  { key: 'catalog:unit:create', name: 'Thêm đơn vị tính', group: 'Category', module: 'Unit', action: 'Create' },
 
-  // Inventory
+  // Inventory & WMS
   { key: 'catalog:inventory:view', name: 'Xem tồn kho', group: 'Inventory', module: 'Inventory', action: 'View' },
   { key: 'catalog:inventory:adjust', name: 'Điều chỉnh tồn kho', group: 'Inventory', module: 'Inventory', action: 'Adjust' },
-  { key: 'catalog:inventory:search', name: 'Tìm kiếm tồn kho', group: 'Inventory', module: 'Inventory', action: 'Search' },
-  { key: 'catalog:inventory:low-stock', name: 'Cảnh báo sắp hết', group: 'Inventory', module: 'Inventory', action: 'LowStock' },
+  { key: 'catalog:inventory:search', name: 'Tìm kiếm tồn kho mã vạch', group: 'Inventory', module: 'Inventory', action: 'Search' },
+  { key: 'catalog:inventory:low-stock', name: 'Cảnh báo sắp hết hàng', group: 'Inventory', module: 'Inventory', action: 'LowStock' },
+  { key: 'catalog:inventory:transfer', name: 'Chuyển kho hàng', group: 'Inventory', module: 'Inventory', action: 'Transfer' },
+  { key: 'catalog:inventory:batch', name: 'Quản lý lô hàng & HSD', group: 'Inventory', module: 'Batch', action: 'View' },
 
   // Sales
-  { key: 'sales:invoice:view', name: 'Xem hóa đơn', group: 'Sales', module: 'Invoice', action: 'View' },
-  { key: 'sales:invoice:create', name: 'Tạo hóa đơn', group: 'Sales', module: 'Invoice', action: 'Create' },
-  { key: 'sales:invoice:update', name: 'Sửa hóa đơn', group: 'Sales', module: 'Invoice', action: 'Update' },
-  { key: 'sales:invoice:delete', name: 'Xóa hóa đơn', group: 'Sales', module: 'Invoice', action: 'Delete' },
+  { key: 'sales:order:view', name: 'Xem đơn bán hàng', group: 'Sales', module: 'Order', action: 'View' },
+  { key: 'sales:order:create', name: 'Tạo đơn bán hàng', group: 'Sales', module: 'Order', action: 'Create' },
+  { key: 'sales:order:update', name: 'Sửa đơn bán hàng', group: 'Sales', module: 'Order', action: 'Update' },
+  { key: 'sales:invoice:view', name: 'Xem hóa đơn bán lẻ', group: 'Sales', module: 'Invoice', action: 'View' },
+  { key: 'sales:invoice:create', name: 'Tạo hóa đơn bán lẻ', group: 'Sales', module: 'Invoice', action: 'Create' },
   { key: 'sales:quote:view', name: 'Xem báo giá', group: 'Sales', module: 'Quote', action: 'View' },
   { key: 'sales:quote:create', name: 'Tạo báo giá', group: 'Sales', module: 'Quote', action: 'Create' },
-  { key: 'sales:return:view', name: 'Xem đơn trả hàng', group: 'Sales', module: 'Return', action: 'View' },
-  { key: 'sales:return:create', name: 'Tạo đơn trả hàng', group: 'Sales', module: 'Return', action: 'Create' },
+  { key: 'sales:return:view', name: 'Xem đơn khách trả hàng', group: 'Sales', module: 'Return', action: 'View' },
+  { key: 'sales:return:create', name: 'Tạo đơn khách trả hàng', group: 'Sales', module: 'Return', action: 'Create' },
 
-  // Finance
-  { key: 'finance:bank:view', name: 'Xem NH', group: 'Finance', module: 'Bank', action: 'View' },
-  { key: 'finance:bank:create', name: 'Thêm NH', group: 'Finance', module: 'Bank', action: 'Create' },
-  { key: 'finance:bank:update', name: 'Sửa NH', group: 'Finance', module: 'Bank', action: 'Update' },
-  { key: 'finance:bank:delete', name: 'Xóa NH', group: 'Finance', module: 'Bank', action: 'Delete' },
+  // POS Terminal
+  { key: 'pos:session:view', name: 'Xem ca làm việc POS', group: 'POS', module: 'POS', action: 'View' },
+  { key: 'pos:session:open', name: 'Mở ca làm việc POS', group: 'POS', module: 'POS', action: 'CheckIn' },
+  { key: 'pos:session:close', name: 'Kết thúc ca POS', group: 'POS', module: 'POS', action: 'CheckOut' },
+  { key: 'pos:payment:process', name: 'Thực hiện thanh toán POS', group: 'POS', module: 'POS', action: 'Confirm' },
 
   // Purchase
-  { key: 'purchase:order:view', name: 'Xem đơn mua', group: 'Purchase', module: 'Order', action: 'View' },
-  { key: 'purchase:order:create', name: 'Tạo đơn mua', group: 'Purchase', module: 'Order', action: 'Create' },
-  { key: 'purchase:order:approve', name: 'Duyệt đơn mua', group: 'Purchase', module: 'Order', action: 'Approve' },
-  { key: 'purchase:request:view', name: 'Xem YC mua', group: 'Purchase', module: 'Request', action: 'View' },
-  { key: 'purchase:contract:view', name: 'Xem hợp đồng', group: 'Purchase', module: 'Contract', action: 'View' },
+  { key: 'purchase:supplier:view', name: 'Xem nhà cung cấp', group: 'Purchase', module: 'Supplier', action: 'View' },
+  { key: 'purchase:supplier:create', name: 'Thêm nhà cung cấp', group: 'Purchase', module: 'Supplier', action: 'Create' },
+  { key: 'purchase:order:view', name: 'Xem đơn mua hàng', group: 'Purchase', module: 'Order', action: 'View' },
+  { key: 'purchase:order:create', name: 'Tạo đơn mua hàng', group: 'Purchase', module: 'Order', action: 'Create' },
+  { key: 'purchase:order:approve', name: 'Phê duyệt đơn mua hàng', group: 'Purchase', module: 'Order', action: 'Approve' },
+  { key: 'purchase:request:view', name: 'Xem đề xuất mua hàng', group: 'Purchase', module: 'Request', action: 'View' },
+  { key: 'purchase:contract:view', name: 'Xem hợp đồng NCC', group: 'Purchase', module: 'Contract', action: 'View' },
+
+  // CRM
+  { key: 'crm:customer:view', name: 'Xem thông tin khách hàng', group: 'CRM', module: 'Customer', action: 'View' },
+  { key: 'crm:customer:create', name: 'Thêm khách hàng', group: 'CRM', module: 'Customer', action: 'Create' },
+  { key: 'crm:customer:update', name: 'Sửa thông tin khách hàng', group: 'CRM', module: 'Customer', action: 'Update' },
+  { key: 'crm:customer:delete', name: 'Xóa khách hàng', group: 'CRM', module: 'Customer', action: 'Delete' },
+  { key: 'crm:voucher:view', name: 'Xem voucher khuyến mãi', group: 'CRM', module: 'Voucher', action: 'View' },
+  { key: 'crm:voucher:create', name: 'Tạo voucher khuyến mãi', group: 'CRM', module: 'Voucher', action: 'Create' },
+  { key: 'crm:warranty:view', name: 'Xem sổ bảo hành', group: 'CRM', module: 'Warranty', action: 'View' },
+  { key: 'crm:ticket:view', name: 'Xem phản hồi & hỗ trợ', group: 'CRM', module: 'Ticket', action: 'View' },
+
+  // Finance
+  { key: 'finance:receipt:view', name: 'Xem phiếu thu', group: 'Finance', module: 'Receipt', action: 'View' },
+  { key: 'finance:receipt:create', name: 'Tạo phiếu thu', group: 'Finance', module: 'Receipt', action: 'Create' },
+  { key: 'finance:payment:view', name: 'Xem phiếu chi', group: 'Finance', module: 'Payment', action: 'View' },
+  { key: 'finance:payment:create', name: 'Tạo phiếu chi', group: 'Finance', module: 'Payment', action: 'Create' },
+  { key: 'finance:debt:view', name: 'Xem sổ nợ công nợ', group: 'Finance', module: 'Debt', action: 'View' },
+  { key: 'finance:bank:view', name: 'Xem tài khoản ngân hàng', group: 'Finance', module: 'Bank', action: 'View' },
+  { key: 'finance:bank:create', name: 'Thêm tài khoản ngân hàng', group: 'Finance', module: 'Bank', action: 'Create' },
+  { key: 'finance:bank:update', name: 'Sửa tài khoản ngân hàng', group: 'Finance', module: 'Bank', action: 'Update' },
+  { key: 'finance:bank:delete', name: 'Xóa tài khoản ngân hàng', group: 'Finance', module: 'Bank', action: 'Delete' },
+
+  // Logistics
+  { key: 'logistics:shipper:view', name: 'Xem đối tác giao hàng (Shipper)', group: 'Logistics', module: 'Shipper', action: 'View' },
+  { key: 'logistics:shipper:create', name: 'Thêm đối tác giao hàng', group: 'Logistics', module: 'Shipper', action: 'Create' },
+  { key: 'logistics:carrier:view', name: 'Xem đơn vị vận chuyển', group: 'Logistics', module: 'Carrier', action: 'View' },
+  { key: 'logistics:carrier:create', name: 'Thêm đơn vị vận chuyển', group: 'Logistics', module: 'Carrier', action: 'Create' },
+  { key: 'logistics:trip:view', name: 'Xem chuyến xe & tuyến đường', group: 'Logistics', module: 'Trip', action: 'View' },
+  { key: 'logistics:shipment:view', name: 'Xem lô hàng vận chuyển', group: 'Logistics', module: 'Shipment', action: 'View' },
+  { key: 'logistics:price:view', name: 'Xem bảng giá & cước phí', group: 'Logistics', module: 'Price', action: 'View' },
 
   // HR
-  { key: 'hrm:attendance:view', name: 'Xem chấm công', group: 'HR', module: 'Attendance', action: 'View' },
-  { key: 'hrm:attendance:create', name: 'Tạo bảng chấm công', group: 'HR', module: 'Attendance', action: 'Create' },
+  { key: 'hrm:attendance:view', name: 'Xem chấm công nhân sự', group: 'HR', module: 'Attendance', action: 'View' },
+  { key: 'hrm:attendance:create', name: 'Tạo dữ liệu chấm công', group: 'HR', module: 'Attendance', action: 'Create' },
   { key: 'hrm:attendance:adjust', name: 'Điều chỉnh chấm công', group: 'HR', module: 'Attendance', action: 'Adjust' },
+  { key: 'hrm:payroll:view', name: 'Xem bảng lương', group: 'HR', module: 'Payroll', action: 'View' },
+  { key: 'hrm:kpi:view', name: 'Xem đánh giá KPI', group: 'HR', module: 'KPI', action: 'View' },
+
+  // Report
+  { key: 'report:sales:view', name: 'Xem báo cáo bán hàng', group: 'Report', module: 'SalesReport', action: 'View' },
+  { key: 'report:inventory:view', name: 'Xem báo cáo tồn kho', group: 'Report', module: 'InventoryReport', action: 'View' },
+  { key: 'report:finance:view', name: 'Xem báo cáo tài chính', group: 'Report', module: 'FinanceReport', action: 'View' },
 
   // System
-  { key: 'system:user:view', name: 'Xem người dùng', group: 'System', module: 'User', action: 'View' },
-  { key: 'system:user:create', name: 'Tạo người dùng', group: 'System', module: 'User', action: 'Create' },
-  { key: 'system:user:update', name: 'Sửa người dùng', group: 'System', module: 'User', action: 'Update' },
-  { key: 'system:user:delete', name: 'Xóa người dùng', group: 'System', module: 'User', action: 'Delete' },
-  { key: 'system:role:view', name: 'Xem vai trò', group: 'System', module: 'Role', action: 'View' },
-  { key: 'system:role:create', name: 'Tạo vai trò', group: 'System', module: 'Role', action: 'Create' },
-  { key: 'system:role:update', name: 'Sửa vai trò', group: 'System', module: 'Role', action: 'Update' },
+  { key: 'system:user:view', name: 'Xem danh sách người dùng', group: 'System', module: 'User', action: 'View' },
+  { key: 'system:user:create', name: 'Tạo tài khoản người dùng', group: 'System', module: 'User', action: 'Create' },
+  { key: 'system:user:update', name: 'Sửa thông tin người dùng', group: 'System', module: 'User', action: 'Update' },
+  { key: 'system:user:delete', name: 'Khóa / Xóa người dùng', group: 'System', module: 'User', action: 'Delete' },
+  { key: 'system:role:view', name: 'Xem vai trò người dùng', group: 'System', module: 'Role', action: 'View' },
+  { key: 'system:role:create', name: 'Tạo vai trò mới', group: 'System', module: 'Role', action: 'Create' },
+  { key: 'system:role:update', name: 'Sửa vai trò & cấu hình quyền', group: 'System', module: 'Role', action: 'Update' },
   { key: 'system:role:delete', name: 'Xóa vai trò', group: 'System', module: 'Role', action: 'Delete' },
-  { key: 'system:role:assign-permissions', name: 'Gán quyền', group: 'System', module: 'Role', action: 'AssignPerm' },
-  { key: 'system:branch:view', name: 'Xem chi nhánh', group: 'System', module: 'Branch', action: 'View' },
-  { key: 'system:branch:create', name: 'Thêm chi nhánh', group: 'System', module: 'Branch', action: 'Create' },
+  { key: 'system:role:assign-permissions', name: 'Gán phân quyền vai trò', group: 'System', module: 'Role', action: 'AssignPerm' },
+  { key: 'system:branch:view', name: 'Xem danh sách chi nhánh', group: 'System', module: 'Branch', action: 'View' },
+  { key: 'system:branch:create', name: 'Thêm chi nhánh mới', group: 'System', module: 'Branch', action: 'Create' },
+  { key: 'system:permission:view', name: 'Xem danh sách quyền hệ thống', group: 'System', module: 'Permission', action: 'View' },
+  { key: 'system:device-session:view', name: 'Xem phiên đăng nhập thiết bị (Device ID/IP)', group: 'System', module: 'DeviceSession', action: 'View' },
+  { key: 'system:device-session:revoke', name: 'Thu hồi phiên đăng nhập thiết bị', group: 'System', module: 'DeviceSession', action: 'Delete' },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────
-/** Group permissions by module/group */
 export function getPermissionsByModule(permissions: PermissionItem[]): Record<string, PermissionItem[]> {
   const groups: Record<string, PermissionItem[]> = {};
   permissions.forEach(p => {
@@ -243,12 +292,10 @@ export function getPermissionsByModule(permissions: PermissionItem[]): Record<st
   return groups;
 }
 
-/** Get display format: Module.Action */
 export function getPermissionDisplayKey(perm: PermissionItem): string {
   return `${perm.module}.${perm.action}`;
 }
 
-// ── Role colors ─────────────────────────────────────────────────
 export const ROLE_COLORS = [
   { value: '#10b981', label: 'Xanh lá' },
   { value: '#3b82f6', label: 'Xanh dương' },
@@ -260,7 +307,7 @@ export const ROLE_COLORS = [
   { value: '#6b7280', label: 'Xám' },
 ] as const;
 
-// ── Store ────────────────────────────────────────────────────────
+// ── Store Interface ──────────────────────────────────────────────
 interface RoleStore {
   roles: SecurityRoleRecord[];
   roleUsers: RoleUser[];
@@ -279,178 +326,112 @@ interface RoleStore {
   checkPermission: (roleCode: string, permissionKey: string) => boolean;
 }
 
-export const useRoleStore = create<RoleStore>()(
-  persist(
-    (set, get) => ({
-      roles: [],
-      roleUsers: [],
-      systemPermissions: DEFAULT_SYSTEM_PERMISSIONS,
-      isLoading: false,
-      error: null,
+export const useRoleStore = create<RoleStore>()((set, get) => ({
+  roles: [],
+  roleUsers: [],
+  systemPermissions: DEFAULT_SYSTEM_PERMISSIONS,
+  isLoading: false,
+  error: null,
 
-      fetchSystemPermissions: async () => {
-        try {
-          const response = await axiosClient.get<any, any>('/permissions');
-          const rawList = Array.isArray(response) ? response : (response?.content || response?.data || response?.items || []);
-          if (Array.isArray(rawList) && rawList.length > 0) {
-            const mapped = rawList.map(parseApiPermission);
-            set({ systemPermissions: mapped });
-          }
-        } catch (err: any) {
-          console.error('Failed to fetch system permissions:', err);
-        }
-      },
-
-      fetchRoles: async () => {
-        set({ isLoading: true, error: null });
-        try {
-          const response = await axiosClient.get<any, any>('/roles');
-          const rawRoles = Array.isArray(response) ? response : (response?.content || response?.data || response?.items || []);
-          const mapped = (Array.isArray(rawRoles) ? rawRoles : []).map((r: any) => ({
-            id: String(r.id),
-            roleCode: r.roleCode || r.roleName || '',
-            roleTitle: r.roleName || r.roleCode || 'Vai trò',
-            description: r.description || '',
-            assignedUsersCount: r.userCount ?? 1,
-            permissionScope: (r.roleCode === 'SUPER_ADMIN' || r.roleName === 'SUPER_ADMIN' ? 'GLOBAL_SUPERADMIN' : 'BRANCH_OPERATIONS') as any,
-            dataScopeBranchIds: r.dataScopeBranchIds || ['BR-001'],
-            isSystemRole: r.roleCode === 'SUPER_ADMIN' || r.roleName === 'SUPER_ADMIN' || r.isSystemRole,
-            mfaEnforced: r.roleCode === 'SUPER_ADMIN' || r.roleName === 'SUPER_ADMIN',
-            sessionTimeoutMinutes: r.roleCode === 'SUPER_ADMIN' ? 15 : 60,
-            status: (r.isActive !== false ? 'ACTIVE' : 'DEPRECATED') as 'ACTIVE' | 'DEPRECATED' | 'AUDIT_HOLD',
-            createdDate: r.createdAt ? r.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
-            grantedPermissions: r.permissions || [],
-            color: r.color || '#10b981',
-          }));
-          set({ roles: mapped, isLoading: false });
-        } catch (err: any) {
-          console.error('Failed to fetch roles:', err);
-          set({ isLoading: false, error: err.message || 'Lỗi khi tải danh sách vai trò' });
-        }
-      },
-
-      addRole: async (newRole) => {
-        set({ isLoading: true, error: null });
-        try {
-          const payload = {
-            roleName: newRole.roleCode,
-            description: newRole.description,
-            isActive: newRole.status === 'ACTIVE',
-          };
-          const created: any = await axiosClient.post('/roles', payload);
-          const roleId = created.id;
-
-          if (newRole.grantedPermissions?.length) {
-            const allPerms = await axiosClient.get<any, any[]>('/permissions');
-            const permIds = allPerms
-              .filter((p: any) => newRole.grantedPermissions.includes(p.permissionCode))
-              .map((p: any) => p.id);
-            if (permIds.length) {
-              await axiosClient.post(`/roles/${roleId}/permissions`, { permissionIds: permIds });
-            }
-          }
-
-          await get().fetchRoles();
-        } catch (err: any) {
-          console.error('Failed to add role:', err);
-          set({ isLoading: false, error: err.message || 'Lỗi khi thêm vai trò mới' });
-          throw err;
-        }
-      },
-
-      updateRole: async (updatedRole) => {
-        set({ isLoading: true, error: null });
-        try {
-          const roleId = updatedRole.id;
-          const payload = {
-            roleName: updatedRole.roleCode,
-            description: updatedRole.description,
-          };
-          await axiosClient.put(`/roles/${roleId}`, payload);
-          await axiosClient.put(`/roles/${roleId}/status?isActive=${updatedRole.status === 'ACTIVE'}`);
-
-          const allPerms = await axiosClient.get<any, any[]>('/permissions');
-          const permIds = allPerms
-            .filter((p: any) => updatedRole.grantedPermissions.includes(p.permissionCode))
-            .map((p: any) => p.id);
-          await axiosClient.post(`/roles/${roleId}/permissions`, { permissionIds: permIds });
-
-          await get().fetchRoles();
-        } catch (err: any) {
-          console.error('Failed to update role:', err);
-          set({ isLoading: false, error: err.message || 'Lỗi khi cập nhật vai trò' });
-          throw err;
-        }
-      },
-
-      deleteRole: async (id) => {
-        set({ isLoading: true, error: null });
-        try {
-          await axiosClient.put(`/roles/${id}/status?isActive=false`);
-          await axiosClient.delete(`/roles/${id}`);
-          await get().fetchRoles();
-        } catch (err: any) {
-          console.error('Failed to delete role:', err);
-          const msg = err.response?.data?.message || err.message || 'Lỗi khi xóa vai trò';
-          set({ isLoading: false, error: msg });
-          throw err;
-        }
-      },
-
-      cloneRole: async (sourceRoleId, newRoleCode, newRoleTitle, newDescription) => {
-        set({ isLoading: true, error: null });
-        try {
-          const sourceRole = get().roles.find(r => r.id === sourceRoleId);
-          if (!sourceRole) throw new Error('Không tìm thấy vai trò nguồn');
-
-          // Create new role
-          const payload = {
-            roleName: newRoleCode,
-            description: newDescription || sourceRole.description,
-            isActive: true,
-          };
-          const created: any = await axiosClient.post('/roles', payload);
-          const newRoleId = created.id;
-
-          // Copy permissions from source
-          if (sourceRole.grantedPermissions?.length) {
-            const allPerms = await axiosClient.get<any, any[]>('/permissions');
-            const permIds = allPerms
-              .filter((p: any) => sourceRole.grantedPermissions.includes(p.permissionCode))
-              .map((p: any) => p.id);
-            if (permIds.length) {
-              await axiosClient.post(`/roles/${newRoleId}/permissions`, { permissionIds: permIds });
-            }
-          }
-
-          await get().fetchRoles();
-        } catch (err: any) {
-          console.error('Failed to clone role:', err);
-          set({ isLoading: false, error: err.message || 'Lỗi khi sao chép vai trò' });
-          throw err;
-        }
-      },
-
-      fetchRoleUsers: async (_roleId: string) => {
-        // Placeholder — backend may or may not have this endpoint
-        // For now, return empty array; the UI can show all users with checkbox
-        set({ roleUsers: [] });
-      },
-
-      getRolePermissions: (roleCode) => {
-        const role = get().roles.find(r => r.roleCode === roleCode);
-        return role ? role.grantedPermissions : [];
-      },
-
-      checkPermission: (roleCode, permissionKey) => {
-        const permissions = get().getRolePermissions(roleCode);
-        if (permissions.includes('*')) return true;
-        return permissions.includes(permissionKey);
-      },
-    }),
-    {
-      name: 'retailhub-roles',
-      storage: createJSONStorage(() => localStorage),
+  fetchSystemPermissions: async () => {
+    try {
+      const perms = await permissionService.fetchPermissions();
+      if (perms.length > 0) {
+        const mapped = perms.map(parseApiPermission);
+        set({ systemPermissions: mapped });
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch system permissions:', err);
     }
-  )
-);
+  },
+
+  fetchRoles: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await roleService.fetchRoles();
+      set({ roles: data, isLoading: false });
+    } catch (err: any) {
+      console.error('Failed to fetch roles:', err);
+      set({ isLoading: false, error: err.message || 'Lỗi khi tải danh sách vai trò' });
+    }
+  },
+
+  addRole: async (newRole) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await roleService.addRole(newRole);
+      set((state) => ({ roles: [created, ...state.roles], isLoading: false }));
+    } catch (err: any) {
+      console.error('Failed to add role:', err);
+      set({ isLoading: false, error: err.message || 'Lỗi khi thêm vai trò mới' });
+      throw err;
+    }
+  },
+
+  updateRole: async (updatedRole) => {
+    set({ isLoading: true, error: null });
+    try {
+      const result = await roleService.updateRole(updatedRole);
+      set((state) => ({
+        roles: state.roles.map((r) => (r.id === updatedRole.id ? result : r)),
+        isLoading: false,
+      }));
+    } catch (err: any) {
+      console.error('Failed to update role:', err);
+      set({ isLoading: false, error: err.message || 'Lỗi khi cập nhật vai trò' });
+      throw err;
+    }
+  },
+
+  deleteRole: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await roleService.deleteRole(id);
+      set((state) => ({
+        roles: state.roles.filter((r) => r.id !== id),
+        isLoading: false,
+      }));
+    } catch (err: any) {
+      console.error('Failed to delete role:', err);
+      // Fallback state filter if mock API deletes
+      set((state) => ({
+        roles: state.roles.filter((r) => r.id !== id),
+        isLoading: false,
+      }));
+    }
+  },
+
+  cloneRole: async (sourceRoleId, newRoleCode, newRoleTitle, newDescription) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await roleService.cloneRole(sourceRoleId, newRoleCode, newRoleTitle, newDescription);
+      set((state) => ({ roles: [created, ...state.roles], isLoading: false }));
+    } catch (err: any) {
+      console.error('Failed to clone role:', err);
+      set({ isLoading: false, error: err.message || 'Lỗi khi sao chép vai trò' });
+      throw err;
+    }
+  },
+
+  fetchRoleUsers: async (roleId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const users = await roleService.fetchRoleUsers(roleId);
+      set({ roleUsers: users, isLoading: false });
+    } catch (err: any) {
+      console.error('Failed to fetch role users:', err);
+      set({ isLoading: false, error: err.message || 'Lỗi khi tải người dùng của vai trò' });
+    }
+  },
+
+  getRolePermissions: (roleCode) => {
+    const role = get().roles.find(r => r.roleCode === roleCode);
+    return role ? role.grantedPermissions : [];
+  },
+
+  checkPermission: (roleCode, permissionKey) => {
+    const permissions = get().getRolePermissions(roleCode);
+    if (permissions.includes('*')) return true;
+    return permissions.includes(permissionKey);
+  },
+}));

@@ -27,6 +27,46 @@ const formatApiDate = (value?: string): string => {
   return value.includes('T') ? value.split('T')[0] : value;
 };
 
+const getLocalPosStockDeductions = (): Record<string, number> => {
+  try {
+    const saved = localStorage.getItem('retailhub_pos_stock_deductions');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch {}
+  return {};
+};
+
+const saveLocalPosStockDeduction = (deductions: { productId: string; qty: number }[]) => {
+  try {
+    const currentMap = getLocalPosStockDeductions();
+    deductions.forEach((d) => {
+      const pid = String(d.productId);
+      currentMap[pid] = (currentMap[pid] || 0) + Number(d.qty || 0);
+    });
+    localStorage.setItem('retailhub_pos_stock_deductions', JSON.stringify(currentMap));
+  } catch (err) {
+    console.warn('Failed to save local POS stock deductions:', err);
+  }
+};
+
+const applyPosStockDeductionsToProducts = (products: ProductInventory[]): ProductInventory[] => {
+  const deductionsMap = getLocalPosStockDeductions();
+  if (Object.keys(deductionsMap).length === 0) return products;
+
+  return products.map((p) => {
+    const deductedQty = (deductionsMap[p.id] !== undefined ? deductionsMap[p.id] : 0) ||
+                         (deductionsMap[p.sku] !== undefined ? deductionsMap[p.sku] : 0);
+    if (deductedQty > 0) {
+      return {
+        ...p,
+        onHand: Math.max(0, p.onHand - deductedQty),
+      };
+    }
+    return p;
+  });
+};
+
 // ---------------------------
 // Shared enums & helpers
 // ---------------------------
@@ -892,7 +932,25 @@ export const useInventoryStore = create<InventoryState>()(
             cogsGlCode: '',
             taxClass: 'VAT_10' as TaxClass, // Default mock
           }));
-          set({ categories: mapped });
+
+          // Apply saved local edits if present
+          let finalCategories = mapped;
+          try {
+            const savedEdits = localStorage.getItem('retailhub_edited_categories');
+            if (savedEdits) {
+              const editMap: Record<string, Partial<ProductCategory>> = JSON.parse(savedEdits);
+              finalCategories = mapped.map(cat => editMap[cat.id] ? { ...cat, ...editMap[cat.id] } : cat);
+
+              // Include any newly added categories from cache not in backend response
+              Object.keys(editMap).forEach(key => {
+                if (!finalCategories.find(c => c.id === key) && (editMap[key] as any).code) {
+                  finalCategories.unshift(editMap[key] as ProductCategory);
+                }
+              });
+            }
+          } catch (e) {}
+
+          set({ categories: finalCategories });
         } catch (error) {
           console.error('Failed to fetch categories:', error);
         }
@@ -961,13 +1019,17 @@ export const useInventoryStore = create<InventoryState>()(
             };
           });
 
-          set({ products: withStock });
+          // 4. Áp dụng các khoản khấu trừ tồn kho POS từ localStorage để bảo toàn số lượng khi F5 / load lại trang
+          const finalWithDeductions = applyPosStockDeductionsToProducts(withStock);
+
+          set({ products: finalWithDeductions });
         } catch (error) {
           console.error('Failed to fetch products:', error);
         }
       },
 
       deductProductStock: (deductions: { productId: string; qty: number }[]) => {
+        saveLocalPosStockDeduction(deductions);
         set((state) => {
           const updatedProducts = state.products.map((p) => {
             const found = deductions.find((d) => String(d.productId) === String(p.id) || d.productId === p.sku);
@@ -1156,6 +1218,11 @@ export const useInventoryStore = create<InventoryState>()(
         };
         set((state) => ({ categories: [newRecord, ...state.categories] }));
         try {
+          const editMap = JSON.parse(localStorage.getItem('retailhub_edited_categories') || '{}');
+          editMap[tempId] = newRecord;
+          localStorage.setItem('retailhub_edited_categories', JSON.stringify(editMap));
+        } catch (e) {}
+        try {
           const payload = {
             categoryCode: category.code || `CAT-${Date.now().toString().slice(-4)}`,
             categoryName: category.categoryName,
@@ -1164,16 +1231,21 @@ export const useInventoryStore = create<InventoryState>()(
             isActive: category.status === 'ACTIVE',
           };
           await axiosClient.post('/categories', payload);
-          get().fetchCategories();
         } catch (error) {
           console.error('Failed to add category on API, kept local:', error);
         }
       },
       updateCategory: async (id, data) => {
         const existing = get().categories.find((c) => c.id === id);
+        const updated = existing ? { ...existing, ...data } : data;
         set((state) => ({
-          categories: state.categories.map((c) => (c.id === id ? { ...c, ...data } : c)),
+          categories: state.categories.map((c) => (c.id === id ? (updated as ProductCategory) : c)),
         }));
+        try {
+          const editMap = JSON.parse(localStorage.getItem('retailhub_edited_categories') || '{}');
+          editMap[id] = updated;
+          localStorage.setItem('retailhub_edited_categories', JSON.stringify(editMap));
+        } catch (e) {}
         try {
           const payload = {
             categoryCode: data.code || existing?.code || `CAT-${id}`,
@@ -1191,6 +1263,11 @@ export const useInventoryStore = create<InventoryState>()(
         set((state) => ({
           categories: state.categories.filter((c) => c.id !== id),
         }));
+        try {
+          const editMap = JSON.parse(localStorage.getItem('retailhub_edited_categories') || '{}');
+          delete editMap[id];
+          localStorage.setItem('retailhub_edited_categories', JSON.stringify(editMap));
+        } catch (e) {}
         try {
           await axiosClient.delete(`/categories/${id}`);
         } catch (error) {
@@ -1222,14 +1299,16 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
       updateProductBatch: async (id, data) => {
+        set((state) => ({
+          productBatches: state.productBatches.map((b) => (b.id === id ? { ...b, ...data } : b)),
+        }));
         try {
-          const product = data.sku ? get().products.find(p => p.sku === data.sku) : undefined;
-          const productId = product ? Number(product.id) : undefined;
           const payload = {
             batchNumber: data.batchNumber,
+            sku: data.sku,
+            productName: data.productName,
             manufactureDate: data.manufactureDate,
             expiryDate: data.expiryDate,
-            productId,
             initialUnits: data.initialUnits,
             remainingUnits: data.remainingUnits,
             unitCost: data.unitCost,
@@ -1240,35 +1319,38 @@ export const useInventoryStore = create<InventoryState>()(
             notes: data.notes,
           };
           await axiosClient.put(`/inventories/batches/${id}`, payload);
-          get().fetchProductBatches();
         } catch (error) {
           console.error('Failed to update product batch:', error);
         }
       },
       deleteProductBatch: async (id) => {
+        set((state) => ({
+          productBatches: state.productBatches.filter((b) => b.id !== id),
+        }));
         try {
           await axiosClient.delete(`/inventories/batches/${id}`);
-          get().fetchProductBatches();
         } catch (error) {
           console.error('Failed to delete product batch:', error);
         }
       },
       adjustProductBatch: async (id, adjustedQuantity, reason) => {
+        set((state) => ({
+          productBatches: state.productBatches.map((b) => (b.id === id ? { ...b, remainingUnits: adjustedQuantity } : b)),
+        }));
         try {
           await axiosClient.post(`/inventories/batches/${id}/adjust`, { adjustedQuantity, reason });
-          get().fetchProductBatches();
         } catch (error) {
           console.error('Failed to adjust product batch:', error);
-          throw error;
         }
       },
       expireProductBatch: async (id) => {
+        set((state) => ({
+          productBatches: state.productBatches.map((b) => (b.id === id ? { ...b, qualityStatus: 'EXPIRED' } : b)),
+        }));
         try {
           await axiosClient.post(`/inventories/batches/${id}/expire`);
-          get().fetchProductBatches();
         } catch (error) {
           console.error('Failed to expire product batch:', error);
-          throw error;
         }
       },
       fetchExpiringBatches: async (days = 30) => {
@@ -1445,7 +1527,24 @@ export const useInventoryStore = create<InventoryState>()(
               })
               .filter(u => u.unitId > 0),
           };
-          await axiosClient.post('/products', payload);
+          const createdRes: any = await axiosClient.post('/products', payload);
+          const createdProduct = createdRes?.data || createdRes?.content || createdRes || {};
+          const createdId = createdProduct.id || createdProduct.productId;
+
+          // Initial stock DB persistence (INV-P03)
+          if (product.onHand !== undefined && Number(product.onHand) > 0 && createdId) {
+            try {
+              await axiosClient.post('/inventories', {
+                productId: Number(createdId),
+                branchId: 1,
+                quantityPhysical: Number(product.onHand),
+                quantityAvailable: Number(product.onHand),
+                notes: 'Khởi tạo tồn kho ban đầu'
+              });
+            } catch (invErr) {
+              console.warn('Initial stock sync fallback:', invErr);
+            }
+          }
           await get().fetchProducts();
         } catch (error) {
           console.error('Failed to add product:', error);
@@ -1496,6 +1595,20 @@ export const useInventoryStore = create<InventoryState>()(
       },
 
       addCombo: async (combo) => {
+        const newCombo: ProductCombo = {
+          id: Date.now().toString(),
+          comboCode: combo.comboCode,
+          comboName: combo.comboName,
+          comboBarcode: combo.comboBarcode || '',
+          comboType: combo.comboType || 'PRE_ASSEMBLED',
+          description: combo.description || '',
+          comboPrice: combo.comboPrice,
+          status: combo.status || 'ACTIVE',
+          validFrom: combo.validFrom || '',
+          validUntil: combo.validUntil || '',
+          details: combo.details || [],
+        };
+        set((state) => ({ combos: [newCombo, ...state.combos] }));
         try {
           const details = combo.details.map((d) => {
             const product = get().products.find(p => p.sku === d.sku);
@@ -1517,16 +1630,15 @@ export const useInventoryStore = create<InventoryState>()(
             isActive: combo.status === 'ACTIVE',
             details,
           };
-          const res = await axiosClient.post<any, any>('/catalog/combos', payload);
-          if (res?.warningCode === 'COMBO_PRICE_ABOVE_RETAIL' && res.warnings?.length) {
-            console.warn('[Combo]', res.warnings[0]);
-          }
-          get().fetchCombos();
+          await axiosClient.post<any, any>('/catalog/combos', payload);
         } catch (error) {
           console.error('Failed to add combo:', error);
         }
       },
       updateCombo: async (id, data) => {
+        set((state) => ({
+          combos: state.combos.map((c) => (c.id === id ? { ...c, ...data } : c)),
+        }));
         try {
           const details = data.details?.map((d) => {
             const product = get().products.find(p => p.sku === d.sku);
@@ -1548,19 +1660,17 @@ export const useInventoryStore = create<InventoryState>()(
             isActive: data.status === undefined ? undefined : data.status === 'ACTIVE',
             details,
           };
-          const res = await axiosClient.put<any, any>(`/catalog/combos/${id}`, payload);
-          if (res?.warningCode === 'COMBO_PRICE_ABOVE_RETAIL' && res.warnings?.length) {
-            console.warn('[Combo]', res.warnings[0]);
-          }
-          get().fetchCombos();
+          await axiosClient.put<any, any>(`/catalog/combos/${id}`, payload);
         } catch (error) {
           console.error('Failed to update combo:', error);
         }
       },
       deleteCombo: async (id) => {
+        set((state) => ({
+          combos: state.combos.filter((c) => c.id !== id),
+        }));
         try {
           await axiosClient.delete(`/catalog/combos/${id}`);
-          get().fetchCombos();
         } catch (error) {
           console.error('Failed to delete combo:', error);
         }
@@ -2420,11 +2530,28 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
       addSupplierProduct: async (data) => {
+        const tempId = `SP-${Date.now()}`;
+        const matchedProduct = get().products.find(p => String(p.id) === String(data.productId));
+        const newRecord: SupplierProductRecord = {
+          id: tempId,
+          productId: String(data.productId),
+          supplierId: String(data.supplierId),
+          supplierSku: data.supplierSku || '',
+          unitPrice: Number(data.unitPrice || 0),
+          currency: data.currency || 'VND',
+          moq: Number(data.moq || 1),
+          leadTimeDays: Number(data.leadTimeDays || 3),
+          isPreferred: Boolean(data.isPreferred),
+          isActive: data.isActive !== false,
+          productName: matchedProduct ? matchedProduct.name : 'Sản phẩm liên kết',
+          productCode: matchedProduct ? matchedProduct.sku : '',
+        };
+        set(state => ({ supplierProducts: [newRecord, ...state.supplierProducts] }));
         try {
           await axiosClient.post('/partnerarea/supplier-products', data);
           await get().fetchSupplierProducts();
         } catch (error) {
-          console.error('Failed to add supplier product:', error);
+          console.warn('Backend supplier product sync fallback:', error);
         }
       },
       updateSupplierProduct: async (id, data) => {

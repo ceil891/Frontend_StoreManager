@@ -363,7 +363,7 @@ export function SupplierStoragesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? '📦 Thêm khu vực lưu trữ mới' : '⚙️ Sửa thông tin khu vực'}
+        title={modalMode === 'create' ? '📦 Thêm Khu Vực lưu trữ mới' : '⚙️ Sửa thông tin khu vực'}
         width="max-w-xl"
       >
         <form onSubmit={handleSave} className="space-y-4 text-sm">

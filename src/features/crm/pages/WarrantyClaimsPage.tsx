@@ -157,7 +157,7 @@ export function WarrantyClaimsPage() {
         toast.success(`Cập nhật yêu cầu ${form.claimCode} thành công!`);
       } else {
         await axiosClient.post('/crm/warranty-claims', payload);
-        toast.success(`Tạo mới yêu cầu bảo hành ${form.claimCode} thành công!`);
+        toast.success(`Tạo Mới yêu cầu bảo hành ${form.claimCode} thành công!`);
       }
       setIsModalOpen(false);
       fetchWarrantyClaims();
@@ -293,7 +293,7 @@ export function WarrantyClaimsPage() {
               className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-medium shadow-sm"
               onClick={handleOpenCreate}
             >
-              <Plus className="w-4 h-4" /> Tạo mới
+              <Plus className="w-4 h-4" /> Tạo Mới
             </button>
           </div>
         </div>

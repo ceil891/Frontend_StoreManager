@@ -75,7 +75,14 @@ export function SupplierProductsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.productId || !editingItem.supplierId) return;
+    if (!editingItem.productId) {
+      toast.error('Vui lòng chọn Sản phẩm cần liên kết!');
+      return;
+    }
+    if (!editingItem.supplierId) {
+      toast.error('Vui lòng chọn Nhà cung cấp!');
+      return;
+    }
 
     const payload = {
       productId: editingItem.productId,
@@ -89,17 +96,24 @@ export function SupplierProductsPage() {
       isActive: editingItem.isActive !== false,
     };
 
-    if (modalMode === 'create') {
-      await addSupplierProduct(payload);
-    } else {
-      await updateSupplierProduct(editingItem.id!, payload);
+    try {
+      if (modalMode === 'create') {
+        await addSupplierProduct(payload);
+        toast.success('Đã tạo liên kết mặt hàng với Nhà cung cấp thành công!');
+      } else {
+        await updateSupplierProduct(editingItem.id!, payload);
+        toast.success('Đã cập nhật thông tin liên kết Nhà cung cấp thành công!');
+      }
+      setIsModalOpen(false);
+    } catch {
+      toast.error('Lỗi khi lưu liên kết mặt hàng!');
     }
-    setIsModalOpen(false);
   };
 
   const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa liên kết nhà cung cấp này?')) {
       await deleteSupplierProduct(id);
+      toast.success('Đã xóa liên kết nhà cung cấp thành công!');
     }
   };
 
@@ -178,21 +192,21 @@ export function SupplierProductsPage() {
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setSelected(row.original)}
+              onClick={(e) => { e.stopPropagation(); setSelected(row.original); }}
               className="p-1 text-gray-500 hover:text-emerald-600 rounded"
               title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleOpenEdit(row.original)}
+              onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
               className="p-1 text-gray-500 hover:text-blue-600 rounded"
               title="Sửa"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={(e) => { e.stopPropagation(); handleDelete(row.original.id); }}
               className="p-1 text-gray-500 hover:text-red-600 rounded"
               title="Xóa"
             >

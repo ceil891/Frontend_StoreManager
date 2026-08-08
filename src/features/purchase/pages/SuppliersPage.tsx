@@ -78,46 +78,93 @@ export function SuppliersPage() {
 
   const handleSaveSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingSupplier.supplierName || !editingSupplier.code) return;
+    if (!editingSupplier.supplierName?.trim() || !editingSupplier.code?.trim()) {
+      toast.error('Vui lòng điền Tên nhà cung cấp và Mã nhà cung cấp!');
+      return;
+    }
+
+    if (editingSupplier.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editingSupplier.email.trim())) {
+      toast.error('Định dạng Email không hợp lệ (Ví dụ: ncc@domain.com)!');
+      return;
+    }
+
+    if (editingSupplier.phone?.trim() && !/^[0-9]{10,11}$/.test(editingSupplier.phone.trim())) {
+      toast.error('Số điện thoại phải từ 10 - 11 chữ số!');
+      return;
+    }
 
     try {
       if (modalMode === 'create') {
         const newSupplier: Omit<SupplierRecord, 'id'> = {
           code: editingSupplier.code,
           supplierName: editingSupplier.supplierName,
+          shortName: editingSupplier.shortName || '',
+          tags: editingSupplier.tags || '',
           category: editingSupplier.category as any || 'GENERAL',
           contactPerson: editingSupplier.contactPerson || '',
           phone: editingSupplier.phone || '',
           email: editingSupplier.email || '',
           address: editingSupplier.address || '',
+          taxCode: editingSupplier.taxCode || '',
+          paymentTerm: Number(editingSupplier.paymentTerm) || 30,
+          creditLimit: Number(editingSupplier.creditLimit) || 0,
+          bankName: editingSupplier.bankName || '',
+          bankAccount: editingSupplier.bankAccount || '',
+          accountHolder: editingSupplier.accountHolder || '',
           rating: Number(editingSupplier.rating) || 5.0,
           leadTimeDays: Number(editingSupplier.leadTimeDays) || 7,
           paymentTerms: editingSupplier.paymentTerms || 'Net 30',
           activeOrdersCount: Number(editingSupplier.activeOrdersCount) || 0,
           status: editingSupplier.status as any || 'ACTIVE',
-          notes: editingSupplier.notes || ''
+          notes: editingSupplier.notes || editingSupplier.description || '',
+          description: editingSupplier.description || editingSupplier.notes || '',
+          groupId: editingSupplier.groupId,
+          areaId: editingSupplier.areaId
         };
         await addSupplier(newSupplier);
         toast.success('Đã thêm nhà cung cấp mới thành công');
       } else if (editingSupplier.id) {
-        await updateSupplier(editingSupplier.id, editingSupplier);
+        await updateSupplier(editingSupplier.id, {
+          ...editingSupplier,
+          shortName: editingSupplier.shortName,
+          tags: editingSupplier.tags,
+          taxCode: editingSupplier.taxCode,
+          paymentTerm: Number(editingSupplier.paymentTerm) || 30,
+          creditLimit: Number(editingSupplier.creditLimit) || 0,
+          bankName: editingSupplier.bankName,
+          bankAccount: editingSupplier.bankAccount,
+          accountHolder: editingSupplier.accountHolder,
+          groupId: editingSupplier.groupId,
+          areaId: editingSupplier.areaId,
+          notes: editingSupplier.notes || editingSupplier.description,
+          description: editingSupplier.description || editingSupplier.notes
+        });
         toast.success('Đã cập nhật thông tin nhà cung cấp');
       }
+      fetchSuppliers();
       setIsModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lưu nhà cung cấp thất bại');
+      toast.error(err?.message || 'Lưu nhà cung cấp thất bại');
     }
   };
 
   const handleDeleteConfirm = async () => {
     if (!deletingSupplier) return;
+
+    if (deletingSupplier.status === 'ACTIVE') {
+      toast.error('Không thể xóa Nhà cung cấp đang Hoạt động! Vui lòng chuyển trạng thái sang Tạm ngưng hoặc Ngừng giao dịch trước.');
+      setDeletingSupplier(null);
+      return;
+    }
+
     try {
       await deleteSupplier(deletingSupplier.id);
       toast.success('Đã xóa nhà cung cấp');
-    } catch (err) {
+      fetchSuppliers();
+    } catch (err: any) {
       console.error(err);
-      toast.error('Xóa nhà cung cấp thất bại');
+      toast.error(err?.response?.data?.message || err?.message || 'Xóa nhà cung cấp thất bại');
     }
     setDeletingSupplier(null);
   };
@@ -234,7 +281,7 @@ export function SuppliersPage() {
               onClick={() => toast.success('Xuất danh sách nhà cung cấp thành công!')}
               className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0"
             >
-              <Download className="w-4 h-4" /> Xuất dữ liệu
+              <Download className="w-4 h-4" /> Xuất Dữ Liệu
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0">
               <Plus className="w-4 h-4" /> Thêm Nhà Cung Cấp Mới
@@ -278,8 +325,18 @@ export function SuppliersPage() {
                   <Building2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">{categoryLabels[selectedSupplier.category] || selectedSupplier.category}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">{categoryLabels[selectedSupplier.category] || selectedSupplier.category}</p>
+                    {selectedSupplier.tags && (
+                      <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 rounded">
+                        {selectedSupplier.tags}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xl font-bold text-gray-900 dark:text-white">{selectedSupplier.supplierName}</p>
+                  {selectedSupplier.shortName && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Tên viết tắt: {selectedSupplier.shortName}</p>
+                  )}
                 </div>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
@@ -291,25 +348,73 @@ export function SuppliersPage() {
               </span>
             </div>
 
-            <div className="space-y-4 bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+            {/* Thông tin định danh & Phân nhóm */}
+            <div className="grid grid-cols-2 gap-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 text-xs">
+              <div>
+                <span className="text-gray-500 dark:text-gray-400 block font-medium">Mã nhà cung cấp:</span>
+                <span className="font-mono font-bold text-gray-900 dark:text-white">{selectedSupplier.code}</span>
+              </div>
+              <div>
+                <span className="text-gray-500 dark:text-gray-400 block font-medium">Mã số thuế (Tax Code):</span>
+                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{selectedSupplier.taxCode || 'Chưa cập nhật'}</span>
+              </div>
+              <div>
+                <span className="text-gray-500 dark:text-gray-400 block font-medium">Nhóm NCC:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{selectedSupplier.groupId || 'Mặc định'}</span>
+              </div>
+              <div>
+                <span className="text-gray-500 dark:text-gray-400 block font-medium">Khu vực phân phối:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{selectedSupplier.areaId || 'Toàn quốc'}</span>
+              </div>
+            </div>
+
+            {/* Thông tin liên hệ */}
+            <div className="space-y-3 bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Thông tin liên hệ trực tiếp</h3>
               <div className="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
                 <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                <span className="font-semibold">{selectedSupplier.contactPerson}</span>
+                <span className="font-semibold">{selectedSupplier.contactPerson || 'Chưa cập nhật'}</span>
               </div>
               <div className="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
                 <Phone className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                <a href={`tel:${selectedSupplier.phone}`} className="hover:underline">{selectedSupplier.phone}</a>
+                <a href={`tel:${selectedSupplier.phone}`} className="hover:underline font-mono">{selectedSupplier.phone || 'Chưa cập nhật'}</a>
               </div>
               <div className="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
                 <Mail className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                <a href={`mailto:${selectedSupplier.email}`} className="hover:underline">{selectedSupplier.email}</a>
+                <a href={`mailto:${selectedSupplier.email}`} className="hover:underline">{selectedSupplier.email || 'Chưa cập nhật'}</a>
               </div>
               <div className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
                 <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
-                <span>{selectedSupplier.address}</span>
+                <span>{selectedSupplier.address || 'Chưa cập nhật địa chỉ'}</span>
               </div>
             </div>
+
+            {/* Tài khoản ngân hàng & Công nợ */}
+            {(selectedSupplier.bankAccount || selectedSupplier.bankName || selectedSupplier.creditLimit) && (
+              <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2 text-xs">
+                <h3 className="font-semibold uppercase tracking-wider text-gray-400 text-[10px]">Tài khoản ngân hàng & Hạn mức</h3>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {selectedSupplier.bankName && (
+                    <div>
+                      <span className="text-gray-500 text-xs block">Ngân hàng:</span>
+                      <span className="font-medium text-gray-900 dark:text-white">{selectedSupplier.bankName}</span>
+                    </div>
+                  )}
+                  {selectedSupplier.bankAccount && (
+                    <div>
+                      <span className="text-gray-500 text-xs block">Số tài khoản:</span>
+                      <span className="font-mono font-bold text-gray-900 dark:text-white">{selectedSupplier.bankAccount}</span>
+                    </div>
+                  )}
+                  {selectedSupplier.accountHolder && (
+                    <div className="col-span-2">
+                      <span className="text-gray-500 text-xs block">Chủ tài khoản:</span>
+                      <span className="font-semibold text-gray-900 dark:text-white uppercase">{selectedSupplier.accountHolder}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
               <div className="flex justify-between items-center text-sm">
@@ -367,7 +472,7 @@ export function SuppliersPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm nhà cung cấp' : 'Cập nhật nhà cung cấp'}
+        title={modalMode === 'create' ? 'Thêm Nhà Cung Cấp' : 'Cập nhật nhà cung cấp'}
         size="erp"
       >
         <form onSubmit={handleSaveSupplier}>
