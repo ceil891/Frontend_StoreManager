@@ -200,20 +200,7 @@ export const usePurchaseStore = create<PurchaseState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const data = await purchaseService.fetchPurchaseOrders();
-      const mappedOrders: PurchaseOrderItem[] = data.map((po) => ({
-        id: po.id,
-        poNumber: po.poCode,
-        supplierName: po.supplierName,
-        destinationStore: po.branchLocation,
-        orderDate: po.createdDate,
-        estDeliveryDate: po.expectedDeliveryDate,
-        totalCost: po.totalAmount,
-        status: po.status as any,
-        paymentStatus: 'UNPAID',
-        orderedBy: po.createdByName,
-        itemsCount: 1,
-      }));
-      set({ purchaseOrders: mappedOrders, isLoading: false });
+      set({ purchaseOrders: data, isLoading: false });
     } catch (e: any) {
       console.error('Failed to fetch purchase orders:', e);
       set({ isLoading: false, error: e.message || 'Lỗi khi tải đơn mua hàng' });
@@ -223,35 +210,9 @@ export const usePurchaseStore = create<PurchaseState>()((set) => ({
   addPurchaseOrder: async (po) => {
     set({ isLoading: true, error: null });
     try {
-      const createdPO = await purchaseService.addPurchaseOrder({
-        id: '',
-        poCode: po.poNumber,
-        supplierName: po.supplierName,
-        supplierPhone: '',
-        totalAmount: po.totalCost,
-        paidAmount: 0,
-        createdDate: po.orderDate,
-        expectedDeliveryDate: po.estDeliveryDate,
-        status: po.status,
-        branchLocation: po.destinationStore,
-        createdByName: po.orderedBy,
-      });
-
-      const newOrderItem: PurchaseOrderItem = {
-        id: createdPO.id,
-        poNumber: createdPO.poCode || po.poNumber,
-        supplierName: createdPO.supplierName || po.supplierName,
-        destinationStore: createdPO.branchLocation || po.destinationStore,
-        orderDate: createdPO.createdDate || po.orderDate,
-        estDeliveryDate: createdPO.expectedDeliveryDate || po.estDeliveryDate,
-        totalCost: createdPO.totalAmount || po.totalCost,
-        status: (createdPO.status as any) || po.status,
-        paymentStatus: po.paymentStatus || 'UNPAID',
-        orderedBy: createdPO.createdByName || po.orderedBy,
-        itemsCount: po.itemsCount || 1,
-      };
-
-      set((state) => ({ purchaseOrders: [newOrderItem, ...state.purchaseOrders], isLoading: false }));
+      await purchaseService.addPurchaseOrder(po);
+      const updated = await purchaseService.fetchPurchaseOrders();
+      set({ purchaseOrders: updated, isLoading: false });
     } catch (e: any) {
       console.error('Failed to post PO to API:', e);
       set({ isLoading: false, error: e.message || 'Lỗi khi thêm đơn mua hàng' });

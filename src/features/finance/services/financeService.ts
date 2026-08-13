@@ -146,4 +146,108 @@ export const financeService = {
       createdByName: item.createdByName || 'Kế toán tổng hợp',
     }));
   },
+
+  // --- Receipt Vouchers update/delete ---
+  async updateReceiptVoucher(id: string, data: Partial<ReceiptVoucherRecord>): Promise<Partial<ReceiptVoucherRecord>> {
+    const res = await axiosClient.put<any, any>(`/finance/receipts/${id}`, data);
+    return res?.data || res || data;
+  },
+
+  async deleteReceiptVoucher(id: string): Promise<void> {
+    await axiosClient.delete(`/finance/receipts/${id}`);
+  },
+
+  // --- Payment Vouchers update/delete ---
+  async updatePaymentVoucher(id: string, data: Partial<PaymentVoucherRecord>): Promise<Partial<PaymentVoucherRecord>> {
+    const res = await axiosClient.put<any, any>(`/finance/payments/${id}`, data);
+    return res?.data || res || data;
+  },
+
+  async deletePaymentVoucher(id: string): Promise<void> {
+    await axiosClient.delete(`/finance/payments/${id}`);
+  },
+
+  // --- Debts CRUD ---
+  async addDebtLedger(debt: Omit<DebtLedgerRecord, 'id'>): Promise<DebtLedgerRecord> {
+    const res = await axiosClient.post<any, any>('/finance/debts', debt);
+    const item = res?.data || res;
+    return { id: String(item?.id || Date.now()), ...debt, ...(item || {}) };
+  },
+
+  async updateDebtLedger(id: string, data: Partial<DebtLedgerRecord>): Promise<Partial<DebtLedgerRecord>> {
+    const res = await axiosClient.put<any, any>(`/finance/debts/${id}`, data);
+    return res?.data || res || data;
+  },
+
+  async deleteDebtLedger(id: string): Promise<void> {
+    await axiosClient.delete(`/finance/debts/${id}`);
+  },
+
+  // --- Operating Costs CRUD ---
+  async addOperatingCost(cost: Omit<OperatingCostRecord, 'id'>): Promise<OperatingCostRecord> {
+    const res = await axiosClient.post<any, any>('/finance/operating-costs', cost);
+    const item = res?.data || res;
+    return { id: String(item?.id || Date.now()), ...cost, ...(item || {}) };
+  },
+
+  async updateOperatingCost(id: string, data: Partial<OperatingCostRecord>): Promise<Partial<OperatingCostRecord>> {
+    const res = await axiosClient.put<any, any>(`/finance/operating-costs/${id}`, data);
+    return res?.data || res || data;
+  },
+
+  async deleteOperatingCost(id: string): Promise<void> {
+    await axiosClient.delete(`/finance/operating-costs/${id}`);
+  },
+
+  // --- Transaction Reasons CRUD ---
+  async addTransactionReason(reason: any): Promise<any> {
+    const res = await axiosClient.post<any, any>('/finance/transaction-reasons', reason);
+    return res?.data || res;
+  },
+
+  async updateTransactionReason(id: string, data: any): Promise<any> {
+    const res = await axiosClient.put<any, any>(`/finance/transaction-reasons/${id}`, data);
+    return res?.data || res || data;
+  },
+
+  async deleteTransactionReason(id: string): Promise<void> {
+    await axiosClient.delete(`/finance/transaction-reasons/${id}`);
+  },
+
+  // --- Journal Entries CRUD ---
+  async addJournalEntry(entry: Omit<JournalEntryRecord, 'id'>): Promise<JournalEntryRecord> {
+    const res = await axiosClient.post<any, any>('/finance/journal-entries', entry);
+    const item = res?.data || res;
+    return { id: String(item?.id || Date.now()), ...entry, ...(item || {}) };
+  },
+
+  async updateJournalEntry(id: string, data: Partial<JournalEntryRecord>): Promise<Partial<JournalEntryRecord>> {
+    const res = await axiosClient.put<any, any>(`/finance/journal-entries/${id}`, data);
+    return res?.data || res || data;
+  },
+
+  async deleteJournalEntry(id: string): Promise<void> {
+    await axiosClient.delete(`/finance/journal-entries/${id}`);
+  },
+
+  // --- Fixed Assets CRUD ---
+  async fetchFixedAssets(): Promise<any[]> {
+    const res = await axiosClient.get<any, any>('/accounting/fixed-assets');
+    const list = Array.isArray(res) ? res : (res?.content || []);
+    return list;
+  },
+
+  async addFixedAsset(asset: any): Promise<any> {
+    const res = await axiosClient.post<any, any>('/accounting/fixed-assets', asset);
+    return res?.data || res;
+  },
+
+  async updateFixedAsset(id: string, data: any): Promise<any> {
+    const res = await axiosClient.put<any, any>(`/accounting/fixed-assets/${id}`, data);
+    return res?.data || res || data;
+  },
+
+  async deleteFixedAsset(id: string): Promise<void> {
+    await axiosClient.delete(`/accounting/fixed-assets/${id}`);
+  },
 };

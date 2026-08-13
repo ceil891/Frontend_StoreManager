@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppRouter } from './routes';
 import { useThemeStore } from './shared/store/themeStore';
 import { Toaster } from 'sonner';
+import { GlobalErrorBoundary } from './shared/components/ui/GlobalErrorBoundary';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,11 +29,13 @@ function ThemeInitializer() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeInitializer />
-      <Toaster position="top-right" richColors />
-      <AppRouter />
-    </QueryClientProvider>
+    <GlobalErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeInitializer />
+        <Toaster position="top-right" richColors />
+        <AppRouter />
+      </QueryClientProvider>
+    </GlobalErrorBoundary>
   );
 }
 

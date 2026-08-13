@@ -1050,6 +1050,12 @@ export function PosTerminalPage() {
               <span className="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">TỔNG CỘNG</span>
               <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">{fmt(totalAmount)}</span>
             </div>
+            {activeCustomer && (
+              <div className="flex justify-between items-center text-xs text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800/60 mt-1">
+                <span className="flex items-center gap-1">🎁 Tích điểm đơn này:</span>
+                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-black">+{Math.floor((totalAmount / (loyaltyConfig?.earnRateAmount || 10000)) * (activeCustomer?.membershipRank === 'Thành viên Vàng' ? 1.5 : activeCustomer?.membershipRank === 'Thành viên Bạc' ? 1.2 : 1.0))} điểm</span>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2">

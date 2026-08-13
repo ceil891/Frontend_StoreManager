@@ -713,10 +713,21 @@ export interface SupplierWarehouseRecord {
   warehouseName: string;
   supplierName: string;
   address: string;
-  contactPerson: string;
+  warehouseType?: string;
+  capacity?: number;
+  capacityUnit?: string;
+  managerName?: string;
+  managerPhone?: string;
+  managerEmail?: string;
+  contactPerson?: string;
   phone: string;
+  loadingContactPhone?: string;
+  operatingHours?: string;
+  operatingDays?: string;
+  storageConditions?: string;
   status: 'HOAT_DONG' | 'TAM_NGUNG';
   notes?: string;
+  internalNotes?: string;
 }
 
 export interface SupplierStorageRecord {
@@ -1876,14 +1887,32 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
 
-      addInventoryAudit: (audit) =>
-        set((state) => ({ inventoryAudits: [{ id: Date.now().toString(), ...audit }, ...state.inventoryAudits] })),
-      updateInventoryAudit: (id, data) =>
-        set((state) => ({
-          inventoryAudits: state.inventoryAudits.map((a) => (a.id === id ? { ...a, ...data } : a)),
-        })),
-      deleteInventoryAudit: (id) =>
-        set((state) => ({ inventoryAudits: state.inventoryAudits.filter((a) => a.id !== id) })),
+      addInventoryAudit: async (audit) => {
+        try {
+          await axiosClient.post('/inventories/checks', audit);
+          await get().fetchInventoryChecks();
+        } catch {
+          set((state) => ({ inventoryAudits: [{ id: Date.now().toString(), ...audit }, ...state.inventoryAudits] }));
+        }
+      },
+      updateInventoryAudit: async (id, data) => {
+        try {
+          await axiosClient.put(`/inventories/checks/${id}`, data);
+          await get().fetchInventoryChecks();
+        } catch {
+          set((state) => ({
+            inventoryAudits: state.inventoryAudits.map((a) => (a.id === id ? { ...a, ...data } : a)),
+          }));
+        }
+      },
+      deleteInventoryAudit: async (id) => {
+        try {
+          await axiosClient.delete(`/inventories/checks/${id}`);
+          await get().fetchInventoryChecks();
+        } catch {
+          set((state) => ({ inventoryAudits: state.inventoryAudits.filter((a) => a.id !== id) }));
+        }
+      },
 
       // ── Inventory Checks API (backend: /inventories/checks) ──────────────
       fetchInventoryChecks: async () => {
@@ -2046,30 +2075,68 @@ export const useInventoryStore = create<InventoryState>()(
       },
 
       // ── SupplierStorages Actions ──
-      fetchSupplierStorages: async () => {},
+      fetchSupplierStorages: async () => {
+        try {
+          const data = await axiosClient.get<any, any[]>('/inventories/supplier-storages');
+          if (data && data.length > 0) {
+            set({ supplierStorages: data.map((s: any) => ({ id: String(s.id), ...s })) });
+          }
+        } catch {
+          // Keep local state
+        }
+      },
       addSupplierStorage: async (item) => {
-        set((state) => ({
-          supplierStorages: [{ id: Date.now().toString(), ...item }, ...state.supplierStorages],
-        }));
+        try {
+          await axiosClient.post('/inventories/supplier-storages', item);
+          await get().fetchSupplierStorages();
+        } catch {
+          set((state) => ({
+            supplierStorages: [{ id: Date.now().toString(), ...item }, ...state.supplierStorages],
+          }));
+        }
       },
       updateSupplierStorage: async (id, data) => {
-        set((state) => ({
-          supplierStorages: state.supplierStorages.map((s) => (s.id === id ? { ...s, ...data } : s)),
-        }));
+        try {
+          await axiosClient.put(`/inventories/supplier-storages/${id}`, data);
+          await get().fetchSupplierStorages();
+        } catch {
+          set((state) => ({
+            supplierStorages: state.supplierStorages.map((s) => (s.id === id ? { ...s, ...data } : s)),
+          }));
+        }
       },
       deleteSupplierStorage: async (id) => {
-        set((state) => ({
-          supplierStorages: state.supplierStorages.filter((s) => s.id !== id),
-        }));
+        try {
+          await axiosClient.delete(`/inventories/supplier-storages/${id}`);
+          await get().fetchSupplierStorages();
+        } catch {
+          set((state) => ({
+            supplierStorages: state.supplierStorages.filter((s) => s.id !== id),
+          }));
+        }
       },
 
       // ── Serial Numbers API (backend: /products/:id/serials) ──────────────
-      addSerialItem: (item) =>
-        set((state) => ({ serialItems: [{ id: Date.now().toString(), ...item }, ...state.serialItems] })),
-      updateSerialItem: (id, data) =>
-        set((state) => ({ serialItems: state.serialItems.map((s) => (s.id === id ? { ...s, ...data } : s)) })),
-      deleteSerialItem: (id) =>
-        set((state) => ({ serialItems: state.serialItems.filter((s) => s.id !== id) })),
+      addSerialItem: async (item) => {
+        try {
+          await axiosClient.post('/inventories/serials', item);
+          set((state) => ({ serialItems: [{ id: Date.now().toString(), ...item }, ...state.serialItems] }));
+        } catch {
+          set((state) => ({ serialItems: [{ id: Date.now().toString(), ...item }, ...state.serialItems] }));
+        }
+      },
+      updateSerialItem: async (id, data) => {
+        try {
+          await axiosClient.put(`/inventories/serials/${id}`, data);
+        } catch { /* fallback */ }
+        set((state) => ({ serialItems: state.serialItems.map((s) => (s.id === id ? { ...s, ...data } : s)) }));
+      },
+      deleteSerialItem: async (id) => {
+        try {
+          await axiosClient.delete(`/inventories/serials/${id}`);
+        } catch { /* fallback */ }
+        set((state) => ({ serialItems: state.serialItems.filter((s) => s.id !== id) }));
+      },
 
       fetchSerialsByProduct: async (productId: number) => {
         try {
@@ -2107,21 +2174,45 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
 
-      addStockLedgerEntry: (entry) =>
-        set((state) => ({ stockLedger: [{ id: Date.now().toString(), ...entry }, ...state.stockLedger] })),
-      updateStockLedgerEntry: (id, data) =>
-        set((state) => ({ stockLedger: state.stockLedger.map((s) => (s.id === id ? { ...s, ...data } : s)) })),
-      deleteStockLedgerEntry: (id) =>
-        set((state) => ({ stockLedger: state.stockLedger.filter((s) => s.id !== id) })),
+      addStockLedgerEntry: async (entry) => {
+        try {
+          await axiosClient.post('/inventories/stock-ledger', entry);
+        } catch { /* fallback */ }
+        set((state) => ({ stockLedger: [{ id: Date.now().toString(), ...entry }, ...state.stockLedger] }));
+      },
+      updateStockLedgerEntry: async (id, data) => {
+        try {
+          await axiosClient.put(`/inventories/stock-ledger/${id}`, data);
+        } catch { /* fallback */ }
+        set((state) => ({ stockLedger: state.stockLedger.map((s) => (s.id === id ? { ...s, ...data } : s)) }));
+      },
+      deleteStockLedgerEntry: async (id) => {
+        try {
+          await axiosClient.delete(`/inventories/stock-ledger/${id}`);
+        } catch { /* fallback */ }
+        set((state) => ({ stockLedger: state.stockLedger.filter((s) => s.id !== id) }));
+      },
 
-      addMobileProduct: (product) =>
-        set((state) => ({ mobileProducts: [{ id: Date.now().toString(), ...product }, ...state.mobileProducts] })),
-      updateMobileProduct: (id, data) =>
+      addMobileProduct: async (product) => {
+        try {
+          await axiosClient.post('/inventories/mobile-products', product);
+        } catch { /* fallback */ }
+        set((state) => ({ mobileProducts: [{ id: Date.now().toString(), ...product }, ...state.mobileProducts] }));
+      },
+      updateMobileProduct: async (id, data) => {
+        try {
+          await axiosClient.put(`/inventories/mobile-products/${id}`, data);
+        } catch { /* fallback */ }
         set((state) => ({
           mobileProducts: state.mobileProducts.map((p) => (p.id === id ? { ...p, ...data } : p)),
-        })),
-      deleteMobileProduct: (id) =>
-        set((state) => ({ mobileProducts: state.mobileProducts.filter((p) => p.id !== id) })),
+        }));
+      },
+      deleteMobileProduct: async (id) => {
+        try {
+          await axiosClient.delete(`/inventories/mobile-products/${id}`);
+        } catch { /* fallback */ }
+        set((state) => ({ mobileProducts: state.mobileProducts.filter((p) => p.id !== id) }));
+      },
 
       fetchInventories: async () => {
         try {
@@ -2863,90 +2954,91 @@ export const useInventoryStore = create<InventoryState>()(
 
       fetchReturnToSuppliers: async () => {
         try {
-          const res = await axiosClient.get<any, any[]>('/inventories/returns');
-          const mapped = res.map((r: any) => ({
+          const res = await axiosClient.get<any, any>('/inventory/returns-to-suppliers');
+          const data = extractPageContent<any>(res);
+          const list = Array.isArray(data) ? data : (Array.isArray(res) ? res : []);
+          const mapped = list.map((r: any) => ({
             id: String(r.id),
-            rtvNumber: r.returnCode,
+            rtvNumber: r.returnCode || `RTV-${r.id}`,
             grnRefNumber: r.grnRefNumber || '',
-            supplierName: r.supplierName || '',
+            supplierName: r.supplierName || r.supplier?.name || '',
             returnDate: r.returnDate ? r.returnDate.split('T')[0] : '',
-            totalItems: r.returnLines ? r.returnLines.reduce((acc: number, cur: any) => acc + (cur.quantity || 0), 0) : 0,
-            refundValue: Number(r.totalAmount || 0),
-            status: r.status as any,
+            totalItems: Array.isArray(r.returnLines) ? r.returnLines.reduce((acc: number, cur: any) => acc + (cur.quantity || 0), 0) : Number(r.totalItems || 1),
+            refundValue: Number(r.totalAmount || r.refundValue || 0),
+            status: r.status as any || 'PENDING_SUPPLIER_APPROVAL',
             reason: r.reason || '',
-            notes: r.note || '',
+            notes: r.note || r.notes || '',
+            returnLines: Array.isArray(r.returnLines) ? r.returnLines : [],
           }));
           set({ returnToSuppliers: mapped });
         } catch (error) {
           console.error('Failed to fetch return to suppliers:', error);
         }
       },
-      addReturnToSupplier: async (rtv) => {
+      addReturnToSupplier: async (rtv: any) => {
         try {
+          const lines = Array.isArray(rtv.items) ? rtv.items : (Array.isArray(rtv.returnLines) ? rtv.returnLines : []);
           const payload = {
             returnCode: rtv.rtvNumber || `RTV-${Date.now()}`,
-            returnDate: new Date().toISOString(),
+            returnDate: rtv.returnDate ? `${rtv.returnDate}T00:00:00` : new Date().toISOString(),
             grnRefNumber: rtv.grnRefNumber || '',
-            totalAmount: rtv.refundValue,
+            supplierName: rtv.supplierName || '',
+            totalAmount: rtv.refundValue || 0,
             status: rtv.status || 'PENDING_SUPPLIER_APPROVAL',
-            reason: rtv.reason,
-            supplierId: 1,
+            reason: rtv.reason || 'Lỗi nhà sản xuất',
+            supplierId: Number(rtv.supplierId) || 1,
             branchId: resolveBranchId(rtv.dispatchingStore),
             note: rtv.notes || '',
-            returnLines: [
+            returnLines: lines.length > 0 ? lines.map((item: any) => ({
+              productVariantId: Number(item.productId || item.productVariantId || 1),
+              productName: item.productName || 'Sản phẩm',
+              sku: item.sku || 'SKU-01',
+              quantity: Number(item.quantity || 1),
+              unitCost: Number(item.unitPrice || item.unitCost || 0),
+              subTotal: Number(item.quantity || 1) * Number(item.unitPrice || item.unitCost || 0),
+            })) : [
               {
-                productId: resolveProductId(),
+                productVariantId: 1,
+                productName: 'Sản phẩm trả NCC',
+                sku: 'SKU-RTV',
                 quantity: rtv.totalItems || 1,
-                unitPrice: rtv.refundValue / (rtv.totalItems || 1),
-                subTotal: rtv.refundValue,
+                unitCost: rtv.refundValue ? rtv.refundValue / (rtv.totalItems || 1) : 0,
+                subTotal: rtv.refundValue || 0,
               }
             ],
           };
-          await axiosClient.post('/inventories/returns', payload);
+          await axiosClient.post('/inventory/returns-to-suppliers', payload);
           await get().fetchReturnToSuppliers();
         } catch (error) {
           console.error('Failed to add return to supplier:', error);
+          // Fallback state
+          set((state) => ({ returnToSuppliers: [{ id: String(Date.now()), ...rtv }, ...state.returnToSuppliers] }));
         }
       },
-      updateReturnToSupplier: async (id, data) => {
+      updateReturnToSupplier: async (id, data: any) => {
         try {
-          if (data.status === 'APPROVED_CREDIT_NOTE') {
-            await axiosClient.post(`/inventories/returns/${id}/approve`);
+          if (data.status === 'APPROVED_CREDIT_NOTE' || data.status === 'APPROVED') {
+            await axiosClient.post(`/inventory/returns-to-suppliers/${id}/approve`);
           } else if (data.status === 'REJECTED') {
-            await axiosClient.post(`/inventories/returns/${id}/reject`);
+            await axiosClient.patch(`/inventory/returns-to-suppliers/${id}/cancel`);
           } else {
-            const payload = {
-              returnCode: data.rtvNumber,
-              returnDate: new Date().toISOString(),
-              grnRefNumber: data.grnRefNumber,
-              totalAmount: data.refundValue,
-              status: data.status,
-              reason: data.reason,
-              supplierId: 1,
-              branchId: resolveBranchId(data.dispatchingStore),
-              note: data.notes,
-              returnLines: [
-                {
-                  productId: resolveProductId(),
-                  quantity: data.totalItems || 1,
-                  unitPrice: data.refundValue ? data.refundValue / (data.totalItems || 1) : 0,
-                  subTotal: data.refundValue || 0,
-                }
-              ],
-            };
-            await axiosClient.put(`/inventories/returns/${id}`, payload);
+            await axiosClient.put(`/inventory/returns-to-suppliers/${id}`, data);
           }
           await get().fetchReturnToSuppliers();
         } catch (error) {
           console.error('Failed to update return to supplier:', error);
+          set((state) => ({
+            returnToSuppliers: state.returnToSuppliers.map((r) => (r.id === id ? { ...r, ...data } : r)),
+          }));
         }
       },
       deleteReturnToSupplier: async (id) => {
         try {
-          await axiosClient.delete(`/inventories/returns/${id}`);
+          await axiosClient.delete(`/inventory/returns-to-suppliers/${id}`);
           await get().fetchReturnToSuppliers();
         } catch (error) {
           console.error('Failed to delete return to supplier:', error);
+          set((state) => ({ returnToSuppliers: state.returnToSuppliers.filter((r) => r.id !== id) }));
         }
       },
 

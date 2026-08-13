@@ -42,17 +42,20 @@ function isItemActive(item: NavItem, pathname: string, allHrefs: string[]): bool
   return false;
 }
 
-function filterNavItem(item: NavItem, permissions: string[]): NavItem | null {
+import { checkPermission } from '@/shared/hooks/usePermission';
+
+function filterNavItem(item: NavItem, permissions: string[], role?: string | null): NavItem | null {
+  if (role === 'SUPER_ADMIN') return item;
   if (item.children && item.children.length > 0) {
     const validChildren = item.children
-      .map((child) => filterNavItem(child, permissions))
+      .map((child) => filterNavItem(child, permissions, role))
       .filter((c): c is NavItem => c !== null);
     if (validChildren.length > 0) {
       return { ...item, children: validChildren };
     }
     return null;
   }
-  if (!item.permission || permissions.includes(item.permission)) {
+  if (!item.permission || checkPermission(permissions, item.permission, role)) {
     return item;
   }
   return null;
@@ -177,18 +180,19 @@ export function MainLayout() {
   }, [location.pathname, allHrefs]);
 
   const permissions = useAuthPermissions();
+  const userRole = useAuthUser()?.role;
 
   const filteredGroups = useMemo(() => {
     return NAV_GROUPS.map((group) => {
       const validItems = group.items
-        .map((item) => filterNavItem(item, permissions))
+        .map((item) => filterNavItem(item, permissions, userRole))
         .filter((i): i is NavItem => i !== null);
       return {
         ...group,
         items: validItems,
       };
     }).filter((g) => g.items.length > 0);
-  }, [permissions]);
+  }, [permissions, userRole]);
 
   // Breadcrumbs path computation
   let currentGroup = '';
