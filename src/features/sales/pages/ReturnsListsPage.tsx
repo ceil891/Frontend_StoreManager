@@ -1,641 +1,534 @@
+import { useState, useMemo } from 'react';
+import { Plus, Search, Eye, CheckCircle2, XCircle, FileText, ArrowRight } from 'lucide-react';
 import { Modal } from '@/shared/components/ui/Modal';
-import { useMemo, useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, RefreshCw } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-
-
 import type { ColumnDef } from '@tanstack/react-table';
-import { useSalesStore } from '@/features/sales/store/salesStore';
-import { axiosClient } from '@/shared/lib/axiosClient';
+import { useSalesStore, type ReturnRequestItem } from '@/features/sales/store/salesStore';
 import { toast } from 'sonner';
 
-interface ReturnBillRecord {
-  id: string;
-  returnCode: string;
-  invoiceCode: string;
-  customerName: string;
-  returnDate: string;
-  returnAmount: number;
-  refundedAmount: number;
-  receiver: string;
-  status: 'CHO_KIEM_TRA' | 'DA_NHAN_LAI' | 'DA_HUY';
-  notes?: string;
-}
+const REQUEST_STATUS_CONFIG: Record<string, { label: string; style: string }> = {
+  PENDING: { label: 'Chờ duyệt', style: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
+  APPROVED: { label: 'Đã duyệt', style: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
+  PARTIALLY_RETURNED: { label: 'Trả một phần', style: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' },
+  COMPLETED: { label: 'Hoàn thành (100%)', style: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
+  REJECTED: { label: 'Từ chối', style: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' },
+  CANCELLED: { label: 'Đã hủy', style: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
+};
+
+const REFUND_METHOD_LABELS: Record<string, string> = {
+  CASH: 'Tiền mặt',
+  BANK_TRANSFER: 'Chuyển khoản',
+  STORE_CREDIT: 'Ví / Credit',
+};
 
 export function ReturnsListsPage() {
-  const { customerReturns, fetchCustomerReturns, addCustomerReturn, updateCustomerReturn, deleteCustomerReturn } = useSalesStore();
-  const [isLoading, setIsLoading] = useState(true);
+  const { saleOrders, returnRequests, addReturnRequest, updateReturnRequestStatus, addCustomerReturn } = useSalesStore();
+
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<ReturnBillRecord | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<ReturnRequestItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  const [editingItem, setEditingItem] = useState<Partial<ReturnBillRecord>>({});
+  const [editingRequest, setEditingRequest] = useState<Partial<ReturnRequestItem>>({});
 
-  useEffect(() => {
-    const load = async () => {
-      setIsLoading(true);
-      try {
-        await fetchCustomerReturns();
-      } catch (err) {
-        console.error(err);
-        toast.error('Không thể tải danh sách trả hàng');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
-  }, [fetchCustomerReturns]);
-
-  const data = useMemo<ReturnBillRecord[]>(() => {
-    return customerReturns.map((ret) => ({
-      id: ret.id,
-      returnCode: ret.returnCode,
-      invoiceCode: ret.orderCode,
-      customerName: ret.customerId || 'Khách lẻ',
-      returnDate: ret.returnDate ? ret.returnDate.substring(0, 10) : '',
-      returnAmount: ret.refundAmount,
-      refundedAmount: ret.status === 'APPROVED_REFUNDED' ? ret.refundAmount : 0,
-      receiver: ret.inspector || 'Nhân viên nhận',
-      status: ret.status === 'APPROVED_REFUNDED' ? 'DA_NHAN_LAI' : ret.status === 'REJECTED' ? 'DA_HUY' : 'CHO_KIEM_TRA',
-      notes: ret.reason || ret.notes || '',
-    }));
-  }, [customerReturns]);
-
-  const filtered = useMemo(() => {
-    if (!search) return data;
+  const filteredRequests = useMemo(() => {
+    if (!search) return returnRequests;
     const q = search.toLowerCase();
-    return data.filter(
-      (d) =>
-        d.returnCode.toLowerCase().includes(q) ||
-        d.invoiceCode.toLowerCase().includes(q) ||
-        d.customerName.toLowerCase().includes(q) ||
-        d.receiver.toLowerCase().includes(q)
+    return returnRequests.filter(
+      (r) =>
+        r.requestCode.toLowerCase().includes(q) ||
+        r.orderCode.toLowerCase().includes(q) ||
+        (r.customerName || '').toLowerCase().includes(q) ||
+        (r.customerPhone || '').includes(q)
     );
-  }, [search, data]);
+  }, [search, returnRequests]);
 
-  const [returnLines, setReturnLines] = useState<{
-    id: string;
-    sku: string;
-    productName: string;
-    quantity: number;
-    unitPrice: number;
-    condition: 'UNOPENED' | 'DEFECTIVE' | 'USED_DAMAGED';
-  }>([
-    { id: '1', sku: 'SP-IP15-256', productName: 'iPhone 15 Pro 256GB - Titan Tự Nhiên', quantity: 1, unitPrice: 28500000, condition: 'UNOPENED' }
-  ]);
-
-  const updateLinesAndTotals = (newLines: typeof returnLines) => {
-    setReturnLines(newLines);
-    const total = newLines.reduce((sum, l) => sum + ((Number(l.quantity) || 0) * (Number(l.unitPrice) || 0)), 0);
-    setEditingItem(prev => ({
-      ...prev,
-      returnAmount: total,
-      refundedAmount: total,
-    }));
-  };
-
-  const handleAddReturnLine = () => {
-    const newLine = {
-      id: Date.now().toString(),
-      sku: 'SKU-SP-TRA',
-      productName: 'Sản phẩm trả mới',
-      quantity: 1,
-      unitPrice: 500000,
-      condition: 'UNOPENED' as const,
-    };
-    updateLinesAndTotals([...returnLines, newLine]);
-  };
-
-  const handleRemoveReturnLine = (id: string) => {
-    updateLinesAndTotals(returnLines.filter(l => l.id !== id));
-  };
-
-  const handleUpdateReturnLine = (id: string, field: string, value: any) => {
-    const updated = returnLines.map(l => l.id === id ? { ...l, [field]: value } : l);
-    updateLinesAndTotals(updated);
-  };
-
-  const handleOpenCreate = () => {
-    setModalMode('create');
-    const defaultItem = {
-      id: '1',
-      sku: 'SP-IP15-256',
-      productName: 'iPhone 15 Pro 256GB - Titan Tự Nhiên',
-      quantity: 1,
-      unitPrice: 28500000,
-      condition: 'UNOPENED' as const,
-    };
-    setReturnLines([defaultItem]);
-    setEditingItem({
-      returnCode: `RT-2026-${Date.now().toString().slice(-4)}`,
-      invoiceCode: 'INV-2026-8892',
-      customerName: 'Nguyễn Văn An',
-      returnDate: new Date().toISOString().split('T')[0],
-      returnAmount: 28500000,
-      refundedAmount: 28500000,
-      receiver: 'Trần Văn Hùng',
-      status: 'CHO_KIEM_TRA',
-      notes: 'Khách trả nguyên seal chưa kích hoạt',
-    });
-    setIsModalOpen(true);
-  };
-
-  const handleOpenEdit = (item: ReturnBillRecord) => {
-    setModalMode('edit');
-    setEditingItem(item);
-    setIsModalOpen(true);
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingItem.returnCode || !editingItem.invoiceCode || !editingItem.customerName) return;
+  const handleApproveAndCreateReturn = async (req: ReturnRequestItem) => {
+    if (req.remainingQty <= 0) {
+      toast.warning(`Yêu cầu ${req.requestCode} đã hoàn tất trả hàng (100%)`);
+      return;
+    }
 
     try {
-      const amt = Number(editingItem.returnAmount || 0);
-      const apiStatus = editingItem.status === 'DA_NHAN_LAI' ? 'APPROVED_REFUNDED' : editingItem.status === 'DA_HUY' ? 'REJECTED' : 'PENDING_INSPECTION';
-
-      const payload = {
-        returnCode: editingItem.returnCode,
-        orderCode: editingItem.invoiceCode,
-        customerId: editingItem.customerName,
-        refundAmount: amt,
-        refundMethod: 'CASH' as any,
-        isRestocked: true,
-        returnBranchId: 'branch_001',
-        returnDate: editingItem.returnDate || new Date().toISOString().split('T')[0],
-        reason: editingItem.notes || '',
-        condition: 'UNOPENED' as any,
-        status: apiStatus as any,
-        inspector: editingItem.receiver || 'Nhân viên kiểm tra',
-        notes: editingItem.notes || '',
-        returnLines: returnLines.map(l => ({
-          productId: l.id,
-          sku: l.sku,
-          productName: l.productName,
-          quantity: l.quantity,
-          refundPrice: l.unitPrice,
-          unitPrice: l.unitPrice,
-          condition: l.condition
-        })),
-        details: returnLines.map(l => ({
-          productId: Number(l.id) || 1,
-          quantity: l.quantity,
-          refundPrice: l.unitPrice
-        }))
-      };
-
-      if (modalMode === 'create') {
-        await addCustomerReturn(payload);
-        toast.success('Thêm Phiếu trả hàng thành công!');
-      } else {
-        await updateCustomerReturn(editingItem.id!, payload);
-        toast.success('Cập nhật phiếu trả hàng thành công!');
+      // 1. Update Request status to APPROVED or PARTIALLY_RETURNED
+      if (req.status === 'PENDING') {
+        updateReturnRequestStatus(req.id, 'APPROVED');
       }
-      setIsModalOpen(false);
-      fetchCustomerReturns();
+
+      // 2. Auto Create Physical Customer Return (RET-XXXX) in status PENDING_RECEIPT
+      const newRetCode = `RET-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+      const qtyToReturn = req.remainingQty;
+      const firstItem = req.items && req.items[0];
+      const itemPrice = firstItem?.price || 15000;
+      const totalAmount = qtyToReturn * itemPrice;
+
+      await addCustomerReturn({
+        returnCode: newRetCode,
+        returnRequestCode: req.requestCode,
+        orderCode: req.orderCode,
+        customerId: req.customerId,
+        returnDate: new Date().toISOString().split('T')[0],
+        refundAmount: totalAmount,
+        deductionAmount: 0,
+        reason: req.reason,
+        status: 'PENDING_RECEIPT', // Standard: RET created in PENDING_RECEIPT state waiting for physical goods
+        refundMethod: (req.requestedRefundMethod as any) || 'CASH',
+        isRestocked: true,
+        returnBranchId: '1',
+        warehouseId: 'WH-01',
+        locationId: 'BIN-A01',
+        inspector: req.handlerName || 'Trần Văn Hưng',
+        createdBy: 'Admin POS',
+        notes: `Tạo từ Yêu cầu trả hàng ${req.requestCode} (SL: ${qtyToReturn})`,
+        returnLines: (req.items || []).map((it, idx) => ({
+          id: String(idx + 1),
+          productId: it.productId,
+          productName: it.productName,
+          sku: it.sku,
+          quantity: qtyToReturn,
+          availableQty: qtyToReturn,
+          originalQty: it.quantity,
+          price: it.price,
+          subTotal: qtyToReturn * it.price,
+          reason: it.reason || req.reason,
+          condition: 'UNOPENED',
+          isRestocked: true,
+        })),
+      });
+
+      toast.success(`✓ Đã tạo Phiếu Khách Hàng Trả Hàng ${newRetCode} (Trạng thái: Chờ nhận hàng)!`);
     } catch (err) {
       console.error(err);
-      toast.error('Lỗi khi lưu phiếu trả hàng.');
+      toast.error('Có lỗi xảy ra khi tạo phiếu thực trả');
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa biên bản trả hàng này?')) {
-      try {
-        await deleteCustomerReturn(id);
-        toast.success('Đã xóa phiếu trả hàng thành công!');
-        fetchCustomerReturns();
-      } catch (err) {
-        console.error(err);
-        toast.error('Lỗi khi xóa phiếu trả hàng.');
-      }
+  const handleRejectRequest = (req: ReturnRequestItem) => {
+    updateReturnRequestStatus(req.id, 'REJECTED');
+    toast.info(`Đã từ chối Yêu cầu trả hàng ${req.requestCode}`);
+  };
+
+  const handleSaveNewRequest = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRequest.orderCode) {
+      toast.error('Vui lòng chọn Mã đơn gốc');
+      return;
     }
+
+    const qty = Number(editingRequest.requestedQty) || 1;
+
+    const newReq: ReturnRequestItem = {
+      id: String(Date.now()),
+      requestCode: editingRequest.requestCode || `RR-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      orderCode: editingRequest.orderCode,
+      customerId: editingRequest.customerId || '1',
+      customerName: editingRequest.customerName || 'Khách mua',
+      customerPhone: editingRequest.customerPhone || '',
+      requestDate: editingRequest.requestDate || new Date().toISOString().split('T')[0],
+      reason: editingRequest.reason || 'Yêu cầu trả hàng',
+      requestedRefundMethod: editingRequest.requestedRefundMethod || 'CASH',
+      status: 'PENDING',
+      handlerName: 'Quản trị viên',
+      notes: editingRequest.notes || '',
+      requestedQty: qty,
+      returnedQty: 0,
+      remainingQty: qty,
+      items: [
+        {
+          productId: '1',
+          productName: 'Sản phẩm từ đơn ' + editingRequest.orderCode,
+          sku: 'SKU-' + editingRequest.orderCode,
+          quantity: qty,
+          returnedQty: 0,
+          price: 100000,
+          reason: editingRequest.reason || 'Yêu cầu trả hàng',
+        },
+      ],
+    };
+
+    addReturnRequest(newReq);
+    setIsModalOpen(false);
+    toast.success('Tạo Yêu cầu trả hàng thành công!');
   };
 
-  const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
-  };
-
-  const columns = useMemo<ColumnDef<ReturnBillRecord>[]>(
+  const columns = useMemo<ColumnDef<ReturnRequestItem>[]>(
     () => [
       {
-        accessorKey: 'returnCode',
-        header: 'Mã phiếu trả',
-        cell: (info) => <span className="font-mono font-bold text-red-600">{info.getValue() as string}</span>,
+        accessorKey: 'requestCode',
+        header: 'Mã yêu cầu (RR)',
+        cell: (info) => (
+          <span className="font-mono font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2.5 py-1 rounded-full border border-blue-200 dark:border-blue-800 text-xs">
+            {info.getValue() as string}
+          </span>
+        ),
       },
       {
-        accessorKey: 'invoiceCode',
-        header: 'Hóa đơn gốc',
-        cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
+        accessorKey: 'orderCode',
+        header: 'Mã đơn gốc',
+        cell: (info) => <span className="font-mono text-gray-700 dark:text-gray-300 font-semibold">{info.getValue() as string}</span>,
       },
       {
-        accessorKey: 'customerName',
+        id: 'customer',
         header: 'Khách hàng',
-        cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
+        cell: ({ row }) => (
+          <div>
+            <p className="font-bold text-gray-900 dark:text-white text-xs">{row.original.customerName || 'Khách vãng lai'}</p>
+            {row.original.customerPhone && <p className="text-[11px] font-mono text-gray-500">{row.original.customerPhone}</p>}
+          </div>
+        ),
       },
       {
-        accessorKey: 'returnAmount',
-        header: 'Giá trị hàng trả',
-        cell: (info) => <span className="font-mono font-bold text-red-600">{formatCurrency(info.getValue() as number)}</span>,
+        id: 'qtyProgress',
+        header: 'Tiến độ trả hàng',
+        cell: ({ row }) => {
+          const req = row.original;
+          return (
+            <div className="text-xs space-y-0.5">
+              <div className="flex gap-2">
+                <span className="text-gray-500">Yêu cầu: <strong>{req.requestedQty}</strong></span>
+                <span className="text-emerald-600">Đã RET: <strong>{req.returnedQty}</strong></span>
+              </div>
+              <span className="inline-block font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded text-[11px]">
+                Còn được tạo RET: {req.remainingQty}
+              </span>
+            </div>
+          );
+        },
       },
       {
-        accessorKey: 'refundedAmount',
-        header: 'Đã hoàn khách',
-        cell: (info) => <span className="font-mono font-bold text-emerald-600">{formatCurrency(info.getValue() as number)}</span>,
+        accessorKey: 'reason',
+        header: 'Lý do trả hàng',
+        cell: (info) => <span className="text-xs text-gray-700 dark:text-gray-300 line-clamp-1">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'requestDate',
+        header: 'Ngày yêu cầu',
+        cell: (info) => <span className="text-xs font-mono text-gray-500">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'status',
         header: 'Trạng thái',
         cell: (info) => {
-          const status = info.getValue() as string;
-          let badgeClass = 'bg-amber-100 text-amber-800';
-          let label = 'Chờ kiểm kho';
-          if (status === 'DA_NHAN_LAI') {
-            badgeClass = 'bg-emerald-100 text-emerald-800';
-            label = 'Đã nhận lại';
-          } else if (status === 'DA_HUY') {
-            badgeClass = 'bg-red-100 text-red-800';
-            label = 'Đã hủy';
-          }
-          return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
+          const st = info.getValue() as string;
+          const config = REQUEST_STATUS_CONFIG[st] || { label: st, style: 'bg-gray-100 text-gray-700' };
+          return (
+            <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${config.style}`}>
+              {config.label}
+            </span>
+          );
         },
       },
       {
         id: 'actions',
         header: 'Thao tác',
-        cell: ({ row }) => (
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setSelected(row.original)}
-              className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem chi tiết"
-            >
-              <Eye className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleOpenEdit(row.original)}
-              className="p-1 text-gray-500 hover:text-blue-600 rounded"
-              title="Sửa"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(row.original.id)}
-              className="p-1 text-gray-500 hover:text-red-600 rounded"
-              title="Xóa"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const req = row.original;
+          const canCreateRET = (req.status === 'PENDING' || req.status === 'APPROVED' || req.status === 'PARTIALLY_RETURNED') && req.remainingQty > 0;
+
+          return (
+            <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => setSelectedRequest(req)}
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg text-xs flex items-center gap-1 font-medium"
+                title="Xem chi tiết"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
+
+              {canCreateRET && (
+                <button
+                  type="button"
+                  onClick={() => handleApproveAndCreateReturn(req)}
+                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                  title="Duyệt yêu cầu và Tạo phiếu RET ở trạng thái Chờ nhận hàng"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" /> + Tạo Phiếu RET
+                </button>
+              )}
+
+              {req.status === 'PENDING' && (
+                <button
+                  type="button"
+                  onClick={() => handleRejectRequest(req)}
+                  className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-medium transition-colors"
+                  title="Từ chối"
+                >
+                  <XCircle className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          );
+        },
       },
     ],
-    [data]
+    []
   );
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Lịch sử nhận hàng hoàn trả (khách hàng)</h1>
-          <p className="text-sm text-gray-500">
-            Xem và xử lý các yêu cầu trả lại hàng hóa của khách hàng, ghi nhận nhập kho lại và hoàn lại tiền.
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <FileText className="w-6 h-6 text-blue-600" /> Quản Lý Yêu Cầu Trả Hàng (Return Requests - RR)
+          </h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Quản lý và tiếp nhận các yêu cầu / đề nghị đổi trả từ khách hàng (Mã Yêu Cầu: RR-XXXX | Hỗ trợ Trả từng phần 1:N)
           </p>
         </div>
+
         <button
-          onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition"
+          onClick={() => {
+            setEditingRequest({
+              requestCode: `RR-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+              orderCode: '',
+              customerName: '',
+              customerPhone: '',
+              requestDate: new Date().toISOString().split('T')[0],
+              reason: '',
+              requestedRefundMethod: 'CASH',
+              requestedQty: 1,
+            });
+            setIsModalOpen(true);
+          }}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs flex items-center gap-2 transition-colors shrink-0"
         >
-          <Plus className="w-4 h-4" /> Tạo Phiếu Trả Hàng
+          <Plus className="w-4 h-4" /> Tạo Yêu Cầu Trả Hàng (RR)
         </button>
       </div>
 
-      <div className="p-4 bg-white dark:bg-gray-800 rounded shadow flex items-center gap-4">
-        <Search className="w-5 h-5 text-gray-400" />
+      {/* Search & Filter */}
+      <div className="flex items-center gap-3 bg-white dark:bg-gray-900 p-3 rounded-xl border border-gray-200 dark:border-gray-800">
+        <Search className="w-4 h-4 text-gray-400" />
         <input
           type="text"
+          placeholder="Tìm theo Mã yêu cầu (RR-XXXX), Mã đơn gốc, Tên KH, SĐT..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm kiếm mã phiếu trả, mã hóa đơn gốc, khách hàng, thủ kho..."
-          className="w-full bg-transparent outline-none text-sm"
+          className="w-full bg-transparent text-sm text-gray-900 dark:text-white focus:outline-none"
         />
       </div>
 
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-          <span className="text-sm font-bold text-gray-500">Đang tải danh sách trả hàng...</span>
-        </div>
-      ) : (
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
-      )}
+      {/* Table */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+        <ReusableDataTable data={filteredRequests} columns={columns} />
+      </div>
 
+      {/* MODAL XEM CHI TIẾT YÊU CẦU */}
       <Modal
-        isOpen={!!selected}
-        onClose={() => setSelected(null)}
-        title={`Chi tiết Phiếu Trả: ${selected?.returnCode}`}
+        isOpen={!!selectedRequest}
+        onClose={() => setSelectedRequest(null)}
+        title={`📋 Chi Tiết Yêu Cầu Trả Hàng ${selectedRequest?.requestCode}`}
+        width="max-w-2xl"
       >
-        {selected && (
+        {selectedRequest && (
           <div className="space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border border-gray-200 dark:border-gray-800">
               <div>
-                <span className="text-gray-500">Mã phiếu trả:</span>
-                <p className="font-mono font-semibold text-red-600">{selected.returnCode}</p>
+                <p className="text-xs text-gray-500">Mã yêu cầu:</p>
+                <p className="font-mono font-bold text-blue-600">{selectedRequest.requestCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Hóa đơn mua gốc:</span>
-                <p className="font-mono font-semibold">{selected.invoiceCode}</p>
+                <p className="text-xs text-gray-500">Mã đơn gốc:</p>
+                <p className="font-mono font-bold">{selectedRequest.orderCode}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Khách hàng:</p>
+                <p className="font-bold text-gray-900 dark:text-white">{selectedRequest.customerName} ({selectedRequest.customerPhone})</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Ngày yêu cầu:</p>
+                <p className="font-mono">{selectedRequest.requestDate}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Số lượng yêu cầu trả:</p>
+                <p className="font-bold text-blue-600">{selectedRequest.requestedQty} sản phẩm (Đã trả: {selectedRequest.returnedQty} | Còn lại: {selectedRequest.remainingQty})</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Hình thức mong muốn:</p>
+                <p className="font-semibold">{REFUND_METHOD_LABELS[selectedRequest.requestedRefundMethod] || selectedRequest.requestedRefundMethod}</p>
               </div>
             </div>
+
             <div>
-              <span className="text-gray-500">Khách hàng:</span>
-              <p className="font-semibold">{selected.customerName}</p>
+              <p className="text-xs font-bold uppercase text-gray-500 mb-1">Lý do yêu cầu trả:</p>
+              <p className="p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 rounded-lg text-xs border border-amber-200 dark:border-amber-800">
+                {selectedRequest.reason}
+              </p>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+
+            {selectedRequest.items && selectedRequest.items.length > 0 && (
               <div>
-                <span className="text-gray-500">Ngày trả hàng:</span>
-                <p className="font-mono">{selected.returnDate}</p>
+                <p className="text-xs font-bold uppercase text-gray-500 mb-2">Danh sách sản phẩm yêu cầu trả:</p>
+                <div className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                      <tr>
+                        <th className="p-2 text-left">Sản phẩm</th>
+                        <th className="p-2 text-center">SKU</th>
+                        <th className="p-2 text-center">SL yêu cầu</th>
+                        <th className="p-2 text-center">SL đã trả</th>
+                        <th className="p-2 text-right">Đơn giá</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedRequest.items.map((it, idx) => (
+                        <tr key={idx} className="border-t border-gray-200 dark:border-gray-800">
+                          <td className="p-2 font-medium">{it.productName}</td>
+                          <td className="p-2 text-center font-mono text-gray-500">{it.sku}</td>
+                          <td className="p-2 text-center font-bold">{it.quantity}</td>
+                          <td className="p-2 text-center font-bold text-emerald-600">{it.returnedQty || 0}</td>
+                          <td className="p-2 text-right">{it.price.toLocaleString('vi-VN')} ₫</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div>
-                <span className="text-gray-500">Thủ kho nhận hàng:</span>
-                <p>{selected.receiver || 'Chưa nhận'}</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 border-t pt-2">
-              <div>
-                <span className="text-gray-500">Giá trị trả lại:</span>
-                <p className="font-mono font-bold text-red-600">{formatCurrency(selected.returnAmount)}</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Đã hoàn trả khách:</span>
-                <p className="font-mono font-bold text-emerald-600">{formatCurrency(selected.refundedAmount)}</p>
-              </div>
-            </div>
-            <div>
-              <span className="text-gray-500">Trạng thái xử lý:</span>
-              <div>
-                <span
-                  className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
-                    selected.status === 'DA_NHAN_LAI'
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : selected.status === 'CHO_KIEM_TRA'
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}
+            )}
+
+            {selectedRequest.remainingQty > 0 && (
+              <div className="pt-3 border-t flex justify-end gap-2">
+                {selectedRequest.status === 'PENDING' && (
+                  <button
+                    onClick={() => handleRejectRequest(selectedRequest)}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs"
+                  >
+                    ✕ Từ chối yêu cầu
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    handleApproveAndCreateReturn(selectedRequest);
+                    setSelectedRequest(null);
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center gap-1"
                 >
-                  {selected.status === 'DA_NHAN_LAI'
-                    ? 'Đã nhận lại kho'
-                    : selected.status === 'CHO_KIEM_TRA'
-                    ? 'Chờ kiểm kho'
-                    : 'Đã hủy'}
-                </span>
-              </div>
-            </div>
-            {selected.notes && (
-              <div>
-                <span className="text-gray-500">Chi tiết lý do trả:</span>
-                <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
-                  {selected.notes}
-                </p>
+                  <CheckCircle2 className="w-4 h-4" /> + Tạo Phiếu RET (Còn {selectedRequest.remainingQty} SP)
+                </button>
               </div>
             )}
           </div>
         )}
       </Modal>
 
+      {/* MODAL TẠO YÊU CẦU TRẢ HÀNG MỚI */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? '🚚 Tạo phiếu trả hàng mới (Khách Hàng)' : '⚙️ Sửa thông tin phiếu trả hàng'}
-        width="max-w-3xl"
+        title="📋 Tạo Yêu Cầu Trả Hàng Từ Khách Hàng (RR)"
+        width="max-w-lg"
       >
-        <form onSubmit={handleSave} className="space-y-4 text-xs">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã phiếu trả *</label>
-                {modalMode === 'create' && (
-                  <button
-                    type="button"
-                    onClick={() => setEditingItem({ ...editingItem, returnCode: `RT-2026-${Date.now().toString().slice(-4)}` })}
-                    className="text-[10px] text-emerald-600 font-bold hover:underline"
-                  >
-                    ⚡ Sinh mã
-                  </button>
-                )}
-              </div>
-              <input
-                type="text"
-                value={editingItem.returnCode || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, returnCode: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
-                required
-                disabled={modalMode === 'edit'}
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Hóa đơn mua gốc *</label>
-              <input
-                type="text"
-                value={editingItem.invoiceCode || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, invoiceCode: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                placeholder="INV-2026-XXX"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tên khách hàng *</label>
-              <input
-                type="text"
-                value={editingItem.customerName || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, customerName: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                placeholder="Họ tên khách hàng"
-                required
-              />
-            </div>
+        <form onSubmit={handleSaveNewRequest} className="space-y-4 text-xs">
+          <div>
+            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Mã yêu cầu (Auto)</label>
+            <input
+              type="text"
+              value={editingRequest.requestCode || ''}
+              onChange={(e) => setEditingRequest({ ...editingRequest, requestCode: e.target.value })}
+              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-mono font-bold text-blue-600"
+              required
+            />
           </div>
 
-          {/* TABLE SẢN PHẨM TRẢ HÀNG */}
-          <div className="p-3 bg-gray-50/80 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
-                📦 Danh sách sản phẩm trả lại ({returnLines.length})
-              </h4>
-              <button
-                type="button"
-                onClick={handleAddReturnLine}
-                className="px-2.5 py-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm flex items-center gap-1 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" /> Thêm SP trả
-              </button>
-            </div>
-
-            <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-bold border-b dark:border-gray-700">
-                  <tr>
-                    <th className="p-2">Sản phẩm / SKU</th>
-                    <th className="p-2 w-20 text-center">Số lượng</th>
-                    <th className="p-2 w-28 text-right">Đơn giá hoàn</th>
-                    <th className="p-2 w-32">Tình trạng SP</th>
-                    <th className="p-2 w-28 text-right">Thành tiền</th>
-                    <th className="p-2 w-10 text-center">Xóa</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-900">
-                  {returnLines.map((line) => (
-                    <tr key={line.id}>
-                      <td className="p-1.5 space-y-1">
-                        <input
-                          type="text"
-                          value={line.productName}
-                          onChange={(e) => handleUpdateReturnLine(line.id, 'productName', e.target.value)}
-                          placeholder="Tên sản phẩm..."
-                          className="w-full p-1 border rounded text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                        />
-                        <input
-                          type="text"
-                          value={line.sku}
-                          onChange={(e) => handleUpdateReturnLine(line.id, 'sku', e.target.value.toUpperCase())}
-                          placeholder="Mã SKU..."
-                          className="w-full p-1 border rounded text-[10px] font-mono bg-white dark:bg-gray-800 text-gray-500"
-                        />
-                      </td>
-                      <td className="p-1.5">
-                        <input
-                          type="number"
-                          min="1"
-                          value={line.quantity}
-                          onChange={(e) => handleUpdateReturnLine(line.id, 'quantity', Number(e.target.value))}
-                          className="w-full p-1 border rounded text-center font-mono text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                        />
-                      </td>
-                      <td className="p-1.5">
-                        <input
-                          type="number"
-                          value={line.unitPrice}
-                          onChange={(e) => handleUpdateReturnLine(line.id, 'unitPrice', Number(e.target.value))}
-                          className="w-full p-1 border rounded text-right font-mono text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                        />
-                      </td>
-                      <td className="p-1.5">
-                        <select
-                          value={line.condition}
-                          onChange={(e) => handleUpdateReturnLine(line.id, 'condition', e.target.value)}
-                          className="w-full p-1 border rounded text-[11px] bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                        >
-                          <option value="UNOPENED">🟢 Chưa mở hộp</option>
-                          <option value="DEFECTIVE">🟠 Lỗi nhà sản xuất</option>
-                          <option value="USED_DAMAGED">🔴 Đã dùng / Hỏng</option>
-                        </select>
-                      </td>
-                      <td className="p-1.5 text-right font-mono font-bold text-red-600">
-                        {formatCurrency(line.quantity * line.unitPrice)}
-                      </td>
-                      <td className="p-1.5 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveReturnLine(line.id)}
-                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {returnLines.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="p-3 text-center text-gray-400 font-medium">
-                        Chưa có sản phẩm trả lại. Bấm "+ Thêm SP trả" để chọn sản phẩm.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+          <div>
+            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Mã đơn gốc *</label>
+            <select
+              value={editingRequest.orderCode || ''}
+              onChange={(e) => {
+                const code = e.target.value;
+                const foundSO = saleOrders.find((so) => so.code === code);
+                setEditingRequest({
+                  ...editingRequest,
+                  orderCode: code,
+                  customerName: foundSO?.customerName || editingRequest.customerName || 'Khách mua',
+                  customerPhone: foundSO?.customerPhone || editingRequest.customerPhone || '',
+                });
+              }}
+              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-mono font-bold"
+              required
+            >
+              <option value="">-- Chọn đơn hàng gốc --</option>
+              <option value="ONLINE-805391">ONLINE-805391 - Nguyễn Lưu Hoàng (0901234567)</option>
+              <option value="ORD-POS-2026-818712">ORD-POS-2026-818712 - Trần Văn Nam (0988776655)</option>
+              {saleOrders.map((so) => (
+                <option key={so.id} value={so.code}>
+                  {so.code} - {so.customerName}
+                </option>
+              ))}
+            </select>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Giá trị hàng trả (VND) *</label>
-              <input
-                type="number"
-                value={editingItem.returnAmount || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, returnAmount: Number(e.target.value) })}
-                className="w-full p-2 border border-red-300 dark:border-red-900 rounded font-mono font-bold text-red-600 bg-white dark:bg-gray-900"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Đã hoàn khách (VND) *</label>
-              <input
-                type="number"
-                value={editingItem.refundedAmount || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, refundedAmount: Number(e.target.value) })}
-                className="w-full p-2 border border-emerald-300 dark:border-emerald-900 rounded font-mono font-bold text-emerald-600 bg-white dark:bg-gray-900"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày trả hàng *</label>
-              <input
-                type="date"
-                value={editingItem.returnDate || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, returnDate: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Thủ kho nhận hàng</label>
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Tên khách hàng</label>
               <input
                 type="text"
-                value={editingItem.receiver || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, receiver: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                placeholder="Tên nhân viên nhận kho"
+                value={editingRequest.customerName || ''}
+                onChange={(e) => setEditingRequest({ ...editingRequest, customerName: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900"
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tình trạng xử lý *</label>
-              <select
-                value={editingItem.status || 'CHO_KIEM_TRA'}
-                onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-              >
-                <option value="CHO_KIEM_TRA">⏳ Chờ Kiểm Kho (Chưa nhập kho)</option>
-                <option value="DA_NHAN_LAI">🟢 Đã nhập lại kho & Duyệt trả</option>
-                <option value="DA_HUY">🔴 Đã hủy phiếu</option>
-              </select>
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại</label>
+              <input
+                type="text"
+                value={editingRequest.customerPhone || ''}
+                onChange={(e) => setEditingRequest({ ...editingRequest, customerPhone: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-mono"
+              />
             </div>
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chi tiết lý do trả & Ghi chú</label>
-            <textarea
-              value={editingItem.notes || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-              rows={2}
-              placeholder="Chi tiết lý do trả hàng, tình trạng phụ kiện đính kèm..."
+            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Số lượng yêu cầu trả *</label>
+            <input
+              type="number"
+              min={1}
+              value={editingRequest.requestedQty || 1}
+              onChange={(e) => setEditingRequest({ ...editingRequest, requestedQty: Number(e.target.value) })}
+              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-bold"
+              required
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+          <div>
+            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Hình thức hoàn tiền mong muốn</label>
+            <select
+              value={editingRequest.requestedRefundMethod || 'CASH'}
+              onChange={(e) => setEditingRequest({ ...editingRequest, requestedRefundMethod: e.target.value })}
+              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900"
+            >
+              <option value="CASH">Tiền mặt</option>
+              <option value="BANK_TRANSFER">Chuyển khoản ngân hàng</option>
+              <option value="STORE_CREDIT">Ví / Store Credit</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Lý do yêu cầu trả *</label>
+            <textarea
+              rows={3}
+              value={editingRequest.reason || ''}
+              onChange={(e) => setEditingRequest({ ...editingRequest, reason: e.target.value })}
+              placeholder="Nhập lý do khách báo trả hàng..."
+              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900"
+              required
+            />
+          </div>
+
+          <div className="pt-3 border-t flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium rounded-lg transition-colors"
+              className="px-4 py-2 border rounded-lg hover:bg-gray-100 font-bold"
             >
-              Hủy bỏ
+              Hủy
             </button>
-            <button type="submit" className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow transition-colors">
-              {modalMode === 'create' ? 'Lưu phiếu trả hàng' : 'Cập nhật phiếu'}
+            <button
+              type="submit"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg"
+            >
+              Lưu Yêu Cầu
             </button>
           </div>
         </form>

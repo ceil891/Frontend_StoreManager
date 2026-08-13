@@ -131,40 +131,45 @@ export const purchaseService = {
 
   async addPurchaseOrder(po: Omit<PurchaseOrderItem, 'id'>): Promise<PurchaseOrderItem> {
     // 1. Resolve Supplier ID
-    let supplierId = 1;
-    try {
-      const supRes = await axiosClient.get<any, any>('/partnerarea/suppliers?size=500');
-      const supList: any[] = Array.isArray(supRes) ? supRes : (supRes?.content || supRes?.data || []);
-      const matched = supList.find(
-        (s: any) =>
-          (s.name && s.name.toLowerCase() === (po.supplierName || '').toLowerCase()) ||
-          (s.supplierName && s.supplierName.toLowerCase() === (po.supplierName || '').toLowerCase()) ||
-          (s.supplierCode && s.supplierCode.toLowerCase() === (po.supplierName || '').toLowerCase()) ||
-          String(s.id) === String((po as any).supplierId)
-      );
-      if (matched?.id) {
-        supplierId = Number(matched.id);
-      } else if (supList.length > 0 && supList[0].id) {
-        supplierId = Number(supList[0].id);
-      }
-    } catch {}
+    let supplierId = Number((po as any).supplierId);
+    if (!supplierId || isNaN(supplierId)) {
+      try {
+        const supRes = await axiosClient.get<any, any>('/partnerarea/suppliers?size=500');
+        const supList: any[] = Array.isArray(supRes) ? supRes : (supRes?.content || supRes?.data || []);
+        const matched = supList.find(
+          (s: any) =>
+            (s.name && s.name.toLowerCase() === (po.supplierName || '').toLowerCase()) ||
+            (s.supplierName && s.supplierName.toLowerCase() === (po.supplierName || '').toLowerCase()) ||
+            (s.supplierCode && s.supplierCode.toLowerCase() === (po.supplierName || '').toLowerCase()) ||
+            String(s.id) === String((po as any).supplierId)
+        );
+        if (matched?.id) {
+          supplierId = Number(matched.id);
+        } else if (supList.length > 0 && supList[0].id) {
+          supplierId = Number(supList[0].id);
+        }
+      } catch {}
+    }
 
     // 2. Resolve Branch ID
-    let branchId = 1;
-    try {
-      const branchRes = await axiosClient.get<any, any>('/branches?size=100');
-      const branchList: any[] = Array.isArray(branchRes) ? branchRes : (branchRes?.content || branchRes?.data || []);
-      const matchedBranch = branchList.find(
-        (b: any) =>
-          (b.name && b.name.toLowerCase() === (po.destinationStore || '').toLowerCase()) ||
-          String(b.id) === String((po as any).branchId)
-      );
-      if (matchedBranch?.id) {
-        branchId = Number(matchedBranch.id);
-      } else if (branchList.length > 0 && branchList[0].id) {
-        branchId = Number(branchList[0].id);
-      }
-    } catch {}
+    let branchId = Number((po as any).branchId);
+    if (!branchId || isNaN(branchId)) {
+      try {
+        const branchRes = await axiosClient.get<any, any>('/branches?size=100');
+        const branchList: any[] = Array.isArray(branchRes) ? branchRes : (branchRes?.content || branchRes?.data || []);
+        const matchedBranch = branchList.find(
+          (b: any) =>
+            (b.name && b.name.toLowerCase() === (po.destinationStore || '').toLowerCase()) ||
+            (b.branchName && b.branchName.toLowerCase() === (po.destinationStore || '').toLowerCase()) ||
+            String(b.id) === String((po as any).branchId)
+        );
+        if (matchedBranch?.id) {
+          branchId = Number(matchedBranch.id);
+        } else if (branchList.length > 0 && branchList[0].id) {
+          branchId = Number(branchList[0].id);
+        }
+      } catch {}
+    }
 
     // 3. Resolve Product IDs for details
     let prodList: any[] = [];
@@ -176,17 +181,20 @@ export const purchaseService = {
     const firstValidProdId = prodList.length > 0 && prodList[0].id ? Number(prodList[0].id) : 1;
 
     const details = (po.poLines && po.poLines.length > 0 ? po.poLines : [{ productName: 'Sản phẩm', quantity: 1, unitPrice: po.totalCost || 100000 }]).map((l: any, idx: number) => {
-      const matchedProd = prodList.find(
-        (p: any) =>
-          (p.name && p.name.toLowerCase() === (l.productName || '').toLowerCase()) ||
-          (p.productCode && p.productCode.toLowerCase() === (l.productName || '').toLowerCase()) ||
-          String(p.id) === String(l.productId)
-      );
-      const pid = matchedProd?.id ? Number(matchedProd.id) : (firstValidProdId + idx);
+      let pid = Number(l.productId);
+      if (!pid || isNaN(pid)) {
+        const matchedProd = prodList.find(
+          (p: any) =>
+            (p.name && p.name.toLowerCase() === (l.productName || '').toLowerCase()) ||
+            (p.productCode && p.productCode.toLowerCase() === (l.productName || '').toLowerCase()) ||
+            String(p.id) === String(l.productId)
+        );
+        pid = matchedProd?.id ? Number(matchedProd.id) : (firstValidProdId + idx);
+      }
       return {
         productId: pid,
         quantity: Math.max(1, Number(l.quantity) || 1),
-        unitPrice: Math.max(0, Number(l.unitPrice) || 0),
+        unitPrice: Math.max(1000, Number(l.unitPrice) || 1000),
       };
     });
 
@@ -204,8 +212,8 @@ export const purchaseService = {
       poCode: po.poNumber || `PO-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       poDate: formatLocalDateTime(po.orderDate),
       expectedDate: po.estDeliveryDate ? formatLocalDateTime(po.estDeliveryDate) : null,
-      supplierId: supplierId,
-      branchId: branchId,
+      supplierId: supplierId || 1,
+      branchId: branchId || 1,
       status: po.status || 'DRAFT',
       note: po.notes || '',
       details: details,
@@ -248,7 +256,7 @@ export const purchaseService = {
       return {
         productId: matchedProd?.id ? Number(matchedProd.id) : (firstValidProdId + idx),
         quantity: Math.max(1, Number(l.quantity) || 1),
-        unitPrice: Math.max(0, Number(l.unitPrice) || 0),
+        unitPrice: Math.max(1000, Number(l.unitPrice) || 1000),
       };
     });
 

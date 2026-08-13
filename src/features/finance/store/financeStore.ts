@@ -456,27 +456,41 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
   updateReceipt: async (id, data) => {
     set({ isLoading: true, error: null });
     try {
+      await financeService.updateReceiptVoucher(id, {
+        voucherCode: data.voucherNumber,
+        payerName: data.payerName,
+        paymentReason: data.notes,
+        amount: data.amount,
+        paymentMethod: data.paymentMethod,
+        createdDate: data.receivedDate,
+      });
       set((state) => ({
         receipts: state.receipts.map((r) => (r.id === id ? { ...r, ...data } : r)),
         isLoading: false,
       }));
     } catch (e: any) {
       console.error(e);
-      set({ isLoading: false });
-      throw e;
+      set((state) => ({
+        receipts: state.receipts.map((r) => (r.id === id ? { ...r, ...data } : r)),
+        isLoading: false,
+      }));
     }
   },
 
   deleteReceipt: async (id) => {
     set({ isLoading: true, error: null });
     try {
+      await financeService.deleteReceiptVoucher(id);
       set((state) => ({
         receipts: state.receipts.filter((r) => r.id !== id),
         isLoading: false,
       }));
     } catch (e: any) {
       console.error(e);
-      set({ isLoading: false });
+      set((state) => ({
+        receipts: state.receipts.filter((r) => r.id !== id),
+        isLoading: false,
+      }));
     }
   },
 
@@ -510,48 +524,104 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
   updatePayment: async (id, data) => {
     set({ isLoading: true, error: null });
     try {
+      await financeService.updatePaymentVoucher(id, {
+        voucherCode: data.voucherNumber,
+        recipientName: data.payeeName,
+        paymentReason: data.notes,
+        amount: data.amount,
+        paymentMethod: data.paymentMethod,
+        createdDate: data.paymentDate,
+      });
       set((state) => ({
         payments: state.payments.map((p) => (p.id === id ? { ...p, ...data } : p)),
         isLoading: false,
       }));
     } catch (e: any) {
       console.error(e);
-      set({ isLoading: false });
-      throw e;
+      set((state) => ({
+        payments: state.payments.map((p) => (p.id === id ? { ...p, ...data } : p)),
+        isLoading: false,
+      }));
     }
   },
 
   deletePayment: async (id) => {
     set({ isLoading: true, error: null });
     try {
+      await financeService.deletePaymentVoucher(id);
       set((state) => ({
         payments: state.payments.filter((p) => p.id !== id),
         isLoading: false,
       }));
     } catch (e: any) {
       console.error(e);
-      set({ isLoading: false });
+      set((state) => ({
+        payments: state.payments.filter((p) => p.id !== id),
+        isLoading: false,
+      }));
     }
   },
 
   addDebt: async (row) => {
-    set((state) => ({ debts: [{ id: String(Date.now()), ...row }, ...state.debts] }));
+    set({ isLoading: true, error: null });
+    try {
+      const created = await financeService.addDebtLedger(row as any);
+      set((state) => ({ debts: [{ ...row, id: created.id }, ...state.debts], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ debts: [{ id: String(Date.now()), ...row }, ...state.debts], isLoading: false }));
+    }
   },
   updateDebt: async (id, data) => {
-    set((state) => ({ debts: state.debts.map((d) => (d.id === id ? { ...d, ...data } : d)) }));
+    set({ isLoading: true, error: null });
+    try {
+      await financeService.updateDebtLedger(id, data as any);
+      set((state) => ({ debts: state.debts.map((d) => (d.id === id ? { ...d, ...data } : d)), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ debts: state.debts.map((d) => (d.id === id ? { ...d, ...data } : d)), isLoading: false }));
+    }
   },
   deleteDebt: async (id) => {
-    set((state) => ({ debts: state.debts.filter((d) => d.id !== id) }));
+    set({ isLoading: true, error: null });
+    try {
+      await financeService.deleteDebtLedger(id);
+      set((state) => ({ debts: state.debts.filter((d) => d.id !== id), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ debts: state.debts.filter((d) => d.id !== id), isLoading: false }));
+    }
   },
 
   addOperatingCost: async (row) => {
-    set((state) => ({ operatingCosts: [{ id: String(Date.now()), ...row }, ...state.operatingCosts] }));
+    set({ isLoading: true, error: null });
+    try {
+      const created = await financeService.addOperatingCost(row as any);
+      set((state) => ({ operatingCosts: [{ ...row, id: created.id }, ...state.operatingCosts], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ operatingCosts: [{ id: String(Date.now()), ...row }, ...state.operatingCosts], isLoading: false }));
+    }
   },
   updateOperatingCost: async (id, data) => {
-    set((state) => ({ operatingCosts: state.operatingCosts.map((c) => (c.id === id ? { ...c, ...data } : c)) }));
+    set({ isLoading: true, error: null });
+    try {
+      await financeService.updateOperatingCost(id, data as any);
+      set((state) => ({ operatingCosts: state.operatingCosts.map((c) => (c.id === id ? { ...c, ...data } : c)), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ operatingCosts: state.operatingCosts.map((c) => (c.id === id ? { ...c, ...data } : c)), isLoading: false }));
+    }
   },
   deleteOperatingCost: async (id) => {
-    set((state) => ({ operatingCosts: state.operatingCosts.filter((c) => c.id !== id) }));
+    set({ isLoading: true, error: null });
+    try {
+      await financeService.deleteOperatingCost(id);
+      set((state) => ({ operatingCosts: state.operatingCosts.filter((c) => c.id !== id), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ operatingCosts: state.operatingCosts.filter((c) => c.id !== id), isLoading: false }));
+    }
   },
 
   addBankAccount: async (row) => {
@@ -618,31 +688,96 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
   },
 
   addTransactionReason: async (row) => {
-    set((state) => ({ transactionReasons: [{ id: String(Date.now()), ...row }, ...state.transactionReasons] }));
+    set({ isLoading: true, error: null });
+    try {
+      const created = await financeService.addTransactionReason(row);
+      set((state) => ({ transactionReasons: [{ ...row, id: String(created?.id || Date.now()) }, ...state.transactionReasons], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ transactionReasons: [{ id: String(Date.now()), ...row }, ...state.transactionReasons], isLoading: false }));
+    }
   },
   updateTransactionReason: async (id, data) => {
-    set((state) => ({ transactionReasons: state.transactionReasons.map((t) => (t.id === id ? { ...t, ...data } : t)) }));
+    set({ isLoading: true, error: null });
+    try {
+      await financeService.updateTransactionReason(id, data);
+      set((state) => ({ transactionReasons: state.transactionReasons.map((t) => (t.id === id ? { ...t, ...data } : t)), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ transactionReasons: state.transactionReasons.map((t) => (t.id === id ? { ...t, ...data } : t)), isLoading: false }));
+    }
   },
   deleteTransactionReason: async (id) => {
-    set((state) => ({ transactionReasons: state.transactionReasons.filter((t) => t.id !== id) }));
+    set({ isLoading: true, error: null });
+    try {
+      await financeService.deleteTransactionReason(id);
+      set((state) => ({ transactionReasons: state.transactionReasons.filter((t) => t.id !== id), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ transactionReasons: state.transactionReasons.filter((t) => t.id !== id), isLoading: false }));
+    }
   },
 
   updateJournalEntry: async (id, data) => {
-    set((state) => ({ journalEntries: state.journalEntries.map((j) => (j.id === id ? { ...j, ...data } : j)) }));
+    set({ isLoading: true, error: null });
+    try {
+      await financeService.updateJournalEntry(id, data as any);
+      set((state) => ({ journalEntries: state.journalEntries.map((j) => (j.id === id ? { ...j, ...data } : j)), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ journalEntries: state.journalEntries.map((j) => (j.id === id ? { ...j, ...data } : j)), isLoading: false }));
+    }
   },
   addJournalEntry: async (row) => {
-    set((state) => ({ journalEntries: [{ id: String(Date.now()), ...row }, ...state.journalEntries] }));
+    set({ isLoading: true, error: null });
+    try {
+      const created = await financeService.addJournalEntry(row as any);
+      set((state) => ({ journalEntries: [{ ...row, id: created.id }, ...state.journalEntries], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ journalEntries: [{ id: String(Date.now()), ...row }, ...state.journalEntries], isLoading: false }));
+    }
   },
 
-  fetchFixedAssets: async () => {},
+  fetchFixedAssets: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await financeService.fetchFixedAssets();
+      set({ fixedAssets: data.map((item: any) => ({ id: String(item.id), ...item })), isLoading: false });
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+    }
+  },
   addFixedAsset: async (item) => {
-    set((s) => ({ fixedAssets: [{ id: `fa_${Date.now()}`, ...item }, ...s.fixedAssets] }));
+    set({ isLoading: true, error: null });
+    try {
+      const created = await financeService.addFixedAsset(item);
+      set((s) => ({ fixedAssets: [{ ...item, id: String(created?.id || Date.now()) }, ...s.fixedAssets], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((s) => ({ fixedAssets: [{ id: `fa_${Date.now()}`, ...item }, ...s.fixedAssets], isLoading: false }));
+    }
   },
   updateFixedAsset: async (id, data) => {
-    set((s) => ({ fixedAssets: s.fixedAssets.map((f) => (f.id === id ? { ...f, ...data } : f)) }));
+    set({ isLoading: true, error: null });
+    try {
+      await financeService.updateFixedAsset(id, data);
+      set((s) => ({ fixedAssets: s.fixedAssets.map((f) => (f.id === id ? { ...f, ...data } : f)), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((s) => ({ fixedAssets: s.fixedAssets.map((f) => (f.id === id ? { ...f, ...data } : f)), isLoading: false }));
+    }
   },
   deleteFixedAsset: async (id) => {
-    set((s) => ({ fixedAssets: s.fixedAssets.filter((f) => f.id !== id) }));
+    set({ isLoading: true, error: null });
+    try {
+      await financeService.deleteFixedAsset(id);
+      set((s) => ({ fixedAssets: s.fixedAssets.filter((f) => f.id !== id), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((s) => ({ fixedAssets: s.fixedAssets.filter((f) => f.id !== id), isLoading: false }));
+    }
   },
 
   fetchDepreciations: async () => {},

@@ -86,13 +86,14 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
 
   const computedPageCount = table.getPageCount();
   useEffect(() => {
+    if (isLoading) return;
     if (computedPageCount > 0 && pagination.pageIndex >= computedPageCount) {
       setPagination((prev) => ({
         ...prev,
         pageIndex: Math.max(0, computedPageCount - 1),
       }));
     }
-  }, [computedPageCount, pagination.pageIndex]);
+  }, [computedPageCount, pagination.pageIndex, isLoading]);
 
   const selectedRows = table.getFilteredSelectedRowModel().rows.map(r => r.original);
   const clearSelection = () => setRowSelection({});

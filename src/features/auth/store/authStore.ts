@@ -169,6 +169,20 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        // Sanity check: nếu isAuthenticated là true nhưng user hoặc user.role bị null, tự động reset
+        if (state && state.isAuthenticated && (!state.user || !state.user.role)) {
+          console.warn('[AuthStore] Corrupted auth state detected on rehydrate. Resetting auth state.');
+          useAuthStore.setState({
+            user: null,
+            accessToken: null,
+            refreshToken: null,
+            isAuthenticated: false,
+          });
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+        }
+      },
     }
   )
 );

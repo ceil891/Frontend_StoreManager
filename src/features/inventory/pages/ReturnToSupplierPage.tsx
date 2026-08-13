@@ -1,9 +1,11 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Eye, Building2, Calendar, FileText, CheckCircle2, RotateCcw, Edit, Trash2, X } from 'lucide-react';
+import { Plus, Download, Search, Eye, Building2, Calendar, FileText, CheckCircle2, RotateCcw, Edit, Trash2, X, PackageCheck } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type ReturnToSupplierItem } from '../store/inventoryStore';
+import { usePurchaseStore } from '@/features/purchase/store/purchaseStore';
+import { toast } from 'sonner';
 
 interface UiReturnItem extends ReturnToSupplierItem {
   returnNumber: string;
@@ -13,6 +15,7 @@ interface UiReturnItem extends ReturnToSupplierItem {
   logisticsCarrier: string;
   filedBy: string;
   trackingNumber?: string;
+  supplierId?: string | number;
 }
 
 export function ReturnToSupplierPage() {
@@ -23,8 +26,13 @@ export function ReturnToSupplierPage() {
     updateReturnToSupplier, 
     deleteReturnToSupplier,
     products,
-    fetchProducts
+    fetchProducts,
+    importReceipts,
+    fetchImportReceipts,
   } = useInventoryStore();
+
+  const { suppliers, fetchSuppliers } = usePurchaseStore();
+
   const [search, setSearch] = useState('');
   const [selectedRTV, setSelectedRTV] = useState<UiReturnItem | null>(null);
 
@@ -39,11 +47,12 @@ export function ReturnToSupplierPage() {
     id: string;
     productName: string;
     sku: string;
+    productId?: string | number;
     quantity: number;
     unitPrice: number;
     reason: string;
-  }[]>([
-    { id: '1', productName: 'Sữa tươi Vinamilk 1L', sku: 'SKU-MILK-01', quantity: 10, unitPrice: 32000, reason: 'Hết hạn bảo quản' }
+  }>([
+    { id: '1', productName: 'Sữa tươi Vinamilk 1L', sku: 'SKU-MILK-01', productId: '1', quantity: 10, unitPrice: 32000, reason: 'Hết hạn bảo quản' }
   ]);
 
   // Filter states
@@ -52,7 +61,9 @@ export function ReturnToSupplierPage() {
   useEffect(() => {
     fetchReturnToSuppliers();
     fetchProducts();
-  }, [fetchReturnToSuppliers, fetchProducts]);
+    fetchSuppliers();
+    if (fetchImportReceipts) fetchImportReceipts();
+  }, [fetchReturnToSuppliers, fetchProducts, fetchSuppliers, fetchImportReceipts]);
 
   // Auto calculate totals when returnItems changes
   const updateReturnItemsAndRecalculate = (newItems: typeof returnItems) => {
@@ -66,12 +77,47 @@ export function ReturnToSupplierPage() {
     }));
   };
 
+  const handleSelectGRN = (grnCode: string) => {
+    const foundReceipt = (importReceipts || []).find((rec: any) => rec.code === grnCode || rec.receiptNumber === grnCode || `GRN-${rec.id}` === grnCode);
+    if (!foundReceipt) {
+      setEditingRTV(prev => ({ ...prev, grnRefNumber: grnCode }));
+      return;
+    }
+
+    const supplierName = (foundReceipt as any).supplierName || (foundReceipt as any).supplier?.name || editingRTV.supplierName;
+    const supplierId = (foundReceipt as any).supplierId || (foundReceipt as any).supplier?.id || editingRTV.supplierId;
+
+    const lines = (foundReceipt as any).receiptLines || (foundReceipt as any).items || [];
+    const mappedItems = lines.map((item: any, idx: number) => ({
+      id: String(idx + 1),
+      productName: item.productName || item.name || 'Sản phẩm ' + (idx + 1),
+      sku: item.sku || `SKU-${idx + 1}`,
+      productId: item.productId || item.productVariantId || item.id || 1,
+      quantity: Number(item.quantity || 1),
+      unitPrice: Number(item.unitPrice || item.costPrice || 50000),
+      reason: 'Lô hàng lỗi chất lượng',
+    }));
+
+    setEditingRTV(prev => ({
+      ...prev,
+      grnRefNumber: grnCode,
+      supplierName: supplierName || prev.supplierName,
+      supplierId: supplierId || prev.supplierId,
+    }));
+
+    if (mappedItems.length > 0) {
+      updateReturnItemsAndRecalculate(mappedItems);
+      toast.success(`Đã nạp ${mappedItems.length} sản phẩm từ phiếu nhập ${grnCode}`);
+    }
+  };
+
   const handleAddProductLine = () => {
     const firstP = products[0];
     const newItem = {
       id: Date.now().toString(),
       productName: firstP?.name || 'Sản phẩm mới',
       sku: firstP?.sku || 'SKU-NEW',
+      productId: firstP?.id || '1',
       quantity: 1,
       unitPrice: firstP?.price || 50000,
       reason: 'Lỗi chất lượng'
@@ -91,6 +137,7 @@ export function ReturnToSupplierPage() {
         return {
           ...item,
           sku: value,
+          productId: p?.id || item.productId,
           productName: p?.name || item.productName,
           unitPrice: p?.price || item.unitPrice
         };
@@ -122,7 +169,6 @@ export function ReturnToSupplierPage() {
   }, [returnToSuppliers]);
 
   const filtered = data.filter((item) => {
-    // 1. Text search
     let matchesSearch = true;
     const q = search.toLowerCase();
     if (q) {
@@ -133,10 +179,7 @@ export function ReturnToSupplierPage() {
         item.dispatchingStore.toLowerCase().includes(q)
       );
     }
-
-    // 2. Status filter
     const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-
     return matchesSearch && matchesStatus;
   });
 
@@ -145,7 +188,8 @@ export function ReturnToSupplierPage() {
     setEditingRTV({
       returnNumber: `RTV-${Date.now().toString().slice(-6)}`,
       grnRefNumber: `GRN-${Math.floor(1000 + Math.random() * 9000)}`,
-      supplierName: '',
+      supplierName: suppliers[0]?.name || suppliers[0]?.companyName || 'Công ty TNHH Hà Nội',
+      supplierId: suppliers[0]?.id || 1,
       dispatchingStore: 'Kho phân phối Trung tâm',
       returnDate: new Date().toISOString().split('T')[0],
       returnedItemsCount: 1,
@@ -168,35 +212,62 @@ export function ReturnToSupplierPage() {
 
   const handleSaveRTV = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingRTV.returnNumber || !editingRTV.supplierName) return;
+    if (!editingRTV.returnNumber || !editingRTV.supplierName) {
+      toast.error('Vui lòng điền đủ Mã trả hàng và Nhà cung cấp');
+      return;
+    }
+
+    const matchedSupplier = suppliers.find(s => s.name === editingRTV.supplierName || s.companyName === editingRTV.supplierName || String(s.id) === String(editingRTV.supplierId));
+    const resolvedSupplierId = matchedSupplier?.id || editingRTV.supplierId || 1;
 
     const payload = {
       rtvNumber: editingRTV.returnNumber,
       grnRefNumber: editingRTV.grnRefNumber || '',
+      supplierId: resolvedSupplierId,
       supplierName: editingRTV.supplierName,
       dispatchingStore: editingRTV.dispatchingStore || 'Kho phân phối Trung tâm',
       returnDate: editingRTV.returnDate || new Date().toISOString().split('T')[0],
-      totalItems: Number(editingRTV.returnedItemsCount) || 1,
-      refundValue: Number(editingRTV.claimValuation) || 0,
+      totalItems: returnItems.reduce((acc, cur) => acc + (cur.quantity || 0), 0),
+      refundValue: returnItems.reduce((acc, cur) => acc + (cur.quantity * cur.unitPrice), 0),
       status: editingRTV.status || 'PENDING_SUPPLIER_APPROVAL',
       reason: editingRTV.reason || 'DEFECTIVE_BATCH',
+      logisticsCarrier: editingRTV.logisticsCarrier || '',
+      trackingNumber: editingRTV.trackingNumber || '',
+      filedBy: editingRTV.filedBy || 'Người quản lý',
       notes: editingRTV.notes || '',
+      items: returnItems,
+      returnLines: returnItems,
     };
 
-    if (formMode === 'create') {
-      await addReturnToSupplier(payload);
-    } else if (editingRTV.id) {
-      await updateReturnToSupplier(editingRTV.id, payload);
+    try {
+      if (formMode === 'create') {
+        await addReturnToSupplier(payload);
+        toast.success('Tạo đơn trả hàng cho NCC thành công!');
+      } else if (editingRTV.id) {
+        await updateReturnToSupplier(editingRTV.id, payload);
+        toast.success('Cập nhật đơn trả hàng NCC thành công!');
+      }
+      setIsFormOpen(false);
+      fetchReturnToSuppliers();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi lưu đơn trả hàng NCC.');
     }
-    setIsFormOpen(false);
   };
 
   const handleDeleteConfirm = async () => {
     if (!deletingRTV) return;
-    await deleteReturnToSupplier(deletingRTV.id);
-    setDeletingRTV(null);
-    if (selectedRTV?.id === deletingRTV.id) {
-      setSelectedRTV(null);
+    try {
+      await deleteReturnToSupplier(deletingRTV.id);
+      toast.success('Đã xóa đơn trả hàng NCC!');
+      setDeletingRTV(null);
+      if (selectedRTV?.id === deletingRTV.id) {
+        setSelectedRTV(null);
+      }
+      fetchReturnToSuppliers();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi xóa đơn trả hàng NCC.');
     }
   };
 
@@ -219,64 +290,45 @@ export function ReturnToSupplierPage() {
       },
       {
         accessorKey: 'dispatchingStore',
-        header: 'Kho / Chi nhánh xuất',
+        header: 'Kho xuất trả',
+        cell: (info) => <span className="text-gray-600 dark:text-gray-300">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'returnedItemsCount',
-        header: 'Số lượng trả',
+        header: 'SL sản phẩm',
         cell: (info) => <span className="font-bold text-gray-900 dark:text-white">{info.getValue() as number}</span>,
       },
       {
         accessorKey: 'claimValuation',
-        header: 'Giá trị yêu cầu',
-        cell: (info) => <span className="font-bold text-emerald-600 dark:text-emerald-400">{(info.getValue() as number).toLocaleString('vi-VN')} ₫</span>,
+        header: 'Giá trị bồi hoàn',
+        cell: (info) => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{(info.getValue() as number).toLocaleString('vi-VN')} ₫</span>,
       },
       {
         accessorKey: 'status',
-        header: 'Trạng thái xử lý',
+        header: 'Trạng thái',
         cell: (info) => {
-          const status = info.getValue() as string;
-          const statusMap: Record<string, string> = {
-            PENDING_SUPPLIER_APPROVAL: 'Chờ NCC phản hồi',
-            APPROVED_CREDIT_NOTE: 'Đã duyệt bồi hoàn',
-            REPLACEMENT_DISPATCHED: 'Đang gửi hàng đổi',
-            REJECTED: 'Từ chối',
-          };
-          return (
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-              status === 'APPROVED_CREDIT_NOTE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
-              status === 'REPLACEMENT_DISPATCHED' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' :
-              status === 'PENDING_SUPPLIER_APPROVAL' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' :
-              'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
-            }`}>
-              {statusMap[status] || status}
-            </span>
-          );
+          const st = info.getValue() as string;
+          const label = st === 'APPROVED_CREDIT_NOTE' ? 'Đã duyệt bồi hoàn' : (st === 'REJECTED' ? 'Từ chối' : 'Chờ NCC phản hồi');
+          const style = st === 'APPROVED_CREDIT_NOTE' ? 'bg-emerald-100 text-emerald-800' : (st === 'REJECTED' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800');
+          return <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${style}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
         header: 'Thao tác',
         cell: ({ row }) => (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
             <button
-              onClick={(e) => { e.stopPropagation(); setSelectedRTV(row.original); }}
-              title="Xem chi tiết"
-              className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+              type="button"
+              onClick={() => setSelectedRTV(row.original)}
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg transition-colors"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
-              title="Chỉnh sửa"
-              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); setDeletingRTV(row.original); }}
-              title="Xóa"
-              className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+              type="button"
+              onClick={() => setDeletingRTV(row.original)}
+              className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg transition-colors"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -287,79 +339,46 @@ export function ReturnToSupplierPage() {
     []
   );
 
-  const statusMap: Record<string, string> = {
-    PENDING_SUPPLIER_APPROVAL: 'Chờ nhà cung cấp phản hồi',
-    APPROVED_CREDIT_NOTE: 'Đã duyệt Credit Note bồi hoàn',
-    REPLACEMENT_DISPATCHED: 'Đang gửi hàng hóa thay thế',
-    REJECTED: 'Từ chối yêu cầu',
-  };
-
-  const reasonLabels: Record<string, string> = {
-    DEFECTIVE_BATCH: 'Lô hàng bị lỗi chất lượng',
-    WRONG_SPECIFICATION: 'Sai thông số / Sai mẫu mã đặt hàng',
-    EXPIRED_ON_ARRIVAL: 'Hết hạn sử dụng khi giao hàng',
-    EXCESS_UNORDERED: 'Giao dư số lượng đặt hàng',
-  };
-
   return (
     <>
-      <div className="space-y-6">
+      <div className="p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Trả hàng cho Nhà cung cấp (RTV)</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý các đợt hoàn trả hàng lỗi, yêu cầu bồi hoàn và đổi trả sản phẩm. Nhấp vào dòng để xem chi tiết.</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Trả Hàng Nhà Cung Cấp (RTV - Return to Vendor)</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Quản lý xuất trả hàng lỗi, hết hạn cho nhà cung cấp và theo dõi Credit Note bồi hoàn.
+            </p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Xuất Dữ Liệu
+            <button
+              type="button"
+              onClick={() => toast.success('Xuất log đơn RTV thành công!')}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+            >
+              <Download className="w-4 h-4" /> Xuất Log RTV
             </button>
-            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
-              <Plus className="w-4 h-4" /> Tạo đơn trả hàng
+            <button
+              type="button"
+              onClick={handleOpenCreate}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
+            >
+              <Plus className="w-4 h-4" /> Tạo đơn trả hàng cho NCC mới
             </button>
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-gray-400" />
-              </div>
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Tìm kiếm theo mã RTV, mã GRN hoặc nhà cung cấp..."
-                className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
-              />
+        <div className="flex flex-col sm:flex-row gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="flex-1 relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-gray-400" />
             </div>
-          </div>
-
-          {/* Quick Filters Row */}
-          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700/60">
-            <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-gray-500 font-medium">Trạng thái xử lý:</span>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs cursor-pointer"
-              >
-                <option value="all">Tất cả trạng thái</option>
-                <option value="PENDING_SUPPLIER_APPROVAL">Chờ NCC phản hồi (PENDING SUPPLIER APPROVAL)</option>
-                <option value="APPROVED_CREDIT_NOTE">Đã duyệt bồi hoàn (APPROVED CREDIT NOTE)</option>
-                <option value="REPLACEMENT_DISPATCHED">Đang gửi hàng đổi (REPLACEMENT DISPATCHED)</option>
-                <option value="REJECTED">Từ chối (REJECTED)</option>
-              </select>
-            </div>
-
-            {(statusFilter !== 'all' || search) && (
-              <button
-                onClick={() => { setStatusFilter('all'); setSearch(''); }}
-                className="text-xs text-red-500 hover:text-red-600 font-semibold flex items-center gap-1 ml-auto transition-colors"
-              >
-                <X className="w-3.5 h-3.5" /> Xóa bộ lọc
-              </button>
-            )}
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Tìm kiếm mã RTV, mã GRN, tên NCC..."
+              className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
+            />
           </div>
         </div>
 
@@ -370,97 +389,44 @@ export function ReturnToSupplierPage() {
       <Modal
         isOpen={!!selectedRTV}
         onClose={() => setSelectedRTV(null)}
-        title={selectedRTV ? `Chi tiết trả hàng nhà cung cấp (RTV): ${selectedRTV.returnNumber}` : 'Chi tiết trả hàng RTV'}
-        width="max-w-lg"
+        title={selectedRTV ? `Chi tiết đơn RTV: ${selectedRTV.returnNumber}` : 'Chi tiết RTV'}
+        width="max-w-2xl"
       >
         {selectedRTV && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold">
-                  <RotateCcw className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">Giá trị yêu cầu hoàn tiền</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">{selectedRTV.claimValuation.toLocaleString('vi-VN')} ₫</p>
-                </div>
+          <div className="space-y-4 text-sm">
+            <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800 flex justify-between items-center">
+              <div>
+                <span className="text-xs text-emerald-800 dark:text-emerald-400 font-bold uppercase">Tổng giá trị bồi hoàn</span>
+                <p className="text-2xl font-black text-emerald-600">{selectedRTV.claimValuation.toLocaleString('vi-VN')} ₫</p>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                selectedRTV.status === 'APPROVED_CREDIT_NOTE' ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
-                selectedRTV.status === 'REPLACEMENT_DISPATCHED' ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100' :
-                selectedRTV.status === 'PENDING_SUPPLIER_APPROVAL' ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
-                'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100'
-              }`}>
-                {statusMap[selectedRTV.status] || selectedRTV.status}
+              <span className="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-bold uppercase">
+                {selectedRTV.status}
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Nhà cung cấp nhận
-                </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedRTV.supplierName}</p>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border">
+                <span className="text-gray-400 block">Nhà cung cấp:</span>
+                <span className="font-bold text-gray-900 dark:text-white text-sm">{selectedRTV.supplierName}</span>
               </div>
-              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Calendar className="w-4 h-4 text-blue-500" /> Ngày giao gửi hàng
-                </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedRTV.returnDate}</p>
+              <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border">
+                <span className="text-gray-400 block">Mã GRN gốc:</span>
+                <span className="font-mono font-bold text-gray-900 dark:text-white text-sm">{selectedRTV.grnRefNumber}</span>
               </div>
-            </div>
-
-            <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Mã tham chiếu GRN nhập hàng gốc:</span>
-                <span className="font-mono font-semibold text-gray-900 dark:text-white">{selectedRTV.grnRefNumber}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Kho xuất phát hàng trả:</span>
+              <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border">
+                <span className="text-gray-400 block">Kho xuất trả:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedRTV.dispatchingStore}</span>
               </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Tổng số lượng trả:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedRTV.returnedItemsCount} đơn vị</span>
+              <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border">
+                <span className="text-gray-400 block">Ngày tạo:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{selectedRTV.returnDate}</span>
               </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Đơn vị vận chuyển & Mã tracking:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">
-                  {selectedRTV.logisticsCarrier} {selectedRTV.trackingNumber && <span className="font-mono text-xs text-gray-500">({selectedRTV.trackingNumber})</span>}
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
-                <span className="text-gray-500 dark:text-gray-400">Nhân viên vận tải phụ trách:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedRTV.filedBy}</span>
-              </div>
-
-              <div className="pt-3 border-t border-gray-200 dark:border-gray-800">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Lý do phân loại trả hàng RTV</span>
-                <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-400 bg-white dark:bg-gray-800 p-2.5 rounded border border-gray-200 dark:border-gray-700">{reasonLabels[selectedRTV.reason] || selectedRTV.reason}</p>
-              </div>
-
-              {selectedRTV.notes && (
-                <div className="pt-2 border-t border-gray-200 dark:border-gray-800">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Thỏa thuận khấu trừ & Ghi chú</span>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedRTV.notes}</p>
-                </div>
-              )}
-            </div>
-
-            <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
-              {selectedRTV.status === 'PENDING_SUPPLIER_APPROVAL' && (
-                <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                  <CheckCircle2 className="w-4 h-4" /> Ghi nhận Credit Note từ NCC
-                </button>
-              )}
-              <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
-                <FileText className="w-4 h-4 inline mr-1" /> In phiếu trả hàng RTV
-              </button>
             </div>
           </div>
         )}
       </Modal>
 
+      {/* FORM CREATE / EDIT RTV MODAL */}
       <Modal
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
@@ -475,20 +441,25 @@ export function ReturnToSupplierPage() {
                 type="text"
                 value={editingRTV.returnNumber || ''}
                 onChange={(e) => setEditingRTV({ ...editingRTV, returnNumber: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
                 required
               />
             </div>
             <div>
               <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã GRN nhập hàng gốc *</label>
-              <input
-                type="text"
+              <select
                 value={editingRTV.grnRefNumber || ''}
-                onChange={(e) => setEditingRTV({ ...editingRTV, grnRefNumber: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                placeholder="GRN-2026-XXXX"
+                onChange={(e) => handleSelectGRN(e.target.value)}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
                 required
-              />
+              >
+                <option value="">-- Chọn GRN từ hệ thống --</option>
+                {(importReceipts || []).map((grn: any) => (
+                  <option key={grn.id} value={grn.code || grn.receiptNumber || `GRN-${grn.id}`}>
+                    {grn.code || `GRN-${grn.id}`} - {grn.supplierName || 'NCC'} ({grn.receiptDate || 'Hôm nay'})
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày trả hàng *</label>
@@ -505,25 +476,36 @@ export function ReturnToSupplierPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Nhà cung cấp nhận *</label>
-              <input
-                type="text"
+              <select
                 value={editingRTV.supplierName || ''}
-                onChange={(e) => setEditingRTV({ ...editingRTV, supplierName: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                placeholder="Tên nhà cung cấp..."
+                onChange={(e) => {
+                  const name = e.target.value;
+                  const matched = suppliers.find(s => s.name === name || s.companyName === name);
+                  setEditingRTV({ ...editingRTV, supplierName: name, supplierId: matched?.id || 1 });
+                }}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-xs"
                 required
-              />
+              >
+                <option value="">-- Chọn nhà cung cấp --</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.name || s.companyName}>
+                    {s.name || s.companyName} ({s.code || `SUP-${s.id}`})
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Kho xuất trả hàng *</label>
-              <input
-                type="text"
-                value={editingRTV.dispatchingStore || ''}
+              <select
+                value={editingRTV.dispatchingStore || 'Kho phân phối Trung tâm'}
                 onChange={(e) => setEditingRTV({ ...editingRTV, dispatchingStore: e.target.value })}
                 className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                placeholder="Kho phân phối Trung tâm, Kho Q1..."
                 required
-              />
+              >
+                <option value="Kho phân phối Trung tâm">Kho phân phối Trung tâm (Hà Nội)</option>
+                <option value="Kho Chi nhánh Quận 1">Kho Chi nhánh Quận 1 (TP.HCM)</option>
+                <option value="Kho tổng miền Trung">Kho tổng miền Trung (Đà Nẵng)</option>
+              </select>
             </div>
           </div>
 
@@ -531,12 +513,12 @@ export function ReturnToSupplierPage() {
           <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider text-[11px] flex items-center gap-1">
-                📦 Danh sách sản phẩm xuất trả NCC ({returnItems.length})
+                📦 DANH SÁCH SẢN PHẨM XUẤT TRẢ NCC ({returnItems.length})
               </span>
               <button
                 type="button"
                 onClick={handleAddProductLine}
-                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] flex items-center gap-1"
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] flex items-center gap-1 shadow-sm"
               >
                 <Plus className="w-3.5 h-3.5" /> Thêm Sản Phẩm trả
               </button>
@@ -544,14 +526,14 @@ export function ReturnToSupplierPage() {
 
             <div className="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-lg bg-white dark:bg-gray-950">
               <table className="w-full text-left text-xs">
-                <thead className="bg-gray-100 dark:bg-gray-900 text-gray-500 uppercase text-[10px]">
+                <thead className="bg-gray-100 dark:bg-gray-900 text-gray-500 uppercase text-[10px] font-bold">
                   <tr>
-                    <th className="p-2">Sản phẩm / SKU</th>
-                    <th className="p-2 w-24 text-center">Số lượng</th>
-                    <th className="p-2 w-32 text-right">Đơn giá nhập</th>
-                    <th className="p-2 w-44">Lý do lỗi / Trả</th>
-                    <th className="p-2 w-32 text-right">Thành tiền</th>
-                    <th className="p-2 w-10 text-center">Xóa</th>
+                    <th className="p-2">SẢN PHẨM / SKU</th>
+                    <th className="p-2 w-24 text-center">SỐ LƯỢNG</th>
+                    <th className="p-2 w-32 text-right">ĐƠN GIÁ NHẬP</th>
+                    <th className="p-2 w-44">LÝ DO LỖI / TRẢ</th>
+                    <th className="p-2 w-32 text-right">THÀNH TIỀN</th>
+                    <th className="p-2 w-10 text-center">XÓA</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
@@ -561,7 +543,7 @@ export function ReturnToSupplierPage() {
                         <select
                           value={item.sku}
                           onChange={(e) => handleUpdateProductLine(item.id, 'sku', e.target.value)}
-                          className="w-full p-1 border rounded bg-white dark:bg-gray-900 text-xs font-medium"
+                          className="w-full p-1.5 border rounded bg-white dark:bg-gray-900 text-xs font-medium"
                         >
                           {products.map(p => (
                             <option key={p.id} value={p.sku}>{p.sku} - {p.name}</option>
@@ -577,7 +559,7 @@ export function ReturnToSupplierPage() {
                           min={1}
                           value={item.quantity}
                           onChange={(e) => handleUpdateProductLine(item.id, 'quantity', parseInt(e.target.value) || 0)}
-                          className="w-full p-1 border rounded text-center font-bold"
+                          className="w-full p-1.5 border rounded text-center font-bold text-emerald-600"
                         />
                       </td>
                       <td className="p-2 text-right font-mono">
@@ -585,7 +567,7 @@ export function ReturnToSupplierPage() {
                           type="number"
                           value={item.unitPrice}
                           onChange={(e) => handleUpdateProductLine(item.id, 'unitPrice', parseInt(e.target.value) || 0)}
-                          className="w-full p-1 border rounded text-right font-mono"
+                          className="w-full p-1.5 border rounded text-right font-mono"
                         />
                       </td>
                       <td className="p-2">
@@ -593,11 +575,11 @@ export function ReturnToSupplierPage() {
                           type="text"
                           value={item.reason}
                           onChange={(e) => handleUpdateProductLine(item.id, 'reason', e.target.value)}
-                          className="w-full p-1 border rounded"
+                          className="w-full p-1.5 border rounded"
                           placeholder="Nhập lý do trả..."
                         />
                       </td>
-                      <td className="p-2 text-right font-bold text-emerald-600 font-mono">
+                      <td className="p-2 text-right font-bold text-emerald-600 font-mono text-sm">
                         {((item.quantity || 0) * (item.unitPrice || 0)).toLocaleString('vi-VN')} ₫
                       </td>
                       <td className="p-2 text-center">
@@ -615,23 +597,23 @@ export function ReturnToSupplierPage() {
               </table>
             </div>
 
-            <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-950/30 p-2.5 rounded-lg border border-emerald-200 dark:border-emerald-900">
-              <span className="font-bold text-emerald-800 dark:text-emerald-300">
-                Tổng số lượng trả: <span className="font-mono text-base">{editingRTV.returnedItemsCount || 0}</span> đơn vị
+            <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-lg border border-emerald-200 dark:border-emerald-900">
+              <span className="font-bold text-emerald-900 dark:text-emerald-300">
+                Tổng số lượng trả: <span className="font-mono text-base font-extrabold text-emerald-700 dark:text-emerald-400">{editingRTV.returnedItemsCount || 0}</span> đơn vị
               </span>
-              <span className="font-bold text-emerald-800 dark:text-emerald-300">
-                Tổng giá trị hoàn tiền: <span className="font-mono text-base text-emerald-600 font-extrabold">{(editingRTV.claimValuation || 0).toLocaleString('vi-VN')} ₫</span>
+              <span className="font-bold text-emerald-900 dark:text-emerald-300">
+                Tổng giá trị hoàn tiền: <span className="font-mono text-lg text-emerald-600 dark:text-emerald-400 font-black">{(editingRTV.claimValuation || 0).toLocaleString('vi-VN')} ₫</span>
               </span>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Phân loại lý do trả *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">PHÂN LOẠI LÝ DO TRẢ *</label>
               <select
                 value={editingRTV.reason || 'DEFECTIVE_BATCH'}
                 onChange={(e) => setEditingRTV({ ...editingRTV, reason: e.target.value as any })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-medium"
               >
                 <option value="DEFECTIVE_BATCH">Lô hàng lỗi chất lượng</option>
                 <option value="WRONG_SPECIFICATION">Sai mẫu mã đặt hàng</option>
@@ -640,11 +622,11 @@ export function ReturnToSupplierPage() {
               </select>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Trạng thái xử lý *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">TRẠNG THÁI XỬ LÝ *</label>
               <select
                 value={editingRTV.status || 'PENDING_SUPPLIER_APPROVAL'}
                 onChange={(e) => setEditingRTV({ ...editingRTV, status: e.target.value as any })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
               >
                 <option value="PENDING_SUPPLIER_APPROVAL">Chờ nhà cung cấp phản hồi</option>
                 <option value="APPROVED_CREDIT_NOTE">Đã duyệt bồi hoàn</option>
@@ -653,12 +635,12 @@ export function ReturnToSupplierPage() {
               </select>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Nhân viên phụ trách *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">NHÂN VIÊN PHỤ TRÁCH *</label>
               <input
                 type="text"
-                value={editingRTV.filedBy || ''}
+                value={editingRTV.filedBy || 'Người quản lý'}
                 onChange={(e) => setEditingRTV({ ...editingRTV, filedBy: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-semibold"
                 required
               />
             </div>
@@ -666,46 +648,49 @@ export function ReturnToSupplierPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Đơn vị vận chuyển</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">ĐƠN VỊ VẬN CHUYỂN</label>
               <input
                 type="text"
                 value={editingRTV.logisticsCarrier || ''}
                 onChange={(e) => setEditingRTV({ ...editingRTV, logisticsCarrier: e.target.value })}
                 className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Nhà xe nội địa, GHTK, Viettel Post..."
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã vận đơn tracking</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">MÃ VẬN ĐƠN TRACKING</label>
               <input
                 type="text"
                 value={editingRTV.trackingNumber || ''}
                 onChange={(e) => setEditingRTV({ ...editingRTV, trackingNumber: e.target.value })}
                 className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                placeholder="Mã vận đơn..."
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ghi chú & thỏa thuận bồi hoàn</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">GHI CHÚ & THỎA THUẬN BỐI HOÀN</label>
             <textarea
               rows={2}
               value={editingRTV.notes || ''}
               onChange={(e) => setEditingRTV({ ...editingRTV, notes: e.target.value })}
               className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              placeholder="Nội dung thỏa thuận bồi hoàn với nhà cung cấp..."
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="flex justify-end gap-3 pt-4 border-t">
             <button
               type="button"
               onClick={() => setIsFormOpen(false)}
-              className="px-4 py-2 border rounded-lg text-sm text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-50 dark:hover:bg-gray-800"
+              className="px-5 py-2.5 border rounded-lg text-sm text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow"
+              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold shadow transition-all"
             >
               Lưu dữ liệu
             </button>

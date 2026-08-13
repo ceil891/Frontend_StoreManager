@@ -355,16 +355,34 @@ export function SuppliersPage() {
                 <span className="font-mono font-bold text-gray-900 dark:text-white">{selectedSupplier.code}</span>
               </div>
               <div>
+                <span className="text-gray-500 dark:text-gray-400 block font-medium">Tên viết tắt:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{selectedSupplier.shortName || '—'}</span>
+              </div>
+              <div>
                 <span className="text-gray-500 dark:text-gray-400 block font-medium">Mã số thuế (Tax Code):</span>
                 <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{selectedSupplier.taxCode || 'Chưa cập nhật'}</span>
               </div>
               <div>
+                <span className="text-gray-500 dark:text-gray-400 block font-medium">Thẻ phân loại (Tags):</span>
+                <span className="font-medium text-blue-600 dark:text-blue-400">{selectedSupplier.tags || '—'}</span>
+              </div>
+              <div>
                 <span className="text-gray-500 dark:text-gray-400 block font-medium">Nhóm NCC:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedSupplier.groupId || 'Mặc định'}</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {selectedSupplier.groupId === 'SUP-GRP-RAW' ? 'NCC Nguyên vật liệu thô' :
+                   selectedSupplier.groupId === 'SUP-GRP-IMP' ? 'NCC Hàng nhập khẩu' :
+                   selectedSupplier.groupId === 'SUP-GRP-LOCAL' ? 'NCC Đơn vị nội địa' :
+                   (selectedSupplier.groupId || 'Mặc định')}
+                </span>
               </div>
               <div>
                 <span className="text-gray-500 dark:text-gray-400 block font-medium">Khu vực phân phối:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedSupplier.areaId || 'Toàn quốc'}</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {selectedSupplier.areaId === 'AREA-MIEN-BAC' ? 'Khu vực Miền Bắc' :
+                   selectedSupplier.areaId === 'AREA-MIEN-NAM' ? 'Khu vực Miền Nam' :
+                   selectedSupplier.areaId === 'AREA-OVERSEAS' ? 'Nhà cung cấp Quốc tế' :
+                   (selectedSupplier.areaId || 'Toàn quốc')}
+                </span>
               </div>
             </div>
 
