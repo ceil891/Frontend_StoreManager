@@ -3,15 +3,20 @@ import { useMemo, useState, useEffect } from 'react';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import {
   ShoppingBag, Search, Eye, Filter, RefreshCw, CheckCircle2, Clock, Truck, Package, XCircle,
-  TrendingUp, ArrowUpRight, DollarSign, Printer, User, Phone, MapPin
+  TrendingUp, ArrowUpRight, DollarSign, Printer, User, Phone, MapPin, Building2
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 
-
+export interface BranchOption {
+  id: string | number;
+  branchCode?: string;
+  branchName: string;
+  address?: string;
+  phone?: string;
+}
 
 export interface OnlineOrder {
   id: string;
@@ -23,6 +28,8 @@ export interface OnlineOrder {
   paymentMethod: 'VietQR' | 'COD' | 'Thẻ ATM/Visa' | 'Chuyển khoản';
   paymentStatus: 'Đã thanh toán' | 'Chờ thanh toán COD' | 'Đã hoàn tiền';
   fulfillmentStatus: 'CHO_XAC_NHAN' | 'DANG_DONG_GOI' | 'DA_GIAO_NTVC' | 'GIAO_THANH_CONG' | 'DA_HUY';
+  branchId?: string | number;
+  branchName?: string;
   carrier: string;
   trackingCode: string;
   shipperName?: string;
@@ -47,6 +54,12 @@ export function OnlineOrdersPage() {
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
   const [selectedOrder, setSelectedOrder] = useState<OnlineOrder | null>(null);
 
+  // Modal for assigning Branch / Warehouse
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [isAssignBranchOpen, setIsAssignBranchOpen] = useState(false);
+  const [selectedBranchId, setSelectedBranchId] = useState<string | number>('');
+  const [branchPackingNote, setBranchPackingNote] = useState('');
+
   // Modal for assigning Shipper / Carrier
   const [isAssignShipperOpen, setIsAssignShipperOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -58,6 +71,39 @@ export function OnlineOrdersPage() {
     shipperPhone: '0912 345 678'
   });
 
+  const fetchBranches = async () => {
+    try {
+      const res = await axiosClient.get<any, any>('/system/branches');
+      const data = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : (Array.isArray(res?.content) ? res.content : []));
+      if (Array.isArray(data) && data.length > 0) {
+        setBranches(data.map((b: any) => ({
+          id: String(b.id),
+          branchCode: b.branchCode || `CN-${b.id}`,
+          branchName: b.branchName || 'Chi nhánh',
+          address: b.address || 'Việt Nam',
+          phone: b.phone || ''
+        })));
+        setSelectedBranchId(String(data[0].id));
+      } else {
+        const defaults: BranchOption[] = [
+          { id: '1', branchCode: 'CN-HCM', branchName: 'Chi nhánh AuraMart Quận 1 (TP. Hồ Chí Minh)', address: '123 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP.HCM', phone: '028 3888 9999' },
+          { id: '2', branchCode: 'CN-HN', branchName: 'Chi nhánh AuraMart Cầu Giấy (Hà Nội)', address: '45 Cầu Giấy, Quan Hoa, Quận Cầu Giấy, Hà Nội', phone: '024 3999 8888' },
+          { id: '3', branchCode: 'KHO-TONG', branchName: 'Kho Tổng Trung Tâm AuraMart (Bình Dương)', address: 'KCN VSIP 1, Đại lộ Tự Do, TP. Thuận An, Bình Dương', phone: '0274 3777 666' }
+        ];
+        setBranches(defaults);
+        setSelectedBranchId('1');
+      }
+    } catch {
+      const defaults: BranchOption[] = [
+        { id: '1', branchCode: 'CN-HCM', branchName: 'Chi nhánh AuraMart Quận 1 (TP. Hồ Chí Minh)', address: '123 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP.HCM', phone: '028 3888 9999' },
+        { id: '2', branchCode: 'CN-HN', branchName: 'Chi nhánh AuraMart Cầu Giấy (Hà Nội)', address: '45 Cầu Giấy, Quan Hoa, Quận Cầu Giấy, Hà Nội', phone: '024 3999 8888' },
+        { id: '3', branchCode: 'KHO-TONG', branchName: 'Kho Tổng Trung Tâm AuraMart (Bình Dương)', address: 'KCN VSIP 1, Đại lộ Tự Do, TP. Thuận An, Bình Dương', phone: '0274 3777 666' }
+      ];
+      setBranches(defaults);
+      setSelectedBranchId('1');
+    }
+  };
+
   const fetchOrders = async (showToast = false) => {
     setIsLoading(true);
     let realOrders: OnlineOrder[] = [];
@@ -66,28 +112,37 @@ export function OnlineOrdersPage() {
       const res = await axiosClient.get<any, any>('/sales/orders');
       const rawItems = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : (Array.isArray(res?.content) ? res.content : []));
       if (Array.isArray(rawItems) && rawItems.length > 0) {
-        realOrders = rawItems.map((item: any) => ({
+        // Chỉ lấy các đơn có nguồn Online (origin = ONLINE hoặc orderCode bắt đầu bằng ONLINE-)
+        const onlineRaw = rawItems.filter((it: any) => {
+          const origin = (it.origin || it.orderOrigin || '').toUpperCase();
+          const code = (it.orderCode || it.code || '').toUpperCase();
+          return origin === 'ONLINE' || origin === 'WEB' || code.startsWith('ONLINE-') || code.startsWith('WEB-');
+        });
+
+        realOrders = onlineRaw.map((item: any) => ({
           id: String(item.id),
-          orderCode: item.orderCode || `ONLINE-${item.id}`,
-          customerName: item.customerName || 'Khách hàng Online',
-          customerPhone: item.customerPhone || '0988 123 456',
-          shippingAddress: item.shippingAddress || 'Việt Nam',
-          totalAmount: Number(item.totalAmount || 0),
-          paymentMethod: item.paymentMethod === 'MOMO' ? 'VietQR' : 'COD',
-          paymentStatus: (item.status === 'COMPLETED' || item.status === 'DELIVERED') ? 'Đã thanh toán' : 'Chờ thanh toán COD',
+          orderCode: item.orderCode || item.code || `ONLINE-${item.id}`,
+          customerName: item.customerName || item.customer?.name || item.recipientName || 'Khách đặt Online',
+          customerPhone: item.customerPhone || item.customer?.phone || item.recipientPhone || '—',
+          shippingAddress: item.shippingAddress || item.address || 'Giao tận nơi',
+          totalAmount: Number(item.totalAmount || item.finalAmount || 0),
+          paymentMethod: (item.paymentMethod === 'MOMO' || item.paymentMethod === 'VIETQR') ? 'VietQR' : (item.paymentMethod || 'COD') as any,
+          paymentStatus: (item.status === 'COMPLETED' || item.status === 'DELIVERED' || item.paymentStatus === 'PAID') ? 'Đã thanh toán' : 'Chờ thanh toán COD',
           fulfillmentStatus: mapBackendToFulfillmentStatus(item.status),
-          carrier: item.carrier || (item.status === 'PENDING' ? 'Chưa chọn (Chờ đóng gói)' : 'Viettel Post'),
-          trackingCode: item.trackingCode || (item.status === 'PENDING' ? 'Tự động tạo' : `VTP-${item.id}`),
-          shipperName: item.shipperName || (item.status === 'PENDING' ? 'Chưa chọn (Chờ đóng gói)' : 'Nguyễn Văn Minh'),
-          shipperPhone: item.shipperPhone || (item.status === 'PENDING' ? 'Chưa chọn' : '0912 345 678'),
-          createdDate: item.createdAt ? new Date(item.createdAt).toISOString().replace('T', ' ').substring(0, 16) : new Date().toISOString().replace('T', ' ').substring(0, 16),
-          itemsCount: item.details?.length || 1,
-          items: item.details ? item.details.map((d: any) => ({
+          branchId: item.branchId || item.branch?.id,
+          branchName: item.branchName || item.branch?.branchName || (item.branchId ? `Chi nhánh ${item.branchId}` : undefined),
+          carrier: item.carrier || (item.status === 'PENDING' ? '' : 'Viettel Post'),
+          trackingCode: item.trackingCode || (item.status === 'PENDING' ? '' : `VTP-${item.id}`),
+          shipperName: item.shipperName || '',
+          shipperPhone: item.shipperPhone || '',
+          createdDate: item.createdAt ? new Date(item.createdAt).toISOString().replace('T', ' ').substring(0, 16) : (item.orderDate ? String(item.orderDate).substring(0, 10) : new Date().toISOString().substring(0, 10)),
+          itemsCount: item.details?.length || (item.items?.length || 1),
+          items: (item.details || item.items || []).map((d: any) => ({
             productName: d.productNameSnapshot || d.productName || 'Sản phẩm',
-            sku: d.variantCode || d.skuSnapshot || 'SKU',
+            sku: d.variantCode || d.skuSnapshot || d.sku || 'SKU',
             quantity: Number(d.quantity || 1),
-            price: Number(d.unitPriceSnapshot || d.unitPrice || 0)
-          })) : []
+            price: Number(d.unitPriceSnapshot || d.unitPrice || d.price || 0)
+          }))
         }));
       }
     } catch (err) {
@@ -95,43 +150,6 @@ export function OnlineOrdersPage() {
     }
 
     setIsLoading(false);
-
-    try {
-      const localSaved = localStorage.getItem('user_local_orders');
-      if (localSaved) {
-        const parsed = JSON.parse(localSaved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const mappedLocal: OnlineOrder[] = parsed.map((lo: any, idx: number) => ({
-            id: lo.id || `local-${idx}`,
-            orderCode: lo.id || `ONLINE-${Date.now()}`,
-            customerName: lo.shippingAddress?.fullName || 'Khách hàng Online',
-            customerPhone: lo.shippingAddress?.phone || '0988123456',
-            shippingAddress: lo.shippingAddress?.street || 'TP. Hồ Chí Minh',
-            totalAmount: Number(lo.total || 0),
-            paymentMethod: lo.paymentMethod === 'MOMO' ? 'VietQR' : 'COD',
-            paymentStatus: lo.status === 'delivered' ? 'Đã thanh toán' : 'Chờ thanh toán COD',
-            fulfillmentStatus: lo.status === 'delivered' ? 'GIAO_THANH_CONG' : lo.status === 'cancelled' ? 'DA_HUY' : 'CHO_XAC_NHAN',
-            carrier: 'Viettel Post',
-            trackingCode: lo.trackingNumber || `VTP-${lo.id}`,
-            createdDate: lo.date || new Date().toISOString().substring(0, 10),
-            itemsCount: lo.items?.length || 1,
-            items: lo.items ? lo.items.map((it: any) => ({
-              productName: it.productName || 'Sản phẩm',
-              sku: `SKU-${it.productId}`,
-              quantity: it.quantity || 1,
-              price: it.price || 0
-            })) : []
-          }));
-
-          mappedLocal.forEach(m => {
-            if (!realOrders.some(r => r.orderCode === m.orderCode)) {
-              realOrders.unshift(m);
-            }
-          });
-        }
-      }
-    } catch { }
-
     setOrders(realOrders);
 
     if (showToast) {
@@ -141,6 +159,7 @@ export function OnlineOrdersPage() {
 
   useEffect(() => {
     fetchOrders(false);
+    fetchBranches();
   }, []);
 
   // Reset assignmentHistory when a new order is selected
@@ -156,6 +175,7 @@ export function OnlineOrdersPage() {
         o.orderCode.toLowerCase().includes(search.toLowerCase()) ||
         o.customerName.toLowerCase().includes(search.toLowerCase()) ||
         o.customerPhone.includes(search) ||
+        (o.branchName && o.branchName.toLowerCase().includes(search.toLowerCase())) ||
         o.trackingCode.toLowerCase().includes(search.toLowerCase());
 
       const matchStatus = statusFilter === 'Tất cả' || o.fulfillmentStatus === statusFilter;
@@ -190,12 +210,13 @@ export function OnlineOrdersPage() {
   const handleUpdateStatus = async (
     orderId: string,
     newStatus: OnlineOrder['fulfillmentStatus'],
-    extraData?: { carrier?: string; trackingCode?: string; shipperName?: string; shipperPhone?: string }
+    extraData?: { branchId?: string | number; branchName?: string; carrier?: string; trackingCode?: string; shipperName?: string; shipperPhone?: string }
   ) => {
     const backendStatus = mapFulfillmentToBackendStatus(newStatus);
 
     try {
       const params: any = { status: backendStatus };
+      if (extraData?.branchId) params.branchId = extraData.branchId;
       if (extraData?.carrier) params.carrier = extraData.carrier;
       if (extraData?.trackingCode) params.trackingCode = extraData.trackingCode;
       if (extraData?.shipperName) params.shipperName = extraData.shipperName;
@@ -212,6 +233,8 @@ export function OnlineOrdersPage() {
           return {
             ...o,
             fulfillmentStatus: newStatus,
+            branchId: extraData?.branchId !== undefined ? extraData.branchId : o.branchId,
+            branchName: extraData?.branchName || o.branchName,
             carrier: extraData?.carrier || (newStatus === 'CHO_XAC_NHAN' ? 'Chưa chọn (Chờ đóng gói)' : o.carrier || 'Viettel Post'),
             trackingCode: extraData?.trackingCode || o.trackingCode,
             shipperName: extraData?.shipperName || o.shipperName,
@@ -228,6 +251,8 @@ export function OnlineOrdersPage() {
           ? {
               ...prev,
               fulfillmentStatus: newStatus,
+              branchId: extraData?.branchId !== undefined ? extraData.branchId : prev.branchId,
+              branchName: extraData?.branchName || prev.branchName,
               carrier: extraData?.carrier || (newStatus === 'CHO_XAC_NHAN' ? 'Chưa chọn (Chờ đóng gói)' : prev.carrier || 'Viettel Post'),
               trackingCode: extraData?.trackingCode || prev.trackingCode,
               shipperName: extraData?.shipperName || prev.shipperName,
@@ -246,6 +271,32 @@ export function OnlineOrdersPage() {
     };
 
     toast.success(`Đã cập nhật trạng thái đơn hàng: ${labelMap[newStatus]}`);
+  };
+
+  const handleOpenAssignBranchModal = () => {
+    if (!selectedOrder) return;
+    if (selectedOrder.branchId) {
+      setSelectedBranchId(String(selectedOrder.branchId));
+    } else if (branches.length > 0) {
+      setSelectedBranchId(String(branches[0].id));
+    }
+    setBranchPackingNote('');
+    setIsAssignBranchOpen(true);
+  };
+
+  const handleConfirmAssignBranch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOrder) return;
+    const branch = branches.find(b => String(b.id) === String(selectedBranchId));
+    const branchName = branch ? branch.branchName : 'Chi nhánh AuraMart';
+
+    await handleUpdateStatus(selectedOrder.id, 'DANG_DONG_GOI', {
+      branchId: selectedBranchId,
+      branchName: branchName
+    });
+
+    setIsAssignBranchOpen(false);
+    toast.success(`Đã chọn ${branchName} thực hiện đóng gói đơn hàng!`);
   };
 
   const handleOpenAssignShipperModal = () => {
@@ -271,13 +322,13 @@ export function OnlineOrdersPage() {
       case 'CHO_XAC_NHAN':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-900/40">
-            <Clock className="w-3 h-3" /> Chờ xác nhận
+            <Clock className="w-3 h-3" /> Chờ xác nhận & phân bổ kho
           </span>
         );
       case 'DANG_DONG_GOI':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900/40">
-            <Package className="w-3 h-3" /> Đang đóng gói
+            <Package className="w-3 h-3" /> Đang đóng gói tại chi nhánh
           </span>
         );
       case 'DA_GIAO_NTVC':
@@ -289,7 +340,7 @@ export function OnlineOrdersPage() {
       case 'GIAO_THANH_CONG':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/40">
-            <CheckCircle2 className="w-3 h-3" /> Thành công
+            <CheckCircle2 className="w-3 h-3" /> Giao thành công
           </span>
         );
       case 'DA_HUY':
@@ -320,6 +371,8 @@ export function OnlineOrdersPage() {
             customerPhone: data.customerPhone || prev.customerPhone,
             shippingAddress: data.shippingAddress || prev.shippingAddress,
             totalAmount: Number(data.totalAmount || prev.totalAmount),
+            branchId: data.branchId || data.branch?.id || prev.branchId,
+            branchName: data.branchName || data.branch?.branchName || prev.branchName,
             items: fetchedItems.length > 0 ? fetchedItems : prev.items
           } : prev);
         }
@@ -350,6 +403,29 @@ export function OnlineOrdersPage() {
       ),
     },
     {
+      accessorKey: 'branchName',
+      header: 'Chi nhánh đóng gói',
+      cell: ({ row }) => {
+        const isPending = row.original.fulfillmentStatus === 'CHO_XAC_NHAN';
+        return (
+          <div>
+            {isPending ? (
+              <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-semibold bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-lg border border-amber-200 dark:border-amber-800">
+                <Clock className="w-3 h-3" /> Chờ phân bổ
+              </span>
+            ) : (
+              <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 flex items-center gap-1">
+                <Building2 className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate max-w-[140px]" title={row.original.branchName || 'Chi nhánh AuraMart'}>
+                  {row.original.branchName || 'Chi nhánh AuraMart'}
+                </span>
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       accessorKey: 'totalAmount',
       header: 'Tổng tiền',
       cell: ({ row }) => (
@@ -372,7 +448,7 @@ export function OnlineOrdersPage() {
       cell: ({ row }) => (
         <div>
           <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-            {row.original.fulfillmentStatus === 'CHO_XAC_NHAN' ? 'Chưa chọn' : row.original.carrier}
+            {row.original.fulfillmentStatus === 'CHO_XAC_NHAN' ? 'Chưa phân công' : row.original.carrier}
           </div>
           <div className="text-[11px] text-gray-400 font-mono">
             {row.original.fulfillmentStatus === 'CHO_XAC_NHAN' ? 'Chờ đóng gói' : row.original.trackingCode}
@@ -406,10 +482,10 @@ export function OnlineOrdersPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
             <ShoppingBag className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />
-            Quản Lý Đơn Hàng Online
+            Quản lý đơn hàng online
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Quản lý tập trung các đơn hàng đặt trực tuyến và giao hàng
+            Quản lý tập trung các đơn hàng trực tuyến, phân bổ chi nhánh đóng gói và xuất giao
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -426,7 +502,7 @@ export function OnlineOrdersPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Tổng Đơn Hàng Online</p>
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Tổng đơn hàng online</p>
             <h3 className="text-2xl font-black text-gray-900 dark:text-white mt-1">{stats.totalOrders}</h3>
             <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1 font-medium">
               <TrendingUp className="w-3.5 h-3.5" /> Tăng trưởng ổn định
@@ -439,9 +515,9 @@ export function OnlineOrdersPage() {
 
         <div className="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Đơn Chờ Xác Nhận</p>
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Đơn chờ xác nhận</p>
             <h3 className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">{stats.pendingFulfillment}</h3>
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 font-medium">Cần xử lý đóng gói ngay</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 font-medium">Cần phân bổ chi nhánh đóng gói</p>
           </div>
           <div className="w-12 h-12 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center">
             <Clock className="w-6 h-6" />
@@ -481,7 +557,7 @@ export function OnlineOrdersPage() {
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Tìm theo mã đơn, tên khách, SĐT, mã vận đơn..."
+              placeholder="Tìm theo mã đơn, tên khách, SĐT, chi nhánh..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
@@ -542,6 +618,47 @@ export function OnlineOrdersPage() {
               <div>{getStatusBadge(selectedOrder.fulfillmentStatus)}</div>
             </div>
 
+            {/* Fulfillment Branch Section */}
+            <div className="p-4 rounded-xl border border-indigo-100 dark:border-indigo-950/60 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-2">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-bold text-indigo-900 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-indigo-600" /> Chi nhánh xuất hàng & đóng gói
+                </h4>
+                {selectedOrder.fulfillmentStatus === 'CHO_XAC_NHAN' ? (
+                  <button
+                    onClick={handleOpenAssignBranchModal}
+                    className="text-xs px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-sm transition-all"
+                  >
+                    Chọn chi nhánh đóng gói
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleOpenAssignBranchModal}
+                    className="text-xs px-2.5 py-1 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-lg font-medium transition-all"
+                  >
+                    Đổi chi nhánh
+                  </button>
+                )}
+              </div>
+              <div>
+                {selectedOrder.branchName ? (
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                      <Building2 className="w-4 h-4 text-indigo-600 shrink-0" /> {selectedOrder.branchName}
+                    </p>
+                    <p className="text-xs text-indigo-700 dark:text-indigo-300">
+                      Trạng thái: <strong className="font-semibold">{selectedOrder.fulfillmentStatus === 'DANG_DONG_GOI' ? 'Đang đóng gói và chuẩn bị hàng tại kho' : 'Đã xác nhận phân bổ chi nhánh'}</strong>
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-xs text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200 flex items-center gap-2 font-medium">
+                    <Clock className="w-4 h-4 shrink-0 text-amber-600" />
+                    <span>Đơn hàng chưa được phân bổ chi nhánh đóng gói. Vui lòng bấm <strong>"Xác nhận & Chọn chi nhánh đóng gói"</strong> để phân công kho xuất hàng.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Customer & Delivery Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 rounded-xl border border-gray-100 dark:border-gray-800 space-y-2">
@@ -563,13 +680,13 @@ export function OnlineOrdersPage() {
                 </h4>
                 {selectedOrder.fulfillmentStatus === 'CHO_XAC_NHAN' ? (
                   <div className="space-y-1">
-                    <p className="text-xs text-amber-600 font-semibold">Chưa chọn (Chờ đóng gói)</p>
+                    <p className="text-xs text-amber-600 font-semibold">Chưa chọn (Chờ phân bổ chi nhánh & đóng gói)</p>
                     <p className="text-xs text-gray-400">Tài xế / Shipper: Chưa phân công</p>
                     <p className="text-xs font-mono text-gray-400">Mã vận đơn: Tự động tạo khi giao</p>
                   </div>
                 ) : selectedOrder.fulfillmentStatus === 'DANG_DONG_GOI' ? (
                   <div className="space-y-1">
-                    <p className="text-xs text-indigo-600 font-semibold">Đã đóng gói - Chờ bàn giao Shipper</p>
+                    <p className="text-xs text-indigo-600 font-semibold">Đang đóng gói - Chờ bàn giao Shipper</p>
                     <p className="text-xs text-gray-500">Hãy bấm nút "Chọn người giao hàng" phía dưới để gán Shipper</p>
                   </div>
                 ) : (
@@ -674,13 +791,13 @@ export function OnlineOrdersPage() {
                 <Printer className="w-4 h-4" /> In phiếu đóng gói
               </button>
 
-              {/* Step 1: Confirm & move to packing */}
+              {/* Step 1: Confirm & Choose Branch to Pack */}
               {selectedOrder.fulfillmentStatus === 'CHO_XAC_NHAN' && (
                 <button
-                  onClick={() => handleUpdateStatus(selectedOrder.id, 'DANG_DONG_GOI')}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium cursor-pointer shadow-sm transition-all"
+                  onClick={handleOpenAssignBranchModal}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold cursor-pointer shadow-sm transition-all"
                 >
-                  <Package className="w-4 h-4" /> Xác nhận & Chuyển đóng gói
+                  <Building2 className="w-4 h-4" /> Xác nhận & Chọn chi nhánh đóng gói
                 </button>
               )}
 
@@ -725,6 +842,86 @@ export function OnlineOrdersPage() {
           </div>
         )}
       </Modal>
+
+      {/* Modal Chọn Chi Nhánh Đóng Gói */}
+      {isAssignBranchOpen && (
+        <Modal
+          isOpen={isAssignBranchOpen}
+          onClose={() => setIsAssignBranchOpen(false)}
+          title="Chọn chi nhánh xuất hàng & đóng gói"
+        >
+          <form onSubmit={handleConfirmAssignBranch} className="space-y-4 p-1">
+            <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 space-y-1 text-xs">
+              <p><strong>Mã đơn hàng:</strong> <span className="font-mono text-emerald-600 font-bold">{selectedOrder?.orderCode}</span></p>
+              <p><strong>Khách hàng:</strong> {selectedOrder?.customerName} ({selectedOrder?.customerPhone})</p>
+              <p><strong>Địa chỉ nhận hàng:</strong> {selectedOrder?.shippingAddress}</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
+                Chọn chi nhánh thực hiện đóng gói & trừ tồn kho *
+              </label>
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {branches.map(branch => (
+                  <label
+                    key={branch.id}
+                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                      String(selectedBranchId) === String(branch.id)
+                        ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 ring-1 ring-indigo-600'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="branchSelect"
+                      value={branch.id}
+                      checked={String(selectedBranchId) === String(branch.id)}
+                      onChange={(e) => setSelectedBranchId(e.target.value)}
+                      className="mt-1 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div className="text-xs">
+                      <p className="font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-indigo-600" /> {branch.branchName}
+                      </p>
+                      <p className="text-gray-500 mt-0.5">{branch.address}</p>
+                      {branch.phone && <p className="text-gray-400">Hotline: {branch.phone}</p>}
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                Ghi chú đóng gói / Lưu ý cho thủ kho
+              </label>
+              <textarea
+                value={branchPackingNote}
+                onChange={(e) => setBranchPackingNote(e.target.value)}
+                placeholder="VD: Kiểm tra kỹ tem niêm phong, bọc xốp chống sốc..."
+                rows={2}
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setIsAssignBranchOpen(false)}
+                className="px-4 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 rounded-xl"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5"
+              >
+                <Package className="w-4 h-4" /> Xác nhận & Chuyển sang đóng gói
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {/* Modal Chọn Người Giao Hàng & Đơn Vị Vận Chuyển */}
       {isAssignShipperOpen && (

@@ -59,6 +59,7 @@ export function PurchaseOrdersPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingPO, setEditingPO] = useState<Partial<PurchaseOrderItem> & { poLines?: POLineItem[] }>({});
   const [deletingPO, setDeletingPO] = useState<PurchaseOrderItem | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const filtered = data.filter((item) =>
     item.supplierName.toLowerCase().includes(search.toLowerCase()) ||
@@ -79,8 +80,9 @@ export function PurchaseOrdersPage() {
     const totalQty = initialLines.reduce((acc, l) => acc + l.quantity, 0);
     const totalVal = initialLines.reduce((acc, l) => acc + (l.quantity * l.unitPrice), 0);
 
+    const now = new Date();
     setEditingPO({
-      poNumber: `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      poNumber: `PO-${now.getFullYear()}-${Date.now().toString().slice(-5)}${Math.floor(10 + Math.random() * 90)}`,
       supplierName: apiSuppliers[0] || '',
       destinationStore: apiBranches[0] || 'Chi nhánh mặc định',
       orderDate: today,
@@ -172,6 +174,8 @@ export function PurchaseOrdersPage() {
 
   const handleSavePO = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (!editingPO.supplierName?.trim()) {
       toast.error('Vui lòng chọn hoặc nhập tên Nhà cung cấp!');
       return;
@@ -185,6 +189,7 @@ export function PurchaseOrdersPage() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       if (modalMode === 'create') {
         const newPO: Omit<PurchaseOrderItem, 'id'> = {
@@ -212,6 +217,8 @@ export function PurchaseOrdersPage() {
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || 'Lưu đơn mua hàng thất bại');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -282,21 +289,25 @@ export function PurchaseOrdersPage() {
       {
         accessorKey: 'paymentStatus',
         header: 'Thanh toán',
-        cell: (info) => {
-          const status = info.getValue() as string;
-          const payMap: Record<string, string> = {
-            UNPAID: 'Chưa thanh toán',
-            PARTIAL_ADVANCE: 'Tạm ứng 1 phần',
-            PAID: 'Đã thanh toán',
-          };
+        cell: ({ row }) => {
+          const status = row.original.paymentStatus;
+          const totalCost = row.original.totalCost || 0;
+          const adv = (row.original as any).advanceAmount ?? (status === 'PARTIAL_ADVANCE' ? Math.round(totalCost * 0.5) : (status === 'PAID' ? totalCost : 0));
           return (
-            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${
-              status === 'PAID' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
-              status === 'PARTIAL_ADVANCE' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' :
-              'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
-            }`}>
-              {payMap[status] || status}
-            </span>
+            <div className="space-y-0.5">
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${
+                status === 'PAID' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
+                status === 'PARTIAL_ADVANCE' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' :
+                'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+              }`}>
+                {status === 'PAID' ? 'Đã thanh toán' : status === 'PARTIAL_ADVANCE' ? 'Đã tạm ứng' : 'Chưa thanh toán'}
+              </span>
+              {status === 'PARTIAL_ADVANCE' && (
+                <div className="text-[10px] text-gray-500 font-mono">
+                  <span>Tạm ứng: <strong className="text-blue-600">{adv.toLocaleString('vi-VN')} ₫</strong></span>
+                </div>
+              )}
+            </div>
           );
         },
       },
@@ -647,13 +658,38 @@ export function PurchaseOrdersPage() {
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái thanh toán</label>
                   <select
                     value={editingPO.paymentStatus || 'UNPAID'}
-                    onChange={(e) => setEditingPO({ ...editingPO, paymentStatus: e.target.value as any })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                    onChange={(e) => {
+                      const st = e.target.value;
+                      const adv = st === 'PARTIAL_ADVANCE' ? ((editingPO as any).advanceAmount || Math.round((editingPO.totalCost || 0) * 0.5)) : (st === 'PAID' ? editingPO.totalCost : 0);
+                      setEditingPO({ ...editingPO, paymentStatus: st as any, advanceAmount: adv } as any);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
                   >
                     <option value="UNPAID">Chưa thanh toán</option>
                     <option value="PARTIAL_ADVANCE">Đã tạm ứng</option>
                     <option value="PAID">Đã thanh toán đủ</option>
                   </select>
+
+                  {editingPO.paymentStatus === 'PARTIAL_ADVANCE' && (
+                    <div className="mt-2 p-2.5 bg-blue-50 dark:bg-blue-950/40 rounded-lg border border-blue-200 dark:border-blue-800 space-y-1">
+                      <label className="block text-[11px] font-bold text-blue-900 dark:text-blue-300 uppercase">
+                        SỐ TIỀN ĐÃ TẠM ỨNG (₫) *
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={editingPO.totalCost || 0}
+                        value={(editingPO as any).advanceAmount ?? Math.round((editingPO.totalCost || 0) * 0.5)}
+                        onChange={(e) => setEditingPO({ ...editingPO, advanceAmount: parseFloat(e.target.value) || 0 } as any)}
+                        placeholder="Nhập số tiền tạm ứng..."
+                        className="w-full px-2.5 py-1 border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-900 text-blue-900 dark:text-blue-200 font-mono font-bold text-xs"
+                      />
+                      <div className="flex justify-between text-[10px] font-semibold text-blue-800 dark:text-blue-300 pt-0.5">
+                        <span>Đã tạm ứng: {((editingPO as any).advanceAmount ?? Math.round((editingPO.totalCost || 0) * 0.5)).toLocaleString('vi-VN')} ₫</span>
+                        <span>Còn nợ: {Math.max(0, (editingPO.totalCost || 0) - ((editingPO as any).advanceAmount ?? Math.round((editingPO.totalCost || 0) * 0.5))).toLocaleString('vi-VN')} ₫</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -763,9 +799,11 @@ export function PurchaseOrdersPage() {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
+              disabled={isSubmitting}
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg shadow transition-colors text-sm flex items-center gap-2 cursor-pointer"
             >
-              {modalMode === 'create' ? 'Tạo PO' : 'Lưu cập nhật'}
+              {isSubmitting && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />}
+              {isSubmitting ? 'Đang lưu...' : (modalMode === 'create' ? 'Tạo PO' : 'Lưu cập nhật')}
             </button>
           </div>
         </form>

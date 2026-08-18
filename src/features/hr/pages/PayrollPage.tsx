@@ -72,7 +72,7 @@ export function PayrollPage() {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     const net = (form.baseSalary||0) + (form.allowance||0) - (form.deduction||0);
-    setData([...data, { ...form as PayrollItem, id: String(data.length+1), netSalary: net }]);
+    setData([{ ...form as PayrollItem, id: String(data.length+1), netSalary: net }, ...data]);
     setIsModal(false);
   };
 

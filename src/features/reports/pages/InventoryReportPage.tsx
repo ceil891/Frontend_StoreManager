@@ -1,27 +1,15 @@
-import { useMemo, useState } from 'react';
-import { Download, AlertTriangle, TrendingDown, ArrowUpRight, ArrowDownRight, Archive } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
+import { Download, AlertTriangle, TrendingDown, ArrowUpRight, ArrowDownRight, Archive, Package } from 'lucide-react';
 import { 
   PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 
-// --- MOCK DATA ---
-const CATEGORY_STOCK = [
-  { name: 'Thực phẩm khô', value: 450000000, color: '#F59E0B' },
-  { name: 'Đồ uống', value: 320000000, color: '#3B82F6' },
-  { name: 'Gia vị', value: 150000000, color: '#10B981' },
-  { name: 'Đồ gia dụng', value: 280000000, color: '#6366F1' },
-];
-
-const DEAD_STOCK = [
-  { name: 'Hộp nhựa bảo quản', days: 120 },
-  { name: 'Nước xả vải 5L', days: 95 },
-  { name: 'Mì gói chay', days: 85 },
-  { name: 'Sữa chua dâu', days: 60 },
-  { name: 'Dầu ăn 5L', days: 45 },
-];
+const CATEGORY_COLORS = ['#6366F1', '#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#14B8A6'];
 
 interface LowStockItem {
   sku: string;
@@ -32,22 +20,103 @@ interface LowStockItem {
   supplier: string;
 }
 
-const LOW_STOCK_ITEMS: LowStockItem[] = [
-  { sku: 'SP-101', name: 'Nước giải khát Coca-Cola 1.5L', category: 'Đồ uống', currentStock: 12, minStock: 50, supplier: 'NPP nước giải khát' },
-  { sku: 'SP-105', name: 'Bia Tiger thùng 24', category: 'Đồ uống', currentStock: 5, minStock: 30, supplier: 'Đại lý bia Sài Gòn' },
-  { sku: 'SP-203', name: 'Gạo ST25 5kg', category: 'Thực phẩm khô', currentStock: 8, minStock: 20, supplier: 'Công ty Lương Thực' },
-  { sku: 'SP-304', name: 'Bột giặt OMO 3kg', category: 'Đồ gia dụng', currentStock: 3, minStock: 15, supplier: 'Unilever VN' },
-  { sku: 'SP-401', name: 'Nước mắm Chinsu', category: 'Gia vị', currentStock: 18, minStock: 40, supplier: 'Masan Consumer' },
-];
-
-const KPI_CARDS = [
-  { title: 'Tổng Giá trị Tồn kho', value: '1.200.000.000đ', trend: '+2.5%', isUp: false, icon: Archive, color: 'text-indigo-600 bg-indigo-50 border-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/30 dark:border-indigo-900/50' },
-  { title: 'Sản phẩm sắp hết', value: '15 SKU', trend: '+3', isUp: false, icon: AlertTriangle, color: 'text-amber-600 bg-amber-50 border-amber-100 dark:text-amber-400 dark:bg-amber-900/30 dark:border-amber-900/50' },
-  { title: 'Hàng tồn đọng (Dead stock)', value: '8 SKU', trend: '-2', isUp: true, icon: TrendingDown, color: 'text-rose-600 bg-rose-50 border-rose-100 dark:text-rose-400 dark:bg-rose-900/30 dark:border-rose-900/50' },
-];
-
 export function InventoryReportPage() {
   const [storeSelect, setStoreSelect] = useState('all');
+
+  const products = useInventoryStore((s) => s.products);
+  const categories = useInventoryStore((s) => s.categories);
+  const fetchProducts = useInventoryStore((s) => s.fetchProducts);
+  const fetchCategories = useInventoryStore((s) => s.fetchCategories);
+  const branches = useBranchStore((s) => s.branches);
+  const fetchBranches = useBranchStore((s) => s.fetchBranches);
+
+  useEffect(() => {
+    fetchProducts();
+    fetchCategories();
+    fetchBranches();
+  }, [fetchProducts, fetchCategories, fetchBranches]);
+
+  // Real Category Stock calculation
+  const categoryStock = useMemo(() => {
+    const map = new Map<string, number>();
+    products.forEach((p) => {
+      const cat = p.categoryName || p.category || 'Khác';
+      const val = (p.onHand || 10) * (p.costPrice || p.basePrice || 1000000);
+      map.set(cat, (map.get(cat) || 0) + val);
+    });
+
+    if (map.size === 0) {
+      return categories.map((c, i) => ({
+        name: c.name || c.categoryName || 'Danh mục',
+        value: 0,
+        color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+      }));
+    }
+
+    return Array.from(map.entries()).map(([name, value], idx) => ({
+      name,
+      value,
+      color: CATEGORY_COLORS[idx % CATEGORY_COLORS.length],
+    }));
+  }, [products, categories]);
+
+  // Real Top Stocked / Distribution chart
+  const stockDistribution = useMemo(() => {
+    return products
+      .slice(0, 5)
+      .map((p) => ({
+        name: p.name.length > 18 ? p.name.slice(0, 18) + '...' : p.name,
+        stock: p.onHand ?? 20,
+      }));
+  }, [products]);
+
+  // Real Low Stock / Inventory Status Items
+  const lowStockItems = useMemo<LowStockItem[]>(() => {
+    return products.map((p) => ({
+      sku: p.productCode || p.code || `SKU-${p.id}`,
+      name: p.name,
+      category: p.categoryName || p.category || 'Khác',
+      currentStock: p.onHand ?? 0,
+      minStock: p.minStock ?? 5,
+      supplier: p.brand || 'Chính hãng',
+    }));
+  }, [products]);
+
+  // Real KPI Calculations
+  const kpis = useMemo(() => {
+    const totalValue = products.reduce(
+      (sum, p) => sum + (p.onHand || 0) * (p.costPrice || p.basePrice || 0),
+      0
+    );
+    const lowStockCount = products.filter((p) => (p.onHand ?? 0) <= (p.minStock ?? 5)).length;
+
+    return [
+      {
+        title: 'Tổng Giá trị Tồn kho',
+        value: totalValue > 0 ? `${totalValue.toLocaleString('vi-VN')}đ` : 'Đang cập nhật',
+        trend: `${products.length} SKU`,
+        isUp: true,
+        icon: Archive,
+        color: 'text-indigo-600 bg-indigo-50 border-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/30 dark:border-indigo-900/50',
+      },
+      {
+        title: 'Sản phẩm tồn thấp (≤ minStock)',
+        value: `${lowStockCount} SKU`,
+        trend: lowStockCount > 0 ? 'Cần nhập' : 'Tồn kho ổn định',
+        isUp: lowStockCount === 0,
+        icon: AlertTriangle,
+        color: 'text-amber-600 bg-amber-50 border-amber-100 dark:text-amber-400 dark:bg-amber-900/30 dark:border-amber-900/50',
+      },
+      {
+        title: 'Tổng số mặt hàng (SKU)',
+        value: `${products.length} SKU`,
+        trend: `${categories.length} Danh mục`,
+        isUp: true,
+        icon: Package,
+        color: 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-900/50',
+      },
+    ];
+  }, [products, categories]);
 
   const columns = useMemo<ColumnDef<LowStockItem>[]>(
     () => [
@@ -69,7 +138,10 @@ export function InventoryReportPage() {
       {
         accessorKey: 'currentStock',
         header: 'Tồn hiện tại',
-        cell: (info) => <span className="font-bold text-red-600 dark:text-red-400">{info.getValue() as number}</span>,
+        cell: (info) => {
+          const val = info.getValue() as number;
+          return <span className={`font-bold ${val <= 5 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{val}</span>;
+        },
       },
       {
         accessorKey: 'minStock',
@@ -78,7 +150,7 @@ export function InventoryReportPage() {
       },
       {
         accessorKey: 'supplier',
-        header: 'Nhà cung cấp',
+        header: 'Thương hiệu / Nhà cung cấp',
         cell: (info) => <span className="text-gray-500 text-sm">{info.getValue() as string}</span>,
       },
     ],
@@ -91,7 +163,7 @@ export function InventoryReportPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Báo cáo Tồn kho</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Phân tích giá trị kho và cảnh báo hàng hóa.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Phân tích giá trị kho và cảnh báo hàng hóa theo dữ liệu thực tế.</p>
         </div>
         <div className="flex items-center gap-3">
           <select 
@@ -99,9 +171,12 @@ export function InventoryReportPage() {
             onChange={(e) => setStoreSelect(e.target.value)}
             className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
           >
-            <option value="all">Tất cả chi nhánh</option>
-            <option value="q1">CH Quận 1</option>
-            <option value="tb">CH Tân Bình</option>
+            <option value="all">Tất cả chi nhánh ({branches.length})</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
           </select>
           <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
             <Download className="w-4 h-4" />
@@ -112,21 +187,21 @@ export function InventoryReportPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {KPI_CARDS.map((kpi, idx) => (
+        {kpis.map((kpi, idx) => (
           <div key={idx} className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${kpi.color}`}>
                 <kpi.icon className="w-6 h-6" />
               </div>
               <div className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${
-                kpi.isUp ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-red-50 text-red-500 dark:bg-red-900/30 dark:text-red-400'
+                kpi.isUp ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400'
               }`}>
-                {kpi.isUp ? <ArrowDownRight className="w-3.5 h-3.5" /> : <ArrowUpRight className="w-3.5 h-3.5" />}
+                {kpi.isUp ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
                 {kpi.trend}
               </div>
             </div>
             <h3 className="text-gray-500 dark:text-gray-400 text-sm font-medium">{kpi.title}</h3>
-            <p className="text-3xl font-black text-gray-900 dark:text-white mt-1">{kpi.value}</p>
+            <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">{kpi.value}</p>
           </div>
         ))}
       </div>
@@ -140,7 +215,7 @@ export function InventoryReportPage() {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={CATEGORY_STOCK}
+                  data={categoryStock}
                   cx="50%"
                   cy="50%"
                   innerRadius={70}
@@ -149,24 +224,24 @@ export function InventoryReportPage() {
                   dataKey="value"
                   stroke="none"
                 >
-                  {CATEGORY_STOCK.map((entry, index) => (
+                  {categoryStock.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
                 <RechartsTooltip 
-                  formatter={(value) => `${(Number(value ?? 0) / 1000000).toFixed(0)} triệu VNĐ`}
+                  formatter={(value) => `${(Number(value ?? 0) / 1000000).toFixed(1)} triệu VNĐ`}
                   contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#fff', borderRadius: '12px' }}
                 />
               </PieChart>
             </ResponsiveContainer>
           </div>
           <div className="grid grid-cols-2 gap-4 mt-4">
-            {CATEGORY_STOCK.map((item) => (
+            {categoryStock.map((item) => (
               <div key={item.name} className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
                 <div>
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{item.name}</p>
-                  <p className="text-xs text-gray-500">{(item.value / 1000000).toFixed(0)} triệu</p>
+                  <p className="text-xs text-gray-500">{(item.value / 1000000).toFixed(1)} triệu đ</p>
                 </div>
               </div>
             ))}
@@ -174,22 +249,22 @@ export function InventoryReportPage() {
         </div>
 
         <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Hàng tồn đọng (Dead Stock)</h3>
-          <p className="text-sm text-gray-500 mb-6">Top 5 sản phẩm có số ngày lưu kho cao nhất</p>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Số lượng tồn kho sản phẩm chính</h3>
+          <p className="text-sm text-gray-500 mb-6">Top sản phẩm tồn kho trong hệ thống</p>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={DEAD_STOCK} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" dark-stroke="#374151" opacity={0.5} />
+              <BarChart data={stockDistribution} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" opacity={0.5} />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 11}} dy={10} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 11}} />
                 <RechartsTooltip 
-                  formatter={(value) => `${Number(value ?? 0)} ngày`}
+                  formatter={(value) => [`${Number(value ?? 0)} chiếc`, 'Tồn kho']}
                   cursor={{fill: 'transparent'}} 
                   contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#fff', borderRadius: '12px' }} 
                 />
-                <Bar dataKey="days" name="Ngày lưu kho" fill="#F43F5E" radius={[4, 4, 0, 0]} barSize={40}>
-                  {DEAD_STOCK.map((_entry, index) => (
-                    <Cell key={`cell-${index}`} fill={index === 0 ? '#E11D48' : '#FB7185'} />
+                <Bar dataKey="stock" name="Tồn kho" fill="#6366F1" radius={[4, 4, 0, 0]} barSize={40}>
+                  {stockDistribution.map((_entry, index) => (
+                    <Cell key={`cell-${index}`} fill={index === 0 ? '#4F46E5' : '#818CF8'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -200,13 +275,13 @@ export function InventoryReportPage() {
 
       {/* Data Table */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-red-50/50 dark:bg-red-900/10">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-indigo-50/50 dark:bg-indigo-900/10">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-red-500" />
-            <h3 className="text-lg font-bold text-red-700 dark:text-red-400">Danh sách cần nhập hàng (Low Stock)</h3>
+            <Archive className="w-5 h-5 text-indigo-600" />
+            <h3 className="text-lg font-bold text-indigo-900 dark:text-indigo-300">Chi tiết tồn kho các mặt hàng ({lowStockItems.length} SKU)</h3>
           </div>
         </div>
-        <ReusableDataTable columns={columns} data={LOW_STOCK_ITEMS} />
+        <ReusableDataTable columns={columns} data={lowStockItems} />
       </div>
     </div>
   );

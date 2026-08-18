@@ -1,4 +1,4 @@
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -20,7 +20,8 @@ declare module '@tanstack/react-table' {
   }
 }
 
-import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, Settings2, Inbox } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, Settings2, Inbox, Download } from 'lucide-react';
+import { exportToCsv } from '@/shared/utils/exportCsv';
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -58,9 +59,40 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
     setGlobalFilter(debouncedSearch);
   }, [debouncedSearch]);
 
+  const effectiveColumns = useMemo(() => {
+    const hasSelect = columns.some((c) => c.id === 'select' || (c as any).accessorKey === 'select');
+    if (hasSelect) return columns;
+
+    const selectCol: ColumnDef<TData, TValue> = {
+      id: 'select',
+      header: ({ table }) => (
+        <input
+          type="checkbox"
+          checked={table.getIsAllPageRowsSelected()}
+          onChange={table.getToggleAllPageRowsSelectedHandler()}
+          onClick={(e) => e.stopPropagation()}
+          className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer w-4 h-4"
+          title="Chọn tất cả"
+        />
+      ),
+      cell: ({ row }) => (
+        <input
+          type="checkbox"
+          checked={row.getIsSelected()}
+          onChange={row.getToggleSelectedHandler()}
+          onClick={(e) => e.stopPropagation()}
+          className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer w-4 h-4"
+        />
+      ),
+      meta: { align: 'center' },
+    };
+
+    return [selectCol, ...columns];
+  }, [columns]);
+
   const table = useReactTable({
     data,
-    columns,
+    columns: effectiveColumns,
     pageCount,
     state: {
       sorting,
@@ -118,12 +150,36 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
             </div>
           )}
           
-          {selectedRows.length > 0 && bulkActions && (
+          {selectedRows.length > 0 && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg animate-in fade-in zoom-in-95 duration-200">
               <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 border-r border-emerald-200 dark:border-emerald-800 pr-3 mr-1">
                 Đã chọn {selectedRows.length}
               </span>
-              {bulkActions(selectedRows, clearSelection)}
+              {bulkActions ? (
+                bulkActions(selectedRows, clearSelection)
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const exportHeaders = effectiveColumns
+                        .filter(c => c.id !== 'select' && c.id !== 'actions' && typeof c.header === 'string')
+                        .map(c => ({ header: c.header as string, accessor: (r: any) => String(r[(c as any).accessorKey || c.id] || '') }));
+                      if (exportHeaders.length > 0) {
+                        exportToCsv('danh-sach-da-chon', selectedRows, exportHeaders);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-md text-xs font-semibold transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Xuất Excel ({selectedRows.length})
+                  </button>
+                  <button
+                    onClick={clearSelection}
+                    className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 font-semibold underline ml-1 cursor-pointer"
+                  >
+                    Bỏ chọn
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

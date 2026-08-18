@@ -288,7 +288,7 @@ export function ProductBatchesPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Lô Sản phẩm & Hạn sử dụng</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý lô sản phẩm & hạn sử dụng</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Theo dõi các lô sản phẩm dễ hỏng, giám sát chất lượng nhập kho và phòng ngừa tồn kho hết hạn. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">

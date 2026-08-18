@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, CreditCard, Percent, Smartphone, Globe, RefreshCcw, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePosConfigStore, type PaymentMethodRecord } from '../store/posConfigStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 
 const typeBadgeStyles = {
   CREDIT_CARD_GATEWAY: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200',
@@ -28,9 +29,15 @@ const settlementMap: Record<string, string> = {
 };
 
 export function PaymentMethodsPage() {
-  const { paymentMethods: data, addPaymentMethod, updatePaymentMethod, deletePaymentMethod } = usePosConfigStore();
+  const { paymentMethods: data, fetchPaymentMethods, addPaymentMethod, updatePaymentMethod, deletePaymentMethod } = usePosConfigStore();
+  const { branches, fetchBranches } = useBranchStore();
   const [search, setSearch] = useState('');
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethodRecord | null>(null);
+
+  useEffect(() => {
+    fetchPaymentMethods();
+    fetchBranches();
+  }, [fetchPaymentMethods, fetchBranches]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
@@ -49,14 +56,29 @@ export function PaymentMethodsPage() {
     setEditingMethod({
       methodCode: `PM-${Math.floor(1000 + Math.random() * 9000)}`,
       methodName: '',
-      providerType: 'CREDIT_CARD_GATEWAY',
+      providerType: 'CASH',
       processingFeePct: 0,
       fixedFeeUsd: 0,
       settlementTime: 'INSTANT',
       totalVolumeUsd: 0,
       supportedCurrencies: ['VND', 'USD'],
       status: 'ACTIVE',
-      configuredGateways: ''
+      configuredGateways: '',
+      sortOrder: 0,
+      currency: 'VND',
+      logoUrl: '',
+      bankName: '',
+      bankAccount: '',
+      bankAccountName: '',
+      transferSyntax: 'POS {order_code}',
+      merchantId: '',
+      apiKey: '',
+      secretKey: '',
+      checksumKey: '',
+      allowPos: true,
+      allowOnline: false,
+      branchIds: [],
+      applyToAllBranches: true
     });
     setIsModalOpen(true);
   };
@@ -75,14 +97,30 @@ export function PaymentMethodsPage() {
       const newMethod: Omit<PaymentMethodRecord, 'id'> = {
         methodCode: editingMethod.methodCode,
         methodName: editingMethod.methodName,
-        providerType: editingMethod.providerType as any || 'CREDIT_CARD_GATEWAY',
+        providerType: editingMethod.providerType as any || 'CASH',
         processingFeePct: Number(editingMethod.processingFeePct) || 0,
         fixedFeeUsd: Number(editingMethod.fixedFeeUsd) || 0,
         settlementTime: editingMethod.settlementTime as any || 'INSTANT',
         totalVolumeUsd: Number(editingMethod.totalVolumeUsd) || 0,
         supportedCurrencies: editingMethod.supportedCurrencies || ['VND'],
         status: editingMethod.status as any || 'ACTIVE',
-        configuredGateways: editingMethod.configuredGateways || ''
+        configuredGateways: editingMethod.configuredGateways || '',
+        sortOrder: Number(editingMethod.sortOrder) || 0,
+        currency: editingMethod.currency || 'VND',
+        logoUrl: editingMethod.logoUrl || '',
+        bankName: editingMethod.bankName || '',
+        bankAccount: editingMethod.bankAccount || '',
+        bankAccountName: editingMethod.bankAccountName || '',
+        transferSyntax: editingMethod.transferSyntax || 'POS {order_code}',
+        merchantId: editingMethod.merchantId || '',
+        apiKey: editingMethod.apiKey || '',
+        secretKey: editingMethod.secretKey || '',
+        checksumKey: editingMethod.checksumKey || '',
+        allowPos: (editingMethod.branchIds && editingMethod.branchIds.length > 0) ? true : (editingMethod.allowPos !== undefined ? editingMethod.allowPos : true),
+        allowOnline: editingMethod.allowOnline !== undefined ? editingMethod.allowOnline : false,
+        branchIds: editingMethod.branchIds || [],
+        applyToAllBranches: editingMethod.applyToAllBranches !== false,
+        ytdTotal: 0,
       };
       addPaymentMethod(newMethod);
     } else if (editingMethod.id) {
@@ -144,9 +182,12 @@ export function PaymentMethodsPage() {
         },
       },
       {
-        accessorKey: 'totalVolumeUsd',
+        accessorKey: 'ytdTotal',
         header: 'Tổng GD (YTD)',
-        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">${(info.getValue() as number).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>,
+        cell: (info) => {
+          const val = (info.getValue() as number) || 0;
+          return <span className="font-mono font-bold text-gray-900 dark:text-white">{val.toLocaleString('vi-VN')} đ</span>;
+        },
       },
       {
         accessorKey: 'status',
@@ -345,10 +386,10 @@ export function PaymentMethodsPage() {
         title={modalMode === 'create' ? 'Thêm phương thức thanh toán' : 'Cập nhật phương thức'}
         width="max-w-xl"
       >
-        <form onSubmit={handleSaveMethod} className="space-y-4">
+        <form onSubmit={handleSaveMethod} className="space-y-4 text-left">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã PT (Mã cổng) *</label>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Mã PT (Mã cổng) *</label>
               <input
                 type="text"
                 value={editingMethod.methodCode || ''}
@@ -358,7 +399,7 @@ export function PaymentMethodsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên hiển thị *</label>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Tên hiển thị *</label>
               <input
                 type="text"
                 value={editingMethod.methodName || ''}
@@ -371,21 +412,20 @@ export function PaymentMethodsPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại hình</label>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Loại hình *</label>
               <select
-                value={editingMethod.providerType || 'CREDIT_CARD_GATEWAY'}
+                value={editingMethod.providerType || 'CASH'}
                 onChange={(e) => setEditingMethod({ ...editingMethod, providerType: e.target.value as any })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                required
               >
-                <option value="CREDIT_CARD_GATEWAY">Credit Card Gateway</option>
-                <option value="QR_EWALLET">Ví điện tử & QR</option>
-                <option value="BANK_TRANSFER_QR">Chuyển khoản liên ngân hàng</option>
-                <option value="CASH_DRAWER">Két đựng tiền mặt</option>
-                <option value="BUY_NOW_PAY_LATER">Trả góp (BNPL)</option>
+                <option value="CASH">Tiền mặt (CASH)</option>
+                <option value="BANK_TRANSFER">Chuyển khoản ngân hàng / VietQR (BANK_TRANSFER)</option>
+                <option value="GATEWAY">Cổng thanh toán tự động (GATEWAY)</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
               <select
                 value={editingMethod.status || 'ACTIVE'}
                 onChange={(e) => setEditingMethod({ ...editingMethod, status: e.target.value as any })}
@@ -401,7 +441,7 @@ export function PaymentMethodsPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phí phần trăm (%)</label>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Phí phần trăm (%)</label>
               <input
                 type="number"
                 step="0.01"
@@ -411,26 +451,245 @@ export function PaymentMethodsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phí cố định ($)</label>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Phí cố định</label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editingMethod.fixedFeeUsd || 0}
+                  onChange={(e) => setEditingMethod({ ...editingMethod, fixedFeeUsd: parseFloat(e.target.value) || 0 })}
+                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
+                />
+                <select
+                  value={editingMethod.currency || 'VND'}
+                  onChange={(e) => setEditingMethod({ ...editingMethod, currency: e.target.value })}
+                  className="w-24 px-2 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="VND">VND</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Thời gian đối soát (SLA)</label>
+              <select
+                value={editingMethod.settlementTime || 'INSTANT'}
+                onChange={(e) => setEditingMethod({ ...editingMethod, settlementTime: e.target.value as any })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="INSTANT">Tức thời (Cash/POS)</option>
+                <option value="SAME_DAY_BATCH">Cùng ngày (T+0)</option>
+                <option value="T_PLUS_1_BUSINESS_DAY">Ngày làm việc tiếp theo (T+1)</option>
+                <option value="T_PLUS_3_BUSINESS_DAYS">Sau 3 ngày làm việc (T+3)</option>
+              </select>
+              <p className="text-[10px] text-gray-400 mt-1 italic">Thời gian tiền thực về tài khoản doanh nghiệp (phục vụ kế toán đối soát)</p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Thứ tự hiển thị (Sort Order)</label>
               <input
                 type="number"
-                step="0.01"
-                value={editingMethod.fixedFeeUsd || 0}
-                onChange={(e) => setEditingMethod({ ...editingMethod, fixedFeeUsd: parseFloat(e.target.value) || 0 })}
+                value={editingMethod.sortOrder || 0}
+                onChange={(e) => setEditingMethod({ ...editingMethod, sortOrder: parseInt(e.target.value, 10) || 0 })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Cấu hình Engine / Endpoint</label>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Đường dẫn Logo / Icon phương thức</label>
             <input
               type="text"
-              value={editingMethod.configuredGateways || ''}
-              onChange={(e) => setEditingMethod({ ...editingMethod, configuredGateways: e.target.value })}
+              value={editingMethod.logoUrl || ''}
+              onChange={(e) => setEditingMethod({ ...editingMethod, logoUrl: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              placeholder="VD: Stripe API v2023-10..."
+              placeholder="https://image-url-momo-or-vietqr..."
             />
+          </div>
+
+          {/* Conditional Section: BANK_TRANSFER (VietQR Account info) */}
+          {editingMethod.providerType === 'BANK_TRANSFER' && (
+            <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-800/30 rounded-xl space-y-3">
+              <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">Thông tin nhận tiền VietQR</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Mã ngân hàng (VietQR Bank Code) *</label>
+                  <select
+                    value={editingMethod.bankName || 'VCB'}
+                    onChange={(e) => setEditingMethod({ ...editingMethod, bankName: e.target.value })}
+                    className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs focus:ring-1 focus:ring-emerald-500"
+                    required
+                  >
+                    <option value="VCB">Vietcombank (VCB)</option>
+                    <option value="TCB">Techcombank (TCB)</option>
+                    <option value="ICB">VietinBank (ICB)</option>
+                    <option value="BIDV">BIDV (BIDV)</option>
+                    <option value="VBA">Agribank (VBA)</option>
+                    <option value="MB">MBBank (MB)</option>
+                    <option value="VPB">VPBank (VPB)</option>
+                    <option value="ACB">ACB (ACB)</option>
+                    <option value="STB">Sacombank (STB)</option>
+                    <option value="TPB">TPBank (TPB)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Số tài khoản *</label>
+                  <input
+                    type="text"
+                    value={editingMethod.bankAccount || ''}
+                    onChange={(e) => setEditingMethod({ ...editingMethod, bankAccount: e.target.value })}
+                    className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs font-mono focus:ring-1 focus:ring-emerald-500"
+                    placeholder="Nhập số tài khoản ngân hàng..."
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Tên chủ tài khoản *</label>
+                  <input
+                    type="text"
+                    value={editingMethod.bankAccountName || ''}
+                    onChange={(e) => setEditingMethod({ ...editingMethod, bankAccountName: e.target.value.toUpperCase() })}
+                    className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs focus:ring-1 focus:ring-emerald-500"
+                    placeholder="NGUYEN VAN A..."
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Cú pháp chuyển khoản</label>
+                  <input
+                    type="text"
+                    value={editingMethod.transferSyntax || 'POS {order_code}'}
+                    onChange={(e) => setEditingMethod({ ...editingMethod, transferSyntax: e.target.value })}
+                    className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs focus:ring-1 focus:ring-emerald-500"
+                    placeholder="Mặc định: POS {order_code}"
+                  />
+                </div>
+              </div>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 italic mt-1">
+                VietQR URL: https://img.vietqr.io/image/{"{"}bankCode{"}"}-{"{"}accountNumber{"}"}-compact2.png?amount={"{"}amount{"}"}&addInfo={"{"}transferSyntax{"}"}
+              </p>
+            </div>
+          )}
+
+          {/* Conditional Section: GATEWAY (Momo, VNPay, Stripe...) */}
+          {editingMethod.providerType === 'GATEWAY' && (
+            <div className="p-4 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-800/30 rounded-xl space-y-3">
+              <p className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider">Cấu hình kết nối API Cổng thanh toán</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Merchant ID *</label>
+                  <input
+                    type="text"
+                    value={editingMethod.merchantId || ''}
+                    onChange={(e) => setEditingMethod({ ...editingMethod, merchantId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs font-mono"
+                    placeholder="MOMO_12345..."
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">API Key *</label>
+                  <input
+                    type="password"
+                    value={editingMethod.apiKey || ''}
+                    onChange={(e) => setEditingMethod({ ...editingMethod, apiKey: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs font-mono"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Secret Key / Private Key *</label>
+                  <input
+                    type="password"
+                    value={editingMethod.secretKey || ''}
+                    onChange={(e) => setEditingMethod({ ...editingMethod, secretKey: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs font-mono"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Checksum Key / Passcode</label>
+                  <input
+                    type="password"
+                    value={editingMethod.checksumKey || ''}
+                    onChange={(e) => setEditingMethod({ ...editingMethod, checksumKey: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs font-mono"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">API Endpoint / Config URL *</label>
+                <input
+                  type="text"
+                  value={editingMethod.configuredGateways || ''}
+                  onChange={(e) => setEditingMethod({ ...editingMethod, configuredGateways: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  placeholder="https://api.momo.vn/v2/pay/confirm..."
+                  required
+                />
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Kênh áp dụng (Scope / Channel)</label>
+            <div className="flex flex-col gap-3">
+              {/* Online Web toggle */}
+              <label className="inline-flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editingMethod.allowOnline === true}
+                  onChange={(e) => setEditingMethod({ ...editingMethod, allowOnline: e.target.checked })}
+                  className="rounded border-gray-350 text-emerald-600 focus:ring-emerald-500 h-4 w-4 mr-2"
+                />
+                Web Online Store
+              </label>
+              {/* POS per-branch multi-select */}
+              <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-3 bg-gray-50 dark:bg-gray-900/30">
+                <label className="inline-flex items-center text-sm font-semibold text-gray-700 dark:text-gray-300 cursor-pointer mb-2">
+                  <input
+                    type="checkbox"
+                    checked={editingMethod.applyToAllBranches !== false}
+                    onChange={(e) => setEditingMethod({ ...editingMethod, applyToAllBranches: e.target.checked, branchIds: e.target.checked ? [] : (editingMethod.branchIds || []) })}
+                    className="rounded border-gray-350 text-emerald-600 focus:ring-emerald-500 h-4 w-4 mr-2"
+                  />
+                  POS — Áp dụng tất cả chi nhánh
+                </label>
+                {editingMethod.applyToAllBranches === false && (
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Chọn chi nhánh được phép sử dụng phương thức này:</p>
+                    {branches.length === 0 ? (
+                      <p className="text-xs text-gray-400 italic">Chưa có chi nhánh nào. Vui lòng tạo chi nhánh trước.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                        {branches.map((branch: any) => (
+                          <label key={branch.id} className="inline-flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={(editingMethod.branchIds || []).includes(String(branch.id))}
+                              onChange={(e) => {
+                                const currentIds = editingMethod.branchIds || [];
+                                const branchId = String(branch.id);
+                                const newIds = e.target.checked
+                                  ? [...currentIds, branchId]
+                                  : currentIds.filter((id: string) => id !== branchId);
+                                setEditingMethod({ ...editingMethod, branchIds: newIds });
+                              }}
+                              className="rounded border-gray-350 text-emerald-600 focus:ring-emerald-500 h-4 w-4 mr-2 shrink-0"
+                            />
+                            <span className="truncate">{branch.name || branch.branchName}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">

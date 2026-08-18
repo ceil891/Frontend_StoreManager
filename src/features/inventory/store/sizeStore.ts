@@ -84,11 +84,9 @@ export const useSizeStore = create<SizeState>()((set, get) => ({
         sizeCode: data.sizeCode || original?.sizeCode,
         sizeName: data.sizeName || original?.sizeName,
         description: data.description !== undefined ? data.description : original?.description,
+        isActive: data.status !== undefined ? (data.status === 'ACTIVE') : (original?.status === 'ACTIVE'),
       };
       await axiosClient.put(`/sizes/${id}`, payload);
-      if (data.status !== undefined) {
-        await axiosClient.put(`/sizes/${id}/status?isActive=${data.status === 'ACTIVE'}`).catch(() => {});
-      }
     } catch (err: any) {
       console.error('Failed to update size on API:', err);
     }

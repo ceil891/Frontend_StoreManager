@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, X, Send, Sparkles, BarChart2, TrendingUp } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 import { useNavigate, useLocation } from 'react-router';
+import { useAuthUser } from '@/features/auth/store/authStore';
 
 interface ChatMessageItem {
   id: string;
@@ -50,6 +51,7 @@ export function AIAssistant() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const user = useAuthUser();
   const isPosPage = location.pathname === '/pos';
 
   const [messages, setMessages] = useState<ChatMessageItem[]>([
@@ -85,24 +87,11 @@ export function AIAssistant() {
     setIsTyping(true);
 
     try {
-      // Chuyển đổi lịch sử trò chuyện để gửi cho API (giữ lịch sử là các tin nhắn text thông thường)
-      const apiHistory = updatedMessages
-        .filter(m => m.id !== '1') // Bỏ qua tin nhắn chào mừng ban đầu
-        .map(m => {
-          let textContent = m.content;
-          if (m.parsed && m.parsed.loai === 0) {
-            textContent = m.parsed.msg;
-          } else if (m.parsed && m.parsed.loai === 1) {
-            textContent = `Yêu cầu báo cáo: ${m.parsed.name}`;
-          }
-          return {
-            role: m.role,
-            content: textContent
-          };
-        });
+      // Production webhook n8n hoặc từ file .env
+      const aiApiUrl = import.meta.env.VITE_AI_API_URL || 'https://mucvan891.app.n8n.cloud/webhook/ric-qlbh-webhook';
+      const senderId = user?.id ? String(user.id) : (user?.username || 'user_001');
 
-      // Gọi API AI Agent (trả về JSON dạng n8n)
-      const aiApiUrl = import.meta.env.VITE_AI_API_URL || 'http://localhost:8000/api/chat';
+      // Gửi POST tới n8n webhook theo format quy định
       const response = await fetch(aiApiUrl, {
         method: 'POST',
         headers: {
@@ -110,30 +99,79 @@ export function AIAssistant() {
         },
         body: JSON.stringify({
           message: userMsg.content,
-          history: apiHistory.slice(0, -1), // Lịch sử không bao gồm tin nhắn vừa gửi
+          senderId: senderId,
+          platform: 'web',
         }),
       });
 
       if (!response.ok) {
-        throw new Error('API request failed');
+        const errText = await response.text().catch(() => '');
+        let errJson: any = null;
+        try {
+          errJson = errText ? JSON.parse(errText) : null;
+        } catch {
+          // ignore
+        }
+        if (errJson?.hint) {
+          throw new Error(errJson.hint);
+        }
+        if (errJson?.message) {
+          throw new Error(errJson.message);
+        }
+        throw new Error(`API request failed with status ${response.status}`);
       }
 
-      const data = await response.json();
-      const rawResponse = data.response || '';
-      
-      // Thử giải mã JSON phản hồi từ Agent
-      let parsed = null;
-      let displayContent = rawResponse;
+      const rawText = await response.text().catch(() => '');
+      if (!rawText || !rawText.trim()) {
+        throw new Error('Workflow n8n trả về kết quả rỗng (Empty body). Hãy kiểm tra node Webhook trong n8n đã đổi Respond thành "When Last Node Finishes" hoặc thêm node "Respond to Webhook".');
+      }
+
+      let data: any = null;
       try {
-        parsed = JSON.parse(rawResponse);
-        if (parsed && typeof parsed === 'object') {
-          displayContent = parsed.loai === 0 ? parsed.msg : `Yêu cầu báo cáo: ${parsed.name || 'Báo cáo số liệu'}`;
+        data = JSON.parse(rawText);
+      } catch {
+        data = rawText;
+      }
+
+      // n8n có thể trả về array [ { loai: 1, ... } ] hoặc object { loai: 1, ... }
+      if (Array.isArray(data) && data.length > 0) {
+        data = data[0];
+      }
+
+      let parsed: any = null;
+      let displayContent = '';
+
+      if (typeof data === 'string') {
+        try {
+          parsed = JSON.parse(data);
+          displayContent = parsed.loai === 0 ? (parsed.msg || '') : (parsed.msg || `Yêu cầu báo cáo: ${parsed.name || 'Báo cáo số liệu'}`);
+        } catch {
+          displayContent = data;
         }
-      } catch (e) {
-        // Nếu không phải là chuỗi JSON, giữ nguyên văn bản thô
+      } else if (typeof data === 'object' && data !== null) {
+        if (typeof data.response === 'string') {
+          try {
+            parsed = JSON.parse(data.response);
+            displayContent = parsed.loai === 0 ? (parsed.msg || '') : (parsed.msg || `Yêu cầu báo cáo: ${parsed.name || 'Báo cáo số liệu'}`);
+          } catch {
+            displayContent = data.response;
+          }
+        } else if (typeof data.response === 'object' && data.response !== null) {
+          parsed = data.response;
+          displayContent = parsed.loai === 0 ? (parsed.msg || '') : (parsed.msg || `Yêu cầu báo cáo: ${parsed.name || 'Báo cáo số liệu'}`);
+        } else {
+          parsed = data;
+          if (parsed.loai === 0) {
+            displayContent = parsed.msg || 'Không có phản hồi từ trợ lý.';
+          } else if (parsed.loai === 1) {
+            displayContent = parsed.msg || `Yêu cầu báo cáo: ${parsed.name || 'Báo cáo số liệu'}`;
+          } else {
+            displayContent = parsed.msg || parsed.message || (typeof parsed === 'string' ? parsed : JSON.stringify(parsed));
+          }
+        }
       }
       
-      const aiResponse = {
+      const aiResponse: ChatMessageItem = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: displayContent,
@@ -141,12 +179,13 @@ export function AIAssistant() {
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, aiResponse]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error calling AI Agent:', error);
-      const errorMsg = {
+      const detail = error?.message ? ` (${error.message})` : '';
+      const errorMsg: ChatMessageItem = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Không thể kết nối tới trợ lý AI. Vui lòng đảm bảo server AI Agent đã được khởi động tại http://localhost:8000.',
+        content: `Không thể kết nối tới trợ lý AI (n8n Webhook). Vui lòng đảm bảo workflow trên n8n đang ở trạng thái **Active** (bật toggle ở góc trên bên phải n8n).${detail}`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -267,6 +306,11 @@ export function AIAssistant() {
                               </div>
                             )}
                           </div>
+                          {msg.parsed.msg && (
+                            <div className="mt-1.5 p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700/50 text-xs text-gray-700 dark:text-gray-200 leading-relaxed whitespace-pre-line">
+                              {renderMsg(msg.parsed.msg)}
+                            </div>
+                          )}
                           <div className="mt-1.5 pt-2 border-t border-gray-100 dark:border-gray-700/50 flex justify-end">
                             <button
                               type="button"
@@ -352,6 +396,9 @@ export function AIAssistant() {
             {/* Quick Actions */}
             {!isTyping && messages.length < 3 && (
               <div className="px-4 pb-2 pt-2 flex gap-2 overflow-x-auto no-scrollbar bg-gray-50/50 dark:bg-gray-900/50">
+                <button onClick={() => setInput('xem công nợ khách hàng tháng trước')} className="whitespace-nowrap rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-600 transition-colors hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-900/30 dark:text-indigo-400">
+                  📊 Công nợ tháng trước
+                </button>
                 <button onClick={() => setInput('Báo cáo doanh thu hôm nay')} className="whitespace-nowrap rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-600 transition-colors hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-900/30 dark:text-indigo-400">
                   📈 Báo cáo doanh thu
                 </button>

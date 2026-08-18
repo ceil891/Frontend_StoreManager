@@ -3,7 +3,7 @@ import {
   Search, ScanBarcode, UserPlus, CreditCard, Trash2, Plus, Minus, X,
   ArrowLeft, Image as ImageIcon, Gift, Smartphone, Landmark, Banknote,
   CheckCircle2, ShoppingCart as ShoppingCartIcon, Tag, ChevronDown, Clock,
-  type LucideIcon, Loader2
+  type LucideIcon, Loader2, RefreshCw, Layers
 } from 'lucide-react';
 import { usePosCartStore } from '../store/posCartStore';
 import type { PosProduct } from '../store/posCartStore';
@@ -19,17 +19,20 @@ import { useCrmStore } from '@/features/crm/store/crmStore';
 import { useLoyaltyConfigStore } from '@/features/crm/store/loyaltyConfigStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
 import { useDebounce } from '@/shared/hooks/useDebounce';
+import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 
-import { axiosClient } from '@/shared/lib/axiosClient';
+import { crmService } from '@/features/crm/services/crmService';
+import type { CustomerVoucherRecord, VoucherRecord } from '@/features/crm/store/crmStore';
 
 // ─── POS Vouchers ─────────────────────────────────────────────
 
-const VOUCHERS: Record<string, { type: 'PERCENT' | 'FLAT'; value: number }> = {
-  'HELLOSUMMER': { type: 'PERCENT', value: 15 },
-  'RETAILHUB50K': { type: 'FLAT', value: 50000 },
-  'VIP10': { type: 'PERCENT', value: 10 },
-  'WELCOME': { type: 'FLAT', value: 20000 },
+const VOUCHERS: Record<string, { type: 'PERCENT' | 'FLAT'; value: number; minOrderValue?: number }> = {
+  'SMART': { type: 'PERCENT', value: 10, minOrderValue: 100000 },
+  'HELLOSUMMER': { type: 'PERCENT', value: 15, minOrderValue: 200000 },
+  'RETAILHUB50K': { type: 'FLAT', value: 50000, minOrderValue: 300000 },
+  'VIP10': { type: 'PERCENT', value: 10, minOrderValue: 100000 },
+  'WELCOME': { type: 'FLAT', value: 20000, minOrderValue: 50000 },
 };
 
 type DisplayPayment = { id: string; label: string; icon: LucideIcon; isCash: boolean };
@@ -98,8 +101,6 @@ export function PosTerminalPage() {
     setCustomer: setActiveCustomer,
     customerPhone,
     setCustomerPhone,
-    selectedPaymentId,
-    setSelectedPaymentId,
     appliedVoucher,
     setAppliedVoucher,
     usedPoints,
@@ -108,18 +109,44 @@ export function PosTerminalPage() {
     setCashGiven,
   } = usePosCartStore();
 
+  const selectedPaymentId = usePosCartStore((s) => s.selectedPaymentId);
+  const setSelectedPaymentId = usePosCartStore((s) => s.setSelectedPaymentId);
   const paymentMethodsFromConfig = usePosConfigStore((s) => s.paymentMethods);
+  const fetchPaymentMethods = usePosConfigStore((s) => s.fetchPaymentMethods);
   const addSaleOrder = useSalesStore((s) => s.addSaleOrder);
-  const { products, fetchProducts, categories, fetchCategories } = useInventoryStore();
+  const { products, fetchProducts, categories, fetchCategories, combos, fetchCombos } = useInventoryStore();
   const { customers, fetchCustomers, addCustomer } = useCrmStore();
   const { branches, fetchBranches } = useBranchStore();
 
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncPosData = async () => {
+    setIsSyncing(true);
+    try {
+      await Promise.all([
+        fetchProducts(),
+        fetchCombos(),
+        fetchCategories(),
+        fetchCustomers(),
+        fetchBranches(),
+        fetchPaymentMethods(),
+      ]);
+      toast.success('Đã đồng bộ toàn bộ Danh mục, Sản phẩm & Combo từ máy chủ!');
+    } catch (err) {
+      toast.error('Lỗi khi đồng bộ dữ liệu POS.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   useEffect(() => {
     fetchProducts();
+    fetchCombos();
     fetchCategories();
     fetchCustomers();
     fetchBranches();
-  }, [fetchProducts, fetchCategories, fetchCustomers, fetchBranches]);
+    fetchPaymentMethods();
+  }, [fetchProducts, fetchCombos, fetchCategories, fetchCustomers, fetchBranches, fetchPaymentMethods]);
 
   const [selectedPosBranchId, setSelectedPosBranchId] = useState<string>('');
 
@@ -127,13 +154,22 @@ export function PosTerminalPage() {
   const canChangeBranch = user?.role === 'SUPER_ADMIN' || permissions.includes('pos:branch:change');
 
   const { activeBranchId, activeBranchName, isBranchUnassigned } = useMemo(() => {
-    const targetId = selectedPosBranchId || (user?.branchId ? String(user.branchId) : (branches[0] ? String(branches[0].id) : '1'));
-    const matched = (branches || []).find((b) => String(b.id) === targetId || b.branchCode === targetId || `BR-${String(b.id).padStart(3, '0')}` === targetId);
+    // Ưu tiên: 1) user chọn thủ công trên POS, 2) branchId từ hồ sơ đăng nhập, 3) chi nhánh đầu tiên
+    const userBranchId = user?.branchId ? String(user.branchId) : '';
+    const defaultBranchId = userBranchId || (branches.length > 0 ? String(branches[0].id) : '1');
+    const targetId = selectedPosBranchId || defaultBranchId;
+
+    // Match chính xác bằng id hoặc branchCode — KHÔNG match theo tên
+    const matched = (branches || []).find(
+      (b) => String(b.id) === targetId || b.branchCode === targetId
+    );
     const resolvedId = matched ? String(matched.id) : targetId;
+    const resolvedName = matched?.name || (userBranchId === resolvedId ? (user?.branchName || '') : '') || BRANCH_NAME_BY_ID[resolvedId] || `Chi nhánh ${resolvedId}`;
+
     return {
       activeBranchId: resolvedId,
-      activeBranchName: matched?.name || BRANCH_NAME_BY_ID[resolvedId] || `Chi nhánh ${resolvedId}`,
-      isBranchUnassigned: !user?.branchId && !selectedPosBranchId && user?.role !== 'SUPER_ADMIN',
+      activeBranchName: resolvedName,
+      isBranchUnassigned: !userBranchId && !selectedPosBranchId && user?.role !== 'SUPER_ADMIN',
     };
   }, [branches, user, selectedPosBranchId]);
 
@@ -146,11 +182,22 @@ export function PosTerminalPage() {
       .then((res) => {
         const list: any[] = Array.isArray(res) ? res : (res?.data || res?.content || res || []);
         const map: Record<string, number> = {};
+        let posDeductionsMap: Record<string, number> = {};
+        try {
+          const saved = localStorage.getItem('retailhub_pos_stock_deductions');
+          if (saved) posDeductionsMap = JSON.parse(saved);
+        } catch {}
+
         list.forEach((b: any) => {
-          const qty = Number(b.availableQuantity ?? b.onHandQuantity ?? 0);
-          if (b.productId) map[String(b.productId)] = qty;
-          if (b.productVariantId) map[String(b.productVariantId)] = qty;
-          if (b.sku) map[b.sku] = qty;
+          const rawQty = Number(b.availableQuantity ?? b.onHandQuantity ?? 0);
+          const pKey = String(b.productId || b.productVariantId || b.sku || '');
+          const deducted = (posDeductionsMap[pKey] !== undefined ? posDeductionsMap[pKey] : 0) ||
+                           (b.sku && posDeductionsMap[b.sku] !== undefined ? posDeductionsMap[b.sku] : 0);
+          const finalQty = Math.max(0, rawQty - deducted);
+
+          if (b.productId) map[String(b.productId)] = finalQty;
+          if (b.productVariantId) map[String(b.productVariantId)] = finalQty;
+          if (b.sku) map[b.sku] = finalQty;
         });
         setBranchStockMap(map);
       })
@@ -160,7 +207,13 @@ export function PosTerminalPage() {
   }, [activeBranchId]);
 
   const productsList = useMemo(() => {
-    return (products || [])
+    let posDeductionsMap: Record<string, number> = {};
+    try {
+      const saved = localStorage.getItem('retailhub_pos_stock_deductions');
+      if (saved) posDeductionsMap = JSON.parse(saved);
+    } catch {}
+
+    const singleList = (products || [])
       .filter((p) => p.status === 'ACTIVE' && (p as any).isActive !== false)
       .map((p) => {
         const cat = (categories || []).find((c) => c.categoryName === p.category);
@@ -171,8 +224,20 @@ export function PosTerminalPage() {
         else if (tc === 'EXEMPT') rate = 0.00;
         const barcode = p.barcodes && p.barcodes.length > 0 ? p.barcodes[0] : (p.sku || String(p.id));
 
-        // Tồn kho hiển thị POS = Tồn kho khả dụng chuẩn tại Chi nhánh được chọn
-        const bStock = branchStockMap[String(p.id)] ?? branchStockMap[p.sku] ?? (p as any).branchStocks?.[activeBranchId] ?? 0;
+        let branchSpecificStock = 0;
+        if (branchStockMap[String(p.id)] !== undefined) {
+          branchSpecificStock = branchStockMap[String(p.id)];
+        } else if (branchStockMap[p.sku] !== undefined) {
+          branchSpecificStock = branchStockMap[p.sku];
+        } else if (p.branchStocks && p.branchStocks[activeBranchId] !== undefined) {
+          branchSpecificStock = Number(p.branchStocks[activeBranchId]);
+        } else {
+          branchSpecificStock = 0;
+        }
+
+        const pKey = String(p.id);
+        const deducted = posDeductionsMap[pKey] ?? posDeductionsMap[p.sku] ?? 0;
+        const stock = Math.max(0, branchSpecificStock - deducted);
 
         return {
           id: String(p.id),
@@ -183,19 +248,72 @@ export function PosTerminalPage() {
           barcode,
           category: p.category || 'Tất cả',
           unit: p.unit || 'Cái',
-          stock: Number(bStock),
+          stock,
           taxRate: rate,
         };
       });
-  }, [products, categories, branchStockMap, activeBranchId]);
+
+    const comboList = (combos || [])
+      .filter((c) => {
+        if (c.status !== 'ACTIVE') return false;
+
+        // Nếu combo áp dụng cho Tất cả chi nhánh
+        const isAllBranches = !c.branchId || c.branchId === 'ALL' || !c.branchName || c.branchName === 'Tất cả chi nhánh';
+        if (isAllBranches) return true;
+
+        // So sánh theo branchId
+        if (String(c.branchId) === String(activeBranchId)) return true;
+
+        // So sánh theo mã chi nhánh hoặc đối tượng branch
+        const currentBranchObj = branches.find(b => String(b.id) === String(activeBranchId));
+        if (currentBranchObj) {
+          if (c.branchId && (String(c.branchId) === String(currentBranchObj.id) || c.branchId === currentBranchObj.branchCode)) {
+            return true;
+          }
+          if (c.branchName && (
+            currentBranchObj.name.toLowerCase().includes(c.branchName.toLowerCase()) ||
+            c.branchName.toLowerCase().includes(currentBranchObj.name.toLowerCase())
+          )) {
+            return true;
+          }
+        }
+
+        // So sánh theo tên chi nhánh (ví dụ: "Hà Nội" trong "Chi nhánh Hà Nội (BR-001)")
+        if (c.branchName && activeBranchName) {
+          const cName = c.branchName.toLowerCase().trim();
+          const curName = activeBranchName.toLowerCase().trim();
+          if (curName.includes(cName) || cName.includes(curName)) {
+            return true;
+          }
+        }
+
+        return false;
+      })
+      .map((c) => ({
+        id: `combo-${c.id}`,
+        name: `[Combo] ${c.comboName}`,
+        price: Number(c.comboPrice || 0),
+        image: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=200&q=80',
+        sku: c.comboCode || `CB-${c.id}`,
+        barcode: c.comboBarcode || c.comboCode || `CB-${c.id}`,
+        category: 'Combo / Gói sản phẩm',
+        unit: 'Combo',
+        stock: 99,
+        taxRate: 0.08,
+      }));
+
+    return [...singleList, ...comboList];
+  }, [products, combos, categories, branchStockMap, activeBranchId, activeBranchName, branches]);
 
   const categoryTabs = useMemo(() => {
     const dbCats = (categories || []).map((c) => c.categoryName).filter(Boolean);
+    const hasCombos = productsList.some(p => p.category === 'Combo / Gói sản phẩm');
+    const comboTab = hasCombos ? ['Combo / Gói sản phẩm'] : [];
     if (dbCats.length > 0) {
-      return Array.from(new Set(['Tất cả', ...dbCats]));
+      return Array.from(new Set(['Tất cả', ...comboTab, ...dbCats]));
     }
     const productCats = productsList.map((p) => p.category).filter((c) => Boolean(c) && c !== 'Tất cả');
-    return Array.from(new Set(['Tất cả', ...productCats]));
+    return Array.from(new Set(['Tất cả', ...comboTab, ...productCats]));
   }, [categories, productsList]);
 
   const displayPayments = useMemo<DisplayPayment[]>(() => {
@@ -261,19 +379,27 @@ export function PosTerminalPage() {
       return;
     }
 
+    const addressParts = [
+      newCustomerAddress.addressDetail,
+      newCustomerAddress.ward,
+      newCustomerAddress.district,
+      newCustomerAddress.province,
+    ].filter(Boolean);
+    const fullAddress = addressParts.length > 0 ? addressParts.join(', ') : 'Tại quầy POS';
+
     const customerId = 'CUST-POS-' + Math.floor(10000 + Math.random() * 90000);
     const newCust = {
       id: customerId,
       name: cleanName,
       phone: cleanPhone,
-      points: 100, // Điểm thưởng tặng khi mở thẻ mới tại POS
+      points: 0,
     };
 
     try {
       await addCustomer({
         customerCode: customerId,
-        name: newCustomerName.trim(),
-        phone: newCustomerPhoneInput.trim(),
+        name: cleanName,
+        phone: cleanPhone,
         email: newCustomerEmail.trim(),
         address: fullAddress,
         taxCode: newCustomerTaxCode.trim(),
@@ -281,11 +407,12 @@ export function PosTerminalPage() {
         status: 'ACTIVE',
         registeredDate: new Date().toISOString().split('T')[0],
         loyaltyTier: 'BRONZE',
-        loyaltyPoints: 100,
+        loyaltyPoints: 0,
         lifetimeSpent: 0,
         lastActive: new Date().toISOString().split('T')[0],
         avatarUrl: '',
       });
+      await fetchCustomers();
     } catch (err) {
       console.error('Failed to persist customer to CRM backend:', err);
     }
@@ -310,6 +437,18 @@ export function PosTerminalPage() {
   // Voucher
   const [voucherCode, setVoucherCode] = useState('');
   const [voucherError, setVoucherError] = useState('');
+  const [customerVouchersList, setCustomerVouchersList] = useState<CustomerVoucherRecord[]>([]);
+  const [campaignVouchersList, setCampaignVouchersList] = useState<VoucherRecord[]>([]);
+
+  useEffect(() => {
+    crmService.fetchCustomerVouchers().then((res) => {
+      if (Array.isArray(res)) setCustomerVouchersList(res);
+    }).catch((e) => console.warn('POS fetch customer vouchers err:', e));
+
+    crmService.fetchVouchers().then((res) => {
+      if (Array.isArray(res)) setCampaignVouchersList(res);
+    }).catch((e) => console.warn('POS fetch campaign vouchers err:', e));
+  }, []);
 
   // Payment modal
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
@@ -438,11 +577,104 @@ export function PosTerminalPage() {
   // ── Voucher ─────────────────────────────────────────────────────────────────
   const handleApplyVoucher = () => {
     const code = voucherCode.trim().toUpperCase();
-    if (!code) { setVoucherError('Vui lòng nhập mã!'); return; }
-    if (VOUCHERS[code]) {
-      setAppliedVoucher({ code, ...VOUCHERS[code] });
+    if (!code) { setVoucherError('Vui lòng nhập mã voucher!'); return; }
+
+    const currentSubtotal = getTotal();
+
+    // 1. Check Personal Customer Vouchers in database
+    const matchedCustVoucher = customerVouchersList.find(
+      (v) => (v.voucherCode || '').toUpperCase() === code
+    );
+
+    if (matchedCustVoucher) {
+      if (matchedCustVoucher.status === 'USED') {
+        setVoucherError(`Mã voucher ${code} đã được sử dụng trước đó!`);
+        setAppliedVoucher(null);
+        return;
+      }
+      if (matchedCustVoucher.status === 'EXPIRED') {
+        setVoucherError(`Mã voucher ${code} đã hết hạn sử dụng!`);
+        setAppliedVoucher(null);
+        return;
+      }
+
+      // Customer Ownership Verification Security Check
+      if (!activeCustomer || activeCustomer.name === 'Khách vãng lai') {
+        setVoucherError(`Mã voucher này được cấp riêng cho Khách hàng [${matchedCustVoucher.customerName}]. Vui lòng chọn đúng khách hàng trước khi dùng!`);
+        setAppliedVoucher(null);
+        return;
+      }
+
+      const custPhone = (activeCustomer.phone || '').trim();
+      const ownerPhone = (matchedCustVoucher.customerPhone || '').trim();
+      const custName = (activeCustomer.name || '').toLowerCase().trim();
+      const ownerName = (matchedCustVoucher.customerName || '').toLowerCase().trim();
+
+      const isMatch = (custPhone && ownerPhone && custPhone === ownerPhone) ||
+                      (ownerName && custName && (custName.includes(ownerName) || ownerName.includes(custName)));
+
+      if (!isMatch) {
+        setVoucherError(`Mã ${code} thuộc sở hữu của KH [${matchedCustVoucher.customerName} - ${matchedCustVoucher.customerPhone || 'SĐT'}]. Khách hàng hiện tại không có quyền sử dụng!`);
+        setAppliedVoucher(null);
+        return;
+      }
+
+      if (matchedCustVoucher.minOrderValue && currentSubtotal < matchedCustVoucher.minOrderValue) {
+        setVoucherError(`Đơn hàng tối thiểu ${matchedCustVoucher.minOrderValue.toLocaleString('vi-VN')}đ mới áp dụng được mã này!`);
+        setAppliedVoucher(null);
+        return;
+      }
+
+      const dType = matchedCustVoucher.discountType === 'PERCENT' ? 'PERCENT' : 'FLAT';
+      setAppliedVoucher({
+        code,
+        type: dType,
+        value: matchedCustVoucher.discountValue,
+      });
       setVoucherCode('');
       setVoucherError('');
+      toast.success(`Áp dụng voucher cá nhân thành công cho KH ${matchedCustVoucher.customerName}!`);
+      return;
+    }
+
+    // 2. Check Campaign / Public Vouchers from API
+    const matchedCampaign = campaignVouchersList.find((v) => (v.code || '').toUpperCase() === code);
+    if (matchedCampaign) {
+      if (matchedCampaign.status !== 'ACTIVE') {
+        setVoucherError('Chương trình khuyến mãi này đã tạm ngưng hoặc hết hạn!');
+        setAppliedVoucher(null);
+        return;
+      }
+      if (matchedCampaign.minOrderValue && currentSubtotal < matchedCampaign.minOrderValue) {
+        setVoucherError(`Đơn hàng tối thiểu ${matchedCampaign.minOrderValue.toLocaleString('vi-VN')}đ mới áp dụng được!`);
+        setAppliedVoucher(null);
+        return;
+      }
+
+      const dType = matchedCampaign.discountType === 'PERCENT' ? 'PERCENT' : 'FLAT';
+      setAppliedVoucher({
+        code,
+        type: dType,
+        value: matchedCampaign.value,
+      });
+      setVoucherCode('');
+      setVoucherError('');
+      toast.success(`Đã áp dụng mã giảm giá ${code}!`);
+      return;
+    }
+
+    // 3. Fallback dictionary (SMART, HELLOSUMMER, RETAILHUB50K, VIP10, WELCOME)
+    if (VOUCHERS[code]) {
+      const v = VOUCHERS[code];
+      if (v.minOrderValue && currentSubtotal < v.minOrderValue) {
+        setVoucherError(`Đơn hàng tối thiểu ${v.minOrderValue.toLocaleString('vi-VN')}đ mới dùng được mã ${code}!`);
+        setAppliedVoucher(null);
+        return;
+      }
+      setAppliedVoucher({ code, ...v });
+      setVoucherCode('');
+      setVoucherError('');
+      toast.success(`Đã áp dụng mã giảm giá ${code}!`);
     } else {
       setVoucherError('Mã không hợp lệ hoặc đã hết hạn!');
       setAppliedVoucher(null);
@@ -474,8 +706,28 @@ export function PosTerminalPage() {
 
   const totalAmount = taxableAmount + vatAmount;
 
+  // Cấu hình phí phụ thu của phương thức thanh toán
+  const selectedPaymentConfig = paymentMethodsFromConfig.find((m) => String(m.id) === String(selectedPaymentId));
+  let paymentFee = 0;
+  if (selectedPaymentConfig) {
+    const feeVal = selectedPaymentConfig.feeValue !== undefined ? selectedPaymentConfig.feeValue : 
+                   (selectedPaymentConfig.feeType === 'PERCENT' ? selectedPaymentConfig.processingFeePct : selectedPaymentConfig.fixedFeeUsd);
+    const feeT = selectedPaymentConfig.feeType || 
+                 (selectedPaymentConfig.processingFeePct > 0 ? 'PERCENT' : 'FIXED');
+
+    if (feeVal > 0) {
+      if (feeT === 'PERCENT') {
+        paymentFee = Math.round(totalAmount * (feeVal / 100));
+      } else {
+        paymentFee = Math.round(feeVal);
+      }
+    }
+  }
+
+  const totalAmountToPay = totalAmount + paymentFee;
+
   const cashGivenNum = parseFloat(cashGiven.replace(/\./g, '')) || 0;
-  const changeAmount = Math.max(0, cashGivenNum - totalAmount);
+  const changeAmount = Math.max(0, cashGivenNum - totalAmountToPay);
 
   // ── Confirm payment ──────────────────────────────────────────────────────────
   const handleConfirmPayment = () => {
@@ -519,7 +771,7 @@ export function PosTerminalPage() {
         subTotal: Math.round(subtotal),
         taxAmount: Math.round(vatAmount),
         discountAmount: Math.round(voucherDiscount + pointsDiscount),
-        totalAmount: Math.round(totalAmount),
+        totalAmount: Math.round(totalAmountToPay),
         status: 'COMPLETED',
         paymentStatus: 'PAID',
         paymentMethod: payLabel,
@@ -536,18 +788,83 @@ export function PosTerminalPage() {
           quantity: i.quantity,
           unitPriceSnapshot: i.price
         })),
-        amountTendered: isCashPayment ? Math.round(cashGivenNum) : Math.round(totalAmount),
+        amountTendered: isCashPayment ? Math.round(cashGivenNum) : Math.round(totalAmountToPay),
         changeAmount: isCashPayment ? Math.round(changeAmount) : 0,
         shiftId: deriveShiftId(now),
         promoCodeApplied: appliedVoucher?.code,
+        paymentMethodId: selectedPaymentConfig ? Number(selectedPaymentConfig.id) : null,
+        paymentMethodCode: selectedPaymentConfig ? selectedPaymentConfig.methodCode : null,
       } as any);
 
       // Tự động trừ tồn kho hiển thị (onHand) trên POS ngay lập tức & đồng bộ toàn hệ thống
       try {
-        const deductions = items.map((it) => ({ productId: String(it.id), qty: it.quantity }));
+        const savedD = localStorage.getItem('retailhub_pos_stock_deductions');
+        const posDeductionsMap: Record<string, number> = savedD ? JSON.parse(savedD) : {};
+
+        items.forEach((it) => {
+          const pId = String(it.id);
+          posDeductionsMap[pId] = (posDeductionsMap[pId] || 0) + it.quantity;
+          if (it.sku) posDeductionsMap[it.sku] = (posDeductionsMap[it.sku] || 0) + it.quantity;
+        });
+        localStorage.setItem('retailhub_pos_stock_deductions', JSON.stringify(posDeductionsMap));
+
+        const deductions = items.map((it) => ({ productId: String(it.id), sku: it.sku, qty: it.quantity }));
         (useInventoryStore.getState() as any).deductProductStock(deductions);
+        setBranchStockMap((prev) => {
+          const nextMap = { ...prev };
+          items.forEach((it) => {
+            const pId = String(it.id);
+            const cur = nextMap[pId] ?? nextMap[it.sku] ?? (products.find(p => String(p.id) === pId)?.onHand ?? 10);
+            nextMap[pId] = Math.max(0, cur - it.quantity);
+            if (it.sku) nextMap[it.sku] = Math.max(0, cur - it.quantity);
+          });
+          return nextMap;
+        });
       } catch (err) {
         console.error('Failed to deduct local POS inventory state:', err);
+      }
+
+      // Tự động tích điểm cho Khách hàng & Ghi nhật ký Lịch sử Loyalty CRM
+      if (activeCustomer) {
+        try {
+          const earnedPoints = Math.floor((totalAmount / (loyaltyConfig?.earnRateAmount || 10000)) * (activeCustomer?.membershipRank === 'Thành viên Vàng' ? 1.5 : activeCustomer?.membershipRank === 'Thành viên Bạc' ? 1.2 : 1.0));
+
+          if (earnedPoints > 0) {
+            useCrmStore.getState().addCustomerPoints(String(activeCustomer.id), earnedPoints, {
+              code: `TX-EARN-${Date.now().toString().slice(-6)}`,
+              customerId: String(activeCustomer.id),
+              customerName: activeCustomer.name,
+              phone: activeCustomer.phone || '',
+              pointsChange: earnedPoints,
+              transactionType: 'TÍCH ĐIỂM BÁN HÀNG POS',
+              refDocument: code,
+              date: dateStr,
+              balanceAfter: (activeCustomer.loyaltyPoints || 0) + earnedPoints,
+              amount: Math.round(totalAmount),
+              actionType: 'EARN',
+              createdAt: dateStr,
+            });
+          }
+
+          if (usedPoints > 0) {
+            useCrmStore.getState().addCustomerPoints(String(activeCustomer.id), -usedPoints, {
+              code: `TX-REDEEM-${Date.now().toString().slice(-6)}`,
+              customerId: String(activeCustomer.id),
+              customerName: activeCustomer.name,
+              phone: activeCustomer.phone || '',
+              pointsChange: -usedPoints,
+              transactionType: 'TIÊU ĐIỂM BÁN HÀNG POS',
+              refDocument: code,
+              date: dateStr,
+              balanceAfter: Math.max(0, (activeCustomer.loyaltyPoints || 0) - usedPoints),
+              amount: Math.round(pointsDiscount),
+              actionType: 'REDEEM',
+              createdAt: dateStr,
+            });
+          }
+        } catch (err) {
+          console.error('Failed to update CRM customer loyalty points:', err);
+        }
       }
 
       const printInvoicePayload: PrintInvoiceData = {
@@ -561,7 +878,7 @@ export function PosTerminalPage() {
         subTotal: Math.round(subtotal),
         taxAmount: Math.round(vatAmount),
         discountAmount: Math.round(voucherDiscount + pointsDiscount),
-        totalAmount: Math.round(totalAmount),
+        totalAmount: Math.round(totalAmountToPay),
         items: items.map((i) => ({
           sku: i.sku || String(i.id),
           name: i.name,
@@ -583,14 +900,16 @@ export function PosTerminalPage() {
         setVoucherError('');
         setPaymentState('idle');
         setIsPaymentOpen(false);
+        setCurrentOrderCode('');
         toast.success(`Thanh toán thành công đơn hàng ${code}!`);
       }, 1000);
     };
 
     onCompleteRef.current = performOrderCreation;
     setPaymentState('processing');
-    const delay = isCashPayment ? 1200 : 3500;
-    paymentTimerRef.current = setTimeout(performOrderCreation, delay);
+    if (isCashPayment) {
+      paymentTimerRef.current = setTimeout(performOrderCreation, 1200);
+    }
   };
 
   // ── Quick cash buttons ────────────────────────────────────────────────────────
@@ -638,6 +957,18 @@ export function PosTerminalPage() {
             </div>
           </div>
 
+          {/* Sync Data Button */}
+          <button
+            type="button"
+            onClick={handleSyncPosData}
+            disabled={isSyncing}
+            title="Đồng bộ lại danh mục sản phẩm & combo từ máy chủ"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-all shadow-xs shrink-0 cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">{isSyncing ? 'Đang tải...' : 'Đồng bộ dữ liệu'}</span>
+          </button>
+
           <div className="text-right shrink-0 hidden lg:flex flex-col items-end">
             <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-0.5">
               <Clock className="w-3.5 h-3.5" />
@@ -663,7 +994,7 @@ export function PosTerminalPage() {
                         </option>
                       ))
                     ) : (
-                      <option value="1">CH Quận 1 (Trụ sở chính)</option>
+                      <option value="">-- Chưa có chi nhánh --</option>
                     )}
                   </select>
                 ) : (
@@ -977,7 +1308,19 @@ export function PosTerminalPage() {
                       className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-l-lg text-gray-600 dark:text-gray-400 transition-colors">
                       <Minus className="w-3 h-3" />
                     </button>
-                    <span className="w-7 text-center text-xs font-bold text-gray-900 dark:text-white select-none">{item.quantity}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={item.quantity}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (isNaN(val) || val <= 0) return;
+                        const maxStock = getStock(item.id);
+                        const validQty = Math.min(val, maxStock > 0 ? maxStock : val);
+                        updateQuantity(item.id, validQty);
+                      }}
+                      className="w-10 text-center text-xs font-bold text-gray-900 dark:text-white bg-transparent focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded p-0 border-0"
+                    />
                     <button
                       type="button"
                       onClick={() => handleInc(item.id)}
@@ -1068,7 +1411,12 @@ export function PosTerminalPage() {
               <Trash2 className="w-5 h-5" />
             </button>
             <button
-              onClick={() => setIsPaymentOpen(true)}
+              onClick={() => {
+                const now = new Date();
+                const code = `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
+                setCurrentOrderCode(code);
+                setIsPaymentOpen(true);
+              }}
               disabled={items.length === 0}
               className="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-emerald-600/30"
             >
@@ -1171,34 +1519,42 @@ export function PosTerminalPage() {
                       </p>
                     </div>
 
-                    <div className="relative border-2 border-dashed border-gray-250 dark:border-gray-700 p-3 bg-white rounded-2xl shadow-sm w-44 h-44 flex items-center justify-center overflow-hidden shrink-0">
-                      <svg className="w-full h-full text-emerald-600" viewBox="0 0 100 100">
-                        <path d="M10 25 V10 H25 M75 10 H90 V25 M90 75 V90 H75 M25 90 H10 V75" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-                        {selectedPayment.id.includes('ewallet') || selectedPayment.id.includes('transfer') || selectedPayment.id.includes('qr') ? (
-                          <>
-                            <rect x="20" y="20" width="15" height="15" fill="currentColor" />
-                            <rect x="65" y="20" width="15" height="15" fill="currentColor" />
-                            <rect x="20" y="65" width="15" height="15" fill="currentColor" />
-                            <rect x="45" y="45" width="10" height="10" fill="currentColor" />
-                            <rect x="55" y="65" width="10" height="10" fill="currentColor" />
-                            <rect x="65" y="55" width="10" height="10" fill="currentColor" />
-                            <rect x="45" y="65" width="5" height="5" fill="currentColor" />
-                            <rect x="65" y="45" width="5" height="5" fill="currentColor" />
-                          </>
-                        ) : (
-                          <>
-                            <rect x="22" y="32" width="56" height="36" rx="4" fill="none" stroke="currentColor" strokeWidth="4" />
-                            <circle cx="50" cy="50" r="5" fill="currentColor" />
-                            <path d="M36 50 Q43 42 50 50 T64 50" fill="none" stroke="currentColor" strokeWidth="3" />
-                          </>
-                        )}
-                      </svg>
+                    <div className="relative border-2 border-dashed border-gray-250 dark:border-gray-700 p-2 bg-white rounded-2xl shadow-sm w-60 h-60 flex items-center justify-center overflow-hidden shrink-0">
+                      {selectedPaymentConfig?.providerType === 'BANK_TRANSFER' ? (
+                        <img
+                          src={`https://img.vietqr.io/image/${selectedPaymentConfig.bankName}-${selectedPaymentConfig.bankAccount}-compact2.png?amount=${totalAmountToPay}&addInfo=${encodeURIComponent((selectedPaymentConfig.transferSyntax || 'POS {order_code}').replace('{order_code}', currentOrderCode))}&accountName=${encodeURIComponent(selectedPaymentConfig.bankAccountName || '')}`}
+                          alt="VietQR Payment"
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <svg className="w-full h-full text-emerald-600" viewBox="0 0 100 100">
+                          <path d="M10 25 V10 H25 M75 10 H90 V25 M90 75 V90 H75 M25 90 H10 V75" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+                          {selectedPayment.id.includes('ewallet') || selectedPayment.id.includes('transfer') || selectedPayment.id.includes('qr') || selectedPaymentConfig?.providerType === 'GATEWAY' ? (
+                            <>
+                              <rect x="20" y="20" width="15" height="15" fill="currentColor" />
+                              <rect x="65" y="20" width="15" height="15" fill="currentColor" />
+                              <rect x="20" y="65" width="15" height="15" fill="currentColor" />
+                              <rect x="45" y="45" width="10" height="10" fill="currentColor" />
+                              <rect x="55" y="65" width="10" height="10" fill="currentColor" />
+                              <rect x="65" y="55" width="10" height="10" fill="currentColor" />
+                              <rect x="45" y="65" width="5" height="5" fill="currentColor" />
+                              <rect x="65" y="45" width="5" height="5" fill="currentColor" />
+                            </>
+                          ) : (
+                            <>
+                              <rect x="22" y="32" width="56" height="36" rx="4" fill="none" stroke="currentColor" strokeWidth="4" />
+                              <circle cx="50" cy="50" r="5" fill="currentColor" />
+                              <path d="M36 50 Q43 42 50 50 T64 50" fill="none" stroke="currentColor" strokeWidth="3" />
+                            </>
+                          )}
+                        </svg>
+                      )}
                       <div className="absolute inset-x-0 h-0.5 bg-emerald-500 animate-bounce top-1/2 shadow shadow-emerald-500" />
                     </div>
 
                     <div className="text-center">
                       <p className="text-xs text-gray-400">Số tiền cần thu</p>
-                      <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{fmt(totalAmount)}</p>
+                      <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{fmt(totalAmountToPay)}</p>
                     </div>
 
                     <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl p-3 text-center w-full">
@@ -1230,7 +1586,12 @@ export function PosTerminalPage() {
                 <div className="px-6 pt-4 pb-2">
                   <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-4 text-center mb-4">
                     <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold uppercase tracking-wider mb-1">Số tiền cần thu</p>
-                    <p className="text-4xl font-black text-gray-900 dark:text-white">{fmt(totalAmount)}</p>
+                    <p className="text-4xl font-black text-gray-900 dark:text-white">{fmt(totalAmountToPay)}</p>
+                    {paymentFee > 0 && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold mt-1">
+                        (Bao gồm phí {selectedPaymentConfig?.methodName}: +{fmt(paymentFee)})
+                      </p>
+                    )}
                   </div>
 
                   {/* Payment method selection */}
@@ -1287,7 +1648,7 @@ export function PosTerminalPage() {
                           </button>
                         ))}
                       </div>
-                      {cashGivenNum >= totalAmount && cashGivenNum > 0 && (
+                      {cashGivenNum >= totalAmountToPay && cashGivenNum > 0 && (
                         <div className="mt-2 flex justify-between items-center bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 rounded-lg px-3 py-2">
                           <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">Tiền thối lại:</span>
                           <span className="text-sm font-black text-blue-700 dark:text-blue-400">{fmt(changeAmount)}</span>
@@ -1304,7 +1665,7 @@ export function PosTerminalPage() {
                   </button>
                   <button
                     onClick={handleConfirmPayment}
-                    disabled={isCashPayment && cashGivenNum < totalAmount}
+                    disabled={isCashPayment && cashGivenNum < totalAmountToPay}
                     className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-sm transition-colors shadow disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     ✓ Xác nhận

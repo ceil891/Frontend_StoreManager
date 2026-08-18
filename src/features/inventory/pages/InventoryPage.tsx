@@ -53,6 +53,7 @@ export function InventoryPage() {
 
   // Filter states
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [branchFilter, setBranchFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
@@ -594,8 +595,14 @@ function generateSkuCode(existingSkus: string[] = []): string {
         accessorKey: 'onHand',
         header: 'Tồn kho & Cảnh báo',
         cell: ({ row }) => {
-          const onHand = Number(row.original.onHand || 0);
+          const isBranchSelected = branchFilter !== 'all';
+          const selectedBranch = branches.find(b => String(b.id) === branchFilter);
+          const branchStock = isBranchSelected ? Number(row.original.branchStocks?.[branchFilter] ?? 0) : Number(row.original.onHand || 0);
+          const onHand = branchStock;
           const isActive = row.original.status === 'ACTIVE';
+          const minStock = Number(row.original.minStock ?? 5);
+          const reorderPoint = Number(row.original.reorderPoint ?? 10);
+          const maxStock = Number(row.original.maxStock ?? 100);
 
           let statusBadge = (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200">
@@ -609,10 +616,22 @@ function generateSkuCode(existingSkus: string[] = []): string {
                 🔴 Hết hàng
               </span>
             );
-          } else if (onHand <= 10) {
+          } else if (minStock > 0 && onHand <= minStock) {
+            statusBadge = (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 border border-red-200">
+                🔴 Dưới định mức ({onHand})
+              </span>
+            );
+          } else if (reorderPoint > 0 && onHand <= reorderPoint) {
             statusBadge = (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200">
                 🟡 Sắp hết ({onHand})
+              </span>
+            );
+          } else if (maxStock > 0 && onHand > maxStock) {
+            statusBadge = (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200">
+                🟠 Vượt định mức ({onHand})
               </span>
             );
           }
@@ -744,6 +763,22 @@ function generateSkuCode(existingSkus: string[] = []): string {
           {/* Quick Filters Row */}
           <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700/60">
             <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-gray-500 font-medium">Lọc Chi nhánh:</span>
+              <select
+                value={branchFilter}
+                onChange={(e) => setBranchFilter(e.target.value)}
+                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs cursor-pointer"
+              >
+                <option value="all">Toàn hệ thống (Tất cả chi nhánh)</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={String(b.id)}>
+                    {b.branchName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs">
               <span className="text-gray-500 font-medium">Lọc Danh mục:</span>
               <select
                 value={categoryFilter}
@@ -791,9 +826,9 @@ function generateSkuCode(existingSkus: string[] = []): string {
               />
             </div>
 
-            {(categoryFilter !== 'all' || statusFilter !== 'all' || fromDate || toDate) && (
+            {(branchFilter !== 'all' || categoryFilter !== 'all' || statusFilter !== 'all' || fromDate || toDate) && (
               <button
-                onClick={() => { setCategoryFilter('all'); setStatusFilter('all'); setFromDate(''); setToDate(''); }}
+                onClick={() => { setBranchFilter('all'); setCategoryFilter('all'); setStatusFilter('all'); setFromDate(''); setToDate(''); }}
                 className="text-xs text-red-500 hover:text-red-600 font-semibold flex items-center gap-1 ml-auto transition-colors"
               >
                 <X className="w-3.5 h-3.5" /> Xóa bộ lọc

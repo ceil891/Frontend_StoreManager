@@ -47,7 +47,7 @@ export function FundBalancesPage() {
   const filtered = data.filter(d=> d.branch.toLowerCase().includes(search.toLowerCase()) || d.manager.toLowerCase().includes(search.toLowerCase()));
 
   const openCreate =()=>{ setForm({balanceDate:new Date().toISOString().split('T')[0], cashOnHand:0, bankBalance:0, totalFund:0, branch:'', manager:''}); setIsModal(true); };
-  const handleSave=(e:React.FormEvent)=>{ e.preventDefault(); const total = (form.cashOnHand||0)+(form.bankBalance||0); setData([...data,{...(form as FundBalanceItem), id:String(data.length+1), totalFund: total}]); setIsModal(false); };
+  const handleSave=(e:React.FormEvent)=>{ e.preventDefault(); const total = (form.cashOnHand||0)+(form.bankBalance||0); setData([{...(form as FundBalanceItem), id:String(data.length+1), totalFund: total}, ...data]); setIsModal(false); };
 
   const columns = useMemo<ColumnDef<FundBalanceItem>[]>(()=>[
     { accessorKey:'balanceDate', header:'Ngày chốt', cell:info=> <span className="font-mono text-sm text-gray-700 dark:text-gray-300">{info.getValue() as string}</span> },

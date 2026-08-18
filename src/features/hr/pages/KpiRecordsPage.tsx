@@ -58,7 +58,7 @@ export function KpiRecordsPage() {
   const filtered = data.filter(d=>d.userName.toLowerCase().includes(search.toLowerCase())||d.department.toLowerCase().includes(search.toLowerCase()));
 
   const openCreate = ()=>{ setForm({periodMonth:new Date().getMonth()+1,periodYear:new Date().getFullYear(),targetScore:100,achievedScore:0,rating:'ĐẠT'}); setIsModal(true); };
-  const handleSave=(e:React.FormEvent)=>{ e.preventDefault(); setData([...data,{...form as KpiItem,id:String(data.length+1)}]); setIsModal(false); };
+  const handleSave=(e:React.FormEvent)=>{ e.preventDefault(); setData([{...form as KpiItem,id:String(data.length+1)}, ...data]); setIsModal(false); };
 
   const columns = useMemo<ColumnDef<KpiItem>[]>(()=>[
     {accessorKey:'userName',header:'Nhân viên',cell:({row})=><div><p className="font-medium text-gray-900 dark:text-white">{row.original.userName}</p><p className="text-xs text-gray-400">{row.original.department}</p></div>},

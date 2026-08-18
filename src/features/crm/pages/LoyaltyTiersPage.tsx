@@ -209,7 +209,7 @@ import { toast } from 'sonner';
 // ─────────────────────────────────────────────────────────────────────────────
 export function LoyaltyTiersPage() {
   const { config, updateConfig } = useLoyaltyConfigStore();
-  const { fetchLoyaltyTiers, addLoyaltyTier, updateLoyaltyTier, deleteLoyaltyTier } = useCrmStore();
+  const { customers, fetchCustomers, fetchLoyaltyTiers, addLoyaltyTier, updateLoyaltyTier, deleteLoyaltyTier } = useCrmStore();
   const [localConfig, setLocalConfig] = useState(config);
   const [isConfigSaving, setIsConfigSaving] = useState(false);
 
@@ -222,6 +222,7 @@ export function LoyaltyTiersPage() {
       toast.success('Đã cập nhật cấu hình quy tắc tích & đổi điểm thành công!');
     }, 400);
   };
+
   const [tiers, setTiers] = useState<LoyaltyTier[]>(() => {
     try {
       const saved = localStorage.getItem('retailhub-loyalty-tiers');
@@ -246,6 +247,10 @@ export function LoyaltyTiersPage() {
   });
 
   useEffect(() => {
+    fetchCustomers();
+  }, [fetchCustomers]);
+
+  useEffect(() => {
     fetchLoyaltyTiers().then((apiTiers) => {
       if (apiTiers && apiTiers.length > 0) {
         const mapped = apiTiers.map((t: any, idx: number) => {
@@ -258,7 +263,7 @@ export function LoyaltyTiersPage() {
             maxSpend: t.maxSpend ? Number(t.maxSpend) : null,
             pointRate: Number(t.pointMultiplier || 1),
             discountPct: Number(t.discountPercent || 0),
-            customerCount: Number(t.activeMembersCount || t.customerCount || 0),
+            customerCount: 0,
             benefits: [
               { icon: 'zap', text: `Tích ${t.pointMultiplier || 1} điểm / 100.000đ chi tiêu` },
               { icon: 'percent', text: `Giảm ${t.discountPercent || 0}% mọi đơn hàng` },
@@ -278,6 +283,29 @@ export function LoyaltyTiersPage() {
       console.error('Failed to save loyalty tiers to localStorage', e);
     }
   }, [tiers]);
+
+  const countCustomersForTier = (tier: LoyaltyTier) => {
+    const key = (tier.key || '').toUpperCase();
+    const name = (tier.name || '').toUpperCase();
+    return customers.filter((c) => {
+      const rank = ((c.loyaltyTier as string) || (c as any).membershipRank || '').toUpperCase();
+      if ((key === 'DIAMOND' || name.includes('KIM CƯƠNG')) && (rank.includes('DIAMOND') || rank.includes('KIM CƯƠNG'))) return true;
+      if ((key === 'PLATINUM' || key === 'ELITE_CLUB' || name.includes('BẠCH KIM')) && (rank.includes('PLATINUM') || rank.includes('BẠCH KIM') || rank.includes('ELITE'))) return true;
+      if ((key === 'GOLD' || name.includes('VÀNG')) && (rank.includes('GOLD') || rank.includes('VÀNG'))) return true;
+      if ((key === 'SILVER' || name.includes('BẠC')) && (rank.includes('SILVER') || rank.includes('BẠC'))) return true;
+      if ((key === 'BRONZE' || name.includes('ĐỒNG')) && (rank.includes('BRONZE') || rank.includes('ĐỒNG') || rank === '')) return true;
+      if ((key === 'NEW' || name.includes('MỚI')) && (rank.includes('NEW') || rank.includes('MỚI'))) return true;
+      return rank.includes(name) || rank.includes(key);
+    }).length;
+  };
+
+  const dynamicTiers = tiers.map((t) => ({
+    ...t,
+    customerCount: countCustomersForTier(t),
+  }));
+
+  const totalCustomers = customers.length > 0 ? customers.length : dynamicTiers.reduce((acc, t) => acc + t.customerCount, 0);
+
   const [editingTier, setEditingTier] = useState<LoyaltyTier | null>(null);
   const [deletingTier, setDeletingTier] = useState<LoyaltyTier | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -290,8 +318,6 @@ export function LoyaltyTiersPage() {
     discountPct: 0,
     customerCount: 0,
   });
-
-  const totalCustomers = tiers.reduce((acc, t) => acc + t.customerCount, 0);
 
   const handleOpenEdit = (tier: LoyaltyTier) => {
     setEditingTier(tier);
@@ -363,7 +389,7 @@ export function LoyaltyTiersPage() {
       ],
       ...theme,
     };
-    setTiers((prev) => [...prev, newTier]);
+    setTiers((prev) => [newTier, ...prev]);
     setIsCreateOpen(false);
   };
 
@@ -503,7 +529,7 @@ export function LoyaltyTiersPage() {
 
           {/* Stacked horizontal bar */}
           <div className="flex rounded-full overflow-hidden h-4 mb-4 gap-0.5">
-            {tiers.map(t => (
+            {dynamicTiers.map(t => (
               <div
                 key={t.key}
                 title={`${t.name}: ${t.customerCount} KH`}
@@ -514,7 +540,7 @@ export function LoyaltyTiersPage() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {tiers.map(t => (
+            {dynamicTiers.map(t => (
               <div key={t.key} className="flex items-center gap-2.5">
                 <div className={`w-3 h-3 rounded-full flex-shrink-0 ${t.progressColor}`} />
                 <div>
@@ -530,7 +556,7 @@ export function LoyaltyTiersPage() {
 
         {/* ── Tier Cards grid ───────────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-          {tiers.map((tier) => (
+          {dynamicTiers.map((tier) => (
             <TierCard
               key={tier.key}
               tier={tier}
@@ -881,7 +907,9 @@ function TierCard({ tier, totalCustomers, onEdit, onDelete }: TierCardProps) {
           </span>
         </div>
 
-        <h3 className="text-xl font-extrabold text-gray-900 dark:text-white">Hạng {tier.name}</h3>
+        <h3 className="text-xl font-extrabold text-gray-900 dark:text-white">
+          {tier.name.startsWith('Hạng') || tier.name.startsWith('Thành viên') ? tier.name : `Hạng ${tier.name}`}
+        </h3>
 
         {/* Spend range */}
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1">

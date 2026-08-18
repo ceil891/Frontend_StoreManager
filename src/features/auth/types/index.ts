@@ -17,6 +17,8 @@ export interface User {
   email: string;
   role: RoleType;
   branchId?: string | null;
+  branchCode?: string | null;
+  branchName?: string | null;
   avatar: string;
   /** Danh sách permissionCode thực từ backend (được load sau khi login) */
   permissions: string[];

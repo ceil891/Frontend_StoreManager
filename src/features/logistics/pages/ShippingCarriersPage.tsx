@@ -64,92 +64,7 @@ const PRESET_LOGOS = [
   { name: 'GrabExpress', logo: 'https://images.unsplash.com/photo-1617347454431-f49d7ff5c3b1?w=120&auto=format&fit=crop&q=80' }
 ];
 
-const MOCK_CARRIERS: CarrierRecord[] = [
-  {
-    id: '1',
-    carrierCode: 'SHIP000001',
-    carrierName: 'Viettel Post',
-    logoUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=120&auto=format&fit=crop&q=80',
-    phone: '1900 8095',
-    email: 'support@viettelpost.com.vn',
-    website: 'https://viettelpost.com.vn',
-    contactPerson: 'Nguyễn Văn Minh (Trưởng phòng 3PL)',
-    country: 'Việt Nam',
-    province: 'Hà Nội',
-    district: 'Quận Nam Từ Liêm',
-    addressDetail: 'Tòa nhà Viettel Post, Đại lộ Thăng Long',
-    address: 'Tòa nhà Viettel Post, Đại lộ Thăng Long, Nam Từ Liêm, Hà Nội',
-    hasApi: true,
-    apiKey: 'vtp_live_984102938190',
-    apiSecret: '••••••••••••••••',
-    webhookUrl: 'https://api.retailhub.vn/webhooks/vtp',
-    apiEnvironment: 'PRODUCTION',
-    apiStatus: 'CONNECTED',
-    contractStatus: 'ACTIVE',
-    serviceTypes: ['Standard', 'Express', 'Same Day', 'COD'],
-    supportCod: true,
-    slaInnerCity: '4 giờ',
-    slaOuterProvince: '24 giờ',
-    coverageRegions: ['Toàn quốc', 'Quốc tế'],
-    notes: 'Đối tác chiến lược tích hợp API tạo đơn tự động và đối soát COD hàng tuần.'
-  },
-  {
-    id: '2',
-    carrierCode: 'SHIP000002',
-    carrierName: 'Giao Hàng Tiết Kiệm (GHTK)',
-    logoUrl: 'https://images.unsplash.com/photo-1566576721346-d4a3b4eaeb55?w=120&auto=format&fit=crop&q=80',
-    phone: '1900 6092',
-    email: 'cskh@ghtk.vn',
-    website: 'https://giaohangtietkiem.vn',
-    contactPerson: 'Trần Thị Thảo (Đối soát 3PL)',
-    country: 'Việt Nam',
-    province: 'TP. Hồ Chí Minh',
-    district: 'Quận 1',
-    addressDetail: 'Số 8 Nguyễn Huệ, Phường Bến Nghé',
-    address: 'Số 8 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
-    hasApi: true,
-    apiKey: 'ghtk_live_4920183921',
-    apiSecret: '••••••••••••••••',
-    webhookUrl: 'https://api.retailhub.vn/webhooks/ghtk',
-    apiEnvironment: 'PRODUCTION',
-    apiStatus: 'CONNECTED',
-    contractStatus: 'ACTIVE',
-    serviceTypes: ['Standard', 'Express', 'COD', 'Next Day'],
-    supportCod: true,
-    slaInnerCity: '6 giờ',
-    slaOuterProvince: '36 giờ',
-    coverageRegions: ['Toàn quốc'],
-    notes: 'Tài khoản kết nối API chính thức, đối soát tiền thu hộ COD thứ 2 và thứ 6.'
-  },
-  {
-    id: '3',
-    carrierCode: 'SHIP000003',
-    carrierName: 'Giao Hàng Nhanh (GHN)',
-    logoUrl: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=120&auto=format&fit=crop&q=80',
-    phone: '1900 636677',
-    email: 'cskh@ghn.vn',
-    website: 'https://ghn.vn',
-    contactPerson: 'Lê Hoàng Nam (Quản lý khu vực Miền Nam)',
-    country: 'Việt Nam',
-    province: 'TP. Hồ Chí Minh',
-    district: 'Quận 7',
-    addressDetail: 'Tòa nhà Mapletree Business Centre, 1060 Nguyễn Văn Linh',
-    address: 'Tòa nhà Mapletree, 1060 Nguyễn Văn Linh, Quận 7, TP. HCM',
-    hasApi: true,
-    apiKey: 'ghn_sandbox_9981203',
-    apiSecret: '••••••••••••••••',
-    webhookUrl: 'https://api.retailhub.vn/webhooks/ghn',
-    apiEnvironment: 'SANDBOX',
-    apiStatus: 'CONNECTED',
-    contractStatus: 'ACTIVE',
-    serviceTypes: ['Standard', 'Express', 'Same Day', 'COD'],
-    supportCod: true,
-    slaInnerCity: '4 giờ',
-    slaOuterProvince: '24 giờ',
-    coverageRegions: ['Toàn quốc'],
-    notes: 'Đang thử nghiệm tích hợp webhook tự động cập nhật trạng thái đơn hàng.'
-  }
-];
+const MOCK_CARRIERS: CarrierRecord[] = [];
 
 const getSavedCarriers = (): CarrierRecord[] => {
   try {
@@ -178,16 +93,9 @@ export function ShippingCarriersPage() {
 
   const fetchCarriers = async () => {
     setIsLoading(true);
-    const local = getSavedCarriers();
-    if (local.length > 0) {
-      setData(local);
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      const res = await axiosClient.get<any, any[]>('/logistics/carriers');
-      const items = Array.isArray(res) ? res : (Array.isArray(res?.content) ? res.content : []);
+      const res = await axiosClient.get<any, any>('/logistics/carriers');
+      const items = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : (Array.isArray(res?.content) ? res.content : []));
       
       if (items && items.length > 0) {
         const mapped: CarrierRecord[] = items.map((item: any, idx: number) => {
@@ -200,7 +108,7 @@ export function ShippingCarriersPage() {
             phone: item.phone || '1900 8888',
             email: item.email || `cskh@carrier${item.id}.vn`,
             website: item.website || `https://carrier${item.id}.vn`,
-            contactPerson: item.contactPerson || 'Nguyễn Văn A (Phụ trách đối tác)',
+            contactPerson: item.contactPerson || 'Nguyễn Văn A',
             country: 'Việt Nam',
             province: item.province || 'Hà Nội',
             district: item.district || 'Quận Ba Đình',
@@ -211,8 +119,18 @@ export function ShippingCarriersPage() {
             apiSecret: item.apiSecret || '••••••••••••••••',
             webhookUrl: item.webhookUrl || `https://api.retailhub.vn/webhooks/carrier-${item.id}`,
             apiEnvironment: (item.apiEnvironment || 'PRODUCTION') as any,
-            apiStatus: item.isActive ? 'CONNECTED' : 'DISCONNECTED',
+            apiStatus: item.isActive !== false ? 'CONNECTED' : 'DISCONNECTED',
             contractStatus: (item.contractStatus || 'ACTIVE') as any,
+            contractSignedDate: item.contractSignedDate || '2025-01-15',
+            contractExpiryDate: item.contractExpiryDate || '2027-01-15',
+            billingAccountNo: item.billingAccountNo || 'ACC-889900',
+            reconciliationCycle: item.reconciliationCycle || 'WEEKLY',
+            discountPercent: item.discountPercent ?? 10,
+            standardRating: item.standardRating || 4.8,
+            onTimeDeliveryRate: item.onTimeDeliveryRate || 97.5,
+            codSettlementSpeedDays: item.codSettlementSpeedDays || 2,
+            supportedServices: item.supportedServices || ['Giao tiêu chuẩn', 'Giao hỏa tốc 2H', 'Thu hộ COD'],
+            coverageProvincesCount: item.coverageProvincesCount || 63,
             serviceTypes: item.serviceTypes ? (Array.isArray(item.serviceTypes) ? item.serviceTypes : item.serviceTypes.split(', ')) : ['Standard', 'Express', 'COD'],
             supportCod: item.supportCod ?? true,
             slaInnerCity: item.slaInnerCity || '4 giờ',
@@ -221,23 +139,16 @@ export function ShippingCarriersPage() {
             notes: item.note || ''
           };
         });
-
-        const combined = [...mapped];
-        MOCK_CARRIERS.forEach(mc => {
-          if (!combined.some(c => c.carrierCode === mc.carrierCode)) {
-            combined.push(mc);
-          }
-        });
-        setData(combined);
-        saveCarriersList(combined);
+        setData(mapped);
+        saveCarriersList(mapped);
       } else {
-        setData(MOCK_CARRIERS);
-        saveCarriersList(MOCK_CARRIERS);
+        const local = getSavedCarriers();
+        setData(local);
       }
     } catch (err) {
-      console.warn('Backend GET /logistics/carriers failed, using local standards:', err);
-      setData(MOCK_CARRIERS);
-      saveCarriersList(MOCK_CARRIERS);
+      console.warn('Backend GET /logistics/carriers failed:', err);
+      const local = getSavedCarriers();
+      setData(local);
     } finally {
       setIsLoading(false);
     }
@@ -729,8 +640,8 @@ export function ShippingCarriersPage() {
                     <p className="text-emerald-300">{selected.apiKey || 'vtp_live_sample_key'}</p>
                   </div>
                   <div>
-                    <span className="text-slate-400 text-[11px]">Webhook URL:</span>
-                    <p className="text-slate-300">{selected.webhookUrl || 'https://api.retailhub.vn/webhooks/shipping'}</p>
+                    <span className="text-slate-400 text-[11px]">Cơ chế đồng bộ:</span>
+                    <p className="text-emerald-400 font-semibold">Chủ động API Polling (Không dùng Webhook)</p>
                   </div>
                 </div>
               ) : (
@@ -964,21 +875,21 @@ export function ShippingCarriersPage() {
               </div>
             </div>
 
-            {/* SLA & COD */}
+            {/* SLA & Vehicles */}
             <div className="grid grid-cols-3 gap-3 pt-2">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">SLA Giao Nội thành</label>
+                <label className="block font-bold text-slate-700 mb-1">Số lượng phương tiện</label>
                 <input
                   type="text"
                   value={formState.slaInnerCity || ''}
                   onChange={(e) => setFormState({ ...formState, slaInnerCity: e.target.value })}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
-                  placeholder="4 giờ"
+                  placeholder="10 phương tiện"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">SLA Giao Ngoại tỉnh</label>
+                <label className="block font-bold text-slate-700 mb-1">Thời gian giao tối đa (giờ)</label>
                 <input
                   type="text"
                   value={formState.slaOuterProvince || ''}
@@ -1054,13 +965,13 @@ export function ShippingCarriersPage() {
 
                 <div className="grid grid-cols-3 gap-3">
                   <div className="col-span-2">
-                    <label className="block text-[11px] font-bold text-slate-300 mb-1">Webhook Callback URL</label>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">API Base URL / Endpoint</label>
                     <input
                       type="text"
-                      value={formState.webhookUrl || ''}
-                      onChange={(e) => setFormState({ ...formState, webhookUrl: e.target.value })}
+                      value={formState.website || ''}
+                      onChange={(e) => setFormState({ ...formState, website: e.target.value })}
                       className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500"
-                      placeholder="https://api.retailhub.vn/webhooks/shipping"
+                      placeholder="https://partner-api.carrier.com/v2"
                     />
                   </div>
 
@@ -1086,13 +997,13 @@ export function ShippingCarriersPage() {
 
           {/* Section 5: Notes */}
           <div className="space-y-2 pt-2">
-            <label className="block font-bold text-slate-700 mb-1">Ghi chú & Tài khoản đối soát</label>
+            <label className="block font-bold text-slate-700 mb-1">Ghi chú đối tác</label>
             <textarea
               value={formState.notes || ''}
               onChange={(e) => setFormState({ ...formState, notes: e.target.value })}
               className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-900"
               rows={2}
-              placeholder="Thông tin API, tài khoản đối soát hoặc lưu ý khi tích hợp..."
+              placeholder="Ghi chú đối tác vận chuyển..."
             />
           </div>
 
@@ -1103,13 +1014,13 @@ export function ShippingCarriersPage() {
               onClick={() => setIsModalOpen(false)}
               className="px-5 py-2.5 border border-slate-300 rounded-xl font-bold text-slate-700 hover:bg-slate-100 transition-colors"
             >
-              Hủy
+              Hủy bỏ
             </button>
             <button
               type="submit"
               className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl transition-all shadow-md cursor-pointer"
             >
-              Lưu đối tác 3PL
+              {modalMode === 'create' ? 'Lưu đối tác' : 'Lưu thay đổi'}
             </button>
           </div>
         </form>

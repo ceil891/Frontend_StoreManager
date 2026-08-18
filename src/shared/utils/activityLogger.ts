@@ -1,5 +1,5 @@
 import { useAuthStore } from '@/features/auth/store/authStore';
-import { BRANCH_OPTIONS } from '@/features/hr/store/userStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 import {
   useActivityLogStore,
   type ActivityActionType,
@@ -23,8 +23,9 @@ export type RecordActivityInput = {
 export function recordActivity(input: RecordActivityInput) {
   const user = useAuthStore.getState().user;
   const branchId = user?.branchId ?? undefined;
+  const branches = useBranchStore.getState().branches;
   const branchName = branchId
-    ? BRANCH_OPTIONS.find((b) => b.id === branchId)?.label
+    ? (branches.find((b) => b.id === branchId)?.name || `Chi nhánh ${branchId}`)
     : user
       ? 'Toàn hệ thống'
       : undefined;

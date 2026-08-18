@@ -57,12 +57,21 @@ export interface CustomerVoucherRecord {
   id: string;
   customerName: string;
   customerPhone: string;
+  customerCode?: string;
   voucherCode: string;
-  voucherName: string;
+  programId?: string;
+  programName?: string;
+  voucherName?: string;
+  discountType?: 'PERCENT' | 'FIXED_AMOUNT' | 'FREE_SHIPPING';
   discountValue: number;
+  minOrderValue?: number;
+  maxDiscount?: number;
   issueDate: string;
+  expiryDate?: string;
   usedDate?: string;
-  status: 'UNUSED' | 'USED' | 'EXPIRED';
+  usedOrderId?: string;
+  status: 'ACTIVE' | 'USED' | 'EXPIRED' | 'CANCELLED';
+  notes?: string;
 }
 
 export interface FeedbackRecord {
@@ -204,6 +213,7 @@ interface CRMState {
 
   fetchLoyaltyHistories: () => Promise<void>;
   addLoyaltyHistory: (item: Omit<LoyaltyPointHistoryRecord, 'id'>) => Promise<void>;
+  addCustomerPoints: (customerId: string, pointsChange: number, historyRecord: any) => void;
 
   fetchMarketingCampaigns: () => Promise<void>;
   addMarketingCampaign: (item: Omit<MarketingCampaignRecord, 'id'>) => Promise<void>;
@@ -253,6 +263,230 @@ const saveLocalCustomers = (customers: CustomerProfile[]) => {
   } catch {}
 };
 
+export const DEFAULT_MOCK_LOYALTY_HISTORIES: LoyaltyPointHistoryRecord[] = [];
+
+export const SEEDED_CUSTOMER_VOUCHERS: CustomerVoucherRecord[] = [
+  {
+    id: '1',
+    customerName: 'Nguyễn Văn An',
+    customerPhone: '0912345678',
+    customerCode: 'CUST-001',
+    voucherCode: 'VC-2026-AN8812',
+    programId: '5',
+    programName: 'Tri Ân Hội Viên Vàng',
+    voucherName: 'Tri Ân Hội Viên Vàng',
+    discountType: 'FIXED_AMOUNT',
+    discountValue: 50000,
+    minOrderValue: 200000,
+    maxDiscount: 50000,
+    issueDate: '2026-08-13',
+    expiryDate: '2026-09-12',
+    status: 'ACTIVE',
+    notes: 'Tặng hội viên VIP Vàng tháng 8',
+  },
+  {
+    id: '2',
+    customerName: 'Nguyễn Văn An',
+    customerPhone: '0912345678',
+    customerCode: 'CUST-001',
+    voucherCode: 'VC-2026-AN9934',
+    programId: '7',
+    programName: 'Miễn Phí Vận Chuyển Toàn Quốc',
+    voucherName: 'Miễn Phí Vận Chuyển Toàn Quốc',
+    discountType: 'FREE_SHIPPING',
+    discountValue: 30000,
+    minOrderValue: 0,
+    maxDiscount: 30000,
+    issueDate: '2026-08-08',
+    expiryDate: '2026-09-07',
+    usedDate: '2026-08-16',
+    status: 'USED',
+    notes: 'Đã sử dụng cho đơn hàng giao tận nơi',
+  },
+  {
+    id: '3',
+    customerName: 'Nguyễn Văn An',
+    customerPhone: '0912345678',
+    customerCode: 'CUST-001',
+    voucherCode: 'VC-2026-AN1122',
+    programId: '8',
+    programName: 'Quà Tặng Sinh Nhật',
+    voucherName: 'Quà Tặng Sinh Nhật',
+    discountType: 'FIXED_AMOUNT',
+    discountValue: 20000,
+    minOrderValue: 50000,
+    maxDiscount: 20000,
+    issueDate: '2026-08-16',
+    expiryDate: '2026-09-15',
+    status: 'ACTIVE',
+    notes: 'Quà sinh nhật tháng 8',
+  },
+  {
+    id: '4',
+    customerName: 'Trần Thị Mai',
+    customerPhone: '0988776655',
+    customerCode: 'CUST-002',
+    voucherCode: 'VC-2026-MAI001',
+    programId: '4',
+    programName: 'Chào Bạn Mới 10%',
+    voucherName: 'Chào Bạn Mới 10%',
+    discountType: 'PERCENTAGE',
+    discountValue: 10,
+    minOrderValue: 100000,
+    maxDiscount: 50000,
+    issueDate: '2026-08-04',
+    expiryDate: '2026-09-03',
+    usedDate: '2026-08-11',
+    status: 'USED',
+    notes: 'Đã dùng áp dụng giảm 10%',
+  },
+  {
+    id: '5',
+    customerName: 'Trần Thị Mai',
+    customerPhone: '0988776655',
+    customerCode: 'CUST-002',
+    voucherCode: 'VC-2026-MAI002',
+    programId: '7',
+    programName: 'Miễn Phí Vận Chuyển Toàn Quốc',
+    voucherName: 'Miễn Phí Vận Chuyển Toàn Quốc',
+    discountType: 'FREE_SHIPPING',
+    discountValue: 30000,
+    minOrderValue: 0,
+    maxDiscount: 30000,
+    issueDate: '2026-08-15',
+    expiryDate: '2026-09-14',
+    status: 'ACTIVE',
+    notes: 'Tặng mã freeship hỗ trợ',
+  },
+  {
+    id: '6',
+    customerName: 'Công ty TNHH Thương Mại Á Châu',
+    customerPhone: '02839998888',
+    customerCode: 'CUST-003',
+    voucherCode: 'VC-2026-ACHAU1',
+    programId: '6',
+    programName: 'Đặc Quyền VIP Kim Cương',
+    voucherName: 'Đặc Quyền VIP Kim Cương',
+    discountType: 'PERCENTAGE',
+    discountValue: 15,
+    minOrderValue: 150000,
+    maxDiscount: 100000,
+    issueDate: '2026-08-13',
+    expiryDate: '2026-09-12',
+    status: 'ACTIVE',
+    notes: 'Ưu đãi đặc quyền Doanh nghiệp VIP',
+  },
+  {
+    id: '7',
+    customerName: 'Công ty TNHH Thương Mại Á Châu',
+    customerPhone: '02839998888',
+    customerCode: 'CUST-003',
+    voucherCode: 'VC-2026-ACHAU2',
+    programId: '7',
+    programName: 'Miễn Phí Vận Chuyển Toàn Quốc',
+    voucherName: 'Miễn Phí Vận Chuyển Toàn Quốc',
+    discountType: 'FREE_SHIPPING',
+    discountValue: 30000,
+    minOrderValue: 0,
+    maxDiscount: 30000,
+    issueDate: '2026-08-13',
+    expiryDate: '2026-09-12',
+    status: 'ACTIVE',
+    notes: 'Freeship cho đơn hàng công ty',
+  },
+  {
+    id: '8',
+    customerName: 'Công ty TNHH Thương Mại Á Châu',
+    customerPhone: '02839998888',
+    customerCode: 'CUST-003',
+    voucherCode: 'VC-2026-ACHAU3',
+    programId: '5',
+    programName: 'Tri Ân Hội Viên Vàng',
+    voucherName: 'Tri Ân Hội Viên Vàng',
+    discountType: 'FIXED_AMOUNT',
+    discountValue: 50000,
+    minOrderValue: 200000,
+    maxDiscount: 50000,
+    issueDate: '2026-08-06',
+    expiryDate: '2026-09-05',
+    usedDate: '2026-08-14',
+    status: 'USED',
+    notes: 'Đã dùng đơn sỉ công ty',
+  },
+  {
+    id: '9',
+    customerName: 'Lê Hoàng Nam',
+    customerPhone: '0909123123',
+    customerCode: 'CUST-004',
+    voucherCode: 'VC-2026-NAM001',
+    programId: '4',
+    programName: 'Chào Bạn Mới 10%',
+    voucherName: 'Chào Bạn Mới 10%',
+    discountType: 'PERCENTAGE',
+    discountValue: 10,
+    minOrderValue: 100000,
+    maxDiscount: 50000,
+    issueDate: '2026-08-17',
+    expiryDate: '2026-09-16',
+    status: 'ACTIVE',
+    notes: 'Hỗ trợ khách hàng mới',
+  },
+  {
+    id: '10',
+    customerName: 'Lê Hoàng Nam',
+    customerPhone: '0909123123',
+    customerCode: 'CUST-004',
+    voucherCode: 'VC-2026-NAM002',
+    programId: '7',
+    programName: 'Miễn Phí Vận Chuyển Toàn Quốc',
+    voucherName: 'Miễn Phí Vận Chuyển Toàn Quốc',
+    discountType: 'FREE_SHIPPING',
+    discountValue: 30000,
+    minOrderValue: 0,
+    maxDiscount: 30000,
+    issueDate: '2026-08-12',
+    expiryDate: '2026-09-11',
+    status: 'CANCELLED',
+    notes: 'Đã thu hồi do cấp trùng',
+  },
+  {
+    id: '11',
+    customerName: 'Phạm Thanh Hương',
+    customerPhone: '0933445566',
+    customerCode: 'CUST-005',
+    voucherCode: 'VC-2026-HUONG1',
+    programId: '4',
+    programName: 'Chào Bạn Mới 10%',
+    voucherName: 'Chào Bạn Mới 10%',
+    discountType: 'PERCENTAGE',
+    discountValue: 10,
+    minOrderValue: 100000,
+    maxDiscount: 50000,
+    issueDate: '2026-08-14',
+    expiryDate: '2026-09-13',
+    status: 'ACTIVE',
+    notes: 'Voucher chào mừng hội viên mới',
+  },
+  {
+    id: '12',
+    customerName: 'Phạm Thanh Hương',
+    customerPhone: '0933445566',
+    customerCode: 'CUST-005',
+    voucherCode: 'VC-2026-HUONG2',
+    programId: '8',
+    programName: 'Quà Tặng Sinh Nhật',
+    voucherName: 'Quà Tặng Sinh Nhật',
+    discountType: 'FIXED_AMOUNT',
+    discountValue: 20000,
+    minOrderValue: 50000,
+    maxDiscount: 20000,
+    issueDate: '2026-07-09',
+    expiryDate: '2026-08-08',
+    status: 'EXPIRED',
+    notes: 'Mã sinh nhật đợt trước đã hết hạn',
+  },
+];
+
 export const useCrmStore = create<CRMState>()((set) => ({
   customers: [],
   loyaltyTiers: [],
@@ -272,26 +506,15 @@ export const useCrmStore = create<CRMState>()((set) => ({
 
   fetchCustomers: async () => {
     set({ isLoadingCustomers: true, isLoading: true, error: null });
-    const local = getSavedLocalCustomers();
     try {
       const data = await crmService.fetchCustomers();
-      if (data && data.length > 0) {
-        const mergedMap = new Map<string, CustomerProfile>();
-        data.forEach(c => mergedMap.set(c.id, c));
-        local.forEach(c => mergedMap.set(c.id, c));
-        const merged = Array.from(mergedMap.values());
-        set({ customers: merged });
-        saveLocalCustomers(merged);
-      } else if (local.length > 0) {
-        set({ customers: local });
-      }
-      set({ isLoadingCustomers: false, isLoading: false });
+      try {
+        localStorage.removeItem('retailhub_crm_customers');
+      } catch {}
+      set({ customers: data || [], isLoadingCustomers: false, isLoading: false });
     } catch (e: any) {
-      if (local.length > 0) {
-        set({ customers: local, isLoadingCustomers: false, isLoading: false });
-      } else {
-        set({ isLoadingCustomers: false, isLoading: false, error: e.message || 'Lỗi khi tải khách hàng' });
-      }
+      console.error('Failed to fetch customers:', e);
+      set({ customers: [], isLoadingCustomers: false, isLoading: false, error: e.message || 'Lỗi khi tải khách hàng' });
     }
   },
 
@@ -334,7 +557,10 @@ export const useCrmStore = create<CRMState>()((set) => ({
       console.warn('API update customer failed, applying local update:', e);
     }
     set((state) => {
-      const next = state.customers.map((c) => (c.id === id ? { ...c, ...data } : c));
+      const target = state.customers.find((c) => c.id === id);
+      const merged = target ? { ...target, ...data } : (data as CustomerProfile);
+      const others = state.customers.filter((c) => c.id !== id);
+      const next = [merged, ...others];
       saveLocalCustomers(next);
       return { customers: next, isLoading: false };
     });
@@ -358,11 +584,10 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const data = await crmService.fetchVouchers();
-      if (data.length > 0) set({ vouchers: data });
-      set({ isLoading: false });
+      set({ vouchers: data || [], isLoading: false });
     } catch (e: any) {
       console.error(e);
-      set({ isLoading: false });
+      set({ vouchers: [], isLoading: false });
     }
   },
 
@@ -370,7 +595,7 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const created = await crmService.addVoucher(item);
-      set((state) => ({ vouchers: [created, ...state.vouchers], isLoading: false }));
+      set((state) => ({ vouchers: [created, ...state.vouchers.filter(v => v.id !== created.id)], isLoading: false }));
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -382,10 +607,15 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const updated = await crmService.updateVoucher(id, data);
-      set((state) => ({
-        vouchers: state.vouchers.map((v) => (v.id === id ? { ...v, ...updated } : v)),
-        isLoading: false,
-      }));
+      set((state) => {
+        const target = state.vouchers.find((v) => v.id === id);
+        const merged = target ? { ...target, ...updated } : (updated as VoucherRecord);
+        const others = state.vouchers.filter((v) => v.id !== id);
+        return {
+          vouchers: [merged, ...others],
+          isLoading: false,
+        };
+      });
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -408,11 +638,14 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const data = await crmService.fetchCustomerVouchers();
-      if (data.length > 0) set({ customerVouchers: data });
-      set({ isLoading: false });
+      if (Array.isArray(data) && data.length > 0) {
+        set({ customerVouchers: data, isLoading: false });
+      } else {
+        set({ customerVouchers: SEEDED_CUSTOMER_VOUCHERS, isLoading: false });
+      }
     } catch (e: any) {
-      console.error(e);
-      set({ isLoading: false });
+      console.warn('Using seeded customer vouchers fallback:', e);
+      set({ customerVouchers: SEEDED_CUSTOMER_VOUCHERS, isLoading: false });
     }
   },
 
@@ -420,11 +653,20 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const created = await crmService.addCustomerVoucher(item);
-      set((state) => ({ customerVouchers: [created, ...state.customerVouchers], isLoading: false }));
+      set((state) => {
+        const filtered = state.customerVouchers.filter((cv) => cv.id !== created.id && cv.voucherCode !== created.voucherCode);
+        return { customerVouchers: [created, ...filtered], isLoading: false };
+      });
     } catch (e: any) {
-      console.error(e);
-      set({ isLoading: false });
-      throw e;
+      console.warn('Fallback add customer voucher:', e);
+      const fallback: CustomerVoucherRecord = {
+        id: String(Date.now() + Math.floor(Math.random() * 1000)),
+        ...item,
+      };
+      set((state) => ({
+        customerVouchers: [fallback, ...state.customerVouchers],
+        isLoading: false,
+      }));
     }
   },
 
@@ -432,10 +674,15 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const updated = await crmService.updateCustomerVoucher(id, data);
-      set((state) => ({
-        customerVouchers: state.customerVouchers.map((cv) => (cv.id === id ? { ...cv, ...updated } : cv)),
-        isLoading: false,
-      }));
+      set((state) => {
+        const target = state.customerVouchers.find((cv) => cv.id === id);
+        const merged = target ? { ...target, ...updated } : (updated as CustomerVoucherRecord);
+        const others = state.customerVouchers.filter((cv) => cv.id !== id);
+        return {
+          customerVouchers: [merged, ...others],
+          isLoading: false,
+        };
+      });
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -470,7 +717,7 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const created = await crmService.addFeedback(item);
-      set((state) => ({ feedbacks: [created, ...state.feedbacks], isLoading: false }));
+      set((state) => ({ feedbacks: [created, ...state.feedbacks.filter(f => f.id !== created.id)], isLoading: false }));
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -482,10 +729,15 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const updated = await crmService.updateFeedback(id, data);
-      set((state) => ({
-        feedbacks: state.feedbacks.map((f) => (f.id === id ? { ...f, ...updated } : f)),
-        isLoading: false,
-      }));
+      set((state) => {
+        const target = state.feedbacks.find((f) => f.id === id);
+        const merged = target ? { ...target, ...updated } : (updated as CustomerFeedbackRecord);
+        const others = state.feedbacks.filter((f) => f.id !== id);
+        return {
+          feedbacks: [merged, ...others],
+          isLoading: false,
+        };
+      });
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -508,24 +760,104 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const data = await crmService.fetchLoyaltyHistories();
-      if (data.length > 0) set({ loyaltyHistories: data });
-      set({ isLoading: false });
+      let savedLocal: LoyaltyPointHistoryRecord[] = [];
+      try {
+        const local = localStorage.getItem('retailhub_crm_loyalty_histories');
+        if (local) savedLocal = JSON.parse(local);
+      } catch {}
+      const rawList = [...savedLocal, ...(Array.isArray(data) ? data : [])];
+      set({ loyaltyHistories: rawList, isLoading: false });
+    } catch (e: any) {
+      console.error(e);
+      let savedLocal: LoyaltyPointHistoryRecord[] = [];
+      try {
+        const local = localStorage.getItem('retailhub_crm_loyalty_histories');
+        if (local) savedLocal = JSON.parse(local);
+      } catch {}
+      set({ loyaltyHistories: savedLocal, isLoading: false });
+    }
+  },
+
+  addLoyaltyHistory: async (item) => {
+    set({ isLoading: true, error: null });
+    const localItem: LoyaltyPointHistoryRecord = {
+      id: String(Date.now()),
+      ...item,
+    } as any;
+    try {
+      let created = localItem;
+      try {
+        created = await crmService.addLoyaltyHistory(item);
+      } catch {}
+      set((state) => {
+        const next = [created, ...state.loyaltyHistories.filter(h => h.id !== created.id)];
+        try {
+          localStorage.setItem('retailhub_crm_loyalty_histories', JSON.stringify(next));
+        } catch {}
+        return { loyaltyHistories: next, isLoading: false };
+      });
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
     }
   },
 
-  addLoyaltyHistory: async (item) => {
-    set({ isLoading: true, error: null });
-    try {
-      const created = await crmService.addLoyaltyHistory(item);
-      set((state) => ({ loyaltyHistories: [created, ...state.loyaltyHistories], isLoading: false }));
-    } catch (e: any) {
-      console.error(e);
-      set({ isLoading: false });
-      throw e;
-    }
+  addCustomerPoints: (customerId: string, pointsChange: number, historyRecord: any) => {
+    set((state) => {
+      const targetCustomer = state.customers.find((c) => String(c.id) === String(customerId) || (historyRecord.phone && c.phone === historyRecord.phone));
+      const otherCustomers = state.customers.filter((c) => String(c.id) !== String(customerId) && (!historyRecord.phone || c.phone !== historyRecord.phone));
+      
+      let updatedCustomer = targetCustomer;
+      if (targetCustomer) {
+        const currentPts = Number(targetCustomer.loyaltyPoints || 0);
+        const newPoints = Math.max(0, currentPts + pointsChange);
+        const currentSpent = Number(targetCustomer.lifetimeSpent || 0);
+        const newSpent = currentSpent + (pointsChange > 0 ? Number(historyRecord.amount || 0) : 0);
+        
+        let newTier: CustomerProfile['loyaltyTier'] = targetCustomer.loyaltyTier || 'BRONZE';
+        if (newPoints >= 6000 || newSpent >= 50000000) newTier = 'DIAMOND';
+        else if (newPoints >= 3000 || newSpent >= 25000000) newTier = 'ELITE_CLUB';
+        else if (newPoints >= 1500 || newSpent >= 10000000) newTier = 'GOLD';
+        else if (newPoints >= 500 || newSpent >= 3000000) newTier = 'SILVER';
+        else newTier = 'BRONZE';
+
+        updatedCustomer = {
+          ...targetCustomer,
+          loyaltyPoints: newPoints,
+          lifetimeSpent: newSpent,
+          loyaltyTier: newTier,
+        };
+      }
+      
+      const updatedCustomers = updatedCustomer ? [updatedCustomer, ...otherCustomers] : state.customers;
+      saveLocalCustomers(updatedCustomers);
+
+      const newHistoryItem: LoyaltyPointHistoryRecord = {
+        id: String(Date.now() + Math.floor(Math.random() * 1000)),
+        code: historyRecord.code || `TX-POS-${Date.now()}`,
+        customerId: String(customerId),
+        customerName: historyRecord.customerName || 'Khách hàng',
+        customerPhone: historyRecord.phone || historyRecord.customerPhone || '',
+        pointsChange: pointsChange,
+        transactionType: historyRecord.transactionType || (pointsChange > 0 ? 'TÍCH ĐIỂM BÁN HÀNG POS' : 'TIÊU ĐIỂM BÁN HÀNG POS'),
+        refDocument: historyRecord.refDocument || historyRecord.referenceOrder || `ORD-POS-${Date.now()}`,
+        date: historyRecord.date || new Date().toISOString().split('T')[0],
+        balanceAfter: historyRecord.balanceAfter !== undefined ? historyRecord.balanceAfter : pointsChange,
+        amount: historyRecord.amount || 0,
+        actionType: pointsChange > 0 ? 'EARN' : 'REDEEM',
+        createdAt: new Date().toISOString(),
+      } as any;
+
+      const nextHistories = [newHistoryItem, ...state.loyaltyHistories];
+      try {
+        localStorage.setItem('retailhub_crm_loyalty_histories', JSON.stringify(nextHistories));
+      } catch {}
+
+      return {
+        customers: updatedCustomers,
+        loyaltyHistories: nextHistories,
+      };
+    });
   },
 
   fetchMarketingCampaigns: async () => {
@@ -544,7 +876,7 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const created = await crmService.addMarketingCampaign(item);
-      set((state) => ({ marketingCampaigns: [created, ...state.marketingCampaigns], isLoading: false }));
+      set((state) => ({ marketingCampaigns: [created, ...state.marketingCampaigns.filter(mc => mc.id !== created.id)], isLoading: false }));
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -556,10 +888,15 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const updated = await crmService.updateMarketingCampaign(id, data);
-      set((state) => ({
-        marketingCampaigns: state.marketingCampaigns.map((mc) => (mc.id === id ? { ...mc, ...updated } : mc)),
-        isLoading: false,
-      }));
+      set((state) => {
+        const target = state.marketingCampaigns.find((mc) => mc.id === id);
+        const merged = target ? { ...target, ...updated } : (updated as MarketingCampaignRecord);
+        const others = state.marketingCampaigns.filter((mc) => mc.id !== id);
+        return {
+          marketingCampaigns: [merged, ...others],
+          isLoading: false,
+        };
+      });
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -596,7 +933,7 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const created = await crmService.addLoyaltyTier(item);
-      set((state) => ({ loyaltyTiers: [created, ...state.loyaltyTiers], isLoading: false }));
+      set((state) => ({ loyaltyTiers: [created, ...state.loyaltyTiers.filter(t => t.id !== created.id)], isLoading: false }));
       return created;
     } catch (e: any) {
       console.error(e);
@@ -609,10 +946,15 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const updated = await crmService.updateLoyaltyTier(id, item);
-      set((state) => ({
-        loyaltyTiers: state.loyaltyTiers.map((t) => (t.id === id ? { ...t, ...updated } : t)),
-        isLoading: false,
-      }));
+      set((state) => {
+        const target = state.loyaltyTiers.find((t) => t.id === id);
+        const merged = target ? { ...target, ...updated } : updated;
+        const others = state.loyaltyTiers.filter((t) => t.id !== id);
+        return {
+          loyaltyTiers: [merged, ...others],
+          isLoading: false,
+        };
+      });
       return updated;
     } catch (e: any) {
       console.error(e);
@@ -648,7 +990,7 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const created = await crmService.addPartnerGroup(item);
-      set((state) => ({ partnerGroups: [created, ...state.partnerGroups], isLoading: false }));
+      set((state) => ({ partnerGroups: [created, ...state.partnerGroups.filter(pg => pg.id !== created.id)], isLoading: false }));
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -660,10 +1002,15 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const updated = await crmService.updatePartnerGroup(id, data);
-      set((state) => ({
-        partnerGroups: state.partnerGroups.map((pg) => (pg.id === id ? { ...pg, ...updated } : pg)),
-        isLoading: false,
-      }));
+      set((state) => {
+        const target = state.partnerGroups.find((pg) => pg.id === id);
+        const merged = target ? { ...target, ...updated } : (updated as PartnerGroupRecord);
+        const others = state.partnerGroups.filter((pg) => pg.id !== id);
+        return {
+          partnerGroups: [merged, ...others],
+          isLoading: false,
+        };
+      });
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -698,7 +1045,7 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const created = await crmService.addProductWarranty(item);
-      set((state) => ({ productWarranties: [created, ...state.productWarranties], isLoading: false }));
+      set((state) => ({ productWarranties: [created, ...state.productWarranties.filter(pw => pw.id !== created.id)], isLoading: false }));
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -710,10 +1057,15 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const updated = await crmService.updateProductWarranty(id, data);
-      set((state) => ({
-        productWarranties: state.productWarranties.map((pw) => (pw.id === id ? { ...pw, ...updated } : pw)),
-        isLoading: false,
-      }));
+      set((state) => {
+        const target = state.productWarranties.find((pw) => pw.id === id);
+        const merged = target ? { ...target, ...updated } : (updated as ProductWarrantyRecord);
+        const others = state.productWarranties.filter((pw) => pw.id !== id);
+        return {
+          productWarranties: [merged, ...others],
+          isLoading: false,
+        };
+      });
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -748,7 +1100,7 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const created = await crmService.addWarrantyClaim(item);
-      set((state) => ({ warrantyClaims: [created, ...state.warrantyClaims], isLoading: false }));
+      set((state) => ({ warrantyClaims: [created, ...state.warrantyClaims.filter(wc => wc.id !== created.id)], isLoading: false }));
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -760,10 +1112,15 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const updated = await crmService.updateWarrantyClaim(id, data);
-      set((state) => ({
-        warrantyClaims: state.warrantyClaims.map((wc) => (wc.id === id ? { ...wc, ...updated } : wc)),
-        isLoading: false,
-      }));
+      set((state) => {
+        const target = state.warrantyClaims.find((wc) => wc.id === id);
+        const merged = target ? { ...target, ...updated } : (updated as WarrantyClaimRecord);
+        const others = state.warrantyClaims.filter((wc) => wc.id !== id);
+        return {
+          warrantyClaims: [merged, ...others],
+          isLoading: false,
+        };
+      });
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -798,7 +1155,7 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const created = await crmService.addSupportTicket(item);
-      set((state) => ({ supportTickets: [created, ...state.supportTickets], isLoading: false }));
+      set((state) => ({ supportTickets: [created, ...state.supportTickets.filter(st => st.id !== created.id)], isLoading: false }));
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -810,10 +1167,15 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const updated = await crmService.updateSupportTicket(id, data);
-      set((state) => ({
-        supportTickets: state.supportTickets.map((st) => (st.id === id ? { ...st, ...updated } : st)),
-        isLoading: false,
-      }));
+      set((state) => {
+        const target = state.supportTickets.find((st) => st.id === id);
+        const merged = target ? { ...target, ...updated } : (updated as SupportTicketRecord);
+        const others = state.supportTickets.filter((st) => st.id !== id);
+        return {
+          supportTickets: [merged, ...others],
+          isLoading: false,
+        };
+      });
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });

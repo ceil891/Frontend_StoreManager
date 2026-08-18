@@ -58,9 +58,16 @@ const applyPosStockDeductionsToProducts = (products: ProductInventory[]): Produc
     const deductedQty = (deductionsMap[p.id] !== undefined ? deductionsMap[p.id] : 0) ||
                          (deductionsMap[p.sku] !== undefined ? deductionsMap[p.sku] : 0);
     if (deductedQty > 0) {
+      const updatedBranchStocks: Record<string, number> = {};
+      if (p.branchStocks) {
+        Object.keys(p.branchStocks).forEach((bId) => {
+          updatedBranchStocks[bId] = Math.max(0, p.branchStocks![bId] - deductedQty);
+        });
+      }
       return {
         ...p,
         onHand: Math.max(0, p.onHand - deductedQty),
+        branchStocks: Object.keys(updatedBranchStocks).length > 0 ? updatedBranchStocks : p.branchStocks,
       };
     }
     return p;
@@ -281,9 +288,10 @@ export interface ProductInventory {
   barcodes?: string[];
   reorderPoint?: number;
   minStock?: number;
-  maxStock?: number;
   variants?: ProductVariant[];
   units: ProductUnit[];
+  branchStocks?: Record<string, number>;
+  branchStockDetails?: { branchId: string; branchName: string; quantity: number; available: number }[];
 }
 
 /** Mobile warehouse scanner view — extends core product with POS-oriented fields */
@@ -331,6 +339,8 @@ export interface ProductCombo {
   validFrom: string;
   validUntil: string;
   details: ComboDetailItem[];
+  branchId?: string;
+  branchName?: string;
 }
 
 // ---------------------------
@@ -1072,10 +1082,39 @@ export const useInventoryStore = create<InventoryState>()(
           // 2. Fetch tồn kho thực tế từ balances (/inventories/balances hoặc /inventories)
           let stockMap: Record<string, number> = {};
           let branchStocksMap: Record<string, Record<string, number>> = {};
+          let branchDetailsMap: Record<string, { branchId: string; branchName: string; quantity: number; available: number }[]> = {};
           try {
-            const balancesRes = await axiosClient.get<any, any>('/inventories/balances');
-            const balancesList: any[] = Array.isArray(balancesRes) ? balancesRes : (balancesRes?.data || balancesRes?.content || balancesRes || []);
-            if (balancesList.length > 0) {
+            const stockRes = await axiosClient.get<any, any>('/inventories');
+            const stockList: any[] = Array.isArray(stockRes) ? stockRes : (stockRes?.data || stockRes?.content || stockRes || []);
+            if (stockList.length > 0) {
+              stockList.forEach((s: any) => {
+                const pid = String(s.productId);
+                const branchId = String(s.branchId || 1);
+                const branchName = s.branchName ? s.branchName.trim() : `Chi nhánh ${branchId}`;
+                const qty = Number(s.quantityPhysical ?? s.quantityOnHand ?? s.quantity ?? 0);
+                const avail = Number(s.quantityAvailable ?? qty);
+
+                stockMap[pid] = (stockMap[pid] || 0) + qty;
+                if (!branchStocksMap[pid]) branchStocksMap[pid] = {};
+                branchStocksMap[pid][branchId] = (branchStocksMap[pid][branchId] || 0) + qty;
+
+                if (!branchDetailsMap[pid]) branchDetailsMap[pid] = [];
+                const existing = branchDetailsMap[pid].find(b => b.branchId === branchId);
+                if (existing) {
+                  existing.quantity += qty;
+                  existing.available += avail;
+                } else {
+                  branchDetailsMap[pid].push({
+                    branchId,
+                    branchName,
+                    quantity: qty,
+                    available: avail,
+                  });
+                }
+              });
+            } else {
+              const balancesRes = await axiosClient.get<any, any>('/inventories/balances');
+              const balancesList: any[] = Array.isArray(balancesRes) ? balancesRes : (balancesRes?.data || balancesRes?.content || balancesRes || []);
               balancesList.forEach((b: any) => {
                 let pid = b.productId ? String(b.productId) : null;
                 if (!pid && b.sku) {
@@ -1083,23 +1122,27 @@ export const useInventoryStore = create<InventoryState>()(
                   if (found) pid = found.id;
                 }
                 if (!pid) pid = String(b.productVariantId || b.sku);
-                const branchId = String(b.branchId);
+                const branchId = String(b.branchId || 1);
+                const branchName = b.branchName ? b.branchName.trim() : `Chi nhánh ${branchId}`;
                 const qty = Number(b.availableQuantity ?? b.onHandQuantity ?? b.quantityPhysical ?? 0);
                 
                 stockMap[pid] = (stockMap[pid] || 0) + qty;
                 if (!branchStocksMap[pid]) branchStocksMap[pid] = {};
                 branchStocksMap[pid][branchId] = (branchStocksMap[pid][branchId] || 0) + qty;
-              });
-            } else {
-              const stockRes = await axiosClient.get<any, any>('/inventories');
-              const stockList: any[] = Array.isArray(stockRes) ? stockRes : (stockRes?.data || stockRes?.content || stockRes || []);
-              stockList.forEach((s: any) => {
-                const pid = String(s.productId);
-                const branchId = String(s.branchId || 1);
-                const qty = Number(s.quantityPhysical || s.quantity || 0);
-                stockMap[pid] = (stockMap[pid] || 0) + qty;
-                if (!branchStocksMap[pid]) branchStocksMap[pid] = {};
-                branchStocksMap[pid][branchId] = (branchStocksMap[pid][branchId] || 0) + qty;
+
+                if (!branchDetailsMap[pid]) branchDetailsMap[pid] = [];
+                const existing = branchDetailsMap[pid].find(item => item.branchId === branchId);
+                if (existing) {
+                  existing.quantity += qty;
+                  existing.available += qty;
+                } else {
+                  branchDetailsMap[pid].push({
+                    branchId,
+                    branchName,
+                    quantity: qty,
+                    available: qty,
+                  });
+                }
               });
             }
           } catch {
@@ -1110,17 +1153,20 @@ export const useInventoryStore = create<InventoryState>()(
           const withStock = mapped.map((p) => {
             const realQty = stockMap[p.id];
             const pBranchStocks = branchStocksMap[p.id] || {};
+            const pBranchDetails = branchDetailsMap[p.id] || [];
             return {
               ...p,
               onHand: realQty !== undefined ? realQty : p.onHand,
               branchStocks: pBranchStocks,
+              branchStockDetails: pBranchDetails,
             };
           });
 
           // 4. Áp dụng các khoản khấu trừ tồn kho POS từ localStorage để bảo toàn số lượng khi F5 / load lại trang
           const finalWithDeductions = applyPosStockDeductionsToProducts(withStock);
+          const sorted = [...finalWithDeductions].sort((a, b) => Number(b.id) - Number(a.id));
 
-          set({ products: finalWithDeductions });
+          set({ products: sorted });
         } catch (error) {
           console.error('Failed to fetch products:', error);
         }
@@ -1132,9 +1178,16 @@ export const useInventoryStore = create<InventoryState>()(
           const updatedProducts = state.products.map((p) => {
             const found = deductions.find((d) => String(d.productId) === String(p.id) || d.productId === p.sku);
             if (found) {
+              const updatedBranchStocks: Record<string, number> = {};
+              if (p.branchStocks) {
+                Object.keys(p.branchStocks).forEach((bId) => {
+                  updatedBranchStocks[bId] = Math.max(0, p.branchStocks![bId] - found.qty);
+                });
+              }
               return {
                 ...p,
                 onHand: Math.max(0, (p.onHand || 0) - found.qty),
+                branchStocks: Object.keys(updatedBranchStocks).length > 0 ? updatedBranchStocks : p.branchStocks,
               };
             }
             return p;
@@ -1169,25 +1222,37 @@ export const useInventoryStore = create<InventoryState>()(
         try {
           const pageData = await axiosClient.get<any, any>('/catalog/combos?size=10000');
           const content = pageData.content || [];
-          const mapped = content.map((item: any) => ({
-            id: String(item.id),
-            comboCode: item.comboCode,
-            comboName: item.comboName,
-            comboBarcode: item.barcode || '',
-            comboType: item.comboType || 'PRE_ASSEMBLED',
-            description: item.description || '',
-            comboPrice: Number(item.price || 0),
-            status: (item.isActive ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE',
-            validFrom: item.startDate || '',
-            validUntil: item.endDate || '',
-            details: item.items ? item.items.map((it: any) => ({
-              id: String(it.id),
-              sku: it.productCode || '',
-              productName: it.productName || '',
-              quantity: Number(it.quantity || 0),
-              unitPriceAtCreation: Number(it.price || 0),
-            })) : [],
-          }));
+          let localMeta: Record<string, { branchId?: string; branchName?: string }> = {};
+          try {
+            localMeta = JSON.parse(localStorage.getItem('retailhub_combos_branch_metadata') || '{}');
+          } catch {}
+
+          const mapped = content.map((item: any) => {
+            const idStr = String(item.id);
+            const savedBranchId = item.branchId ? String(item.branchId) : (localMeta[idStr]?.branchId || localMeta[item.comboCode]?.branchId);
+            const savedBranchName = item.branchName || localMeta[idStr]?.branchName || localMeta[item.comboCode]?.branchName;
+            return {
+              id: idStr,
+              comboCode: item.comboCode,
+              comboName: item.comboName,
+              comboBarcode: item.barcode || '',
+              comboType: item.comboType || 'PRE_ASSEMBLED',
+              description: item.description || '',
+              comboPrice: Number(item.price || 0),
+              status: (item.isActive ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE',
+              validFrom: item.startDate || '',
+              validUntil: item.endDate || '',
+              branchId: savedBranchId || undefined,
+              branchName: savedBranchName || undefined,
+              details: item.items ? item.items.map((it: any) => ({
+                id: String(it.id),
+                sku: it.productCode || '',
+                productName: it.productName || '',
+                quantity: Number(it.quantity || 0),
+                unitPriceAtCreation: Number(it.price || 0),
+              })) : [],
+            };
+          });
           set({ combos: mapped });
         } catch (error) {
           console.error('Failed to fetch combos:', error);
@@ -1212,7 +1277,7 @@ export const useInventoryStore = create<InventoryState>()(
             qualityStatus: (item.qualityStatus || 'PASSED_QA') as 'PASSED_QA' | 'QUARANTINED' | 'EXPIRED' | 'RECALLED',
             inspector: item.inspector || '',
             notes: item.notes || '',
-          }));
+          })).sort((a: any, b: any) => Number(b.id) - Number(a.id));
           set({ productBatches: mapped });
         } catch (error) {
           console.error('Failed to fetch product batches:', error);
@@ -1243,7 +1308,7 @@ export const useInventoryStore = create<InventoryState>()(
                 approvedBy: item.approvedBy || '',
                 notes: item.note || '',
               };
-            });
+            }).sort((a: any, b: any) => Number(b.id) - Number(a.id));
             set({ stockTransfers: mapped });
           }
         } catch (error) {
@@ -1655,31 +1720,32 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
       updateProduct: async (id, data) => {
-
         try {
+          const currentProd = get().products.find(p => String(p.id) === String(id) || p.sku === data.sku);
+
           const categoryObj = data.category ? get().categories.find(c => c.categoryName === data.category) : undefined;
-          const categoryId = categoryObj ? Number(categoryObj.id) : undefined;
+          const categoryId = categoryObj ? Number(categoryObj.id) : (currentProd as any)?.categoryId;
 
           const unitObj = data.unit ? get().unitsList.find(u => u.unitName === data.unit) : undefined;
-          const baseUnitId = unitObj ? Number(unitObj.id) : undefined;
+          const baseUnitId = unitObj ? Number(unitObj.id) : (currentProd as any)?.baseUnitId;
 
           const payload = {
-            productCode: data.sku,
-            name: data.name,
-            description: data.description,
-            basePrice: data.price,
-            costPrice: data.costPrice,
-            barcode: data.barcodes?.[0],
-            isActive: data.status === undefined ? undefined : data.status === 'ACTIVE',
+            productCode: data.sku ?? currentProd?.sku,
+            name: data.name ?? currentProd?.name,
+            description: data.description ?? currentProd?.description,
+            basePrice: data.price !== undefined ? data.price : currentProd?.price,
+            costPrice: data.costPrice !== undefined ? data.costPrice : currentProd?.costPrice,
+            barcode: data.barcodes?.[0] ?? currentProd?.barcodes?.[0],
+            isActive: data.status === undefined ? (currentProd?.status === 'ACTIVE') : data.status === 'ACTIVE',
             categoryId: categoryId,
             baseUnitId: baseUnitId,
-            brand: data.brand,
-            mainImageUrl: data.mainImage || (data as any).mainImageUrl,
-            weight: data.weight ? parseFloat(data.weight) || 0 : undefined,
-            reorderPoint: data.reorderPoint,
-            minStock: data.minStock,
-            maxStock: data.maxStock,
-            galleryImages: data.galleryImages ? JSON.stringify(data.galleryImages) : undefined,
+            brand: data.brand ?? currentProd?.brand,
+            mainImageUrl: data.mainImage || (data as any)?.mainImageUrl || currentProd?.mainImage,
+            weight: data.weight ? parseFloat(data.weight) || 0 : (currentProd?.weight ? parseFloat(currentProd.weight) || 0 : undefined),
+            reorderPoint: data.reorderPoint !== undefined ? data.reorderPoint : currentProd?.reorderPoint,
+            minStock: data.minStock !== undefined ? data.minStock : currentProd?.minStock,
+            maxStock: data.maxStock !== undefined ? data.maxStock : currentProd?.maxStock,
+            galleryImages: data.galleryImages ? JSON.stringify(data.galleryImages) : (currentProd?.galleryImages ? JSON.stringify(currentProd.galleryImages) : undefined),
             variants: data.variants ? JSON.stringify(data.variants) : undefined,
           };
           await axiosClient.put(`/products/${id}`, payload);
@@ -1710,9 +1776,17 @@ export const useInventoryStore = create<InventoryState>()(
           status: combo.status || 'ACTIVE',
           validFrom: combo.validFrom || '',
           validUntil: combo.validUntil || '',
+          branchId: combo.branchId,
+          branchName: combo.branchName,
           details: combo.details || [],
         };
         set((state) => ({ combos: [newCombo, ...state.combos] }));
+        try {
+          const localMeta = JSON.parse(localStorage.getItem('retailhub_combos_branch_metadata') || '{}');
+          localMeta[newCombo.id] = { branchId: combo.branchId, branchName: combo.branchName };
+          localMeta[newCombo.comboCode] = { branchId: combo.branchId, branchName: combo.branchName };
+          localStorage.setItem('retailhub_combos_branch_metadata', JSON.stringify(localMeta));
+        } catch (e) {}
         try {
           const details = combo.details.map((d) => {
             const product = get().products.find(p => p.sku === d.sku);
@@ -1732,6 +1806,7 @@ export const useInventoryStore = create<InventoryState>()(
             startDate: combo.validFrom ? `${combo.validFrom}T00:00:00` : undefined,
             endDate: combo.validUntil ? `${combo.validUntil}T00:00:00` : undefined,
             isActive: combo.status === 'ACTIVE',
+            branchId: combo.branchId ? Number(combo.branchId) : null,
             details,
           };
           await axiosClient.post<any, any>('/catalog/combos', payload);
@@ -1743,6 +1818,14 @@ export const useInventoryStore = create<InventoryState>()(
         set((state) => ({
           combos: state.combos.map((c) => (c.id === id ? { ...c, ...data } : c)),
         }));
+        try {
+          const localMeta = JSON.parse(localStorage.getItem('retailhub_combos_branch_metadata') || '{}');
+          localMeta[id] = { branchId: data.branchId, branchName: data.branchName };
+          if (data.comboCode) {
+            localMeta[data.comboCode] = { branchId: data.branchId, branchName: data.branchName };
+          }
+          localStorage.setItem('retailhub_combos_branch_metadata', JSON.stringify(localMeta));
+        } catch (e) {}
         try {
           const details = data.details?.map((d) => {
             const product = get().products.find(p => p.sku === d.sku);
@@ -1762,6 +1845,7 @@ export const useInventoryStore = create<InventoryState>()(
             startDate: data.validFrom ? `${data.validFrom}T00:00:00` : undefined,
             endDate: data.validUntil ? `${data.validUntil}T00:00:00` : undefined,
             isActive: data.status === undefined ? undefined : data.status === 'ACTIVE',
+            branchId: data.branchId ? Number(data.branchId) : null,
             details,
           };
           await axiosClient.put<any, any>(`/catalog/combos/${id}`, payload);
@@ -2970,7 +3054,8 @@ export const useInventoryStore = create<InventoryState>()(
             notes: r.note || r.notes || '',
             returnLines: Array.isArray(r.returnLines) ? r.returnLines : [],
           }));
-          set({ returnToSuppliers: mapped });
+          const sorted = [...mapped].sort((a: any, b: any) => Number(b.id || 0) - Number(a.id || 0));
+          set({ returnToSuppliers: sorted });
         } catch (error) {
           console.error('Failed to fetch return to suppliers:', error);
         }
@@ -3011,8 +3096,20 @@ export const useInventoryStore = create<InventoryState>()(
           await get().fetchReturnToSuppliers();
         } catch (error) {
           console.error('Failed to add return to supplier:', error);
-          // Fallback state
-          set((state) => ({ returnToSuppliers: [{ id: String(Date.now()), ...rtv }, ...state.returnToSuppliers] }));
+          const fallbackRecord = {
+            id: String(Date.now()),
+            rtvNumber: rtv.rtvNumber || `RTV-${Date.now()}`,
+            grnRefNumber: rtv.grnRefNumber || '',
+            supplierName: rtv.supplierName || 'Nhà cung cấp',
+            returnDate: rtv.returnDate || new Date().toISOString().split('T')[0],
+            totalItems: rtv.totalItems || 1,
+            refundValue: rtv.refundValue || 0,
+            status: rtv.status || 'PENDING_SUPPLIER_APPROVAL',
+            reason: rtv.reason || '',
+            notes: rtv.notes || '',
+            returnLines: rtv.returnLines || [],
+          };
+          set((state) => ({ returnToSuppliers: [fallbackRecord, ...state.returnToSuppliers] }));
         }
       },
       updateReturnToSupplier: async (id, data: any) => {

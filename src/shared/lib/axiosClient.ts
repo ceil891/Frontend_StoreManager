@@ -67,16 +67,28 @@ axiosClient.interceptors.response.use(
     const cacheKey = config._cacheKey || `${config.url}?${JSON.stringify(config.params || {})}`;
 
     let resultData = res;
-    // Spring Boot wrapped response: { success: boolean, status: number, message: string, data: any }
-    if (res && typeof res === 'object' && 'success' in res) {
-      if (res.success) {
-        resultData = res.data;
-      } else {
-        const apiError = {
-          code: res.errorCode || 'API_ERROR',
-          message: res.message || 'API request failed',
-        };
-        return Promise.reject(apiError);
+    // Spring Boot wrapped response: { success: boolean, data: any } or { code: number, message: string, data: any }
+    if (res && typeof res === 'object') {
+      if ('success' in res) {
+        if (res.success) {
+          resultData = res.data;
+        } else {
+          const apiError = {
+            code: res.errorCode || 'API_ERROR',
+            message: res.message || 'API request failed',
+          };
+          return Promise.reject(apiError);
+        }
+      } else if ('code' in res && 'data' in res) {
+        if (typeof res.code === 'number' && res.code >= 200 && res.code < 300) {
+          resultData = res.data;
+        } else if (res.code && res.code !== 200 && res.code !== 201) {
+          const apiError = {
+            code: res.code || 'API_ERROR',
+            message: res.message || 'API request failed',
+          };
+          return Promise.reject(apiError);
+        }
       }
     }
 

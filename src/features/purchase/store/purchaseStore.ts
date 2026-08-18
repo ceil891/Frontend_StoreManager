@@ -223,16 +223,16 @@ export const usePurchaseStore = create<PurchaseState>()((set) => ({
   updatePurchaseOrder: async (id, data) => {
     set({ isLoading: true, error: null });
     try {
-      const updated = await purchaseService.updatePurchaseOrder(id, {
-        poCode: data.poNumber,
-        supplierName: data.supplierName,
-        totalAmount: data.totalCost,
-        status: data.status,
+      const updated = await purchaseService.updatePurchaseOrder(id, data);
+      set((state) => {
+        const target = state.purchaseOrders.find((p) => p.id === id);
+        const merged = target ? { ...target, ...data, ...(updated as any) } : (data as PurchaseOrderItem);
+        const others = state.purchaseOrders.filter((p) => p.id !== id);
+        return {
+          purchaseOrders: [merged, ...others],
+          isLoading: false,
+        };
       });
-      set((state) => ({
-        purchaseOrders: state.purchaseOrders.map((p) => (p.id === id ? { ...p, ...data, ...(updated as any) } : p)),
-        isLoading: false,
-      }));
     } catch (e: any) {
       console.error('Failed to update PO:', e);
       set({ isLoading: false, error: e.message || 'Lỗi khi cập nhật đơn mua hàng' });
@@ -244,10 +244,16 @@ export const usePurchaseStore = create<PurchaseState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       await purchaseService.updatePurchaseOrder(id, { status });
-      set((state) => ({
-        purchaseOrders: state.purchaseOrders.map((p) => (p.id === id ? { ...p, status: status as any } : p)),
-        isLoading: false,
-      }));
+      set((state) => {
+        const target = state.purchaseOrders.find((p) => p.id === id);
+        if (!target) return { isLoading: false };
+        const merged = { ...target, status: status as any };
+        const others = state.purchaseOrders.filter((p) => p.id !== id);
+        return {
+          purchaseOrders: [merged, ...others],
+          isLoading: false,
+        };
+      });
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });

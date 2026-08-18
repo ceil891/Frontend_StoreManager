@@ -6,15 +6,18 @@ import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { useInventoryStore, type ProductCombo, type ComboDetailItem } from '../store/inventoryStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 
 
 export function CombosPage() {
   const { combos: data, addCombo, updateCombo, deleteCombo, products, fetchCombos, fetchProducts } = useInventoryStore();
+  const { branches, fetchBranches } = useBranchStore();
 
   useEffect(() => {
     fetchCombos();
     fetchProducts();
-  }, [fetchCombos, fetchProducts]);
+    fetchBranches();
+  }, [fetchCombos, fetchProducts, fetchBranches]);
   
   const [search, setSearch] = useState('');
   const [selectedCombo, setSelectedCombo] = useState<ProductCombo | null>(null);
@@ -87,6 +90,7 @@ export function CombosPage() {
       return;
     }
 
+    const selectedBranch = branches.find(b => String(b.id) === String((editingCombo as any).branchId));
     const payload: Omit<ProductCombo, 'id'> = {
       comboCode: editingCombo.comboCode.trim(),
       comboBarcode: editingCombo.comboBarcode || '',
@@ -97,6 +101,8 @@ export function CombosPage() {
       status: editingCombo.status || 'ACTIVE',
       validFrom: editingCombo.validFrom || '',
       validUntil: editingCombo.validUntil || '',
+      branchId: (editingCombo as any).branchId || undefined,
+      branchName: selectedBranch ? selectedBranch.name : 'Tất cả chi nhánh',
       details: editingDetails
     };
 
@@ -195,6 +201,25 @@ export function CombosPage() {
           const count = row.original.details?.length || 0;
           return <span className="text-sm font-semibold">{count} sản phẩm</span>;
         }
+      },
+      {
+        accessorKey: 'branchName',
+        header: 'Chi nhánh áp dụng',
+        cell: ({ row }) => {
+          const bName = row.original.branchName;
+          const bId = row.original.branchId;
+          const label = bName || (bId ? `Chi nhánh ${bId}` : 'Tất cả chi nhánh');
+          const isAll = !bId || label === 'Tất cả chi nhánh';
+          return (
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
+              isAll
+                ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                : 'bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+            }`}>
+              {label}
+            </span>
+          );
+        },
       },
       {
         accessorKey: 'status',
@@ -362,6 +387,12 @@ export function CombosPage() {
                 <span className="font-mono font-semibold">{selectedCombo.comboBarcode || '—'}</span>
               </div>
               <div className="flex justify-between">
+                <span className="text-gray-500">Chi nhánh áp dụng:</span>
+                <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                  {selectedCombo.branchName || (selectedCombo.branchId ? `Chi nhánh ${selectedCombo.branchId}` : 'Tất cả chi nhánh')}
+                </span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-gray-500">Loại combo:</span>
                 <span className="font-semibold">
                   {selectedCombo.comboType === 'PRE_ASSEMBLED' ? 'Pre-assembled (trừ tồn khi đóng gói)' : 'Dynamic/Virtual (trừ khi bán POS)'}
@@ -445,7 +476,7 @@ export function CombosPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Tên gói combo *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên gói combo *</label>
                 <input
                   type="text"
                   value={editingCombo.comboName || ''}
@@ -453,6 +484,22 @@ export function CombosPage() {
                   className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
                   required
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chi nhánh áp dụng</label>
+                <select
+                  value={(editingCombo as any).branchId || ''}
+                  onChange={(e) => setEditingCombo({ ...editingCombo, branchId: e.target.value } as any)}
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-gray-900"
+                >
+                  <option value="">-- Tất cả chi nhánh --</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={String(b.id)}>
+                      {b.name} ({b.branchCode || `CN-${b.id}`})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

@@ -38,10 +38,10 @@ export function PositionsPage() {
     const q = search.toLowerCase();
     if (q) {
       matchesSearch = (
-        item.positionCode.toLowerCase().includes(q) ||
-        item.positionTitle.toLowerCase().includes(q) ||
-        item.departmentName.toLowerCase().includes(q) ||
-        item.jobGradeTier.toLowerCase().includes(q)
+        (item.positionCode || '').toLowerCase().includes(q) ||
+        (item.positionTitle || '').toLowerCase().includes(q) ||
+        (item.departmentName || '').toLowerCase().includes(q) ||
+        (item.jobGradeTier || '').toLowerCase().includes(q)
       );
     }
 
@@ -154,10 +154,13 @@ export function PositionsPage() {
         accessorKey: 'jobGradeTier',
         header: 'Bậc lương',
         cell: (info) => {
-          const tier = info.getValue() as keyof typeof jobGradeLabels;
+          const tier = info.getValue() as keyof typeof jobGradeLabels | undefined;
+          if (!tier) return <span className="text-xs text-gray-400">--</span>;
+          const style = tierStyles[tier] || 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-200';
+          const label = jobGradeLabels[tier] ?? (typeof tier === 'string' ? tier.replace(/_/g, ' ') : String(tier));
           return (
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${tierStyles[tier]}`}>
-              {jobGradeLabels[tier] ?? tier.replace(/_/g, ' ')}
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${style}`}>
+              {label}
             </span>
           );
         },
@@ -205,7 +208,9 @@ export function PositionsPage() {
         accessorKey: 'status',
         header: 'Trạng thái tuyển dụng',
         cell: (info) => {
-          const status = info.getValue() as keyof typeof hiringStatusLabels;
+          const status = info.getValue() as keyof typeof hiringStatusLabels | undefined;
+          if (!status) return <span className="text-xs text-gray-400">--</span>;
+          const label = hiringStatusLabels[status] ?? (typeof status === 'string' ? status.replace(/_/g, ' ') : String(status));
           return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
               status === 'OPEN_HIRING' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
@@ -213,7 +218,7 @@ export function PositionsPage() {
               status === 'FROZEN' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' :
               'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
             }`}>
-              {hiringStatusLabels[status] ?? status.replace(/_/g, ' ')}
+              {label}
             </span>
           );
         },
@@ -376,10 +381,10 @@ export function PositionsPage() {
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
                 selectedPos.status === 'OPEN_HIRING' ? 'bg-emerald-200 text-emerald-900' :
-                selectedPos.status === 'FROZEN_BUDGET' ? 'bg-amber-200 text-amber-900' :
+                selectedPos.status === 'FROZEN' ? 'bg-amber-200 text-amber-900' :
                 'bg-blue-200 text-blue-900'
               }`}>
-                {selectedPos.status.replace('_', ' ')}
+                {(selectedPos.status || '').replace(/_/g, ' ')}
               </span>
             </div>
 
@@ -389,14 +394,14 @@ export function PositionsPage() {
                   <DollarSign className="w-4 h-4 text-emerald-600" /> Target Salary Band
                 </div>
                 <p className="text-sm font-mono font-bold text-gray-900 truncate">
-                  ${(selectedPos.salaryRangeMin / 1000).toFixed(0)}k - ${(selectedPos.salaryRangeMax / 1000).toFixed(0)}k / yr
+                  ${((selectedPos.salaryRangeMin || 0) / 1000).toFixed(0)}k - ${((selectedPos.salaryRangeMax || 0) / 1000).toFixed(0)}k / yr
                 </p>
               </div>
               <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
                   <Award className="w-4 h-4 text-purple-500" /> Job Grade Hierarchy
                 </div>
-                <p className="text-xs font-bold text-gray-900 truncate font-mono">{selectedPos.jobGradeTier.replace('_', ' ')}</p>
+                <p className="text-xs font-bold text-gray-900 truncate font-mono">{(selectedPos.jobGradeTier || '').replace(/_/g, ' ')}</p>
               </div>
             </div>
 

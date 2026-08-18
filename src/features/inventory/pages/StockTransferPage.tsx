@@ -270,9 +270,9 @@ export function StockTransferPage() {
       if (selected?.id === item.id) {
         setSelected({ ...item, status: 'IN_TRANSIT' });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('API ship stock error:', err);
-      toast.error('Lỗi khi thực hiện xuất kho nguồn.');
+      toast.error(err?.message || err?.reason || 'Lỗi khi thực hiện xuất kho nguồn.');
     }
   };
 
@@ -284,9 +284,9 @@ export function StockTransferPage() {
       if (selected?.id === item.id) {
         setSelected({ ...item, status: 'COMPLETED' });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('API complete stock error:', err);
-      toast.error('Lỗi khi thực hiện nhập kho đích.');
+      toast.error(err?.message || err?.reason || 'Lỗi khi thực hiện nhập kho đích.');
     }
   };
 

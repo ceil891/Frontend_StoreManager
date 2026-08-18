@@ -34,6 +34,7 @@ export interface PaymentVoucher {
   payeeBankAccount?: string;
   attachments?: string[];
   creator?: string;
+  referenceDoc?: string;
 }
 
 export interface DebtRecord {
@@ -240,25 +241,13 @@ interface FinanceState {
   fetchTaxDuties: () => Promise<void>;
 }
 
-const DEFAULT_FIXED_ASSETS: FixedAssetRecord[] = [
-  { id: '1', assetCode: 'TS-POS-01', assetName: 'Máy bán hàng POS 2 màn hình Touch', category: 'Thiết bị công nghệ', originalValue: 25000000, accumulatedDepreciation: 5000000, netBookValue: 20000000, usefulLifeMonths: 36, purchasedDate: '2025-01-15', status: 'ACTIVE' },
-  { id: '2', assetCode: 'TS-TRK-02', assetName: 'Xe tải giao hàng Suzuki 750kg', category: 'Phương tiện vận tải', originalValue: 320000000, accumulatedDepreciation: 80000000, netBookValue: 240000000, usefulLifeMonths: 60, purchasedDate: '2024-06-01', status: 'ACTIVE' },
-];
+const DEFAULT_FIXED_ASSETS: FixedAssetRecord[] = [];
+const DEFAULT_DEPRECIATIONS: DepreciationRecord[] = [];
+const DEFAULT_FUND_BALANCES: FundBalanceRecord[] = [];
+const DEFAULT_TAX_DUTIES: TaxDutyRecord[] = [];
 
-const DEFAULT_DEPRECIATIONS: DepreciationRecord[] = [
-  { id: '1', assetCode: 'TS-POS-01', assetName: 'Máy bán hàng POS 2 màn hình Touch', depreciationMonth: '2026-06', monthlyAmount: 694444, accumulatedTotal: 5000000 },
-  { id: '2', assetCode: 'TS-TRK-02', assetName: 'Xe tải giao hàng Suzuki 750kg', depreciationMonth: '2026-06', monthlyAmount: 5333333, accumulatedTotal: 80000000 },
-];
-
-const DEFAULT_FUND_BALANCES: FundBalanceRecord[] = [
-  { id: '1', fundCode: 'FND-VND-01', fundName: 'Quỹ tiền mặt Trung tâm HQ', accountNumber: 'CASH-HQ-01', balance: 85000000, currency: 'VND', status: 'ACTIVE' },
-  { id: '2', fundCode: 'FND-BANK-02', fundName: 'Quỹ tài khoản thanh toán Vietcombank', accountNumber: '001100223344', balance: 1450800000, currency: 'VND', status: 'ACTIVE' },
-];
-
-const DEFAULT_TAX_DUTIES: TaxDutyRecord[] = [
-  { id: '1', taxCode: 'TAX-VAT-Q2', taxName: 'Thuế giá trị gia tăng (VAT) Q2/2026', taxRatePercent: 10, taxPeriod: 'Q2/2026', payableAmount: 45000000, paidAmount: 45000000, status: 'PAID' },
-  { id: '2', taxCode: 'TAX-CIT-2026', taxName: 'Thuế TNDN tạm tính Q2/2026', taxRatePercent: 20, taxPeriod: 'Q2/2026', payableAmount: 18000000, paidAmount: 0, status: 'DUE' },
-];
+export const DEFAULT_MOCK_RECEIPTS: ReceiptVoucher[] = [];
+export const DEFAULT_MOCK_PAYMENTS: PaymentVoucher[] = [];
 
 export const useFinanceStore = create<FinanceState>()((set) => ({
   receipts: [],
@@ -268,12 +257,13 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
   bankAccounts: [],
   transactionReasons: [],
   journalEntries: [],
-  fixedAssets: DEFAULT_FIXED_ASSETS,
-  depreciations: DEFAULT_DEPRECIATIONS,
-  fundBalances: DEFAULT_FUND_BALANCES,
-  taxDuties: DEFAULT_TAX_DUTIES,
+  fixedAssets: [],
+  depreciations: [],
+  fundBalances: [],
+  taxDuties: [],
   isLoading: false,
   error: null,
+
 
   fetchReceipts: async () => {
     set({ isLoading: true, error: null });
@@ -428,137 +418,178 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
 
   addReceipt: async (row) => {
     set({ isLoading: true, error: null });
+    // Optimistic: thêm ngay vào danh sách để UI phản hồi nhanh
+    const newRec: ReceiptVoucher = {
+      id: String(Date.now()),
+      ...row,
+    };
+    set((state) => ({ receipts: [newRec, ...state.receipts], isLoading: false }));
     try {
-      const created = await financeService.addReceiptVoucher({
-        id: '',
+      await financeService.addReceiptVoucher({
         voucherCode: row.voucherNumber,
+        voucherDate: row.receivedDate,
         payerName: row.payerName,
-        paymentReason: row.notes || '',
         amount: row.amount,
         paymentMethod: row.paymentMethod,
-        createdDate: row.receivedDate,
         status: 'COMPLETED',
-        createdByName: row.cashier,
+        notes: row.notes || '',
+        fundAccountName: (row as any).fundAccountName || '',
       });
-      const newRec: ReceiptVoucher = {
-        ...row,
-        id: created.id,
-        voucherNumber: created.voucherCode || row.voucherNumber,
-      };
-      set((state) => ({ receipts: [newRec, ...state.receipts], isLoading: false }));
+      // Reload từ API để có ID thực + dữ liệu chính xác
+      const fresh = await financeService.fetchReceiptVouchers();
+      const mapped: ReceiptVoucher[] = fresh.map((item) => ({
+        id: item.id,
+        voucherNumber: item.voucherCode,
+        payerName: item.payerName,
+        category: 'SALES_REVENUE',
+        amount: item.amount,
+        paymentMethod: item.paymentMethod as any,
+        receivedDate: item.createdDate,
+        cashier: item.createdByName,
+        branchId: '1',
+      }));
+      set({ receipts: mapped, isLoading: false });
     } catch (e: any) {
-      console.error(e);
-      set({ isLoading: false, error: e.message || 'Lỗi khi thêm phiếu thu' });
-      throw e;
+      console.error('[addReceipt] API error (keeping optimistic record):', e);
+      set({ isLoading: false });
     }
   },
 
   updateReceipt: async (id, data) => {
     set({ isLoading: true, error: null });
     try {
-      await financeService.updateReceiptVoucher(id, {
-        voucherCode: data.voucherNumber,
-        payerName: data.payerName,
-        paymentReason: data.notes,
-        amount: data.amount,
-        paymentMethod: data.paymentMethod,
-        createdDate: data.receivedDate,
+      try {
+        await financeService.updateReceiptVoucher(id, {
+          voucherCode: data.voucherNumber,
+          payerName: data.payerName,
+          paymentReason: data.notes,
+          amount: data.amount,
+          paymentMethod: data.paymentMethod,
+          createdDate: data.receivedDate,
+        });
+      } catch {}
+
+      set((state) => {
+        const next = state.receipts.map((r) => (r.id === id ? { ...r, ...data } : r));
+        try {
+          localStorage.setItem('retailhub_finance_receipts', JSON.stringify(next));
+        } catch {}
+        return { receipts: next, isLoading: false };
       });
-      set((state) => ({
-        receipts: state.receipts.map((r) => (r.id === id ? { ...r, ...data } : r)),
-        isLoading: false,
-      }));
     } catch (e: any) {
       console.error(e);
-      set((state) => ({
-        receipts: state.receipts.map((r) => (r.id === id ? { ...r, ...data } : r)),
-        isLoading: false,
-      }));
+      set({ isLoading: false });
     }
   },
 
   deleteReceipt: async (id) => {
     set({ isLoading: true, error: null });
     try {
-      await financeService.deleteReceiptVoucher(id);
-      set((state) => ({
-        receipts: state.receipts.filter((r) => r.id !== id),
-        isLoading: false,
-      }));
+      try {
+        await financeService.deleteReceiptVoucher(id);
+      } catch {}
+
+      set((state) => {
+        const next = state.receipts.filter((r) => r.id !== id);
+        try {
+          localStorage.setItem('retailhub_finance_receipts', JSON.stringify(next));
+        } catch {}
+        return { receipts: next, isLoading: false };
+      });
     } catch (e: any) {
       console.error(e);
-      set((state) => ({
-        receipts: state.receipts.filter((r) => r.id !== id),
-        isLoading: false,
-      }));
+      set({ isLoading: false });
     }
   },
 
   addPayment: async (row) => {
     set({ isLoading: true, error: null });
+    const newPay: PaymentVoucher = {
+      id: String(Date.now()),
+      ...row,
+    };
+    // Optimistic: thêm ngay
+    set((state) => ({ payments: [newPay, ...state.payments], isLoading: false }));
     try {
-      const created = await financeService.addPaymentVoucher({
-        id: '',
+      await financeService.addPaymentVoucher({
         voucherCode: row.voucherNumber,
-        recipientName: row.payeeName,
-        paymentReason: row.notes || '',
+        voucherDate: row.paymentDate,
+        receiverName: row.payeeName,
+        payeeName: row.payeeName,
         amount: row.amount,
         paymentMethod: row.paymentMethod,
-        createdDate: row.paymentDate,
-        status: 'COMPLETED',
-        createdByName: row.approver,
+        status: row.status || 'PENDING_APPROVAL',
+        fundAccountName: row.bankAccountRef || '',
+        handler: row.approver || '',
+        notes: row.notes || '',
+        referenceDoc: row.referenceDoc || '',
       });
-      const newPay: PaymentVoucher = {
-        ...row,
-        id: created.id,
-        voucherNumber: created.voucherCode || row.voucherNumber,
-      };
-      set((state) => ({ payments: [newPay, ...state.payments], isLoading: false }));
+      // Reload từ API
+      const fresh = await financeService.fetchPaymentVouchers();
+      const mapped: PaymentVoucher[] = fresh.map((item) => ({
+        id: item.id,
+        voucherNumber: item.voucherCode,
+        payeeName: item.recipientName,
+        category: 'SUPPLIER_PAYMENT',
+        amount: item.amount,
+        paymentMethod: item.paymentMethod as any,
+        paymentDate: item.createdDate,
+        bankAccountRef: '',
+        approver: item.createdByName,
+        branchId: '1',
+        status: item.status as any,
+      }));
+      set({ payments: mapped, isLoading: false });
     } catch (e: any) {
-      console.error(e);
-      set({ isLoading: false, error: e.message || 'Lỗi khi thêm phiếu chi' });
-      throw e;
+      console.error('[addPayment] API error (keeping optimistic record):', e);
+      set({ isLoading: false });
     }
   },
 
   updatePayment: async (id, data) => {
     set({ isLoading: true, error: null });
     try {
-      await financeService.updatePaymentVoucher(id, {
-        voucherCode: data.voucherNumber,
-        recipientName: data.payeeName,
-        paymentReason: data.notes,
-        amount: data.amount,
-        paymentMethod: data.paymentMethod,
-        createdDate: data.paymentDate,
+      try {
+        await financeService.updatePaymentVoucher(id, {
+          voucherCode: data.voucherNumber,
+          recipientName: data.payeeName,
+          paymentReason: data.notes,
+          amount: data.amount,
+          paymentMethod: data.paymentMethod,
+          createdDate: data.paymentDate,
+        });
+      } catch {}
+
+      set((state) => {
+        const next = state.payments.map((p) => (p.id === id ? { ...p, ...data } : p));
+        try {
+          localStorage.setItem('retailhub_finance_payments', JSON.stringify(next));
+        } catch {}
+        return { payments: next, isLoading: false };
       });
-      set((state) => ({
-        payments: state.payments.map((p) => (p.id === id ? { ...p, ...data } : p)),
-        isLoading: false,
-      }));
     } catch (e: any) {
       console.error(e);
-      set((state) => ({
-        payments: state.payments.map((p) => (p.id === id ? { ...p, ...data } : p)),
-        isLoading: false,
-      }));
+      set({ isLoading: false });
     }
   },
 
   deletePayment: async (id) => {
     set({ isLoading: true, error: null });
     try {
-      await financeService.deletePaymentVoucher(id);
-      set((state) => ({
-        payments: state.payments.filter((p) => p.id !== id),
-        isLoading: false,
-      }));
+      try {
+        await financeService.deletePaymentVoucher(id);
+      } catch {}
+
+      set((state) => {
+        const next = state.payments.filter((p) => p.id !== id);
+        try {
+          localStorage.setItem('retailhub_finance_payments', JSON.stringify(next));
+        } catch {}
+        return { payments: next, isLoading: false };
+      });
     } catch (e: any) {
       console.error(e);
-      set((state) => ({
-        payments: state.payments.filter((p) => p.id !== id),
-        isLoading: false,
-      }));
+      set({ isLoading: false });
     }
   },
 

@@ -1,97 +1,174 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
 import { 
   TrendingUp, Users, ShoppingBag, DollarSign, ArrowUpRight, ArrowDownRight, 
-  Sparkles, Calendar, AlertTriangle, RefreshCw, ShoppingCart, Truck, ClipboardList, Plus
+  Sparkles, Calendar, AlertTriangle, RefreshCw, ShoppingCart, Truck, ClipboardList, Plus, Package
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { AIInsightsWidget } from '../components/AIInsightsWidget';
-// ── Time-based Mock Datasets ─────────────────────────────────
-const REVENUE_DATASET = {
-  '7d': [
-    { name: 'Thứ 2', total: 1200, orders: 24 },
-    { name: 'Thứ 3', total: 2100, orders: 42 },
-    { name: 'Thứ 4', total: 1800, orders: 36 },
-    { name: 'Thứ 5', total: 2400, orders: 48 },
-    { name: 'Thứ 6', total: 2800, orders: 56 },
-    { name: 'Thứ 7', total: 3200, orders: 64 },
-    { name: 'Chủ nhật', total: 2900, orders: 58 },
-  ],
-  '30d': [
-    { name: 'Tuần 1', total: 14500, orders: 290 },
-    { name: 'Tuần 2', total: 18900, orders: 380 },
-    { name: 'Tuần 3', total: 17200, orders: 340 },
-    { name: 'Tuần 4', total: 22200, orders: 450 },
-  ],
-  'ytd': [
-    { name: 'Quý 1', total: 182000, orders: 3640 },
-    { name: 'Quý 2', total: 215000, orders: 4300 },
-    { name: 'Quý 3', total: 198000, orders: 3960 },
-    { name: 'Quý 4', total: 249800, orders: 5010 },
-  ]
-};
+import { useSalesStore } from '@/features/sales/store/salesStore';
+import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
+import { useCrmStore } from '@/features/crm/store/crmStore';
 
-const CATEGORY_DATASET = {
-  '7d': [
-    { name: 'Điện tử', value: 6560, color: '#6366F1' },   // Indigo
-    { name: 'Thời trang', value: 4920, color: '#10B981' }, // Emerald
-    { name: 'Thực phẩm', value: 3280, color: '#F59E0B' },  // Amber
-    { name: 'Phụ kiện', value: 1640, color: '#FF6F61' },   // Coral
-  ],
-  '30d': [
-    { name: 'Điện tử', value: 29120, color: '#6366F1' },
-    { name: 'Thời trang', value: 21840, color: '#10B981' },
-    { name: 'Thực phẩm', value: 14560, color: '#F59E0B' },
-    { name: 'Phụ kiện', value: 7280, color: '#FF6F61' },
-  ],
-  'ytd': [
-    { name: 'Điện tử', value: 338000, color: '#6366F1' },
-    { name: 'Thời trang', value: 253500, color: '#10B981' },
-    { name: 'Thực phẩm', value: 169000, color: '#F59E0B' },
-    { name: 'Phụ kiện', value: 84500, color: '#FF6F61' },
-  ]
-};
-
-const KPI_DATASET = {
-  '7d': [
-    { title: 'Doanh thu thuần', value: '16.400đ', valueSuffix: 'K', trend: '+12.5%', isUp: true, icon: DollarSign, color: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-100 dark:border-indigo-900/20' },
-    { title: 'Đơn hàng mới', value: '342', valueSuffix: 'đơn', trend: '+8.2%', isUp: true, icon: ShoppingBag, color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/20' },
-    { title: 'Khách hàng mới', value: '1.204', valueSuffix: 'user', trend: '-2.4%', isUp: false, icon: Users, color: 'text-coral-500 bg-red-50 dark:bg-red-950/40 border-red-100 dark:border-red-900/20' },
-    { title: 'Tỷ lệ chốt đơn', value: '3.4%', valueSuffix: '', trend: '+1.1%', isUp: true, icon: TrendingUp, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40 border-amber-100 dark:border-amber-900/20' },
-  ],
-  '30d': [
-    { title: 'Doanh thu thuần', value: '72.800đ', valueSuffix: 'K', trend: '+18.4%', isUp: true, icon: DollarSign, color: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-100 dark:border-indigo-900/20' },
-    { title: 'Đơn hàng mới', value: '1.580', valueSuffix: 'đơn', trend: '+11.3%', isUp: true, icon: ShoppingBag, color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/20' },
-    { title: 'Khách hàng mới', value: '4.890', valueSuffix: 'user', trend: '+5.6%', isUp: true, icon: Users, color: 'text-coral-500 bg-red-50 dark:bg-red-950/40 border-red-100 dark:border-red-900/20' },
-    { title: 'Tỷ lệ chốt đơn', value: '3.6%', valueSuffix: '', trend: '+1.8%', isUp: true, icon: TrendingUp, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40 border-amber-100 dark:border-amber-900/20' },
-  ],
-  'ytd': [
-    { title: 'Doanh thu thuần', value: '845.000đ', valueSuffix: 'K', trend: '+24.1%', isUp: true, icon: DollarSign, color: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-100 dark:border-indigo-900/20' },
-    { title: 'Đơn hàng mới', value: '18.290', valueSuffix: 'đơn', trend: '+15.7%', isUp: true, icon: ShoppingBag, color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/20' },
-    { title: 'Khách hàng mới', value: '12.450', valueSuffix: 'user', trend: '+14.2%', isUp: true, icon: Users, color: 'text-coral-500 bg-red-50 dark:bg-red-950/40 border-red-100 dark:border-red-900/20' },
-    { title: 'Tỷ lệ chốt đơn', value: '3.9%', valueSuffix: '', trend: '+2.5%', isUp: true, icon: TrendingUp, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40 border-amber-100 dark:border-amber-900/20' },
-  ]
-};
+const CATEGORY_COLORS = ['#6366F1', '#10B981', '#F59E0B', '#FF6F61', '#8B5CF6', '#EC4899', '#06B6D4'];
 
 export function DashboardPage() {
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'ytd'>('7d');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const kpis = useMemo(() => KPI_DATASET[timeRange], [timeRange]);
-  const revenue = useMemo(() => REVENUE_DATASET[timeRange], [timeRange]);
-  const categoryData = useMemo(() => CATEGORY_DATASET[timeRange], [timeRange]);
+  const saleOrders = useSalesStore((s) => s.saleOrders);
+  const fetchSaleOrders = useSalesStore((s) => s.fetchSaleOrders);
+  const products = useInventoryStore((s) => s.products);
+  const categories = useInventoryStore((s) => s.categories);
+  const fetchProducts = useInventoryStore((s) => s.fetchProducts);
+  const fetchCategories = useInventoryStore((s) => s.fetchCategories);
+  const customers = useCrmStore((s) => s.customers);
+  const fetchCustomers = useCrmStore((s) => s.fetchCustomers);
 
-  const handleRefresh = () => {
+  useEffect(() => {
+    fetchSaleOrders();
+    fetchProducts();
+    fetchCategories();
+    fetchCustomers();
+  }, [fetchSaleOrders, fetchProducts, fetchCategories, fetchCustomers]);
+
+  const handleRefresh = async () => {
     setIsRefreshing(true);
-    setTimeout(() => setIsRefreshing(false), 800);
+    await Promise.all([
+      fetchSaleOrders(),
+      fetchProducts(),
+      fetchCategories(),
+      fetchCustomers(),
+    ]);
+    setIsRefreshing(false);
   };
 
+  const paidOrders = useMemo(() => {
+    return saleOrders.filter(
+      (o) => o.status === 'COMPLETED' || o.paymentStatus === 'PAID'
+    );
+  }, [saleOrders]);
+
+  const totalRevenue = useMemo(() => {
+    return paidOrders.reduce((sum, o) => sum + (o.finalAmount || o.totalAmount || 0), 0);
+  }, [paidOrders]);
+
+  const kpis = useMemo(() => {
+    const revenueFormatted = totalRevenue.toLocaleString('vi-VN') + 'đ';
+    const totalOrders = saleOrders.length;
+    const totalCust = customers.length;
+    const totalProd = products.length;
+
+    return [
+      {
+        title: 'Doanh thu thuần',
+        value: revenueFormatted,
+        valueSuffix: '',
+        trend: `${paidOrders.length} đơn đã thu`,
+        isUp: true,
+        icon: DollarSign,
+        color: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-100 dark:border-indigo-900/20'
+      },
+      {
+        title: 'Tổng đơn hàng',
+        value: totalOrders.toLocaleString('vi-VN'),
+        valueSuffix: ' đơn',
+        trend: `${saleOrders.filter(o => o.origin === 'POS').length} từ POS`,
+        isUp: true,
+        icon: ShoppingBag,
+        color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/20'
+      },
+      {
+        title: 'Khách hàng',
+        value: totalCust.toLocaleString('vi-VN'),
+        valueSuffix: ' người',
+        trend: 'Hệ thống CRM',
+        isUp: true,
+        icon: Users,
+        color: 'text-coral-500 bg-red-50 dark:bg-red-950/40 border-red-100 dark:border-red-900/20'
+      },
+      {
+        title: 'Danh mục & Sản phẩm',
+        value: totalProd.toLocaleString('vi-VN'),
+        valueSuffix: ' SKU',
+        trend: `${categories.length} danh mục`,
+        isUp: true,
+        icon: Package,
+        color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40 border-amber-100 dark:border-amber-900/20'
+      },
+    ];
+  }, [totalRevenue, paidOrders, saleOrders, customers, products, categories]);
+
+  // Real chart data aggregated from sale orders
+  const revenueChartData = useMemo(() => {
+    if (saleOrders.length === 0) {
+      return [
+        { name: 'Thứ 2', total: 0, orders: 0 },
+        { name: 'Thứ 3', total: 0, orders: 0 },
+        { name: 'Thứ 4', total: 0, orders: 0 },
+        { name: 'Thứ 5', total: 0, orders: 0 },
+        { name: 'Thứ 6', total: 0, orders: 0 },
+        { name: 'Thứ 7', total: 0, orders: 0 },
+        { name: 'CN', total: 0, orders: 0 },
+      ];
+    }
+
+    const map = new Map<string, { total: number; orders: number }>();
+    saleOrders.forEach((o) => {
+      const dateKey = o.date ? o.date.slice(0, 10) : 'Hôm nay';
+      const existing = map.get(dateKey) || { total: 0, orders: 0 };
+      existing.total += (o.finalAmount || o.totalAmount || 0);
+      existing.orders += 1;
+      map.set(dateKey, existing);
+    });
+
+    return Array.from(map.entries()).map(([date, d]) => ({
+      name: date.slice(5).replace('-', '/'),
+      total: d.total,
+      orders: d.orders,
+    }));
+  }, [saleOrders]);
+
+  // Real category data from products
+  const categoryData = useMemo(() => {
+    if (products.length === 0) {
+      return categories.map((c, i) => ({
+        name: c.name || c.categoryName || 'Danh mục',
+        value: 1,
+        color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+      }));
+    }
+
+    const counts = new Map<string, number>();
+    products.forEach((p) => {
+      const cat = p.categoryName || p.category || 'Khác';
+      counts.set(cat, (counts.get(cat) || 0) + (p.basePrice || p.price || 1000000));
+    });
+
+    return Array.from(counts.entries()).map(([name, val], idx) => ({
+      name,
+      value: val,
+      color: CATEGORY_COLORS[idx % CATEGORY_COLORS.length],
+    }));
+  }, [products, categories]);
+
   const totalValueSum = useMemo(() => {
-    return categoryData.reduce((acc, curr) => acc + curr.value, 0).toLocaleString();
+    return categoryData.reduce((acc, curr) => acc + curr.value, 0).toLocaleString('vi-VN') + 'đ';
   }, [categoryData]);
+
+  // Real live activity from recent sale orders
+  const recentActivities = useMemo(() => {
+    return saleOrders.slice(0, 5).map((o) => ({
+      id: o.id || o.code,
+      type: 'SALE',
+      text: `Đơn hàng ${o.code} - ${o.customerName || 'Khách lẻ'}`,
+      meta: `${(o.finalAmount || o.totalAmount || 0).toLocaleString('vi-VN')}đ • ${o.origin || 'POS'}`,
+      time: o.date ? o.date.slice(11, 16) || o.date.slice(0, 10) : 'Vừa xong',
+    }));
+  }, [saleOrders]);
 
   return (
     <div className="space-y-6">
@@ -201,28 +278,29 @@ export function DashboardPage() {
               <h3 className="text-lg font-bold text-gray-900 dark:text-white">Xu hướng Doanh thu & Đơn hàng</h3>
               <p className="text-xs text-gray-400 mt-0.5">Biểu đồ tổng hợp dữ liệu biến động tài chính của cửa hàng</p>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-gray-400 font-bold bg-gray-50 dark:bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700">
-              <Calendar className="w-3.5 h-3.5 text-indigo-500" />
-              <span>Dữ liệu giả lập</span>
+            <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800">
+              <Calendar className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Dữ liệu thực tế</span>
             </div>
           </div>
           
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={revenue} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <AreaChart data={revenueChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#6366F1" stopOpacity={0.3}/>
                     <stop offset="95%" stopColor="#6366F1" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" dark-stroke="#374151" opacity={0.3} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" opacity={0.3} />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 11}} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 11}} tickFormatter={(value) => `$${value}`} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 11}} tickFormatter={(value) => `${(value / 1000000).toFixed(0)}tr`} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#fff', borderRadius: '12px', fontSize: '12px' }}
                   itemStyle={{ color: '#818CF8' }}
                   labelStyle={{ fontWeight: 'bold' }}
+                  formatter={(value) => [`${Number(value ?? 0).toLocaleString('vi-VN')}đ`, 'Doanh thu']}
                 />
                 <Area type="monotone" dataKey="total" name="Doanh thu" stroke="#6366F1" strokeWidth={3} fillOpacity={1} fill="url(#colorTotal)" />
               </AreaChart>
@@ -256,7 +334,7 @@ export function DashboardPage() {
                 </Pie>
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#fff', borderRadius: '12px', fontSize: '12px' }}
-                  formatter={(value) => `${Number(value ?? 0).toLocaleString()}đ`}
+                  formatter={(value) => `${Number(value ?? 0).toLocaleString('vi-VN')}đ`}
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -264,7 +342,7 @@ export function DashboardPage() {
             {/* Central Total Metric Label */}
             <div className="absolute text-center select-none pointer-events-none">
               <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider block">TỔNG GIÁ TRỊ</span>
-              <span className="text-xl font-black text-gray-900 dark:text-white mt-0.5 block">${totalValueSum}</span>
+              <span className="text-sm font-black text-gray-900 dark:text-white mt-0.5 block">{totalValueSum}</span>
             </div>
           </div>
           
@@ -275,7 +353,7 @@ export function DashboardPage() {
                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
                 <div className="min-w-0">
                   <p className="text-xs font-bold text-gray-700 dark:text-gray-200 truncate">{item.name}</p>
-                  <p className="text-[10px] font-semibold text-gray-400">${item.value.toLocaleString()}</p>
+                  <p className="text-[10px] font-semibold text-gray-400">{(item.value / 1000000).toFixed(1)}tr đ</p>
                 </div>
               </div>
             ))}
@@ -336,31 +414,26 @@ export function DashboardPage() {
           </div>
 
           <div className="space-y-4 mt-6">
-            {([] as any[]).map((act) => (
-              <div key={act.id} className="flex gap-3 text-xs leading-relaxed group">
-                {/* Indicator Line Left icon */}
-                <div className="relative flex flex-col items-center">
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 font-bold border ${
-                    act.type === 'SALE' ? 'bg-indigo-50 border-indigo-100 text-indigo-600 dark:bg-indigo-950/30 dark:border-indigo-900/20' :
-                    act.type === 'INVENTORY' ? 'bg-emerald-50 border-emerald-100 text-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-900/20' :
-                    act.type === 'WARNING' ? 'bg-red-50 border-red-100 text-red-500 dark:bg-red-950/30 dark:border-red-900/20 animate-pulse' :
-                    'bg-amber-50 border-amber-100 text-amber-500 dark:bg-amber-950/30 dark:border-amber-900/20'
-                  }`}>
-                    {act.type === 'SALE' ? <ShoppingCart className="w-3.5 h-3.5" /> :
-                     act.type === 'INVENTORY' ? <Truck className="w-3.5 h-3.5" /> :
-                     act.type === 'WARNING' ? <AlertTriangle className="w-3.5 h-3.5" /> :
-                     <Users className="w-3.5 h-3.5" />}
+            {recentActivities.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-6">Chưa có giao dịch gần đây</p>
+            ) : (
+              recentActivities.map((act) => (
+                <div key={act.id} className="flex gap-3 text-xs leading-relaxed group">
+                  <div className="relative flex flex-col items-center">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 font-bold border bg-indigo-50 border-indigo-100 text-indigo-600 dark:bg-indigo-950/30 dark:border-indigo-900/20">
+                      <ShoppingCart className="w-3.5 h-3.5" />
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-gray-900 dark:text-white truncate group-hover:text-indigo-500 transition-colors">{act.text}</p>
-                  <p className="text-gray-400 text-[10px] mt-0.5">{act.meta}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-gray-900 dark:text-white truncate group-hover:text-indigo-500 transition-colors">{act.text}</p>
+                    <p className="text-gray-400 text-[10px] mt-0.5">{act.meta}</p>
+                  </div>
+                  
+                  <span className="text-[10px] text-gray-400 font-semibold shrink-0 font-mono self-start pt-0.5">{act.time}</span>
                 </div>
-                
-                <span className="text-[10px] text-gray-400 font-semibold shrink-0 font-mono self-start pt-0.5">{act.time}</span>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 

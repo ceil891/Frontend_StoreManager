@@ -11,55 +11,103 @@ import type {
 export const financeService = {
   // --- Receipt Vouchers ---
   async fetchReceiptVouchers(): Promise<ReceiptVoucherRecord[]> {
-    const res = await axiosClient.get<any, any>('/finance/receipts');
+    const res = await axiosClient.get<any, any>('/finance/receipt-vouchers');
     const list = Array.isArray(res) ? res : (res?.content || []);
     return list.map((item: any) => ({
       id: String(item.id),
       voucherCode: item.voucherCode || `RV-${item.id}`,
       payerName: item.payerName || '',
-      paymentReason: item.paymentReason || '',
+      paymentReason: item.paymentReason || item.reason?.reasonName || '',
       amount: Number(item.amount || 0),
       paymentMethod: item.paymentMethod || 'BANK_TRANSFER',
-      createdDate: item.createdDate ? item.createdDate.split('T')[0] : '',
+      createdDate: item.voucherDate
+        ? item.voucherDate.split('T')[0]
+        : (item.createdAt ? item.createdAt.split('T')[0] : ''),
       status: item.status || 'COMPLETED',
-      createdByName: item.createdByName || 'Kế toán viên',
+      createdByName: item.createdByName || item.cashier || 'Kế toán viên',
     }));
   },
 
-  async addReceiptVoucher(voucher: Omit<ReceiptVoucherRecord, 'id'>): Promise<ReceiptVoucherRecord> {
-    const res = await axiosClient.post<any, any>('/finance/receipts', voucher);
+  async addReceiptVoucher(voucher: any): Promise<ReceiptVoucherRecord> {
+    const rawDate = voucher.voucherDate || voucher.createdDate || voucher.receivedDate;
+    const formattedDate = rawDate
+      ? (rawDate.includes('T') ? rawDate : `${rawDate}T00:00:00`)
+      : new Date().toISOString().substring(0, 19);
+
+    const payload = {
+      voucherCode: voucher.voucherCode || voucher.voucherNumber,
+      voucherDate: formattedDate,
+      amount: Number(voucher.amount || 0),
+      payerName: voucher.payerName || '',
+      status: voucher.status || 'COMPLETED',
+      paymentMethod: voucher.paymentMethod || 'BANK_TRANSFER',
+      fundAccountName: voucher.fundAccountName || '',
+      notes: voucher.notes || '',
+    };
+    const res = await axiosClient.post<any, any>('/finance/receipt-vouchers', payload);
     const item = res?.data || res;
     return {
       id: String(item?.id || Date.now()),
-      ...voucher,
-      ...(item || {}),
+      voucherCode: item?.voucherCode || payload.voucherCode || '',
+      payerName: item?.payerName || payload.payerName || '',
+      paymentReason: '',
+      amount: Number(item?.amount || payload.amount),
+      paymentMethod: payload.paymentMethod,
+      createdDate: formattedDate.split('T')[0],
+      status: item?.status || payload.status,
+      createdByName: '',
     };
   },
 
   // --- Payment Vouchers ---
   async fetchPaymentVouchers(): Promise<PaymentVoucherRecord[]> {
-    const res = await axiosClient.get<any, any>('/finance/payments');
+    const res = await axiosClient.get<any, any>('/finance/payment-vouchers');
     const list = Array.isArray(res) ? res : (res?.content || []);
     return list.map((item: any) => ({
       id: String(item.id),
       voucherCode: item.voucherCode || `PV-${item.id}`,
-      recipientName: item.recipientName || '',
-      paymentReason: item.paymentReason || '',
+      recipientName: item.receiverName || item.recipientName || '',
+      paymentReason: item.paymentReason || item.reason?.reasonName || '',
       amount: Number(item.amount || 0),
       paymentMethod: item.paymentMethod || 'BANK_TRANSFER',
-      createdDate: item.createdDate ? item.createdDate.split('T')[0] : '',
-      status: item.status || 'COMPLETED',
-      createdByName: item.createdByName || 'Kế toán viên',
+      createdDate: item.voucherDate
+        ? item.voucherDate.split('T')[0]
+        : (item.createdAt ? item.createdAt.split('T')[0] : ''),
+      status: item.status || 'PENDING_APPROVAL',
+      createdByName: item.handler || item.createdByName || 'Kế toán viên',
     }));
   },
 
-  async addPaymentVoucher(voucher: Omit<PaymentVoucherRecord, 'id'>): Promise<PaymentVoucherRecord> {
-    const res = await axiosClient.post<any, any>('/finance/payments', voucher);
+  async addPaymentVoucher(voucher: any): Promise<PaymentVoucherRecord> {
+    const rawDate = voucher.voucherDate || voucher.paymentDate || voucher.createdDate;
+    const formattedDate = rawDate
+      ? (rawDate.includes('T') ? rawDate : `${rawDate}T00:00:00`)
+      : new Date().toISOString().substring(0, 19);
+
+    const payload = {
+      voucherCode: voucher.voucherCode || voucher.voucherNumber,
+      voucherDate: formattedDate,
+      amount: Number(voucher.amount || 0),
+      receiverName: voucher.receiverName || voucher.recipientName || voucher.payeeName || '',
+      status: voucher.status || 'PENDING_APPROVAL',
+      paymentMethod: voucher.paymentMethod || 'BANK_TRANSFER',
+      fundAccountName: voucher.fundAccountName || voucher.bankAccountRef || '',
+      invoiceCode: voucher.invoiceCode || voucher.referenceDoc || '',
+      handler: voucher.handler || voucher.approver || '',
+      notes: voucher.notes || '',
+    };
+    const res = await axiosClient.post<any, any>('/finance/payment-vouchers', payload);
     const item = res?.data || res;
     return {
       id: String(item?.id || Date.now()),
-      ...voucher,
-      ...(item || {}),
+      voucherCode: item?.voucherCode || payload.voucherCode || '',
+      recipientName: item?.receiverName || payload.receiverName,
+      paymentReason: '',
+      amount: Number(item?.amount || payload.amount),
+      paymentMethod: payload.paymentMethod,
+      createdDate: formattedDate.split('T')[0],
+      status: item?.status || payload.status,
+      createdByName: payload.handler,
     };
   },
 

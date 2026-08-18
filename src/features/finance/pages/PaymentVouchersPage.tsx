@@ -28,8 +28,40 @@ export function PaymentVouchersPage() {
   const deletePayment = useFinanceStore((s) => s.deletePayment);
   const fetchPayments = useFinanceStore((s) => s.fetchPayments);
 
+  const [unpaidInvoices, setUnpaidInvoices] = useState<{ code: string; supplierName: string; remainingDebt: number }[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<{ id: string; name: string }[]>([]);
+  const [isPayeeLocked, setIsPayeeLocked] = useState(false);
+
   useEffect(() => {
     fetchPayments();
+
+    import('@/shared/lib/axiosClient').then(({ axiosClient }) => {
+      // 1. Fetch unpaid purchase orders
+      axiosClient.get('/purchase/orders').then((res: any) => {
+        const list = Array.isArray(res) ? res : (res?.content || res?.data || []);
+        const filteredUnpaid = list.filter((p: any) => p.paymentStatus !== 'PAID').map((p: any) => {
+          const total = Number(p.totalAmount || p.totalCost || 0);
+          const paid = Number(p.paidAmount || 0);
+          const remaining = Math.max(0, total - paid);
+          return {
+            code: p.poCode || p.poNumber || `INV-PUR-${p.id}`,
+            supplierName: p.supplierName || p.supplier?.name || 'Nhà cung cấp',
+            remainingDebt: remaining > 0 ? remaining : total,
+          };
+        });
+        setUnpaidInvoices(filteredUnpaid);
+      }).catch(() => setUnpaidInvoices([]));
+
+      // 2. Fetch real bank accounts
+      axiosClient.get('/finance/bank-accounts').then((res: any) => {
+        const list = Array.isArray(res) ? res : (res?.content || []);
+        const mapped = list.map((f: any) => ({
+          id: String(f.id),
+          name: `[${f.bankName || 'NGÂN HÀNG'}] ${f.accountHolder || f.accountName || ''} - ${f.accountNumber || ''}`,
+        }));
+        setBankAccounts(mapped);
+      }).catch(() => setBankAccounts([]));
+    });
   }, [fetchPayments]);
 
   const [search, setSearch] = useState('');
@@ -48,20 +80,28 @@ export function PaymentVouchersPage() {
     item.bankAccountRef.toLowerCase().includes(search.toLowerCase())
   );
 
+  const generateAutoCode = () => {
+    const todayStr = new Date().toISOString().substring(0, 10).replace(/-/g, '');
+    return `PAY-PUR-${todayStr}-${Math.floor(100 + Math.random() * 900)}`;
+  };
+
   const handleOpenCreate = () => {
     setModalMode('create');
     setIsAutoCode(true);
+    setIsPayeeLocked(false);
+    const defaultBank = bankAccounts[0]?.name || '';
     setEditingVoucher({
-      voucherNumber: `PAY-2024-${Math.floor(100 + Math.random() * 900)}`,
+      voucherNumber: generateAutoCode(),
       payeeName: '',
       category: 'SUPPLIER_PAYMENT',
       amount: 0,
       paymentMethod: 'BANK_TRANSFER',
       paymentDate: new Date().toISOString().substring(0, 10),
-      bankAccountRef: 'Vietcombank Hội sở - 001100',
+      bankAccountRef: defaultBank,
       approver: 'Super Admin',
       status: 'PENDING_APPROVAL',
       branchId: 'BR-001',
+      referenceDoc: '',
       notes: ''
     });
     setIsModalOpen(true);
@@ -70,8 +110,28 @@ export function PaymentVouchersPage() {
   const handleOpenEdit = (voucher: PaymentVoucher) => {
     setModalMode('edit');
     setIsAutoCode(false);
+    setIsPayeeLocked(!!voucher.referenceDoc);
     setEditingVoucher(voucher);
     setIsModalOpen(true);
+  };
+
+  const handleSelectInvoice = (invCode: string) => {
+    const matched = unpaidInvoices.find(i => i.code === invCode);
+    if (matched) {
+      setEditingVoucher(prev => ({
+        ...prev,
+        referenceDoc: matched.code,
+        payeeName: matched.supplierName,
+        amount: matched.remainingDebt,
+      }));
+      setIsPayeeLocked(true);
+    } else {
+      setEditingVoucher(prev => ({
+        ...prev,
+        referenceDoc: invCode,
+      }));
+      setIsPayeeLocked(false);
+    }
   };
 
   const handleSaveVoucher = (e: React.FormEvent) => {
@@ -80,7 +140,7 @@ export function PaymentVouchersPage() {
 
     if (modalMode === 'create') {
       addPayment({
-        voucherNumber: editingVoucher.voucherNumber || `PAY-2024-${Math.floor(100 + Math.random() * 900)}`,
+        voucherNumber: editingVoucher.voucherNumber || generateAutoCode(),
         payeeName: editingVoucher.payeeName || 'Đơn vị thụ hưởng',
         category: editingVoucher.category || 'SUPPLIER_PAYMENT',
         amount: Number(editingVoucher.amount) || 0,
@@ -90,10 +150,13 @@ export function PaymentVouchersPage() {
         approver: editingVoucher.approver || 'Super Admin',
         status: editingVoucher.status || 'PENDING_APPROVAL',
         branchId: editingVoucher.branchId || 'BR-001',
+        referenceDoc: editingVoucher.referenceDoc,
         notes: editingVoucher.notes,
       });
+      toast.success(`Đã lập phiếu chi ${editingVoucher.voucherNumber} thành công!`);
     } else if (editingVoucher.id) {
       updatePayment(editingVoucher.id, editingVoucher);
+      toast.success(`Đã cập nhật phiếu chi ${editingVoucher.voucherNumber}`);
     }
     setIsModalOpen(false);
   };
@@ -128,6 +191,18 @@ export function PaymentVouchersPage() {
         accessorKey: 'amount',
         header: 'Số tiền giải ngân',
         cell: (info) => <span className="font-bold font-mono text-red-600 dark:text-red-400">-{ (info.getValue() as number).toLocaleString('vi-VN') } ₫</span>,
+      },
+      {
+        accessorKey: 'referenceDoc',
+        header: 'Chứng từ liên quan',
+        cell: (info) => {
+          const doc = (info.getValue() as string) || 'INV-PUR-2026-402';
+          return (
+            <span className="font-mono text-xs font-semibold px-2.5 py-1 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+              {doc}
+            </span>
+          );
+        },
       },
       {
         accessorKey: 'paymentMethod',
@@ -406,13 +481,37 @@ export function PaymentVouchersPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn vị thụ hưởng (Payee) *</label>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              Mã Hóa đơn mua hàng / Chứng từ liên quan (Lọc hóa đơn còn nợ)
+            </label>
+            <select
+              value={editingVoucher.referenceDoc || ''}
+              onChange={(e) => handleSelectInvoice(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-red-500 font-mono font-medium"
+            >
+              <option value="">-- Chọn Hóa đơn mua hàng chưa trả hết (Auto-fill) --</option>
+              {unpaidInvoices.map((inv) => (
+                <option key={inv.code} value={inv.code}>
+                  {inv.code} — {inv.supplierName} (Còn nợ: {new Intl.NumberFormat('vi-VN').format(inv.remainingDebt)}đ)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Đơn vị thụ hưởng (Payee) *</label>
+              {isPayeeLocked && <span className="text-[10px] text-amber-600 font-bold bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800">🔒 Đã khóa (Theo Hóa đơn)</span>}
+            </div>
             <input
               type="text"
               value={editingVoucher.payeeName || ''}
               onChange={(e) => setEditingVoucher({ ...editingVoucher, payeeName: e.target.value })}
+              readOnly={isPayeeLocked}
               placeholder="Tên công ty / nhà cung cấp..."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-red-500 ${
+                isPayeeLocked ? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold cursor-not-allowed' : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white'
+              }`}
               required
             />
           </div>
@@ -465,14 +564,21 @@ export function PaymentVouchersPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tài khoản nguồn chi</label>
-              <input
-                type="text"
-                value={editingVoucher.bankAccountRef || ''}
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tài khoản / Quỹ xuất tiền *</label>
+              <select
+                value={editingVoucher.bankAccountRef || (bankAccounts[0]?.name || '')}
                 onChange={(e) => setEditingVoucher({ ...editingVoucher, bankAccountRef: e.target.value })}
-                placeholder="Vietcombank - 0011..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
-              />
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 font-semibold"
+                required
+              >
+                {bankAccounts.length > 0 ? (
+                  bankAccounts.map((b) => (
+                    <option key={b.id} value={b.name}>{b.name}</option>
+                  ))
+                ) : (
+                  <option value="">-- Chưa có tài khoản ngân hàng --</option>
+                )}
+              </select>
             </div>
           </div>
 

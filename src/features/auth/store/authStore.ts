@@ -78,8 +78,20 @@ export const useAuthStore = create<AuthState & AuthActions>()(
             }
           }
 
+          const rawUser = response.user as any;
+          const resolvedBranchId = rawUser?.branchId ? String(rawUser.branchId) : rawUser?.branch?.id ? String(rawUser.branch.id) : null;
+          const resolvedBranchCode = rawUser?.branchCode || rawUser?.branch?.branchCode || null;
+          const resolvedBranchName = rawUser?.branchName || rawUser?.branch?.branchName || rawUser?.branchLocation || null;
+
           set({
-            user: { ...response.user, permissions },
+            user: {
+              ...response.user,
+              id: String(response.user.id),
+              branchId: resolvedBranchId,
+              branchCode: resolvedBranchCode,
+              branchName: resolvedBranchName,
+              permissions,
+            },
             accessToken: response.accessToken,
             refreshToken: response.refreshToken,
             isAuthenticated: true,

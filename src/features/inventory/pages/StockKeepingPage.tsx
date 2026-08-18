@@ -2,6 +2,7 @@ import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, AlertTriangle, Layers, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
+import { toast } from 'sonner';
 
 
 import type { ColumnDef } from '@tanstack/react-table';
@@ -53,11 +54,11 @@ export function StockKeepingPage() {
       name: '',
       unitName: 'Cái',
       category: 'Chung',
+      warehouseName: 'Kho Cửa Hàng Tổng',
       onHand: 0,
       minStock: 5,
+      reorderPoint: 10,
       maxStock: 100,
-      price: 0,
-      status: 'ACTIVE',
       notes: '',
     });
     setIsModalOpen(true);
@@ -65,7 +66,13 @@ export function StockKeepingPage() {
 
   const handleOpenEdit = (item: any) => {
     setModalMode('edit');
-    setEditingItem(item);
+    setEditingItem({
+      ...item,
+      warehouseName: item.warehouseName || 'Kho Cửa Hàng Tổng',
+      minStock: item.minStock ?? 5,
+      reorderPoint: item.reorderPoint ?? 10,
+      maxStock: item.maxStock ?? 100,
+    });
     setIsModalOpen(true);
   };
 
@@ -77,20 +84,26 @@ export function StockKeepingPage() {
       sku: editingItem.sku,
       name: editingItem.name,
       category: editingItem.category || 'Chung',
-      unitName: editingItem.unitName || 'Cái',
+      unitName: editingItem.unitName || editingItem.unit || 'Cái',
+      warehouseName: editingItem.warehouseName || 'Kho Cửa Hàng Tổng',
       onHand: Number(editingItem.onHand || 0),
-      minStock: Number(editingItem.minStock || 5),
-      maxStock: Number(editingItem.maxStock || 100),
-      price: Number(editingItem.price || 0),
-      costPrice: Number(editingItem.costPrice || 0),
+      minStock: Number(editingItem.minStock ?? 5),
+      reorderPoint: Number(editingItem.reorderPoint ?? 10),
+      maxStock: Number(editingItem.maxStock ?? 100),
       status: editingItem.status || 'ACTIVE',
       notes: editingItem.notes || '',
     };
 
-    if (modalMode === 'create') {
-      await addProduct(payload as any);
-    } else if (editingItem.id) {
-      await updateProduct(editingItem.id, payload as any);
+    try {
+      if (modalMode === 'create') {
+        await addProduct(payload as any);
+        toast.success(`Đã khai báo chính sách định mức tồn kho thành công cho SKU ${editingItem.sku}!`);
+      } else if (editingItem.id) {
+        await updateProduct(editingItem.id, payload as any);
+        toast.success(`Đã cập nhật chính sách định mức tồn kho thành công cho SKU ${editingItem.sku}!`);
+      }
+    } catch (err: any) {
+      toast.error('Lỗi khi lưu chính sách định mức tồn kho: ' + (err.message || 'Hệ thống bận'));
     }
     setIsModalOpen(false);
   };
@@ -118,7 +131,7 @@ export function StockKeepingPage() {
       },
       {
         accessorKey: 'onHand',
-        header: 'Tồn kho',
+        header: 'Tồn kho hiện tại',
         cell: (info) => <span className="font-mono font-bold">{info.getValue() as number}</span>,
       },
       {
@@ -133,19 +146,27 @@ export function StockKeepingPage() {
       },
       {
         id: 'status',
-        header: 'Định mức',
+        header: 'Trạng thái định mức',
         cell: ({ row }) => {
-          const { onHand = 0, minStock = 0, maxStock = 0 } = row.original;
-          let badgeClass = 'bg-emerald-100 text-emerald-800';
-          let label = 'An toàn';
-          if (minStock > 0 && onHand <= minStock) {
-            badgeClass = 'bg-red-100 text-red-800';
-            label = 'Sắp hết hàng';
-          } else if (maxStock > 0 && onHand >= maxStock) {
-            badgeClass = 'bg-amber-100 text-amber-800';
-            label = 'Vượt định mức';
+          const onHand = Number(row.original.onHand || 0);
+          const minStock = Number(row.original.minStock ?? 5);
+          const reorderPoint = Number(row.original.reorderPoint ?? 10);
+          const maxStock = Number(row.original.maxStock ?? 100);
+
+          let badgeClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300';
+          let label = '🟢 An toàn';
+
+          if (onHand <= minStock) {
+            badgeClass = 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 border border-red-200';
+            label = '🔴 Dưới định mức';
+          } else if (reorderPoint > 0 && onHand <= reorderPoint) {
+            badgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200';
+            label = '🟡 Sắp hết / Cần đặt';
+          } else if (maxStock > 0 && onHand > maxStock) {
+            badgeClass = 'bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200';
+            label = '🟠 Vượt định mức';
           }
-          return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
+          return <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>{label}</span>;
         },
       },
       {
@@ -281,120 +302,189 @@ export function StockKeepingPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Khai báo định mức tồn kho' : 'Điều chỉnh định mức'}
+        title={modalMode === 'create' ? '📋 Khai báo chính sách định mức tồn kho (Stock Policy)' : '⚙️ Điều chỉnh định mức tồn kho'}
+        width="max-w-lg"
       >
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã SKU *</label>
-              <input
-                type="text"
-                value={editingItem.sku || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, sku: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
-                placeholder="SKU-XXXX"
-                required
-                disabled={modalMode === 'edit'}
-              />
+        <form onSubmit={handleSave} className="space-y-4 text-sm">
+          {/* Section 1: Sản phẩm & Môi trường kho */}
+          <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border dark:border-gray-800 space-y-3">
+            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">1. Thông tin sản phẩm & Phạm vi kho</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã SKU *</label>
+                <input
+                  type="text"
+                  value={editingItem.sku || ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const found = data.find((p: any) => p.sku?.toLowerCase() === val.toLowerCase());
+                    if (found) {
+                      setEditingItem({
+                        ...editingItem,
+                        sku: val,
+                        name: found.name,
+                        unit: found.unit || found.unitName || 'Cái',
+                        unitName: found.unit || found.unitName || 'Cái',
+                        onHand: found.onHand ?? found.currentStock ?? 0,
+                        minStock: found.minStock || editingItem.minStock || 5,
+                        maxStock: found.maxStock || editingItem.maxStock || 100,
+                      });
+                    } else {
+                      setEditingItem({ ...editingItem, sku: val });
+                    }
+                  }}
+                  className="w-full mt-1 p-2 border rounded font-mono text-xs dark:bg-gray-950 dark:border-gray-700"
+                  placeholder="SKU-XXXX"
+                  required
+                  disabled={modalMode === 'edit'}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Kho áp dụng *</label>
+                <select
+                  value={editingItem.warehouseName || 'Kho Cửa Hàng Tổng'}
+                  onChange={(e) => setEditingItem({ ...editingItem, warehouseName: e.target.value })}
+                  className="w-full mt-1 p-2 border rounded text-xs dark:bg-gray-950 dark:border-gray-700"
+                >
+                  <option value="Kho Cửa Hàng Tổng">Kho Cửa Hàng Tổng</option>
+                  <option value="Kho Hà Nội">Kho Hà Nội</option>
+                  <option value="Kho TP.HCM">Kho TP.HCM</option>
+                  <option value="ALL">Áp dụng cho tất cả kho</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Đơn vị tính *</label>
-              <input
-                type="text"
-                value={editingItem.unit || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, unit: e.target.value })}
-                className="w-full p-2 border rounded"
-                placeholder="Hộp, lon, túi, cái..."
-                required
-              />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Tên sản phẩm * (Từ API sản phẩm)</label>
+                <select
+                  value={editingItem.name || ''}
+                  onChange={(e) => {
+                    const selectedName = e.target.value;
+                    const found = data.find((p: any) => p.name === selectedName);
+                    if (found) {
+                      setEditingItem({
+                        ...editingItem,
+                        name: found.name,
+                        sku: found.sku,
+                        unit: found.unit || found.unitName || 'Cái',
+                        unitName: found.unit || found.unitName || 'Cái',
+                        onHand: found.onHand ?? found.currentStock ?? 0,
+                        minStock: found.minStock || editingItem.minStock || 5,
+                        maxStock: found.maxStock || editingItem.maxStock || 100,
+                      });
+                    } else {
+                      setEditingItem({ ...editingItem, name: selectedName });
+                    }
+                  }}
+                  className="w-full mt-1 p-2 border rounded text-xs dark:bg-gray-950 dark:border-gray-700 font-semibold"
+                  required
+                  disabled={modalMode === 'edit'}
+                >
+                  <option value="">-- Chọn sản phẩm từ API --</option>
+                  {data.map((p: any) => (
+                    <option key={p.id || p.sku} value={p.name}>
+                      {p.name} ({p.sku})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Đơn vị tính *</label>
+                <input
+                  type="text"
+                  value={editingItem.unit || editingItem.unitName || 'Cái'}
+                  onChange={(e) => setEditingItem({ ...editingItem, unit: e.target.value, unitName: e.target.value })}
+                  className="w-full mt-1 p-2 border rounded text-xs dark:bg-gray-950 dark:border-gray-700"
+                  placeholder="Hộp, lon, túi, cái..."
+                  required
+                />
+              </div>
             </div>
           </div>
+
+          {/* Section 2: Tồn kho thực tế (Readonly) */}
+          <div className="p-3 bg-blue-50/50 dark:bg-blue-950/20 rounded-lg border border-blue-100 dark:border-blue-900/50 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase">Tồn kho hiện tại (Tính tự động)</span>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Số lượng tổng từ các giao dịch kho InventoryBalance</p>
+            </div>
+            <div className="font-mono text-base font-extrabold text-blue-700 dark:text-blue-300">
+              {editingItem.onHand || 0} {editingItem.unit || 'Cái'}
+            </div>
+          </div>
+
+          {/* Section 3: Định mức tồn kho (Min / Reorder / Max) */}
+          <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border dark:border-gray-800 space-y-3">
+            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">2. Chính sách hạn mức (Stock Policy)</h4>
+            
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-red-600 dark:text-red-400 uppercase">Định mức Min *</label>
+                <input
+                  type="number"
+                  value={editingItem.minStock ?? 5}
+                  onChange={(e) => setEditingItem({ ...editingItem, minStock: Number(e.target.value) })}
+                  className="w-full mt-1 p-2 border rounded font-mono text-xs dark:bg-gray-950 dark:border-gray-700"
+                  required
+                  min={0}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase">Điểm đặt hàng *</label>
+                <input
+                  type="number"
+                  value={editingItem.reorderPoint ?? 10}
+                  onChange={(e) => setEditingItem({ ...editingItem, reorderPoint: Number(e.target.value) })}
+                  className="w-full mt-1 p-2 border rounded font-mono text-xs dark:bg-gray-950 dark:border-gray-700"
+                  required
+                  min={0}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase">Định mức Max *</label>
+                <input
+                  type="number"
+                  value={editingItem.maxStock ?? 100}
+                  onChange={(e) => setEditingItem({ ...editingItem, maxStock: Number(e.target.value) })}
+                  className="w-full mt-1 p-2 border rounded font-mono text-xs dark:bg-gray-950 dark:border-gray-700"
+                  required
+                  min={1}
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t dark:border-gray-800 flex items-center justify-between text-xs">
+              <span className="font-semibold text-gray-500">Gợi ý số lượng đặt thêm:</span>
+              <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                {Math.max(0, (editingItem.maxStock || 100) - (editingItem.onHand || 0))} {editingItem.unit || 'Cái'}
+              </span>
+            </div>
+          </div>
+
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Tên sản phẩm *</label>
-            <input
-              type="text"
-              value={editingItem.name || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
-              className="w-full p-2 border rounded"
-              placeholder="Tên đầy đủ của sản phẩm"
-              required
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Danh mục nhóm hàng</label>
-              <input
-                type="text"
-                value={editingItem.category || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value })}
-                className="w-full p-2 border rounded"
-                placeholder="Ví dụ: Nước giải khát"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Tồn kho hiện tại *</label>
-              <input
-                type="number"
-                value={editingItem.onHand || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, onHand: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
-                required
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Định mức tối thiểu (min) *</label>
-              <input
-                type="number"
-                value={editingItem.minStock || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, minStock: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Định mức tối đa (max) *</label>
-              <input
-                type="number"
-                value={editingItem.maxStock || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, maxStock: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
-                required
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Giá bán lẻ (VND)</label>
-              <input
-                type="number"
-                value={editingItem.price || 0}
-                onChange={(e) => setEditingItem({ ...editingItem, price: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Ghi chú chính sách</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border rounded"
+              className="w-full p-2 border rounded dark:bg-gray-950 dark:border-gray-700 text-xs"
               rows={2}
-              placeholder="Chi tiết ghi chú kho..."
+              placeholder="Ghi chú về thời gian nhập hàng, tần suất đặt lại..."
             />
           </div>
-          <div className="flex justify-end gap-2 pt-2 border-t">
+
+          <div className="flex justify-end gap-2 pt-3 border-t dark:border-gray-700">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded hover:bg-gray-100"
+              className="px-4 py-2 border rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-xs font-semibold"
             >
               Hủy
             </button>
-            <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu SKU
+            <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-sm">
+              Lưu chính sách định mức
             </button>
           </div>
         </form>

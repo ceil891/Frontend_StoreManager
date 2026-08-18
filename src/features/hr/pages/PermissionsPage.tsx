@@ -69,7 +69,7 @@ export function PermissionsPage() {
         tenantId: editingItem.tenantId || 'tenant-1',
         version: 1,
       };
-      setData([...data, newItem]);
+      setData([newItem, ...data]);
     } else if (editingItem.id) {
       setData(data.map((item) => (item.id === editingItem.id ? (editingItem as PermissionItem) : item)));
     }

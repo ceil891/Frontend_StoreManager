@@ -105,7 +105,7 @@ export const purchaseService = {
 
   // --- Purchase Orders ---
   async fetchPurchaseOrders(): Promise<PurchaseOrderItem[]> {
-    const res = await axiosClient.get<any, any>('/purchase/orders');
+    const res = await axiosClient.get<any, any>('/purchase/orders?sort=id,desc');
     const list = Array.isArray(res) ? res : (res?.content || res?.data || []);
     return list.map((item: any) => ({
       id: String(item.id),
@@ -122,7 +122,7 @@ export const purchaseService = {
       notes: item.note || item.notes || '',
       poLines: item.details ? item.details.map((d: any) => ({
         productId: d.productId || d.product?.id,
-        productName: d.productNameSnapshot || d.product?.name || d.productName || 'Sản phẩm đặt mua',
+        productName: d.productNameSnapshot || d.productName || d.product?.name || 'Sản phẩm đặt mua',
         quantity: Number(d.quantity || 1),
         unitPrice: Number(d.unitPriceSnapshot || d.unitPrice || 0)
       })) : []
@@ -189,7 +189,7 @@ export const purchaseService = {
             (p.productCode && p.productCode.toLowerCase() === (l.productName || '').toLowerCase()) ||
             String(p.id) === String(l.productId)
         );
-        pid = matchedProd?.id ? Number(matchedProd.id) : (firstValidProdId + idx);
+        pid = matchedProd?.id ? Number(matchedProd.id) : (prodList[idx % Math.max(1, prodList.length)]?.id ? Number(prodList[idx % Math.max(1, prodList.length)].id) : firstValidProdId);
       }
       return {
         productId: pid,
@@ -208,8 +208,12 @@ export const purchaseService = {
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     };
 
+    const uniquePoCode = po.poNumber && !po.poNumber.startsWith('PO-2026-')
+      ? po.poNumber
+      : `PO-${now.getFullYear()}-${Date.now().toString().slice(-5)}${Math.floor(10 + Math.random() * 90)}`;
+
     const payload = {
-      poCode: po.poNumber || `PO-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      poCode: uniquePoCode,
       poDate: formatLocalDateTime(po.orderDate),
       expectedDate: po.estDeliveryDate ? formatLocalDateTime(po.estDeliveryDate) : null,
       supplierId: supplierId || 1,
@@ -254,7 +258,7 @@ export const purchaseService = {
     const details = (data.poLines && data.poLines.length > 0 ? data.poLines : [{ productName: 'Sản phẩm', quantity: 1, unitPrice: data.totalCost || 100000 }]).map((l: any, idx: number) => {
       const matchedProd = prodList.find((p: any) => p.name === l.productName || String(p.id) === String(l.productId));
       return {
-        productId: matchedProd?.id ? Number(matchedProd.id) : (firstValidProdId + idx),
+        productId: matchedProd?.id ? Number(matchedProd.id) : (prodList[idx % Math.max(1, prodList.length)]?.id ? Number(prodList[idx % Math.max(1, prodList.length)].id) : firstValidProdId),
         quantity: Math.max(1, Number(l.quantity) || 1),
         unitPrice: Math.max(1000, Number(l.unitPrice) || 1000),
       };
@@ -294,17 +298,55 @@ export const purchaseService = {
     return list.map((item: any) => ({
       id: String(item.id),
       requestCode: item.requestCode || `PR-${item.id}`,
-      requesterName: item.requesterName || '',
+      requesterName: item.requesterName || item.createdBy || 'Kho vận',
       departmentName: item.departmentName || 'Kho vận',
-      reason: item.reason || '',
-      estimatedTotal: Number(item.estimatedTotal || 0),
-      requestDate: item.requestDate ? item.requestDate.split('T')[0] : '',
+      reason: item.reason || item.note || '',
+      estimatedTotal: Number(item.estimatedTotal || item.totalAmount || 0),
+      requestDate: item.requestDate ? String(item.requestDate).split('T')[0] : '',
       status: item.status || 'PENDING',
     }));
   },
 
   async addPurchaseRequest(pr: Omit<PurchaseRequestRecord, 'id'>): Promise<PurchaseRequestRecord> {
-    const res = await axiosClient.post<any, any>('/purchase/requests', pr);
+    let branchId = 1;
+    let prodList: any[] = [];
+    try {
+      const [branchRes, prodRes] = await Promise.all([
+        axiosClient.get<any, any>('/branches?size=100'),
+        axiosClient.get<any, any>('/products?size=500')
+      ]);
+      const branchList: any[] = Array.isArray(branchRes) ? branchRes : (branchRes?.content || branchRes?.data || []);
+      if (branchList.length > 0 && branchList[0].id) branchId = Number(branchList[0].id);
+      prodList = Array.isArray(prodRes) ? prodRes : (prodRes?.content || prodRes?.data || []);
+    } catch {}
+
+    const firstValidProdId = prodList.length > 0 && prodList[0].id ? Number(prodList[0].id) : 1;
+
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const formatLocalDateTime = (dateStr?: string) => {
+      if (!dateStr) return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00:00`;
+      if (dateStr.includes('T') && !dateStr.includes('Z')) return dateStr;
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00:00`;
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+
+    const payload = {
+      requestCode: pr.requestCode || `PR-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      requestDate: formatLocalDateTime(pr.requestDate),
+      reason: pr.reason || 'Yêu cầu mua hàng bổ sung tồn kho',
+      status: pr.status || 'PENDING',
+      branchId: branchId,
+      note: pr.reason || '',
+      details: [{
+        productId: firstValidProdId,
+        quantity: 1,
+        estimatedPrice: pr.estimatedTotal || 100000
+      }],
+    };
+
+    const res = await axiosClient.post<any, any>('/purchase/requests', payload);
     const item = res?.data || res;
     return {
       id: String(item?.id || Date.now()),
@@ -314,7 +356,45 @@ export const purchaseService = {
   },
 
   async updatePurchaseRequest(id: string, data: Partial<PurchaseRequestRecord>): Promise<Partial<PurchaseRequestRecord>> {
-    const res = await axiosClient.put<any, any>(`/purchase/requests/${id}`, data);
+    let branchId = 1;
+    let prodList: any[] = [];
+    try {
+      const [branchRes, prodRes] = await Promise.all([
+        axiosClient.get<any, any>('/branches?size=100'),
+        axiosClient.get<any, any>('/products?size=500')
+      ]);
+      const branchList: any[] = Array.isArray(branchRes) ? branchRes : (branchRes?.content || branchRes?.data || []);
+      if (branchList.length > 0 && branchList[0].id) branchId = Number(branchList[0].id);
+      prodList = Array.isArray(prodRes) ? prodRes : (prodRes?.content || prodRes?.data || []);
+    } catch {}
+
+    const firstValidProdId = prodList.length > 0 && prodList[0].id ? Number(prodList[0].id) : 1;
+
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const formatLocalDateTime = (dateStr?: string) => {
+      if (!dateStr) return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00:00`;
+      if (dateStr.includes('T') && !dateStr.includes('Z')) return dateStr;
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00:00`;
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+
+    const payload = {
+      requestCode: data.requestCode,
+      requestDate: formatLocalDateTime(data.requestDate),
+      reason: data.reason || 'Yêu cầu mua hàng bổ sung tồn kho',
+      status: data.status || 'PENDING',
+      branchId: branchId,
+      note: data.reason || '',
+      details: [{
+        productId: firstValidProdId,
+        quantity: 1,
+        estimatedPrice: data.estimatedTotal || 100000
+      }],
+    };
+
+    const res = await axiosClient.put<any, any>(`/purchase/requests/${id}`, payload);
     return res?.data || res || data;
   },
 
