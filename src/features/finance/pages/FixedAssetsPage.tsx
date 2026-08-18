@@ -62,7 +62,7 @@ export function FixedAssetsPage() {
   const filtered = data.filter(d=> d.assetName.toLowerCase().includes(search.toLowerCase()) || d.assetCode.toLowerCase().includes(search.toLowerCase()));
 
   const openCreate=()=>{ setForm({purchaseDate:new Date().toISOString().split('T')[0], status:'HOẠT_ĐỘNG', usefulLifeMonths: 36, depreciationMethod: 'STRAIGHT_LINE', salvageValue: 0}); setIsModal(true); };
-  const handleSave=(e:React.FormEvent)=>{ e.preventDefault(); const net = (form.originalValue||0)-(form.accumulatedDep||0); setData([...data,{...form as FixedAssetItem,id:String(data.length+1),netValue:net}]); setIsModal(false); };
+  const handleSave=(e:React.FormEvent)=>{ e.preventDefault(); const net = (form.originalValue||0)-(form.accumulatedDep||0); setData([{...form as FixedAssetItem,id:String(data.length+1),netValue:net}, ...data]); setIsModal(false); };
 
   const columns = useMemo<ColumnDef<FixedAssetItem>[]>(()=>[
     { accessorKey:'assetCode', header:'Mã tài sản' },

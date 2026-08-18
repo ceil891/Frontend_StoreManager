@@ -66,7 +66,7 @@ export function LeaveRequestsPage() {
   });
 
   const openCreate = ()=>{ setForm({leaveType:'Nghỉ phép năm',status:'CHỜ_DUYỆT',days:1}); setIsModal(true); };
-  const handleSave=(e:React.FormEvent)=>{ e.preventDefault(); setData([...data,{...form as LeaveItem,id:String(data.length+1)}]); setIsModal(false); };
+  const handleSave=(e:React.FormEvent)=>{ e.preventDefault(); setData([{...form as LeaveItem,id:String(data.length+1)}, ...data]); setIsModal(false); };
   const approve=(id:string)=>setData(data.map(d=>d.id===id?{...d,status:'ĐÃ_DUYỆT' as const,approvedBy:'Admin hệ thống'}:d));
   const reject=(id:string)=>setData(data.map(d=>d.id===id?{...d,status:'TỪ_CHỐI' as const}:d));
 

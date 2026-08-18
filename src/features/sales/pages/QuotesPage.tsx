@@ -6,7 +6,7 @@ import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
   Plus, Download, Search, Filter, Eye, FileText, User, Calendar,
-  CheckCircle2, Edit, Trash2, ArrowRight, ShieldCheck, Truck, CreditCard, Clock, FileDown
+  CheckCircle2, Edit, Trash2, ArrowRight, ShieldCheck, Truck, CreditCard, Clock, FileDown, Send
 } from 'lucide-react';
 import { useSalesStore, type QuoteItem, formatMoney } from '../store/salesStore';
 import { resolveCustomerName } from '../store/salesHelpers';
@@ -18,13 +18,15 @@ import { toast } from 'sonner';
 
 export function QuotesPage() {
   const { quotes: data, addQuote, updateQuote, deleteQuote, fetchQuotes } = useSalesStore();
+  const customers = useCrmStore((s) => s.customers);
+  const fetchCustomers = useCrmStore((s) => s.fetchCustomers);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       try {
-        await fetchQuotes();
+        await Promise.all([fetchQuotes(), fetchCustomers()]);
       } catch (err) {
         console.error(err);
         toast.error('Không thể tải danh sách báo giá');
@@ -33,9 +35,8 @@ export function QuotesPage() {
       }
     };
     load();
-  }, [fetchQuotes]);
+  }, [fetchQuotes, fetchCustomers]);
 
-  const customers = useCrmStore((s) => s.customers);
   const canManage = usePermission('sales:quotes:manage');
   const [search, setSearch] = useState('');
   const [selectedQuote, setSelectedQuote] = useState<QuoteItem | null>(null);
@@ -45,6 +46,7 @@ export function QuotesPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingQuote, setEditingQuote] = useState<Partial<QuoteItem>>({});
   const [deletingQuote, setDeletingQuote] = useState<QuoteItem | null>(null);
+  const [sendingQuote, setSendingQuote] = useState<QuoteItem | null>(null);
   const [activeTab, setActiveTab] = useState<'info' | 'items' | 'pricing' | 'terms' | 'attachments'>('info');
 
   const filtered = data.filter((item) =>
@@ -59,7 +61,7 @@ export function QuotesPage() {
     nextMonth.setMonth(nextMonth.getMonth() + 1);
 
     setEditingQuote({
-      code: `QT-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
+      code: `QT-${new Date().getFullYear()}${(new Date().getMonth()+1).toString().padStart(2,'0')}${new Date().getDate().toString().padStart(2,'0')}-${Math.floor(1000 + Math.random() * 9000)}`,
       customerId: '',
       issueDate: new Date().toISOString().split('T')[0],
       revision: 1,
@@ -203,6 +205,26 @@ export function QuotesPage() {
     }
   };
 
+  const handleMarkAsSent = (quote: QuoteItem) => {
+    setSendingQuote(quote);
+  };
+
+  const handleConfirmSend = async () => {
+    if (!sendingQuote) return;
+    try {
+      await updateQuote(sendingQuote.id, { ...sendingQuote, status: 'SENT' });
+      toast.success(`Đã gửi Báo giá ${sendingQuote.code} cho khách hàng thành công!`);
+      if (selectedQuote?.id === sendingQuote.id) {
+        setSelectedQuote({ ...selectedQuote, status: 'SENT' });
+      }
+    } catch (err) {
+      console.error('Lỗi khi gửi báo giá:', err);
+      toast.error('Không thể gửi Báo giá. Vui lòng thử lại!');
+    } finally {
+      setSendingQuote(null);
+    }
+  };
+
   const loadStandardTermsTemplate = () => {
     setEditingQuote((prev) => ({
       ...prev,
@@ -290,15 +312,22 @@ export function QuotesPage() {
           <div className="flex items-center gap-1">
             <button
               onClick={(e) => { e.stopPropagation(); setSelectedQuote(row.original); }}
-              title="Xem chi tiết"
+              title="Xem chi tiết báo giá"
               className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors shrink-0"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
+              onClick={(e) => { e.stopPropagation(); handleMarkAsSent(row.original); }}
+              title="Gửi báo giá cho khách hàng"
+              className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors shrink-0"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+            <button
               onClick={(e) => { e.stopPropagation(); handleDownloadPdf(row.original.id); }}
-              title="Tải PDF Báo giá"
-              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors shrink-0"
+              title="Tải PDF báo giá"
+              className="p-1.5 text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors shrink-0"
             >
               <FileDown className="w-4 h-4" />
             </button>
@@ -333,9 +362,9 @@ export function QuotesPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">📋 Báo giá bán hàng (Sales Quotations)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Báo giá bán hàng</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Quản lý báo giá chuyên nghiệp, tự động quản lý Revision, chọn Variant sản phẩm và chuyển đổi thành Đơn Bán Hàng.
+              Quản lý báo giá chuyên nghiệp, tự động quản lý phiên bản, chọn mẫu sản phẩm và chuyển đổi thành đơn bán hàng.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -512,6 +541,13 @@ export function QuotesPage() {
               )}
               <button
                 type="button"
+                onClick={() => handleMarkAsSent(selectedQuote)}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow transition-all text-sm"
+              >
+                <Send className="w-4 h-4" /> Gửi báo giá cho khách hàng
+              </button>
+              <button
+                type="button"
                 onClick={() => handleDownloadPdf(selectedQuote.id)}
                 className="flex items-center justify-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-xl border border-gray-300 dark:border-gray-700 transition-all text-sm"
               >
@@ -632,7 +668,15 @@ export function QuotesPage() {
                       { id: 'CUST-001', code: 'CUST-001', name: 'Nguyễn Văn An', subtitle: 'SĐT: 0901234567 - VIP Gold' },
                       { id: 'CUST-002', code: 'CUST-002', name: 'Công ty TNHH Minh Phát', subtitle: 'MST: 0312456789 - Khách DN' },
                     ]}
-                    onChange={(val) => setEditingQuote(prev => ({ ...prev, customerId: val }))}
+                    onChange={(val) => {
+                      const found = customers.find(c => String(c.id) === String(val) || (c as any).customerCode === val || c.id === val);
+                      setEditingQuote(prev => ({
+                        ...prev,
+                        customerId: val,
+                        customerName: found ? found.name : prev.customerName,
+                        shippingAddress: (found && found.address) ? found.address : prev.shippingAddress,
+                      }));
+                    }}
                   />
                 </div>
 
@@ -955,6 +999,41 @@ export function QuotesPage() {
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow transition-colors text-sm"
             >
               Xóa báo giá
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Send Confirmation Modal */}
+      <Modal
+        isOpen={!!sendingQuote}
+        onClose={() => setSendingQuote(null)}
+        title="Xác nhận gửi báo giá"
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl">
+            <p className="text-sm text-blue-900 dark:text-blue-200">
+              Bạn có chắc chắn muốn gửi báo giá <strong>{sendingQuote?.code}</strong> cho khách hàng không?
+            </p>
+            <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+              Trạng thái sẽ chuyển sang <strong>"Đã gửi"</strong> sau khi xác nhận.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={() => setSendingQuote(null)}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-bold rounded-lg transition-colors text-sm"
+            >
+              Hủy bỏ
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmSend}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow transition-colors text-sm flex items-center gap-1.5"
+            >
+              <Send className="w-4 h-4" /> Xác nhận gửi
             </button>
           </div>
         </div>

@@ -118,23 +118,23 @@ export function ProductVariantsPage() {
   const loadCreationData = async () => {
     try {
       const [prodsRes, attrsRes] = await Promise.allSettled([
-        axiosClient.get('/catalog/products'),
-        axiosClient.get('/attributes')
+        axiosClient.get('/catalog/products?size=200'),
+        axiosClient.get('/attributes?size=200')
       ]);
 
-      const prodsData: any = prodsRes.status === 'fulfilled' ? prodsRes.value : [];
-      let attrsData: any = attrsRes.status === 'fulfilled' ? attrsRes.value : [];
+      const prodsPayload: any = prodsRes.status === 'fulfilled' ? prodsRes.value : [];
+      let attrsPayload: any = attrsRes.status === 'fulfilled' ? attrsRes.value : [];
 
-      if (!attrsData || (Array.isArray(attrsData) && attrsData.length === 0)) {
+      if (!attrsPayload || (Array.isArray(attrsPayload) && attrsPayload.length === 0) || (attrsPayload?.data && attrsPayload.data.length === 0)) {
         try {
-          attrsData = await axiosClient.get('/catalog/attributes');
+          attrsPayload = await axiosClient.get('/catalog/attributes?size=200');
         } catch {
           // ignore
         }
       }
 
-      const fetchedProds = Array.isArray(prodsData) ? prodsData : prodsData?.content || prodsData?.data || [];
-      const fetchedAttrs = Array.isArray(attrsData) ? attrsData : attrsData?.content || attrsData?.data || [];
+      const fetchedProds = Array.isArray(prodsPayload?.data) ? prodsPayload.data : (Array.isArray(prodsPayload) ? prodsPayload : prodsPayload?.content || []);
+      const fetchedAttrs = Array.isArray(attrsPayload?.data) ? attrsPayload.data : (Array.isArray(attrsPayload) ? attrsPayload : attrsPayload?.content || []);
 
       const finalProds = fetchedProds.length > 0 ? fetchedProds : defaultParentProducts;
       const finalAttrs = fetchedAttrs.length > 0 ? fetchedAttrs : defaultAttributes;
@@ -144,6 +144,30 @@ export function ProductVariantsPage() {
 
       if (finalProds.length > 0) {
         setSelectedProductId(String(finalProds[0].id));
+      }
+
+      // Preload values for all fetched attributes
+      const valMap: Record<string, any[]> = {};
+      await Promise.all(
+        finalAttrs.map(async (attr: any) => {
+          try {
+            const valRes: any = await axiosClient.get(`/attributes/${attr.id}/values`);
+            const vList = Array.isArray(valRes?.data) ? valRes.data : (Array.isArray(valRes) ? valRes : valRes?.content || []);
+            valMap[String(attr.id)] = vList.length > 0 ? vList : (defaultAttributeValues[String(attr.id)] || []);
+          } catch {
+            valMap[String(attr.id)] = defaultAttributeValues[String(attr.id)] || [];
+          }
+        })
+      );
+      setAttributeValuesMap(valMap);
+
+      // Set initial selected attributes with distinct attributes
+      if (finalAttrs.length > 0) {
+        const firstAttr = finalAttrs[0];
+        const firstVals = valMap[String(firstAttr.id)] || [];
+        setSelectedAttributes([
+          { attributeId: String(firstAttr.id), valueId: firstVals[0]?.id ? String(firstVals[0].id) : '' }
+        ]);
       }
     } catch (err) {
       console.error(err);
@@ -159,13 +183,6 @@ export function ProductVariantsPage() {
     setNewSku('');
     setNewBarcode('');
     setNewPrice('');
-    
-    // Start with empty attribute rows - user will select from real API data
-    setSelectedAttributes([
-      { attributeId: '', valueId: '' },
-      { attributeId: '', valueId: '' }
-    ]);
-    setAttributeValuesMap({});
     setIsCreateOpen(true);
     loadCreationData();
   };
@@ -178,32 +195,29 @@ export function ProductVariantsPage() {
       return;
     }
 
-    const defaultVals = defaultAttributeValues[attrId] || [];
-    let fetchedVals: any[] = [];
-
-    try {
-      let res: any;
+    let finalVals = attributeValuesMap[attrId] || [];
+    if (finalVals.length === 0) {
       try {
-        res = await axiosClient.get(`/attributes/${attrId}/values`);
-      } catch {
-        res = await axiosClient.get(`/catalog/attributes/${attrId}/values`);
+        let res: any;
+        try {
+          res = await axiosClient.get(`/attributes/${attrId}/values`);
+        } catch {
+          res = await axiosClient.get(`/catalog/attributes/${attrId}/values`);
+        }
+        const fetched = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : res?.content || []);
+        finalVals = fetched.length > 0 ? fetched : (defaultAttributeValues[attrId] || []);
+        setAttributeValuesMap(prev => ({ ...prev, [attrId]: finalVals }));
+      } catch (err) {
+        console.error(err);
+        finalVals = defaultAttributeValues[attrId] || [];
       }
-      fetchedVals = Array.isArray(res) ? res : res?.content || res?.data || [];
-    } catch (err) {
-      console.error(err);
     }
 
-    const finalVals = fetchedVals.length > 0 ? fetchedVals : defaultVals;
     const firstValId = finalVals[0]?.id ? String(finalVals[0].id) : '';
 
     const updatedSelected = [...selectedAttributes];
     updatedSelected[index] = { attributeId: attrId, valueId: firstValId };
     setSelectedAttributes(updatedSelected);
-
-    setAttributeValuesMap(prev => ({
-      ...prev,
-      [attrId]: finalVals
-    }));
   };
 
   const handleValueChange = (index: number, valId: string) => {
@@ -213,7 +227,15 @@ export function ProductVariantsPage() {
   };
 
   const addAttributeRow = () => {
-    setSelectedAttributes([...selectedAttributes, { attributeId: '', valueId: '' }]);
+    // Find next available unused attribute
+    const usedAttrIds = new Set(selectedAttributes.map(a => a.attributeId));
+    const nextAttr = attributesList.find(a => !usedAttrIds.has(String(a.id)));
+    if (nextAttr) {
+      const nextVals = attributeValuesMap[String(nextAttr.id)] || [];
+      setSelectedAttributes([...selectedAttributes, { attributeId: String(nextAttr.id), valueId: nextVals[0]?.id ? String(nextVals[0].id) : '' }]);
+    } else {
+      setSelectedAttributes([...selectedAttributes, { attributeId: '', valueId: '' }]);
+    }
   };
 
   const removeAttributeRow = (index: number) => {
@@ -356,17 +378,23 @@ export function ProductVariantsPage() {
       return;
     }
 
+    const validAttrs = selectedAttributes.filter(a => a.attributeId && a.valueId);
+    const attrIds = validAttrs.map(a => a.attributeId);
+    const uniqueAttrIds = new Set(attrIds);
+    if (uniqueAttrIds.size < attrIds.length) {
+      toast.error('Một biến thể không thể có nhiều hơn 1 giá trị cho cùng nhóm thuộc tính (Ví dụ: không thể vừa là màu Đỏ vừa là màu Xanh Đen trên cùng 1 biến thể). Bạn hãy lưu từng biến thể riêng biệt nhé!');
+      return;
+    }
+
     try {
       const payload = {
         sku: newSku || undefined,
         barcode: newBarcode || undefined,
         price: newPrice !== '' ? Number(newPrice) : undefined,
-        attributes: selectedAttributes
-          .filter(a => a.attributeId && a.valueId)
-          .map(a => ({
-            attributeId: Number(a.attributeId),
-            valueId: Number(a.valueId)
-          }))
+        attributes: validAttrs.map(a => ({
+          attributeId: Number(a.attributeId),
+          valueId: Number(a.valueId)
+        }))
       };
 
       await axiosClient.post(`/catalog/products/${selectedProductId}/variants`, payload);
@@ -375,7 +403,8 @@ export function ProductVariantsPage() {
       fetchVariants();
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || 'Lỗi khi tạo biến thể.');
+      const msg = err?.response?.data?.message || err?.message || 'Lỗi khi tạo biến thể.';
+      toast.error(msg);
     }
   };
 

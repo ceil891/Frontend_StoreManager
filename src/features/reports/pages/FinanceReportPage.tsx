@@ -6,6 +6,7 @@ import {
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
+import { useFinanceStore } from '@/features/finance/store/financeStore';
 
 interface ExpenseTransaction {
   id: string;
@@ -16,15 +17,13 @@ interface ExpenseTransaction {
   status: 'PAID' | 'UNPAID';
 }
 
-const RECENT_EXPENSES: ExpenseTransaction[] = [
-  { id: 'EXP-001', category: 'Tiền thuê mặt bằng', description: 'Thuê mặt bằng CH Quận 1 tháng 5', amount: 45000000, date: '01/05/2024', status: 'PAID' },
-  { id: 'EXP-002', category: 'Tiền điện nước', description: 'Điện nước tháng 4', amount: 5200000, date: '05/05/2024', status: 'PAID' },
-  { id: 'EXP-003', category: 'Lương nhân viên', description: 'Lương tháng 4/2024', amount: 120000000, date: '10/05/2024', status: 'UNPAID' },
-  { id: 'EXP-004', category: 'Marketing', description: 'Quảng cáo Facebook', amount: 15000000, date: '12/05/2024', status: 'PAID' },
-];
-
 export function FinanceReportPage() {
-  const [period, setPeriod] = useState('2024');
+  const [period, setPeriod] = useState('2026');
+  const receipts = useFinanceStore((s) => s.receipts);
+  const payments = useFinanceStore((s) => s.payments);
+  const fetchReceipts = useFinanceStore((s) => s.fetchReceipts);
+  const fetchPayments = useFinanceStore((s) => s.fetchPayments);
+
   const [financeData, setFinanceData] = useState([
     { month: 'T1', income: 400, expense: 240, profit: 160 },
     { month: 'T2', income: 300, expense: 174, profit: 126 },
@@ -36,6 +35,9 @@ export function FinanceReportPage() {
   ]);
 
   useEffect(() => {
+    fetchReceipts();
+    fetchPayments();
+
     const fetchProfitLoss = async () => {
       try {
         const res = await axiosClient.get<any, any>('/reports/profit-loss');
@@ -48,19 +50,33 @@ export function FinanceReportPage() {
       }
     };
     fetchProfitLoss();
-  }, []);
+  }, [fetchReceipts, fetchPayments]);
 
   const kpis = useMemo(() => {
-    const totalIncome = financeData.reduce((acc, curr) => acc + Number(curr.income), 0) * 1000000;
-    const totalExpense = financeData.reduce((acc, curr) => acc + Number(curr.expense), 0) * 1000000;
+    const totalReceiptAmt = receipts.reduce((sum, r) => sum + (r.amount || 0), 0);
+    const totalPaymentAmt = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+    const totalIncome = totalReceiptAmt > 0 ? totalReceiptAmt : financeData.reduce((acc, curr) => acc + Number(curr.income), 0) * 1000000;
+    const totalExpense = totalPaymentAmt > 0 ? totalPaymentAmt : financeData.reduce((acc, curr) => acc + Number(curr.expense), 0) * 1000000;
     const totalProfit = totalIncome - totalExpense;
 
     return [
-      { title: 'Tổng thu', value: totalIncome.toLocaleString('vi-VN') + 'đ', trend: '+15%', isUp: true, icon: Wallet, color: 'text-indigo-600 bg-indigo-50 border-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/30 dark:border-indigo-900/50' },
-      { title: 'Tổng chi (Giá vốn COGS)', value: totalExpense.toLocaleString('vi-VN') + 'đ', trend: '+5%', isUp: false, icon: CreditCard, color: 'text-rose-600 bg-rose-50 border-rose-100 dark:text-rose-400 dark:bg-rose-900/30 dark:border-rose-900/50' },
-      { title: 'Lợi nhuận gộp', value: totalProfit.toLocaleString('vi-VN') + 'đ', trend: '+25%', isUp: true, icon: Activity, color: 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-900/50' },
+      { title: 'Tổng thu (Phiếu thu & Bán hàng)', value: totalIncome.toLocaleString('vi-VN') + 'đ', trend: `${receipts.length} phiếu thu`, isUp: true, icon: Wallet, color: 'text-indigo-600 bg-indigo-50 border-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/30 dark:border-indigo-900/50' },
+      { title: 'Tổng chi (Phiếu chi & Giá vốn)', value: totalExpense.toLocaleString('vi-VN') + 'đ', trend: `${payments.length} phiếu chi`, isUp: false, icon: CreditCard, color: 'text-rose-600 bg-rose-50 border-rose-100 dark:text-rose-400 dark:bg-rose-900/30 dark:border-rose-900/50' },
+      { title: 'Lợi nhuận gộp', value: totalProfit.toLocaleString('vi-VN') + 'đ', trend: 'Lợi nhuận thuần', isUp: totalProfit >= 0, icon: Activity, color: 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-900/50' },
     ];
-  }, [financeData]);
+  }, [receipts, payments, financeData]);
+
+  const recentExpenses = useMemo<ExpenseTransaction[]>(() => {
+    return payments.map((p) => ({
+      id: p.code || `PAY-${p.id}`,
+      category: p.category || 'Chi phí vận hành',
+      description: p.note || p.reason || 'Phiếu chi hệ thống',
+      amount: p.amount || 0,
+      date: p.date ? p.date.slice(0, 10) : 'Gần đây',
+      status: (p.status === 'COMPLETED' || p.status === 'PAID' ? 'PAID' : 'UNPAID') as 'PAID' | 'UNPAID',
+    }));
+  }, [payments]);
 
   const columns = useMemo<ColumnDef<ExpenseTransaction>[]>(
     () => [
@@ -87,7 +103,7 @@ export function FinanceReportPage() {
       {
         accessorKey: 'amount',
         header: 'Số tiền',
-        cell: (info) => <span className="font-bold text-gray-900 dark:text-white">{(info.getValue() as number).toLocaleString()}đ</span>,
+        cell: (info) => <span className="font-bold text-gray-900 dark:text-white">{(info.getValue() as number).toLocaleString('vi-VN')}đ</span>,
       },
       {
         accessorKey: 'status',
@@ -116,7 +132,7 @@ export function FinanceReportPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Báo cáo Tài chính</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Phân tích Thu Chi và Lợi nhuận doanh nghiệp.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Phân tích Thu Chi và Lợi nhuận doanh nghiệp theo số liệu thực tế.</p>
         </div>
         <div className="flex items-center gap-3">
           <select 
@@ -124,8 +140,8 @@ export function FinanceReportPage() {
             onChange={(e) => setPeriod(e.target.value)}
             className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
           >
-            <option value="2024">Năm 2024</option>
-            <option value="2023">Năm 2023</option>
+            <option value="2026">Năm 2026</option>
+            <option value="2025">Năm 2025</option>
           </select>
           <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
             <Download className="w-4 h-4" />
@@ -150,7 +166,7 @@ export function FinanceReportPage() {
               </div>
             </div>
             <h3 className="text-gray-500 dark:text-gray-400 text-sm font-medium">{kpi.title}</h3>
-            <p className="text-3xl font-black text-gray-900 dark:text-white mt-1">{kpi.value}</p>
+            <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">{kpi.value}</p>
           </div>
         ))}
       </div>
@@ -161,7 +177,7 @@ export function FinanceReportPage() {
         <div className="h-[400px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={financeData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" dark-stroke="#374151" opacity={0.5} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" opacity={0.5} />
               <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 12}} dy={10} />
               <YAxis axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 12}} />
               <RechartsTooltip 
@@ -182,10 +198,10 @@ export function FinanceReportPage() {
         <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-gray-400" />
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Chi phí gần đây</h3>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Chi phí & Phiếu chi ({recentExpenses.length} bản ghi)</h3>
           </div>
         </div>
-        <ReusableDataTable columns={columns} data={RECENT_EXPENSES} />
+        <ReusableDataTable columns={columns} data={recentExpenses} />
       </div>
     </div>
   );

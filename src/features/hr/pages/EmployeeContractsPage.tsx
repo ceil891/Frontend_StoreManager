@@ -12,12 +12,8 @@ interface ContractItem {
   status: 'ĐANG_HIỆU_LỰC' | 'HẾT_HẠN' | 'ĐÃ_HỦY';
 }
 
-const MOCK: ContractItem[] = [
-  { id:'1', contractNumber:'HĐLĐ-2024-001', userName:'Nguyễn Văn an', userId:'U001', position:'Trưởng phòng Kinh doanh', startDate:'2024-01-01', endDate:'2026-01-01', contractType:'Xác định thời hạn', status:'ĐANG_HIỆU_LỰC' },
-  { id:'2', contractNumber:'HĐLĐ-2024-002', userName:'Trần thị Bích', userId:'U002', position:'Nhân viên Kho', startDate:'2024-03-15', endDate:'2025-03-15', contractType:'Xác định thời hạn', status:'HẾT_HẠN' },
-  { id:'3', contractNumber:'HĐLĐ-2025-003', userName:'Lê Hoàng Nam', userId:'U003', position:'Kế toán viên', startDate:'2025-01-01', endDate:'', contractType:'Vô thời hạn', status:'ĐANG_HIỆU_LỰC' },
-  { id:'4', contractNumber:'HĐTV-2026-001', userName:'Phạm thị Lan', userId:'U004', position:'Lễ tân', startDate:'2026-04-01', endDate:'2026-07-01', contractType:'Thử việc', status:'ĐANG_HIỆU_LỰC' },
-];
+const MOCK: ContractItem[] = [];
+
 
 const statusCfg: Record<string,{cls:string;label:string}> = {
   ĐANG_HIỆU_LỰC: { cls:'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300', label:'Đang hiệu lực' },
@@ -71,7 +67,7 @@ export function EmployeeContractsPage() {
   const openEdit = (item: ContractItem) => { setMode('edit'); setForm(item); setIsModal(true); };
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (mode==='create') setData([...data, { ...form as ContractItem, id: String(data.length+1) }]);
+    if (mode==='create') setData([{ ...form as ContractItem, id: String(data.length+1) }, ...data]);
     else setData(data.map(d => d.id===form.id ? form as ContractItem : d));
     setIsModal(false);
   };

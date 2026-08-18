@@ -15,6 +15,7 @@ export function ModuleGroupSidebar({ activeModule, onSelectModule }: ModuleGroup
         {MODULE_GROUPS.map((group) => (
           <button
             key={group.key}
+            type="button"
             onClick={() => onSelectModule && onSelectModule(group.key)}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-all ${
               activeModule === group.key

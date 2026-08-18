@@ -22,6 +22,8 @@ interface SupplierStorageRecord {
   supplierWarehouseName: string;
   storageType: 'THUONG' | 'LANH' | 'MAT';
   capacityPallets: number;
+  capacityUnit?: string;
+  operatingHours?: string;
   status: 'TRONG' | 'DAY' | 'TAM_KHOA';
   notes?: string;
   // WMS Fields
@@ -147,12 +149,12 @@ export function SupplierStoragesPage() {
     () => [
       {
         accessorKey: 'storageCode',
-        header: 'Mã phân khu',
+        header: 'Mã Zone',
         cell: (info) => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'storageName',
-        header: 'Tên phân khu kho',
+        header: 'Tên Zone (Khu vực)',
         cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
@@ -170,13 +172,13 @@ export function SupplierStoragesPage() {
         header: 'Sức chứa',
         cell: (info) => (
           <span className="font-mono font-bold text-xs text-gray-900 dark:text-gray-150">
-            {info.getValue() as number} Pallets
+            {info.getValue() as number} {info.row.original.capacityUnit || 'PALLET'}
           </span>
         ),
       },
       {
         accessorKey: 'status',
-        header: 'Trạng thái bãi',
+        header: 'Trạng thái Zone',
         cell: (info) => {
           const status = info.getValue() as string;
           let label = 'Còn trống';
@@ -185,7 +187,7 @@ export function SupplierStoragesPage() {
             label = 'Kệ đầy hàng';
             colorCls = 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/50';
           } else if (status === 'TAM_KHOA') {
-            label = 'Tạm khóa';
+            label = 'Tạm khóa / Bảo trì';
             colorCls = 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/50';
           }
           return (
@@ -359,35 +361,35 @@ export function SupplierStoragesPage() {
         )}
       </Modal>
 
-      {/* Modal Thêm/Sửa Khu vực */}
+      {/* Modal Thêm/Sửa Khu vực kho */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? '📦 Thêm Khu Vực lưu trữ mới' : '⚙️ Sửa thông tin khu vực'}
+        title={modalMode === 'create' ? '📦 Thêm Khu vực kho mới' : '⚙️ Sửa thông tin khu vực kho'}
         width="max-w-xl"
       >
         <form onSubmit={handleSave} className="space-y-4 text-sm">
           {/* Group 1: Thông tin chung */}
           <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border dark:border-gray-800 space-y-3">
             <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-              <Info className="w-3.5 h-3.5 text-emerald-600" /> Thông tin chung phân khu
+              <Info className="w-3.5 h-3.5 text-emerald-600" /> Thông tin chung Zone (Khu vực kho)
             </h4>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã phân khu *</label>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã Zone *</label>
                 <input
                   type="text"
                   value={editingItem.storageCode || ''}
                   onChange={(e) => setEditingItem({ ...editingItem, storageCode: e.target.value })}
                   className="w-full mt-1 p-2 border rounded font-mono text-xs dark:bg-gray-950 dark:border-gray-700"
-                  placeholder="SZ-XXXX"
+                  placeholder="ZONE-XXXX"
                   required
                   disabled={modalMode === 'edit'}
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Tên phân khu kho *</label>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Tên Zone *</label>
                 <input
                   type="text"
                   value={editingItem.storageName || ''}
@@ -459,8 +461,8 @@ export function SupplierStoragesPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t dark:border-gray-800">
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1">
-                  Quy tắc lấy hàng (Putaway Rule)
-                  <span title="Quy tắc cất lấy hàng (FIFO/FEFO/LIFO) là quy tắc cốt lõi của WMS để xuất hàng.">
+                  Quy tắc lấy hàng (Picking Rule)
+                  <span title="Quy tắc xuất hàng (FIFO/FEFO/LIFO) là quy tắc cốt lõi của WMS để lấy hàng ra khỏi kho.">
                     <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
                   </span>
                 </label>
@@ -476,7 +478,7 @@ export function SupplierStoragesPage() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Quyền hạn hoạt động</label>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Quyền nghiệp vụ của Zone</label>
                 <div className="flex flex-col gap-1.5 text-xs mt-1.5">
                   <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
@@ -508,48 +510,57 @@ export function SupplierStoragesPage() {
                 </div>
               </div>
             </div>
+
+            <div className="pt-2.5 border-t dark:border-gray-800">
+              <label className="block text-[10px] font-bold text-gray-500 uppercase">Giờ vận hành (Operating Hours)</label>
+              <input
+                type="text"
+                value={editingItem.operatingHours || '08:00 - 17:30'}
+                onChange={(e) => setEditingItem({ ...editingItem, operatingHours: e.target.value })}
+                className="w-full mt-1 p-2 border rounded font-mono text-xs dark:bg-gray-950 dark:border-gray-700"
+                placeholder="Ví dụ: 08:00 - 17:30 (Thứ 2 - Thứ 6)"
+              />
+            </div>
           </div>
 
           {/* Group 3: Sức chứa thực tế & Đang dùng */}
           <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border dark:border-gray-800 space-y-3">
             <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-orange-500" /> Sức chứa & Tải trọng bãi
+              <Layers className="w-3.5 h-3.5 text-orange-500" /> Sức chứa & Trạng thái Zone
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Sức chứa tối đa (Pallets) *</label>
-                <input
-                  type="number"
-                  value={editingItem.capacityPallets || 0}
-                  onChange={(e) => setEditingItem({ ...editingItem, capacityPallets: Number(e.target.value) })}
-                  className="w-full mt-1 p-2 border rounded font-mono text-xs dark:bg-gray-950 dark:border-gray-700"
-                  required
-                  min={1}
-                />
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Sức chứa tối đa *</label>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <input
+                    type="number"
+                    value={editingItem.capacityPallets || 0}
+                    onChange={(e) => setEditingItem({ ...editingItem, capacityPallets: Number(e.target.value) })}
+                    className="w-full p-2 border rounded font-mono text-xs dark:bg-gray-950 dark:border-gray-700"
+                    required
+                    min={1}
+                  />
+                  <span className="text-xs font-bold text-gray-500">PALLET</span>
+                </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Pallets đã dùng</label>
-                <input
-                  type="number"
-                  value={editingItem.usedPallets || 0}
-                  onChange={(e) => setEditingItem({ ...editingItem, usedPallets: Number(e.target.value) })}
-                  className="w-full mt-1 p-2 border rounded font-mono text-xs dark:bg-gray-950 dark:border-gray-700"
-                  min={0}
-                  max={editingItem.capacityPallets}
-                />
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Đã sử dụng (Tính tự động)</label>
+                <div className="w-full mt-1 p-2 bg-gray-100 dark:bg-gray-800 border rounded font-mono text-xs text-gray-600 dark:text-gray-400 font-bold">
+                  {editingItem.usedPallets || 0} PALLET
+                </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Cấu hình trạng thái bãi</label>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Trạng thái Zone</label>
                 <select
                   value={editingItem.status || 'TRONG'}
                   onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
                   className="w-full mt-1 p-2 border rounded dark:bg-gray-950 dark:border-gray-700 text-xs"
                 >
                   <option value="TRONG">Hoạt động bình thường</option>
-                  <option value="TAM_KHOA">Khóa / Bảo trì bãi</option>
+                  <option value="TAM_KHOA">Khóa / Bảo trì Zone</option>
                 </select>
               </div>
             </div>
@@ -559,7 +570,7 @@ export function SupplierStoragesPage() {
               <div className="pt-2 border-t dark:border-gray-800 flex items-center justify-between text-xs">
                 <span className="font-semibold text-gray-500">Hiệu suất sử dụng:</span>
                 <span className="font-mono font-bold text-gray-850 dark:text-gray-200">
-                  {editingItem.usedPallets} / {editingItem.capacityPallets} Pallets (
+                  {editingItem.usedPallets || 0} / {editingItem.capacityPallets} Pallets (
                   {((editingItem.usedPallets || 0) / (editingItem.capacityPallets || 1)) * 100}%)
                 </span>
               </div>
@@ -573,7 +584,7 @@ export function SupplierStoragesPage() {
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
               className="w-full p-2 border rounded dark:bg-gray-950 dark:border-gray-700 text-xs"
               rows={2}
-              placeholder="Chi tiết hàng hóa ký gửi, thời gian làm việc..."
+              placeholder="Ghi chú đăng ký xe vận tải, điều kiện bốc xếp..."
             />
           </div>
 
@@ -589,7 +600,7 @@ export function SupplierStoragesPage() {
               type="submit" 
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition text-xs font-semibold shadow-sm"
             >
-              {modalMode === 'create' ? 'Tạo Phân Khu Đối Tác' : 'Cập nhật'}
+              {modalMode === 'create' ? 'Tạo Khu vực kho' : 'Cập nhật'}
             </button>
           </div>
         </form>

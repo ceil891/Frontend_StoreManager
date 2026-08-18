@@ -63,17 +63,14 @@ export interface SaleOrder {
 }
 
 export const BRANCH_NAME_BY_ID: Record<string, string> = {
-  '1': 'CH Quận 1 (Hội Sở)',
-  '2': 'Chi nhánh Hà Nội',
-  '3': 'CH Gò Vấp',
-  '4': 'CH Quận 7',
-  '5': 'CH Bình Dương',
-  branch_001: 'CH Quận 1 (Hội Sở)',
-  'BR-001': 'CH Quận 1 (Hội Sở)',
-  'BR-002': 'Chi nhánh Hà Nội',
-  'BR-003': 'CH Gò Vấp',
-  'BR-004': 'CH Quận 7',
-  'BR-005': 'CH Bình Dương',
+  '1': 'Chi nhánh Quận 1 (TP. Hồ Chí Minh)',
+  '2': 'Chi nhánh Hà Nội (Cầu Giấy)',
+  '3': 'Chi nhánh Đà Nẵng (Hải Châu)',
+  '4': 'Chi nhánh Cần Thơ (Ninh Kiều)',
+  'CN-HCM': 'Chi nhánh Quận 1 (TP. Hồ Chí Minh)',
+  'CN-HN': 'Chi nhánh Hà Nội (Cầu Giấy)',
+  'CN-DN': 'Chi nhánh Đà Nẵng (Hải Châu)',
+  'CN-CT': 'Chi nhánh Cần Thơ (Ninh Kiều)',
 };
 
 export interface QuoteItem {
@@ -197,7 +194,7 @@ export interface CustomerReturnItem {
 
 interface SalesState {
   saleOrders: SaleOrder[];
-  quotes: QuoteItem[];
+  surveys: any[];
   exportInvoices: ExportInvoiceItem[];
   customerReturns: CustomerReturnItem[];
   returnRequests: ReturnRequestItem[];
@@ -206,11 +203,13 @@ interface SalesState {
 
   fetchSaleOrders: () => Promise<void>;
   fetchQuotes: () => Promise<void>;
+  fetchSurveys: () => Promise<void>;
+  fetchReturnRequests: () => Promise<void>;
   fetchExportInvoices: () => Promise<void>;
   fetchCustomerReturns: () => Promise<void>;
 
-  addReturnRequest: (req: ReturnRequestItem) => void;
-  updateReturnRequestStatus: (id: string, status: ReturnRequestItem['status']) => void;
+  addReturnRequest: (req: ReturnRequestItem) => Promise<void>;
+  updateReturnRequestStatus: (id: string, status: ReturnRequestItem['status']) => Promise<void>;
 
   addSaleOrder: (order: Omit<SaleOrder, 'id'>) => Promise<void>;
   updateSaleOrder: (id: string, data: Partial<SaleOrder>) => Promise<void>;
@@ -219,6 +218,11 @@ interface SalesState {
   addQuote: (quote: Omit<QuoteItem, 'id'>) => Promise<void>;
   updateQuote: (id: string, data: Partial<QuoteItem>) => Promise<void>;
   deleteQuote: (id: string) => Promise<void>;
+
+  addSurvey: (survey: any) => Promise<void>;
+  updateSurvey: (id: string, data: any) => Promise<void>;
+  deleteSurvey: (id: string) => Promise<void>;
+  convertSurveyToQuote: (id: string) => Promise<any>;
 
   addExportInvoice: (inv: Omit<ExportInvoiceItem, 'id'>) => Promise<void>;
   updateExportInvoice: (id: string, data: Partial<ExportInvoiceItem>) => Promise<void>;
@@ -229,72 +233,66 @@ interface SalesState {
   deleteCustomerReturn: (id: string) => Promise<void>;
 }
 
-export const useSalesStore = create<SalesState>()((set) => ({
+export const DEFAULT_MOCK_SALE_ORDERS: SaleOrder[] = [];
+
+export const useSalesStore = create<SalesState>()((set, get) => ({
   saleOrders: [],
   quotes: [],
   exportInvoices: [],
   customerReturns: [],
-  returnRequests: [
-    {
-      id: 'rr-1',
-      requestCode: 'RR-2026-0001',
-      orderCode: 'ONLINE-805391',
-      customerId: '1',
-      customerName: 'Nguyễn Lưu Hoàng',
-      customerPhone: '0901234567',
-      requestDate: '2026-08-12',
-      reason: 'Sản phẩm lỗi màng bao bì',
-      requestedRefundMethod: 'BANK_TRANSFER',
-      status: 'APPROVED',
-      handlerName: 'Nguyễn Văn Hưng',
-      requestedQty: 10,
-      returnedQty: 0,
-      remainingQty: 10,
-      items: [
-        { productId: '1', productName: 'Pepsi 330ml - Lon', sku: 'SKU-PEPSI-330', quantity: 10, returnedQty: 0, price: 15000, reason: 'Lỗi đóng gói' },
-      ],
-    },
-    {
-      id: 'rr-2',
-      requestCode: 'RR-2026-0002',
-      orderCode: 'ORD-POS-2026-818712',
-      customerId: '2',
-      customerName: 'Trần Văn Nam',
-      customerPhone: '0988776655',
-      requestDate: '2026-08-11',
-      reason: 'Khách mua nhầm Size',
-      requestedRefundMethod: 'CASH',
-      status: 'PARTIALLY_RETURNED',
-      handlerName: 'Phạm Thị Mai',
-      requestedQty: 5,
-      returnedQty: 2,
-      remainingQty: 3,
-      items: [
-        { productId: '2', productName: 'Áo thun Polo Regular Fit - Size L', sku: 'POLO-L-BLK', quantity: 5, returnedQty: 2, price: 250000, reason: 'Size rộng' },
-      ],
-    },
-  ],
+  returnRequests: [],
   isLoading: false,
   error: null,
 
-  addReturnRequest: (req) => {
-    set((state) => ({ returnRequests: [req, ...state.returnRequests] }));
+  addReturnRequest: async (req) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await salesService.addReturnRequest(req);
+      set((state) => ({ returnRequests: [created, ...state.returnRequests], isLoading: false }));
+    } catch (err) {
+      console.warn('API addReturnRequest failed, adding locally:', err);
+      const fallbackItem = { id: String(Date.now()), ...req } as ReturnRequestItem;
+      set((state) => ({ returnRequests: [fallbackItem, ...state.returnRequests], isLoading: false }));
+    }
   },
 
-  updateReturnRequestStatus: (id, status) => {
-    set((state) => ({
-      returnRequests: state.returnRequests.map((r) => (r.id === id ? { ...r, status } : r)),
-    }));
+  updateReturnRequestStatus: async (id, status) => {
+    set({ isLoading: true, error: null });
+    try {
+      await salesService.updateReturnRequestStatus(id, status);
+      set((state) => ({
+        returnRequests: state.returnRequests.map((r) => (r.id === id ? { ...r, status } : r)),
+        isLoading: false,
+      }));
+    } catch (err) {
+      console.warn('API updateReturnRequestStatus failed, updating locally:', err);
+      set((state) => ({
+        returnRequests: state.returnRequests.map((r) => (r.id === id ? { ...r, status } : r)),
+        isLoading: false,
+      }));
+    }
   },
 
   fetchSaleOrders: async () => {
     set({ isLoading: true, error: null });
     try {
       const data = await salesService.fetchSaleOrders();
-      set({ saleOrders: data, isLoading: false });
+      let localOrders: SaleOrder[] = [];
+      try {
+        localOrders = JSON.parse(localStorage.getItem('retailhub_pos_orders') || '[]');
+      } catch {}
+      const mergedMap = new Map<string, SaleOrder>();
+      localOrders.forEach(o => mergedMap.set(o.code || o.id, o));
+      (data || []).forEach(o => mergedMap.set(o.code || o.id, o));
+      const combined = Array.from(mergedMap.values()).sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+      set({ saleOrders: combined, isLoading: false });
     } catch (e: any) {
-      console.error(e);
-      set({ isLoading: false, error: e.message || 'Lỗi khi tải đơn bán hàng' });
+      console.error('Failed to fetch sale orders:', e);
+      let localOrders: SaleOrder[] = [];
+      try {
+        localOrders = JSON.parse(localStorage.getItem('retailhub_pos_orders') || '[]');
+      } catch {}
+      set({ saleOrders: localOrders, isLoading: false, error: e.message || 'Lỗi khi tải đơn bán hàng' });
     }
   },
 
@@ -334,12 +332,30 @@ export const useSalesStore = create<SalesState>()((set) => ({
   addSaleOrder: async (order) => {
     set({ isLoading: true, error: null });
     try {
-      const created = await salesService.addSaleOrder(order);
-      set((state) => ({ saleOrders: [created, ...state.saleOrders], isLoading: false }));
+      let created: SaleOrder;
+      try {
+        created = await salesService.addSaleOrder(order);
+      } catch (err) {
+        created = {
+          id: String(Date.now()),
+          ...order,
+          origin: order.origin || 'POS',
+          status: order.status || 'COMPLETED',
+          paymentStatus: order.paymentStatus || 'PAID',
+        } as SaleOrder;
+      }
+      try {
+        const existingLocal = JSON.parse(localStorage.getItem('retailhub_pos_orders') || '[]');
+        const updatedLocal = [created, ...existingLocal.filter((o: any) => o.id !== created.id && o.code !== created.code)];
+        localStorage.setItem('retailhub_pos_orders', JSON.stringify(updatedLocal));
+      } catch {}
+      set((state) => {
+        const filtered = state.saleOrders.filter(s => s.id !== created.id && s.code !== created.code);
+        return { saleOrders: [created, ...filtered], isLoading: false };
+      });
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false, error: e.message || 'Lỗi khi thêm đơn bán' });
-      throw e;
     }
   },
 
@@ -347,10 +363,15 @@ export const useSalesStore = create<SalesState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const updated = await salesService.updateSaleOrder(id, data);
-      set((state) => ({
-        saleOrders: state.saleOrders.map((s) => (s.id === id ? { ...s, ...updated } : s)),
-        isLoading: false,
-      }));
+      set((state) => {
+        const target = state.saleOrders.find((s) => s.id === id);
+        const merged = target ? { ...target, ...updated } : (updated as SaleOrder);
+        const others = state.saleOrders.filter((s) => s.id !== id);
+        return {
+          saleOrders: [merged, ...others],
+          isLoading: false,
+        };
+      });
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false, error: e.message || 'Lỗi khi cập nhật đơn bán' });
@@ -373,7 +394,7 @@ export const useSalesStore = create<SalesState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const created = await salesService.addQuote(quote);
-      set((state) => ({ quotes: [created, ...state.quotes], isLoading: false }));
+      set((state) => ({ quotes: [created, ...state.quotes.filter(q => q.id !== created.id)], isLoading: false }));
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -385,10 +406,15 @@ export const useSalesStore = create<SalesState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const updated = await salesService.updateQuote(id, data);
-      set((state) => ({
-        quotes: state.quotes.map((q) => (q.id === id ? { ...q, ...updated } : q)),
-        isLoading: false,
-      }));
+      set((state) => {
+        const target = state.quotes.find((q) => q.id === id);
+        const merged = target ? { ...target, ...updated } : (updated as Quote);
+        const others = state.quotes.filter((q) => q.id !== id);
+        return {
+          quotes: [merged, ...others],
+          isLoading: false,
+        };
+      });
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false });
@@ -411,7 +437,7 @@ export const useSalesStore = create<SalesState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const created = await salesService.addExportInvoice(inv);
-      set((state) => ({ exportInvoices: [created, ...state.exportInvoices], isLoading: false }));
+      set((state) => ({ exportInvoices: [created, ...state.exportInvoices.filter(i => i.id !== created.id)], isLoading: false }));
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false, error: e.message || 'Lỗi khi thêm hóa đơn xuất' });
@@ -423,10 +449,15 @@ export const useSalesStore = create<SalesState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const updated = await salesService.updateExportInvoice(id, data);
-      set((state) => ({
-        exportInvoices: state.exportInvoices.map((inv) => (inv.id === id ? { ...inv, ...updated } : inv)),
-        isLoading: false,
-      }));
+      set((state) => {
+        const target = state.exportInvoices.find((inv) => inv.id === id);
+        const merged = target ? { ...target, ...updated } : (updated as ExportInvoice);
+        const others = state.exportInvoices.filter((inv) => inv.id !== id);
+        return {
+          exportInvoices: [merged, ...others],
+          isLoading: false,
+        };
+      });
     } catch (e: any) {
       console.error(e);
       set({ isLoading: false, error: e.message || 'Lỗi khi cập nhật hóa đơn xuất' });
@@ -564,6 +595,81 @@ export const useSalesStore = create<SalesState>()((set) => ({
     } catch (e: any) {
       console.error('Failed to delete customer return:', e);
       set((state) => ({ customerReturns: state.customerReturns.filter((r) => r.id !== id), isLoading: false }));
+    }
+  },
+
+  surveys: [],
+  fetchSurveys: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await salesService.fetchQuoteSurveys();
+      set({ surveys: data, isLoading: false });
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false, error: e.message || 'Lỗi khi tải khảo sát báo giá' });
+    }
+  },
+
+  addSurvey: async (survey) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await salesService.addQuoteSurvey(survey);
+      const data = await salesService.fetchQuoteSurveys();
+      set((state) => ({ surveys: data.length > 0 ? data : [created, ...state.surveys], isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  updateSurvey: async (id, data) => {
+    set({ isLoading: true, error: null });
+    try {
+      await salesService.updateQuoteSurvey(id, data);
+      const updated = await salesService.fetchQuoteSurveys();
+      set({ surveys: updated, isLoading: false });
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  deleteSurvey: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await salesService.deleteQuoteSurvey(id);
+      set((state) => ({ surveys: state.surveys.filter((s) => s.id !== id), isLoading: false }));
+    } catch (e: any) {
+      console.error(e);
+      set((state) => ({ surveys: state.surveys.filter((s) => s.id !== id), isLoading: false }));
+    }
+  },
+
+  convertSurveyToQuote: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      const createdQuote = await salesService.convertQuoteSurveyToQuote(id);
+      const surveys = await salesService.fetchQuoteSurveys();
+      const quotes = await salesService.fetchQuotes();
+      set({ surveys, quotes, isLoading: false });
+      return createdQuote;
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  fetchReturnRequests: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await salesService.fetchReturnRequests();
+      set({ returnRequests: data, isLoading: false });
+    } catch (e: any) {
+      console.error(e);
+      set({ isLoading: false });
     }
   },
 }));

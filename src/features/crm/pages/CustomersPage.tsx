@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { axiosClient } from '@/shared/lib/axiosClient';
 import {
-  UserPlus, Download, Star, Eye, Edit, Trash2, Award, Gift, Zap, BadgeCheck, Users, Camera, Upload,
+  UserPlus, Download, Star, Eye, Edit, Trash2, Award, Gift, Zap, BadgeCheck, Users, Camera, Upload, KeyRound, Lock,
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -43,6 +44,8 @@ const tierLabel: Record<string, string> = {
   BRONZE: 'Đồng', SILVER: 'Bạc', GOLD: 'Vàng', DIAMOND: 'Kim Cương', ELITE_CLUB: 'Elite Club',
 };
 
+
+
 export function CustomersPage() {
   const { customers: data, addCustomer, updateCustomer, deleteCustomer, fetchCustomers, isLoadingCustomers } = useCrmStore();
   
@@ -53,6 +56,11 @@ export function CustomersPage() {
   const [search, setSearch] = useState('');
   const [selectedTier, setSelectedTier] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerProfile | null>(null);
+  
+  // Password Reset state
+  const [resetPasswordCustomer, setResetPasswordCustomer] = useState<CustomerProfile | null>(null);
+  const [newPasswordInput, setNewPasswordInput] = useState('RetailHub@123');
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAutoCode, setIsAutoCode] = useState(true);
@@ -194,6 +202,22 @@ export function CustomersPage() {
     setDeletingCustomer(null);
   };
 
+  const handleAdminResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPasswordCustomer) return;
+    setIsResettingPassword(true);
+    try {
+      await axiosClient.put(`/partnerarea/customers/${resetPasswordCustomer.id}/reset-password?newPassword=${encodeURIComponent(newPasswordInput)}`);
+      toast.success(`Đã cấp lại mật khẩu cho khách hàng "${resetPasswordCustomer.name}"!\nMật khẩu tạm thời: ${newPasswordInput}.\nKhách hàng sẽ phải đổi mật khẩu khi đăng nhập FE_Online.`);
+      setResetPasswordCustomer(null);
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi cấp lại mật khẩu khách hàng.');
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
   const columns = useMemo<ColumnDef<CustomerProfile>[]>(
     () => [
       {
@@ -291,6 +315,17 @@ export function CustomersPage() {
               className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
             >
               <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setResetPasswordCustomer(row.original);
+                setNewPasswordInput('RetailHub@123');
+              }}
+              title="Cấp lại mật khẩu"
+              className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors"
+            >
+              <KeyRound className="w-4 h-4" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); setDeletingCustomer(row.original); }}
@@ -736,6 +771,57 @@ export function CustomersPage() {
               </button>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* Admin Reset Password Modal */}
+      {resetPasswordCustomer && (
+        <Modal
+          isOpen={Boolean(resetPasswordCustomer)}
+          onClose={() => setResetPasswordCustomer(null)}
+          title={`CẤP LẠI MẬT KHẨU KHÁCH HÀNG: ${resetPasswordCustomer.name}`}
+          maxWidth="max-w-md"
+        >
+          <form onSubmit={handleAdminResetPassword} className="space-y-4">
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-300">
+              <p className="font-bold flex items-center gap-1 mb-1">
+                <Lock className="w-4 h-4 text-amber-600" /> Lưu ý quan trọng:
+              </p>
+              <p>Mật khẩu tạm thời sẽ được cấp lại cho khách hàng <strong>{resetPasswordCustomer.name}</strong> ({resetPasswordCustomer.phone || resetPasswordCustomer.email}). Khách hàng sẽ <strong>bắt buộc phải đổi mật khẩu</strong> ở lần đăng nhập tiếp theo trên FE_Online.</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                Mật khẩu mới (tạm thời) *
+              </label>
+              <input
+                type="text"
+                required
+                value={newPasswordInput}
+                onChange={(e) => setNewPasswordInput(e.target.value)}
+                placeholder="Nhập mật khẩu mới..."
+                className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg font-mono font-bold"
+              />
+              <p className="text-[10px] text-gray-400 mt-1">Mật khẩu mặc định: RetailHub@123</p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => setResetPasswordCustomer(null)}
+                className="px-4 py-2 text-xs text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 rounded-lg font-semibold"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                disabled={isResettingPassword}
+                className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg shadow flex items-center gap-1 disabled:opacity-50"
+              >
+                <KeyRound className="w-3.5 h-3.5" /> {isResettingPassword ? 'Đang cấp lại...' : 'Xác nhận cấp lại mật khẩu'}
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
     </>

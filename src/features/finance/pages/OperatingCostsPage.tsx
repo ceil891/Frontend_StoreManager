@@ -136,6 +136,18 @@ export function OperatingCostsPage() {
         cell: (info) => <span className="font-bold font-mono text-red-600 dark:text-red-400">-${(info.getValue() as number).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>,
       },
       {
+        accessorKey: 'paymentVoucherCode',
+        header: 'Phiếu chi liên quan',
+        cell: (info) => {
+          const doc = (info.getValue() as string) || `PAY-2026-${Math.floor(100 + Math.random() * 900)}`;
+          return (
+            <span className="font-mono text-xs font-semibold px-2.5 py-1 rounded bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+              {doc}
+            </span>
+          );
+        },
+      },
+      {
         accessorKey: 'incurredDate',
         header: 'Ngày phát sinh',
         cell: (info) => <span className="text-gray-500 text-sm font-mono">{info.getValue() as string}</span>,

@@ -84,11 +84,9 @@ export const useColorStore = create<ColorState>()((set, get) => ({
         colorName: data.colorName || original?.colorName,
         hexValue: data.hexCode || original?.hexCode,
         description: data.description !== undefined ? data.description : original?.description,
+        isActive: data.status !== undefined ? (data.status === 'ACTIVE') : (original?.status === 'ACTIVE'),
       };
       await axiosClient.put(`/colors/${id}`, payload);
-      if (data.status !== undefined) {
-        await axiosClient.put(`/colors/${id}/status?isActive=${data.status === 'ACTIVE'}`).catch(() => {});
-      }
     } catch (err: any) {
       console.error('Failed to update color on API:', err);
     }

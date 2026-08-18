@@ -220,8 +220,20 @@ export function CustomerReturnsPage() {
       matchedCustomerId = String(matchedCrm.id);
     }
 
-    const mappedLines: CustomerReturnLine[] = (selectedSO as any).items
-      ? (selectedSO as any).items.map((it: any, idx: number) => ({
+    const rawItems = (selectedSO as any).items?.length
+      ? (selectedSO as any).items
+      : selectedSO.orderLines?.length
+      ? selectedSO.orderLines.map((ol: any) => ({
+          productId: ol.id,
+          productName: ol.productName,
+          sku: ol.sku,
+          quantity: ol.quantity,
+          price: ol.unitPrice,
+        }))
+      : null;
+
+    const mappedLines: CustomerReturnLine[] = rawItems
+      ? rawItems.map((it: any, idx: number) => ({
           id: String(idx + 1),
           productId: String(it.productId || it.id || idx + 1),
           productName: it.productName || it.name || 'Sản phẩm ' + (idx + 1),
@@ -230,8 +242,8 @@ export function CustomerReturnsPage() {
           returnedQty: 0,
           availableQty: Number(it.quantity || 1),
           quantity: Number(it.quantity || 1),
-          price: Number(it.price || 0),
-          subTotal: Number((it.quantity || 1) * (it.price || 0)),
+          price: Number(it.price || it.unitPrice || 0),
+          subTotal: Number((it.quantity || 1) * (it.price || it.unitPrice || 0)),
           reason: 'Đổi trả hàng',
           condition: 'UNOPENED',
           isRestocked: true,
@@ -240,14 +252,14 @@ export function CustomerReturnsPage() {
           {
             id: '1',
             productId: '1',
-            productName: 'Sản phẩm từ đơn ' + selectedSO.code,
-            sku: 'SKU-' + selectedSO.code,
-            originalQty: 5,
+            productName: `Sản phẩm đơn hàng ${selectedSO.code}`,
+            sku: `SKU-${selectedSO.code}`,
+            originalQty: 1,
             returnedQty: 0,
-            availableQty: 5,
+            availableQty: 1,
             quantity: 1,
-            price: Number(selectedSO.totalAmount || 100000),
-            subTotal: Number(selectedSO.totalAmount || 100000),
+            price: Number(selectedSO.totalAmount || 0),
+            subTotal: Number(selectedSO.totalAmount || 0),
             reason: 'Lỗi sản phẩm',
             condition: 'UNOPENED',
             isRestocked: true,
@@ -505,9 +517,9 @@ export function CustomerReturnsPage() {
       <div className="p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quy Trình Trả Hàng & Hoàn Tiền ERP</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Khách hàng trả hàng & hoàn tiền</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Quản lý đổi trả hàng bán theo chuẩn POS/ERP. Phân quyền duyệt riêng cho Người kiểm tra.
+              Quản lý đổi trả hàng bán và hoàn tiền khách hàng. Phân quyền duyệt riêng cho Người kiểm tra.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -693,7 +705,7 @@ export function CustomerReturnsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? '📦 Tạo Phiếu Hoàn Trả Khách Hàng (ERP Standard)' : '⚙️ Chỉnh Sửa Phiếu Hoàn Trả'}
+        title={modalMode === 'create' ? 'Tạo phiếu hoàn trả khách hàng' : 'Chỉnh sửa phiếu hoàn trả'}
         width="max-w-4xl"
       >
         <form onSubmit={handleSave} className="space-y-6">

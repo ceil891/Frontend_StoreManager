@@ -147,16 +147,11 @@ export function ShippersPage() {
 
   const fetchShippers = async () => {
     setIsLoading(true);
-    const local = getSavedShippers();
-    if (local.length > 0) {
-      setData(local);
-      setIsLoading(false);
-      return;
-    }
     try {
-      const res = await axiosClient.get<any, any[]>('/logistics/shippers');
-      if (Array.isArray(res) && res.length > 0) {
-        const mapped = res.map((item: any) => ({
+      const res = await axiosClient.get<any, any>('/logistics/shippers');
+      const items = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+      if (items.length > 0) {
+        const mapped = items.map((item: any) => ({
           id: String(item.id),
           partnerCode: item.shipperCode || `SHP-${item.id}`,
           companyName: item.fullName || 'Đơn vị giao hàng',
@@ -168,20 +163,22 @@ export function ShippersPage() {
           activeFleetSize: item.activeFleetSize || 50,
           averageDeliveryHours: item.averageDeliveryHours || 24,
           slaComplianceRate: item.slaComplianceRate || 98.8,
-          status: (item.isActive ? 'ACTIVE' : 'TERMINATED') as ShipperPartnerRecord['status'],
+          status: (item.isActive !== false ? 'ACTIVE' : 'TERMINATED') as ShipperPartnerRecord['status'],
           headquarters: item.address || 'TP. Hà Nội',
           notes: item.note || ''
         }));
         setData(mapped);
         saveShippersList(mapped);
       } else {
-        setData(defaultShipperList);
-        saveShippersList(defaultShipperList);
+        const local = getSavedShippers();
+        const fallback = local.length > 0 ? local : defaultShipperList;
+        setData(fallback);
       }
     } catch (err) {
-      console.error(err);
-      setData(defaultShipperList);
-      saveShippersList(defaultShipperList);
+      console.error('Fetch shippers from backend failed:', err);
+      const local = getSavedShippers();
+      const fallback = local.length > 0 ? local : defaultShipperList;
+      setData(fallback);
     } finally {
       setIsLoading(false);
     }

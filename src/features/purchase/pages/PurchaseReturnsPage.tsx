@@ -1,2 +1,3 @@
-export { ReturnToSupplierPage as PurchaseReturnsPage } from '../../inventory/pages/ReturnToSupplierPage';
-export { ReturnToSupplierPage as default } from '../../inventory/pages/ReturnToSupplierPage';
+export { PurchaseReturnsUnifiedPage as PurchaseReturnsPage } from './PurchaseReturnsUnifiedPage';
+export { PurchaseReturnsUnifiedPage as default } from './PurchaseReturnsUnifiedPage';
+

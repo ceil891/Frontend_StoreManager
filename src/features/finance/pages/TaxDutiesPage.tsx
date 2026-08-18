@@ -52,7 +52,7 @@ export function TaxDutiesPage() {
   const filtered = data.filter(d=> d.type.toLowerCase().includes(search.toLowerCase()) || d.period.toLowerCase().includes(search.toLowerCase()));
 
   const openCreate = ()=>{ setForm({type:'Thuế GTGT', period:'', amountDue:0, amountPaid:0, status:'CHƯA_HOÀN_THÀNH'}); setIsModal(true); };
-  const handleSave = (e:React.FormEvent)=>{ e.preventDefault(); setData([...data,{...form as TaxDutyItem, id:String(data.length+1)}]); setIsModal(false); };
+  const handleSave = (e:React.FormEvent)=>{ e.preventDefault(); setData([{...form as TaxDutyItem, id:String(data.length+1)}, ...data]); setIsModal(false); };
 
   const columns = useMemo<ColumnDef<TaxDutyItem>[]>(()=>[
     { accessorKey:'type', header:'Loại thuế' },

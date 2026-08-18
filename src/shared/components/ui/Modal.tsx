@@ -8,8 +8,10 @@ interface ModalProps {
   title: string;
   children: React.ReactNode;
   width?: string;
+  maxWidth?: string;
   isDestructive?: boolean;
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'erp';
+  closeOnClickOutside?: boolean;
 }
 
 const SIZE_CLASSES: Record<string, string> = {
@@ -20,7 +22,7 @@ const SIZE_CLASSES: Record<string, string> = {
   erp: 'erp-form',
 };
 
-export function Modal({ isOpen, onClose, title, children, width = 'max-w-md', isDestructive = false, size }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, width, maxWidth, isDestructive = false, size, closeOnClickOutside = false }: ModalProps) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -40,7 +42,7 @@ export function Modal({ isOpen, onClose, title, children, width = 'max-w-md', is
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose]);
 
-  const sizeClass = size ? SIZE_CLASSES[size] : width;
+  const sizeClass = size ? SIZE_CLASSES[size] : (maxWidth || width || 'max-w-md');
 
   return (
     <AnimatePresence>
@@ -51,7 +53,7 @@ export function Modal({ isOpen, onClose, title, children, width = 'max-w-md', is
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={closeOnClickOutside ? onClose : undefined}
             className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm"
           />
 

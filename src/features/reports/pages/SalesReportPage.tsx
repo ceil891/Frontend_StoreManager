@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Download, TrendingUp, DollarSign, ShoppingBag, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -51,8 +51,15 @@ function orderToTransaction(order: SaleOrder, customerName: string): SalesTransa
 
 export function SalesReportPage() {
   const saleOrders = useSalesStore((s) => s.saleOrders);
+  const fetchSaleOrders = useSalesStore((s) => s.fetchSaleOrders);
   const customers = useCrmStore((s) => s.customers);
+  const fetchCustomers = useCrmStore((s) => s.fetchCustomers);
   const [dateRange, setDateRange] = useState('7d');
+
+  useEffect(() => {
+    fetchSaleOrders();
+    fetchCustomers();
+  }, [fetchSaleOrders, fetchCustomers]);
 
   const paidOrCompleted = saleOrders.filter(
     (o) => o.status === 'COMPLETED' || (o.status === 'PENDING' && o.paymentStatus === 'PAID')

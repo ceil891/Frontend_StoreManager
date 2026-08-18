@@ -22,9 +22,11 @@ export function SuppliersPage() {
 
   const displayCategories = useMemo(() => {
     if (categories && categories.length > 0) {
-      return categories.map(c => ({ id: c.categoryName, label: c.categoryName }));
+      const uniqueNames = Array.from(new Set(categories.map(c => c.categoryName).filter(Boolean)));
+      return uniqueNames.map(name => ({ id: name, label: name }));
     }
     return [
+      { id: 'Điện thoại & Máy tính bảng', label: 'Điện thoại & Máy tính bảng' },
       { id: 'Hàng hóa chung', label: 'Hàng hóa chung' },
       { id: 'Thiết bị điện tử', label: 'Thiết bị điện tử' },
       { id: 'Thời trang & Phụ kiện', label: 'Thời trang & Phụ kiện' },
@@ -193,7 +195,20 @@ export function SuppliersPage() {
       {
         accessorKey: 'category',
         header: 'Danh mục',
-        cell: (info) => <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded font-semibold">{categoryLabels[info.getValue() as string] || String(info.getValue())}</span>,
+        cell: (info) => {
+          const val = String(info.getValue() || '');
+          const tags = val.split(',').map(s => s.trim()).filter(Boolean);
+          if (tags.length === 0) return <span className="text-xs text-gray-400">—</span>;
+          return (
+            <div className="flex flex-wrap gap-1">
+              {tags.map((t, idx) => (
+                <span key={idx} className="text-[11px] bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded font-semibold">
+                  {categoryLabels[t] || t}
+                </span>
+              ))}
+            </div>
+          );
+        },
       },
       {
         accessorKey: 'contactPerson',

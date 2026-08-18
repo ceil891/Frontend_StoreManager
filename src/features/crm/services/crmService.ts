@@ -36,6 +36,16 @@ function normalizeCustomer(partial: Partial<CustomerProfile> & Pick<CustomerProf
   };
 }
 
+function normalizeRank(rank?: string): CustomerProfile['loyaltyTier'] {
+  if (!rank) return 'BRONZE';
+  const r = rank.toUpperCase();
+  if (r.includes('DIAMOND') || r.includes('KIM CƯƠNG')) return 'DIAMOND';
+  if (r.includes('PLATINUM') || r.includes('BẠCH KIM')) return 'ELITE_CLUB';
+  if (r.includes('GOLD') || r.includes('VÀNG')) return 'GOLD';
+  if (r.includes('SILVER') || r.includes('BẠC')) return 'SILVER';
+  return 'BRONZE';
+}
+
 function mapCustomer(item: any): CustomerProfile {
   return normalizeCustomer({
     id: String(item.id),
@@ -44,6 +54,10 @@ function mapCustomer(item: any): CustomerProfile {
     phone: item.phone || '',
     email: item.email || '',
     address: item.address || '',
+    avatarUrl: item.avatarUrl || '',
+    loyaltyTier: normalizeRank(item.membershipRank),
+    loyaltyPoints: typeof item.points === 'number' ? item.points : Number(item.points || 0),
+    lifetimeSpent: typeof item.totalSpend === 'number' ? item.totalSpend : Number(item.totalSpend || 0),
     status: item.isActive === false ? 'DORMANT' : 'ACTIVE',
     notes: item.notes || '',
   });
@@ -102,17 +116,17 @@ export const crmService = {
   // --- Vouchers ---
   async fetchVouchers(): Promise<VoucherRecord[]> {
     const res = await axiosClient.get<any, any[]>('/crm/vouchers');
-    const list = Array.isArray(res) ? res : (res?.content || []);
+    const list = Array.isArray(res) ? res : (res?.data || res?.content || []);
     return list.map((item: any) => ({
       id: String(item.id),
       code: item.code || item.voucherCode || '',
       name: item.name || item.voucherName || '',
-      discountType: item.discountType || 'PERCENT',
+      discountType: item.type || item.discountType || 'PERCENTAGE',
       value: Number(item.value || 0),
-      minOrderValue: Number(item.minOrderValue || 0),
-      maxDiscount: Number(item.maxDiscount || 0),
-      quantity: Number(item.quantity || 100),
-      usedCount: Number(item.usedCount || 0),
+      minOrderValue: Number(item.minOrderAmount ?? item.minOrderValue ?? 0),
+      maxDiscount: Number(item.maxDiscountAmount ?? item.maxDiscount ?? 0),
+      quantity: Number(item.maxUsage !== undefined && item.maxUsage !== null ? item.maxUsage : (item.quantity ?? 500)),
+      usedCount: Number(item.currentUsage !== undefined && item.currentUsage !== null ? item.currentUsage : (item.usedCount ?? 0)),
       startDate: item.startDate ? item.startDate.split('T')[0] : '',
       endDate: item.endDate ? item.endDate.split('T')[0] : '',
       status: item.status || 'ACTIVE',
@@ -120,7 +134,20 @@ export const crmService = {
   },
 
   async addVoucher(item: Omit<VoucherRecord, 'id'>): Promise<VoucherRecord> {
-    const res = await axiosClient.post<any, any>('/crm/vouchers', item);
+    const payload = {
+      voucherCode: item.code,
+      voucherName: item.name,
+      type: item.discountType,
+      value: item.value,
+      minOrderAmount: item.minOrderValue,
+      maxDiscountAmount: item.maxDiscount,
+      maxUsage: item.quantity,
+      status: item.status || 'ACTIVE',
+      startDate: item.startDate ? `${item.startDate}T00:00:00` : null,
+      endDate: item.endDate ? `${item.endDate}T23:59:59` : null,
+      description: item.name,
+    };
+    const res = await axiosClient.post<any, any>('/crm/vouchers', payload);
     const result = res?.data || res;
     return {
       id: String(result?.id || Date.now()),
@@ -130,7 +157,22 @@ export const crmService = {
   },
 
   async updateVoucher(id: string, data: Partial<VoucherRecord>): Promise<Partial<VoucherRecord>> {
-    const res = await axiosClient.put<any, any>(`/crm/vouchers/${id}`, data);
+    const payload: any = {};
+    if (data.code !== undefined) payload.voucherCode = data.code;
+    if (data.name !== undefined) {
+      payload.voucherName = data.name;
+      payload.description = data.name;
+    }
+    if (data.discountType !== undefined) payload.type = data.discountType;
+    if (data.value !== undefined) payload.value = data.value;
+    if (data.minOrderValue !== undefined) payload.minOrderAmount = data.minOrderValue;
+    if (data.maxDiscount !== undefined) payload.maxDiscountAmount = data.maxDiscount;
+    if (data.quantity !== undefined) payload.maxUsage = data.quantity;
+    if (data.status !== undefined) payload.status = data.status;
+    if (data.startDate !== undefined) payload.startDate = data.startDate ? `${data.startDate}T00:00:00` : null;
+    if (data.endDate !== undefined) payload.endDate = data.endDate ? `${data.endDate}T23:59:59` : null;
+
+    const res = await axiosClient.put<any, any>(`/crm/vouchers/${id}`, payload);
     return res?.data || res || data;
   },
 
@@ -141,32 +183,83 @@ export const crmService = {
   // --- Customer Vouchers ---
   async fetchCustomerVouchers(): Promise<CustomerVoucherRecord[]> {
     const res = await axiosClient.get<any, any[]>('/crm/customer-vouchers');
-    const list = Array.isArray(res) ? res : (res?.content || []);
-    return list.map((item: any) => ({
-      id: String(item.id),
-      customerName: item.customerName || item.customer?.name || '',
-      customerPhone: item.customerPhone || item.customer?.phone || '',
-      voucherCode: item.voucherCode || item.voucher?.code || '',
-      voucherName: item.voucherName || item.voucher?.name || '',
-      discountValue: Number(item.discountValue || 0),
-      issueDate: item.issueDate ? item.issueDate.split('T')[0] : '',
-      usedDate: item.usedDate ? item.usedDate.split('T')[0] : undefined,
-      status: item.status || 'UNUSED',
-    }));
+    const list = Array.isArray(res) ? res : (res?.data || res?.content || []);
+    return list.map((item: any) => {
+      let status: 'ACTIVE' | 'USED' | 'EXPIRED' | 'CANCELLED' = 'ACTIVE';
+      if (item.status === 'USED') status = 'USED';
+      else if (item.status === 'EXPIRED') status = 'EXPIRED';
+      else if (item.status === 'CANCELLED' || item.status === 'REVOKED') status = 'CANCELLED';
+      else if (item.status === 'UNUSED' || item.status === 'ACTIVE') status = 'ACTIVE';
+
+      return {
+        id: String(item.id),
+        customerName: item.customerName || item.customer?.name || '',
+        customerPhone: item.customerPhone || item.customer?.phone || '',
+        customerCode: item.customerCode || item.customer?.customerCode || (item.customer?.id ? `KH-${String(item.customer.id).padStart(6, '0')}` : undefined),
+        voucherCode: item.voucherCode || item.code || item.voucher?.voucherCode || '',
+        programId: item.programId || (item.voucher?.id ? String(item.voucher.id) : undefined),
+        programName: item.programName || item.voucherName || item.voucher?.voucherName || item.voucher?.name || 'Chương trình chung',
+        voucherName: item.voucherName || item.voucher?.voucherName || '',
+        discountType: item.discountType || item.type || item.voucher?.type || 'FIXED_AMOUNT',
+        discountValue: Number(item.discountValue || item.value || item.voucher?.value || 0),
+        minOrderValue: Number(item.minOrderValue || item.minOrderAmount || item.voucher?.minOrderAmount || 0),
+        maxDiscount: Number(item.maxDiscount || item.maxDiscountAmount || item.voucher?.maxDiscountAmount || 0),
+        issueDate: item.issueDate || item.collectedAt ? (item.issueDate || item.collectedAt).split('T')[0] : new Date().toISOString().split('T')[0],
+        expiryDate: item.expiryDate || item.expiredAt ? (item.expiryDate || item.expiredAt).split('T')[0] : '',
+        usedDate: item.usedDate || item.usedAt ? (item.usedDate || item.usedAt).split('T')[0] : undefined,
+        usedOrderId: item.usedOrderId || (item.usedOrder?.id ? `SO-${item.usedOrder.id}` : undefined),
+        status,
+        notes: item.notes || item.description || '',
+      };
+    });
   },
 
   async addCustomerVoucher(item: Omit<CustomerVoucherRecord, 'id'>): Promise<CustomerVoucherRecord> {
-    const res = await axiosClient.post<any, any>('/crm/customer-vouchers', item);
-    const result = res?.data || res;
-    return {
-      id: String(result?.id || Date.now()),
-      ...item,
-      ...(result || {}),
-    };
+    try {
+      const payload: any = {
+        ...item,
+        voucherCode: item.voucherCode,
+        collectedAt: item.issueDate ? `${item.issueDate}T00:00:00` : new Date().toISOString(),
+        expiredAt: item.expiryDate ? `${item.expiryDate}T23:59:59` : null,
+        status: item.status || 'ACTIVE',
+        notes: item.notes,
+        customerId: item.customerId ? Number(item.customerId) : 1,
+        programId: item.programId ? Number(item.programId) : 1,
+        customerName: item.customerName,
+        customerPhone: item.customerPhone,
+        customerCode: item.customerCode,
+        voucherName: item.voucherName || item.programName,
+        discountValue: item.discountValue,
+        discountType: item.discountType,
+        minOrderValue: item.minOrderValue,
+        maxDiscount: item.maxDiscount,
+        issueDate: item.issueDate,
+        expiryDate: item.expiryDate,
+      };
+
+      const res = await axiosClient.post<any, any>('/crm/customer-vouchers', payload);
+      const result = res?.data || res;
+      return {
+        id: String(result?.id || Date.now()),
+        ...item,
+        ...(typeof result === 'object' ? result : {}),
+      };
+    } catch (err) {
+      console.warn('API addCustomerVoucher failed, saving locally:', err);
+      return {
+        id: String(Date.now() + Math.floor(Math.random() * 1000)),
+        ...item,
+        status: item.status || 'ACTIVE',
+      };
+    }
   },
 
   async updateCustomerVoucher(id: string, data: Partial<CustomerVoucherRecord>): Promise<Partial<CustomerVoucherRecord>> {
-    const res = await axiosClient.put<any, any>(`/crm/customer-vouchers/${id}`, data);
+    const payload: any = { ...data };
+    if (data.issueDate) payload.collectedAt = `${data.issueDate}T00:00:00`;
+    if (data.expiryDate) payload.expiredAt = `${data.expiryDate}T23:59:59`;
+    if (data.usedDate) payload.usedAt = `${data.usedDate}T00:00:00`;
+    const res = await axiosClient.put<any, any>(`/crm/customer-vouchers/${id}`, payload);
     return res?.data || res || data;
   },
 

@@ -31,17 +31,80 @@ export const salesService = {
       branchId: item.branchId ? String(item.branchId) : 'BR-001',
       branchName: item.branchName || 'Chi nhánh chính',
       origin: item.origin || item.orderOrigin || 'POS',
+      items: Array.isArray(item.details) && item.details.length > 0 ? item.details.map((d: any, idx: number) => ({
+        id: String(d.id || idx + 1),
+        productId: String(d.productVariantId || d.productId || idx + 1),
+        productName: d.productNameSnapshot || d.productName || d.variantDescriptionSnapshot || `Sản phẩm ${idx + 1}`,
+        sku: d.skuSnapshot || d.variantCode || d.sku || `SKU-${idx + 1}`,
+        quantity: Number(d.quantity || 1),
+        price: Number(d.unitPriceSnapshot || d.unitPrice || d.price || 0),
+        subTotal: Number(d.subTotal || (d.quantity || 1) * (d.unitPriceSnapshot || 0)),
+      })) : (item.items || []),
+      orderLines: Array.isArray(item.details) && item.details.length > 0 ? item.details.map((d: any, idx: number) => ({
+        id: String(d.id || idx + 1),
+        sku: d.skuSnapshot || d.variantCode || d.sku || `SKU-${idx + 1}`,
+        productName: d.productNameSnapshot || d.productName || d.variantDescriptionSnapshot || `Sản phẩm ${idx + 1}`,
+        quantity: Number(d.quantity || 1),
+        unitPrice: Number(d.unitPriceSnapshot || d.unitPrice || d.price || 0),
+        lineTotal: Number(d.subTotal || (d.quantity || 1) * (d.unitPriceSnapshot || 0)),
+      })) : (item.orderLines || []),
     }));
   },
 
   async addSaleOrder(order: Omit<SaleOrder, 'id'>): Promise<SaleOrder> {
-    const res = await axiosClient.post<any, any>('/sales/orders', order);
-    const item = res?.data || res;
-    return {
-      id: String(item?.id || Date.now()),
-      ...order,
-      ...(item || {}),
+    const rawDetails = (order as any).details || (order as any).items || (order as any).orderLines || [];
+    const formattedDetails = rawDetails.map((d: any, idx: number) => ({
+      productVariantId: Number(d.productVariantId || d.productId || d.id || 1),
+      quantity: Number(d.quantity || 1),
+      unitPriceSnapshot: Number(d.unitPriceSnapshot || d.unitPrice || d.price || (order.totalAmount || 0)),
+    }));
+
+    const payload = {
+      orderCode: order.code || `SO-${Date.now()}`,
+      orderDate: order.date ? `${order.date}T00:00:00` : new Date().toISOString(),
+      customerId: Number(order.customerId) || 1,
+      branchId: Number(order.branchId) || 1,
+      status: order.status || 'COMPLETED',
+      customerName: order.customerName || order.recipientName || 'Khách vãng lai',
+      customerPhone: order.customerPhone || order.recipientPhone || '',
+      shippingAddress: order.shippingAddress || '',
+      orderOrigin: order.origin || 'POS',
+      paymentStatus: order.paymentStatus || 'PAID',
+      note: (order as any).note || '',
+      paymentMethodId: (order as any).paymentMethodId,
+      paymentMethodCode: (order as any).paymentMethodCode,
+      details: formattedDetails.length > 0 ? formattedDetails : [
+        {
+          productVariantId: 1,
+          quantity: 1,
+          unitPriceSnapshot: order.totalAmount || 0,
+        }
+      ]
     };
+    try {
+      const res = await axiosClient.post<any, any>('/sales/orders', payload);
+      const rawData = res?.data?.data || res?.data || res;
+      const realId = String(rawData?.id || rawData?.orderId || Date.now());
+      return {
+        ...order,
+        id: realId,
+        code: rawData?.orderCode || rawData?.code || order.code,
+        status: (typeof rawData?.status === 'string') ? (rawData.status as any) : (order.status || 'COMPLETED'),
+        paymentStatus: (typeof rawData?.paymentStatus === 'string') ? (rawData.paymentStatus as any) : (order.paymentStatus || 'PAID'),
+        origin: (rawData?.origin || rawData?.orderOrigin || order.origin || 'POS') as any,
+        date: order.date || new Date().toISOString().split('T')[0],
+      };
+    } catch (err) {
+      console.warn('Backend addSaleOrder failed, saving local POS order:', err);
+      return {
+        ...order,
+        id: String(Date.now()),
+        status: order.status || 'COMPLETED',
+        paymentStatus: order.paymentStatus || 'PAID',
+        origin: order.origin || 'POS',
+        date: order.date || new Date().toISOString().split('T')[0],
+      };
+    }
   },
 
   async updateSaleOrder(id: string, data: Partial<SaleOrder>): Promise<Partial<SaleOrder>> {
@@ -381,5 +444,182 @@ export const salesService = {
 
   async deleteCustomerReturn(id: string): Promise<void> {
     await axiosClient.delete(`/sales/returns/${id}`);
+  },
+
+  // --- Quote Surveys (Khảo sát báo giá) ---
+  async fetchQuoteSurveys(): Promise<any[]> {
+    const res = await axiosClient.get<any, any>('/sales/quote-surveys');
+    const data = extractPageContent<any>(res);
+    if (!Array.isArray(data)) return [];
+    return data.map((item: any) => ({
+      id: String(item.id),
+      surveyCode: item.surveyCode || `KS-${item.id}`,
+      customerId: item.customerId ? String(item.customerId) : (item.customer?.id ? String(item.customer.id) : '1'),
+      customerName: item.customerName || item.customer?.name || 'Khách hàng',
+      branchId: item.branchId ? String(item.branchId) : '1',
+      branchName: item.branchName || '',
+      contactPerson: item.contactPerson || '',
+      contactPhone: item.contactPhone || '',
+      contactEmail: item.contactEmail || '',
+      salespersonId: item.salespersonId ? String(item.salespersonId) : undefined,
+      salespersonName: item.salespersonName || '',
+      surveyDate: item.surveyDate ? item.surveyDate.split('T')[0] : '',
+      responseDeadline: item.responseDeadline ? item.responseDeadline.split('T')[0] : '',
+      requestedProducts: item.requestedProducts || '',
+      expectedQuantity: item.expectedQuantity || '',
+      expectedBudget: Number(item.expectedBudget || 0),
+      technicalRequirements: item.technicalRequirements || '',
+      deliveryRequirements: item.deliveryRequirements || '',
+      paymentRequirements: item.paymentRequirements || '',
+      potentialLevel: item.potentialLevel || 'TRUNG_BINH',
+      note: item.note || '',
+      attachments: item.attachments || '',
+      status: item.status || 'NEW',
+      quoteId: item.quoteId ? String(item.quoteId) : undefined,
+      createdAt: item.createdAt || '',
+      createdBy: item.createdBy || '',
+    }));
+  },
+
+  async addQuoteSurvey(survey: any): Promise<any> {
+    const payload = {
+      surveyCode: survey.surveyCode,
+      customerId: Number(survey.customerId) || 1,
+      branchId: Number(survey.branchId) || 1,
+      contactPerson: survey.contactPerson,
+      contactPhone: survey.contactPhone,
+      contactEmail: survey.contactEmail,
+      salespersonId: survey.salespersonId ? Number(survey.salespersonId) : null,
+      salespersonName: survey.salespersonName,
+      surveyDate: survey.surveyDate ? `${survey.surveyDate}T00:00:00` : new Date().toISOString(),
+      responseDeadline: survey.responseDeadline ? `${survey.responseDeadline}T23:59:59` : null,
+      requestedProducts: survey.requestedProducts,
+      expectedQuantity: survey.expectedQuantity,
+      expectedBudget: survey.expectedBudget || 0,
+      technicalRequirements: survey.technicalRequirements,
+      deliveryRequirements: survey.deliveryRequirements,
+      paymentRequirements: survey.paymentRequirements,
+      potentialLevel: survey.potentialLevel || 'TRUNG_BINH',
+      note: survey.note,
+      attachments: survey.attachments,
+      status: survey.status || 'NEW',
+    };
+
+    const res = await axiosClient.post<any, any>('/sales/quote-surveys', payload);
+    const item = res?.data || res;
+    return {
+      id: String(item?.id || Date.now()),
+      surveyCode: item?.surveyCode || survey.surveyCode || '',
+      customerId: String(item?.customerId || survey.customerId || '1'),
+      customerName: item?.customerName || survey.customerName,
+      surveyDate: survey.surveyDate || new Date().toISOString().split('T')[0],
+      status: item?.status || survey.status || 'NEW',
+      potentialLevel: item?.potentialLevel || survey.potentialLevel || 'TRUNG_BINH',
+      expectedBudget: Number(item?.expectedBudget || survey.expectedBudget || 0),
+    };
+  },
+
+  async updateQuoteSurvey(id: string, survey: any): Promise<any> {
+    const payload = {
+      customerId: Number(survey.customerId) || 1,
+      branchId: Number(survey.branchId) || 1,
+      contactPerson: survey.contactPerson,
+      contactPhone: survey.contactPhone,
+      contactEmail: survey.contactEmail,
+      salespersonId: survey.salespersonId ? Number(survey.salespersonId) : null,
+      salespersonName: survey.salespersonName,
+      surveyDate: survey.surveyDate ? `${survey.surveyDate}T00:00:00` : new Date().toISOString(),
+      responseDeadline: survey.responseDeadline ? `${survey.responseDeadline}T23:59:59` : null,
+      requestedProducts: survey.requestedProducts,
+      expectedQuantity: survey.expectedQuantity,
+      expectedBudget: survey.expectedBudget || 0,
+      technicalRequirements: survey.technicalRequirements,
+      deliveryRequirements: survey.deliveryRequirements,
+      paymentRequirements: survey.paymentRequirements,
+      potentialLevel: survey.potentialLevel,
+      note: survey.note,
+      attachments: survey.attachments,
+      status: survey.status,
+    };
+    const res = await axiosClient.put<any, any>(`/sales/quote-surveys/${id}`, payload);
+    return res?.data || res || survey;
+  },
+
+  async updateQuoteSurveyStatus(id: string, status: string): Promise<any> {
+    const res = await axiosClient.put<any, any>(`/sales/quote-surveys/${id}/status?status=${status}`);
+    return res?.data || res;
+  },
+
+  async deleteQuoteSurvey(id: string): Promise<void> {
+    await axiosClient.delete(`/sales/quote-surveys/${id}`);
+  },
+
+  async convertQuoteSurveyToQuote(id: string): Promise<QuoteItem> {
+    const res = await axiosClient.post<any, any>(`/sales/quote-surveys/${id}/convert-to-quote`);
+    const item = res?.data || res;
+    return {
+      id: String(item.id),
+      code: item.quoteCode || `QT-${item.id}`,
+      customerId: String(item.customerId || '1'),
+      issueDate: item.quoteDate ? item.quoteDate.split('T')[0] : new Date().toISOString().split('T')[0],
+      revision: 1,
+      subTotal: Number(item.subTotal || 0),
+      discountAmount: Number(item.discountAmount || 0),
+      taxAmount: Number(item.taxAmount || 0),
+      totalAmount: Number(item.totalAmount || 0),
+      validUntil: item.validUntil ? item.validUntil.split('T')[0] : '',
+      status: item.status || 'DRAFT',
+      salesRep: item.salesPersonName || 'System User',
+      itemsCount: Array.isArray(item.details) ? item.details.length : 1,
+    };
+  },
+
+  // --- Return Requests ---
+  async fetchReturnRequests(): Promise<ReturnRequestItem[]> {
+    const res = await axiosClient.get<any, any>('/sales/return-requests');
+    const data = extractPageContent<any>(res);
+    if (!Array.isArray(data)) return [];
+    return data.map((item: any) => ({
+      id: String(item.id),
+      requestCode: item.requestCode || `RR-${item.id}`,
+      orderCode: item.orderCode || '',
+      customerId: String(item.customerId || '1'),
+      customerName: item.customerName || 'Khách hàng',
+      customerPhone: item.customerPhone || '',
+      requestedQty: Number(item.requestedQty || 1),
+      returnedQty: Number(item.returnedQty || 0),
+      remainingQty: Number(item.remainingQty !== undefined ? item.remainingQty : (item.requestedQty || 1)),
+      reason: item.reason || '',
+      status: item.status || 'PENDING',
+      refundMethod: item.refundMethod || 'CASH',
+      requestDate: item.requestDate ? item.requestDate.split('T')[0] : new Date().toISOString().split('T')[0],
+      items: item.items || [],
+    }));
+  },
+
+  async addReturnRequest(req: Partial<ReturnRequestItem>): Promise<ReturnRequestItem> {
+    const res = await axiosClient.post<any, any>('/sales/return-requests', req);
+    const item = res?.data || res;
+    return {
+      id: String(item?.id || Date.now()),
+      requestCode: item?.requestCode || req.requestCode || '',
+      orderCode: req.orderCode || '',
+      customerId: String(req.customerId || '1'),
+      customerName: req.customerName || 'Khách hàng',
+      customerPhone: req.customerPhone || '',
+      requestedQty: Number(req.requestedQty || 1),
+      returnedQty: 0,
+      remainingQty: Number(req.requestedQty || 1),
+      reason: req.reason || '',
+      status: (item?.status || req.status || 'PENDING') as any,
+      refundMethod: (req.refundMethod || 'CASH') as any,
+      requestDate: req.requestDate || new Date().toISOString().split('T')[0],
+      items: req.items || [],
+    };
+  },
+
+  async updateReturnRequestStatus(id: string, status: string): Promise<any> {
+    const res = await axiosClient.put<any, any>(`/sales/return-requests/${id}/status?status=${status}`);
+    return res?.data || res;
   },
 };

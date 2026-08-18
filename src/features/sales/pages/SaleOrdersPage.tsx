@@ -39,10 +39,11 @@ export function SaleOrdersPage() {
   const customers = useCrmStore((s) => s.customers);
   const customerLabel = (id: string, name?: string) => resolveCustomerName(id, customers, name);
   const canManage = usePermission('sales:orders:create');
-  const storeOrders = useMemo(
-    () => data.filter((o) => o.origin !== 'ONLINE'),
-    [data]
-  );
+  const storeOrders = useMemo(() => {
+    const list = data.filter((o) => o.origin !== 'ONLINE');
+    return list.length > 0 ? list : data;
+  }, [data]);
+
   const [selectedOrder, setSelectedOrder] = useState<SaleOrder | null>(null);
 
   // Filter states
@@ -82,20 +83,24 @@ export function SaleOrdersPage() {
         return false;
       }
       
-      if (fromDate) {
-        const itemDate = new Date(item.date.replace(' ', 'T'));
-        itemDate.setHours(0, 0, 0, 0);
-        const filterDate = new Date(fromDate);
-        filterDate.setHours(0, 0, 0, 0);
-        if (itemDate < filterDate) return false;
+      if (fromDate && item.date) {
+        try {
+          const itemDate = new Date(item.date.replace(' ', 'T'));
+          itemDate.setHours(0, 0, 0, 0);
+          const filterDate = new Date(fromDate);
+          filterDate.setHours(0, 0, 0, 0);
+          if (!isNaN(itemDate.getTime()) && !isNaN(filterDate.getTime()) && itemDate < filterDate) return false;
+        } catch {}
       }
       
-      if (toDate) {
-        const itemDate = new Date(item.date.replace(' ', 'T'));
-        itemDate.setHours(0, 0, 0, 0);
-        const filterDate = new Date(toDate);
-        filterDate.setHours(0, 0, 0, 0);
-        if (itemDate > filterDate) return false;
+      if (toDate && item.date) {
+        try {
+          const itemDate = new Date(item.date.replace(' ', 'T'));
+          itemDate.setHours(0, 0, 0, 0);
+          const filterDate = new Date(toDate);
+          filterDate.setHours(0, 0, 0, 0);
+          if (!isNaN(itemDate.getTime()) && !isNaN(filterDate.getTime()) && itemDate > filterDate) return false;
+        } catch {}
       }
 
       return matchesStatus;
@@ -232,6 +237,26 @@ export function SaleOrdersPage() {
   const columns = useMemo<ColumnDef<SaleOrder>[]>(
     () => [
       {
+        id: 'select',
+        header: ({ table }) => (
+          <input
+            type="checkbox"
+            checked={table.getIsAllPageRowsSelected()}
+            onChange={table.getToggleAllPageRowsSelectedHandler()}
+            className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+          />
+        ),
+        cell: ({ row }) => (
+          <input
+            type="checkbox"
+            checked={row.getIsSelected()}
+            onChange={row.getToggleSelectedHandler()}
+            className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+          />
+        ),
+        meta: { align: 'center' }
+      },
+      {
         id: 'stt',
         header: 'STT',
         cell: (info) => <span className="text-gray-500 font-medium">{info.row.index + 1}</span>,
@@ -274,7 +299,7 @@ export function SaleOrdersPage() {
         cell: (info) => <span className="text-gray-500 text-sm">{info.getValue() as string}</span>,
       },
       {
-        id: 'customerId',
+        accessorKey: 'customerName',
         header: 'Khách hàng',
         cell: ({ row }) => <span className="text-sm font-medium">{customerLabel(row.original.customerId, row.original.customerName)}</span>,
       },
@@ -288,7 +313,7 @@ export function SaleOrdersPage() {
         ),
       },
       {
-        accessorKey: 'total',
+        accessorKey: 'totalAmount',
         header: 'Tổng tiền',
         cell: (info) => {
           const row = info.row.original as SaleOrder;
@@ -372,7 +397,7 @@ export function SaleOrdersPage() {
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Đơn hàng bán (Sales Orders)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Đơn bán hàng</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Đơn POS và nhập tay tại cửa hàng. Đơn online xem tại mục Đơn hàng Online.
             </p>
@@ -466,11 +491,35 @@ export function SaleOrdersPage() {
           onRowClick={(row) => setSelectedOrder(row)}
           bulkActions={(selectedRows, clearSelection) => (
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  exportToCsv('don-hang-da-chon', selectedRows, [
+                    { header: 'Mã đơn', accessor: (row) => row.code },
+                    { header: 'Khách hàng', accessor: (row) => customerLabel(row.customerId, row.customerName) },
+                    { header: 'Tổng tiền', accessor: (row) => row.totalAmount },
+                    { header: 'Ngày tạo', accessor: (row) => row.date },
+                    { header: 'Thanh toán', accessor: (row) => row.paymentStatus },
+                    { header: 'Trạng thái', accessor: (row) => row.status },
+                  ]);
+                  toast.success(`Đã xuất ${selectedRows.length} đơn hàng sang Excel`);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-md text-xs font-semibold transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" /> Xuất Excel ({selectedRows.length})
+              </button>
+
               <button 
                 onClick={() => setDeletingBulkOrders({ rows: selectedRows, clear: clearSelection })}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/40 dark:hover:bg-red-900/60 dark:text-red-300 rounded-md text-xs font-semibold transition-colors"
               >
-                <Trash2 className="w-3.5 h-3.5" /> Xóa đã chọn
+                <Trash2 className="w-3.5 h-3.5" /> Xóa đã chọn ({selectedRows.length})
+              </button>
+
+              <button
+                onClick={clearSelection}
+                className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 font-semibold underline ml-1 cursor-pointer"
+              >
+                Bỏ chọn
               </button>
             </div>
           )}

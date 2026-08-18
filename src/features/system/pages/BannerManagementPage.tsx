@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useBannerStore, type Banner } from '../store/bannerStore';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -7,7 +7,11 @@ import { Plus, Image as ImageIcon, Link as LinkIcon, Calendar, Edit, Trash2, Pow
 import { toast } from 'sonner';
 
 export default function BannerManagementPage() {
-  const { banners, addBanner, updateBanner, deleteBanner, toggleBannerStatus } = useBannerStore();
+  const { banners, fetchBanners, addBanner, updateBanner, deleteBanner, toggleBannerStatus } = useBannerStore();
+  
+  useEffect(() => {
+    fetchBanners();
+  }, []);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');

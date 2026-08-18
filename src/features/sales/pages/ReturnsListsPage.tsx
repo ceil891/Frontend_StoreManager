@@ -1,9 +1,11 @@
-import { useState, useMemo } from 'react';
-import { Plus, Search, Eye, CheckCircle2, XCircle, FileText, ArrowRight } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Plus, Search, Eye, CheckCircle2, XCircle, FileText, ArrowRight, Upload, Package, DollarSign, User } from 'lucide-react';
 import { Modal } from '@/shared/components/ui/Modal';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import type { ColumnDef } from '@tanstack/react-table';
-import { useSalesStore, type ReturnRequestItem } from '@/features/sales/store/salesStore';
+import { useSalesStore, type ReturnRequestItem, formatMoney } from '@/features/sales/store/salesStore';
+import { useUserStore } from '@/features/hr/store/userStore';
+import { useAuthStore } from '@/features/auth/store/authStore';
 import { toast } from 'sonner';
 
 const REQUEST_STATUS_CONFIG: Record<string, { label: string; style: string }> = {
@@ -22,12 +24,173 @@ const REFUND_METHOD_LABELS: Record<string, string> = {
 };
 
 export function ReturnsListsPage() {
-  const { saleOrders, returnRequests, addReturnRequest, updateReturnRequestStatus, addCustomerReturn } = useSalesStore();
+  const { saleOrders, returnRequests, addReturnRequest, updateReturnRequestStatus, addCustomerReturn, fetchSaleOrders, fetchCustomerReturns, fetchReturnRequests } = useSalesStore();
+  const { users, fetchUsers } = useUserStore();
+  const currentUser = useAuthStore((s) => s.user);
+
+  useEffect(() => {
+    fetchSaleOrders();
+    fetchCustomerReturns();
+    fetchReturnRequests();
+    fetchUsers();
+  }, [fetchSaleOrders, fetchCustomerReturns, fetchReturnRequests, fetchUsers]);
 
   const [search, setSearch] = useState('');
   const [selectedRequest, setSelectedRequest] = useState<ReturnRequestItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState<Partial<ReturnRequestItem>>({});
+  const [isCustomOrderCode, setIsCustomOrderCode] = useState(false);
+
+  // Master list of all available sale orders (Backend API + Local Storage + Standard System Orders)
+  const masterSaleOrders = useMemo(() => {
+    const defaultOrders = [
+      {
+        id: 'default-1',
+        code: 'ONLINE-805391',
+        customerId: '1',
+        customerName: 'Nguyễn Lưu Hoàng',
+        customerPhone: '0901234567',
+        date: new Date().toISOString().split('T')[0],
+        subTotal: 1500000,
+        taxAmount: 150000,
+        discountAmount: 0,
+        totalAmount: 1650000,
+        status: 'COMPLETED',
+        paymentStatus: 'PAID',
+        paymentMethod: 'BANK_TRANSFER',
+        branchId: 'BR-001',
+        branchName: 'Chi nhánh Chính',
+        origin: 'ONLINE',
+        items: [
+          { id: '1', productId: '1', productName: 'Pepsi 330ml - Lon', sku: 'SKU-PEPSI-330', quantity: 10, price: 15000, subTotal: 150000 },
+          { id: '2', productId: '2', productName: 'Bánh Gạo OneOne 150g', sku: 'SKU-ONEONE-150', quantity: 5, price: 30000, subTotal: 150000 },
+        ],
+        orderLines: [
+          { id: '1', sku: 'SKU-PEPSI-330', productName: 'Pepsi 330ml - Lon', quantity: 10, unitPrice: 15000, lineTotal: 150000 },
+          { id: '2', sku: 'SKU-ONEONE-150', productName: 'Bánh Gạo OneOne 150g', quantity: 5, unitPrice: 30000, lineTotal: 150000 },
+        ],
+      },
+      {
+        id: 'default-2',
+        code: 'ORD-POS-2026-818712',
+        customerId: '2',
+        customerName: 'Trần Văn Nam',
+        customerPhone: '0988776655',
+        date: new Date().toISOString().split('T')[0],
+        subTotal: 850000,
+        taxAmount: 85000,
+        discountAmount: 50000,
+        totalAmount: 885000,
+        status: 'COMPLETED',
+        paymentStatus: 'PAID',
+        paymentMethod: 'CASH',
+        branchId: 'BR-001',
+        branchName: 'Chi nhánh Chính',
+        origin: 'POS',
+        items: [
+          { id: '3', productId: '3', productName: 'Sữa Tươi Vinamilk 1L', sku: 'SKU-VNM-1L', quantity: 5, price: 38000, subTotal: 190000 },
+          { id: '4', productId: '4', productName: 'Mì Hảo Hảo Tôm Chua Cay', sku: 'SKU-HAOHAO-TCC', quantity: 20, price: 4500, subTotal: 90000 },
+        ],
+        orderLines: [
+          { id: '3', sku: 'SKU-VNM-1L', productName: 'Sữa Tươi Vinamilk 1L', quantity: 5, unitPrice: 38000, lineTotal: 190000 },
+          { id: '4', sku: 'SKU-HAOHAO-TCC', productName: 'Mì Hảo Hảo Tôm Chua Cay', quantity: 20, unitPrice: 4500, lineTotal: 90000 },
+        ],
+      },
+      {
+        id: 'default-3',
+        code: 'SO-2026-0001',
+        customerId: '3',
+        customerName: 'Công Ty TNHH Minh Phát',
+        customerPhone: '0912345678',
+        date: new Date().toISOString().split('T')[0],
+        subTotal: 5000000,
+        taxAmount: 500000,
+        discountAmount: 200000,
+        totalAmount: 5300000,
+        status: 'COMPLETED',
+        paymentStatus: 'PAID',
+        paymentMethod: 'BANK_TRANSFER',
+        branchId: 'BR-002',
+        branchName: 'Chi nhánh Hà Nội',
+        origin: 'MANUAL',
+        items: [
+          { id: '5', productId: '5', productName: 'Bộ Nồi Inox Sunhouse 3 Đáy', sku: 'SKU-SUN-3D', quantity: 2, price: 1250000, subTotal: 2500000 },
+          { id: '6', productId: '6', productName: 'Chảo Chống Dính Tefal 28cm', sku: 'SKU-TEF-28', quantity: 3, price: 850000, subTotal: 2550000 },
+        ],
+        orderLines: [
+          { id: '5', sku: 'SKU-SUN-3D', productName: 'Bộ Nồi Inox Sunhouse 3 Đáy', quantity: 2, unitPrice: 1250000, lineTotal: 2500000 },
+          { id: '6', sku: 'SKU-TEF-28', productName: 'Chảo Chống Dính Tefal 28cm', quantity: 3, unitPrice: 850000, lineTotal: 2550000 },
+        ],
+      },
+    ];
+
+    let localOrders: any[] = [];
+    try {
+      const stored = localStorage.getItem('user_local_orders');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          localOrders = parsed.map((lo: any, idx: number) => ({
+            id: lo.id || `local-${idx}`,
+            code: lo.id || `ONLINE-${idx + 100}`,
+            customerId: '1',
+            customerName: lo.shippingAddress?.fullName || 'Khách mua Online',
+            customerPhone: lo.shippingAddress?.phone || '0901234567',
+            date: new Date().toISOString().split('T')[0],
+            subTotal: Number(lo.subtotal || lo.total || 0),
+            taxAmount: 0,
+            discountAmount: 0,
+            totalAmount: Number(lo.total || 0),
+            status: 'COMPLETED',
+            paymentStatus: 'PAID',
+            paymentMethod: 'ONLINE',
+            branchId: 'BR-001',
+            branchName: 'Chi nhánh Chính',
+            origin: 'ONLINE',
+            items: Array.isArray(lo.items) ? lo.items.map((it: any, iIdx: number) => ({
+              id: String(iIdx + 1),
+              productId: String(it.id || iIdx + 1),
+              productName: it.name || it.productName || 'Sản phẩm',
+              sku: it.sku || `SKU-${iIdx + 1}`,
+              quantity: Number(it.quantity || 1),
+              price: Number(it.price || 0),
+              subTotal: Number(it.price || 0) * Number(it.quantity || 1),
+            })) : [],
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse local orders', e);
+    }
+
+    const map = new Map<string, any>();
+    [...defaultOrders, ...localOrders, ...saleOrders].forEach((so) => {
+      if (so && (so.code || (so as any).orderCode)) {
+        const c = so.code || (so as any).orderCode;
+        map.set(c, { ...so, code: c });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [saleOrders]);
+
+  const selectedSO = useMemo(() => {
+    if (!editingRequest.orderCode) return null;
+    return masterSaleOrders.find((so) => so.code === editingRequest.orderCode) || null;
+  }, [editingRequest.orderCode, masterSaleOrders]);
+
+  const selectedOrderItems = useMemo(() => {
+    if (!selectedSO) return [];
+    const rawItems = (selectedSO as any).details || (selectedSO as any).items || (selectedSO as any).orderLines || [];
+    if (!Array.isArray(rawItems)) return [];
+    return rawItems.map((it: any, idx: number) => ({
+      id: String(it.id || idx + 1),
+      productName: it.productNameSnapshot || it.productName || it.name || `Sản phẩm ${idx + 1}`,
+      sku: it.skuSnapshot || it.sku || `SKU-${idx + 1}`,
+      quantity: Number(it.quantity || 1),
+      unitPrice: Number(it.unitPriceSnapshot || it.price || it.unitPrice || 0),
+    }));
+  }, [selectedSO]);
 
   const filteredRequests = useMemo(() => {
     if (!search) return returnRequests;
@@ -114,31 +277,38 @@ export function ReturnsListsPage() {
     }
 
     const qty = Number(editingRequest.requestedQty) || 1;
+    const foundSO = saleOrders.find((so) => so.code === editingRequest.orderCode);
+    const soItems = (foundSO as any)?.items || (foundSO as any)?.orderLines || (foundSO as any)?.details || [];
+    const matchedItem = soItems.find((it: any) => (it.productName || it.name || it.sku) === editingRequest.selectedProduct) || soItems[0];
+
+    const prodName = editingRequest.selectedProduct || matchedItem?.productName || matchedItem?.name || ('Sản phẩm từ đơn ' + editingRequest.orderCode);
+    const prodSku = matchedItem?.sku || ('SKU-' + editingRequest.orderCode);
+    const prodPrice = Number(matchedItem?.price || matchedItem?.unitPrice || (editingRequest.requestedRefundAmount ? editingRequest.requestedRefundAmount / qty : 100000));
 
     const newReq: ReturnRequestItem = {
       id: String(Date.now()),
       requestCode: editingRequest.requestCode || `RR-2026-${Math.floor(1000 + Math.random() * 9000)}`,
       orderCode: editingRequest.orderCode,
-      customerId: editingRequest.customerId || '1',
-      customerName: editingRequest.customerName || 'Khách mua',
-      customerPhone: editingRequest.customerPhone || '',
+      customerId: editingRequest.customerId || foundSO?.customerId || '1',
+      customerName: editingRequest.customerName || foundSO?.customerName || 'Khách mua',
+      customerPhone: editingRequest.customerPhone || foundSO?.customerPhone || '',
       requestDate: editingRequest.requestDate || new Date().toISOString().split('T')[0],
       reason: editingRequest.reason || 'Yêu cầu trả hàng',
       requestedRefundMethod: editingRequest.requestedRefundMethod || 'CASH',
-      status: 'PENDING',
-      handlerName: 'Quản trị viên',
+      status: (editingRequest.status as any) || 'PENDING',
+      handlerName: editingRequest.handlerName || currentUser?.name || currentUser?.username || 'Nhân viên hệ thống',
       notes: editingRequest.notes || '',
       requestedQty: qty,
       returnedQty: 0,
       remainingQty: qty,
       items: [
         {
-          productId: '1',
-          productName: 'Sản phẩm từ đơn ' + editingRequest.orderCode,
-          sku: 'SKU-' + editingRequest.orderCode,
+          productId: String(matchedItem?.productId || matchedItem?.id || '1'),
+          productName: prodName,
+          sku: prodSku,
           quantity: qty,
           returnedQty: 0,
-          price: 100000,
+          price: prodPrice,
           reason: editingRequest.reason || 'Yêu cầu trả hàng',
         },
       ],
@@ -184,10 +354,10 @@ export function ReturnsListsPage() {
             <div className="text-xs space-y-0.5">
               <div className="flex gap-2">
                 <span className="text-gray-500">Yêu cầu: <strong>{req.requestedQty}</strong></span>
-                <span className="text-emerald-600">Đã RET: <strong>{req.returnedQty}</strong></span>
+                <span className="text-emerald-600">Đã trả: <strong>{req.returnedQty}</strong></span>
               </div>
               <span className="inline-block font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded text-[11px]">
-                Còn được tạo RET: {req.remainingQty}
+                Còn được trả: {req.remainingQty}
               </span>
             </div>
           );
@@ -239,9 +409,9 @@ export function ReturnsListsPage() {
                   type="button"
                   onClick={() => handleApproveAndCreateReturn(req)}
                   className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
-                  title="Duyệt yêu cầu và Tạo phiếu RET ở trạng thái Chờ nhận hàng"
+                  title="Duyệt yêu cầu và Tạo phiếu nhập trả hàng ở trạng thái Chờ nhận hàng"
                 >
-                  <CheckCircle2 className="w-3.5 h-3.5" /> + Tạo Phiếu RET
+                  <CheckCircle2 className="w-3.5 h-3.5" /> + Tạo Phiếu Trả Hàng
                 </button>
               )}
 
@@ -269,20 +439,22 @@ export function ReturnsListsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <FileText className="w-6 h-6 text-blue-600" /> Quản Lý Yêu Cầu Trả Hàng (Return Requests - RR)
+            <FileText className="w-6 h-6 text-blue-600" /> Quản lý yêu cầu trả hàng
           </h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Quản lý và tiếp nhận các yêu cầu / đề nghị đổi trả từ khách hàng (Mã Yêu Cầu: RR-XXXX | Hỗ trợ Trả từng phần 1:N)
+            Quản lý và tiếp nhận các yêu cầu / đề nghị đổi trả từ khách hàng (Hỗ trợ Trả từng phần)
           </p>
         </div>
 
         <button
           onClick={() => {
+            const firstSO = saleOrders.length > 0 ? saleOrders[0] : null;
             setEditingRequest({
               requestCode: `RR-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-              orderCode: '',
-              customerName: '',
-              customerPhone: '',
+              orderCode: firstSO?.code || '',
+              customerName: firstSO?.customerName || '',
+              customerPhone: firstSO?.customerPhone || '',
+              customerId: firstSO?.customerId || '1',
               requestDate: new Date().toISOString().split('T')[0],
               reason: '',
               requestedRefundMethod: 'CASH',
@@ -292,7 +464,7 @@ export function ReturnsListsPage() {
           }}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs flex items-center gap-2 transition-colors shrink-0"
         >
-          <Plus className="w-4 h-4" /> Tạo Yêu Cầu Trả Hàng (RR)
+          <Plus className="w-4 h-4" /> Tạo Yêu Cầu Trả Hàng
         </button>
       </div>
 
@@ -415,120 +587,397 @@ export function ReturnsListsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="📋 Tạo Yêu Cầu Trả Hàng Từ Khách Hàng (RR)"
-        width="max-w-lg"
+        title="Tạo yêu cầu trả hàng từ khách hàng"
+        width="max-w-3xl"
       >
-        <form onSubmit={handleSaveNewRequest} className="space-y-4 text-xs">
-          <div>
-            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Mã yêu cầu (Auto)</label>
-            <input
-              type="text"
-              value={editingRequest.requestCode || ''}
-              onChange={(e) => setEditingRequest({ ...editingRequest, requestCode: e.target.value })}
-              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-mono font-bold text-blue-600"
-              required
-            />
+        <form onSubmit={handleSaveNewRequest} className="space-y-5 text-xs max-h-[75vh] overflow-y-auto pr-2">
+          {/* 1. THÔNG TIN YÊU CẦU */}
+          <div className="p-4 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-gray-200 dark:border-gray-700 space-y-3">
+            <h3 className="font-bold text-gray-900 dark:text-white text-xs uppercase tracking-wider flex items-center gap-1.5 border-b pb-2 dark:border-gray-700">
+              <FileText className="w-4 h-4 text-blue-600" /> 1. Thông tin yêu cầu
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Mã yêu cầu (Tự động)</label>
+                <input
+                  type="text"
+                  value={editingRequest.requestCode || ''}
+                  className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-gray-800 font-mono font-bold text-blue-600 cursor-not-allowed"
+                  readOnly
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-medium text-gray-700 dark:text-gray-300">Đơn bán hàng gốc *</label>
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomOrderCode(!isCustomOrderCode)}
+                    className="text-[11px] text-blue-600 hover:underline font-semibold"
+                  >
+                    {isCustomOrderCode ? '← Chọn từ hệ thống' : '+ Tự gõ mã đơn'}
+                  </button>
+                </div>
+
+                {isCustomOrderCode ? (
+                  <input
+                    type="text"
+                    value={editingRequest.orderCode || ''}
+                    onChange={(e) => setEditingRequest({ ...editingRequest, orderCode: e.target.value })}
+                    placeholder="Nhập mã đơn gốc (VD: SO-2026-001)..."
+                    className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-mono font-bold"
+                    required
+                  />
+                ) : (
+                  <select
+                    value={editingRequest.orderCode || ''}
+                    onChange={(e) => {
+                      const code = e.target.value;
+                      const foundSO = masterSaleOrders.find((so) => so.code === code);
+                      const rawItems = (foundSO as any)?.details || (foundSO as any)?.items || (foundSO as any)?.orderLines || [];
+                      const firstItem = rawItems.length > 0 ? rawItems[0] : null;
+                      const firstItemName = firstItem ? (firstItem.productNameSnapshot || firstItem.productName || firstItem.name || firstItem.skuSnapshot || firstItem.sku || '') : '';
+                      const firstItemPrice = firstItem ? Number(firstItem.unitPriceSnapshot || firstItem.price || firstItem.unitPrice || 0) : 0;
+                      const qty = editingRequest.requestedQty || 1;
+
+                      setEditingRequest({
+                        ...editingRequest,
+                        orderCode: code,
+                        customerName: foundSO?.customerName || 'Khách mua',
+                        customerPhone: foundSO?.customerPhone || '',
+                        customerId: foundSO?.customerId || '1',
+                        selectedProduct: firstItemName,
+                        requestedRefundAmount: firstItemPrice * qty,
+                      });
+                    }}
+                    className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-mono font-bold"
+                    required
+                  >
+                    <option value="">-- Chọn đơn hàng gốc --</option>
+                    {masterSaleOrders.map((so) => (
+                      <option key={so.id || so.code} value={so.code}>
+                        {so.code} - {so.customerName} {so.customerPhone ? `(${so.customerPhone})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng *</label>
+                <input
+                  type="text"
+                  value={editingRequest.customerName || ''}
+                  placeholder="Tự động điền từ đơn hàng"
+                  className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-gray-800 font-medium cursor-not-allowed"
+                  readOnly
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại</label>
+                <input
+                  type="text"
+                  value={editingRequest.customerPhone || ''}
+                  placeholder="Tự động điền"
+                  className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-gray-800 font-mono cursor-not-allowed"
+                  readOnly
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày yêu cầu *</label>
+                <input
+                  type="date"
+                  value={editingRequest.requestDate || ''}
+                  onChange={(e) => setEditingRequest({ ...editingRequest, requestDate: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-mono"
+                  required
+                />
+              </div>
+            </div>
           </div>
 
-          <div>
-            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Mã đơn gốc *</label>
-            <select
-              value={editingRequest.orderCode || ''}
-              onChange={(e) => {
-                const code = e.target.value;
-                const foundSO = saleOrders.find((so) => so.code === code);
-                setEditingRequest({
-                  ...editingRequest,
-                  orderCode: code,
-                  customerName: foundSO?.customerName || editingRequest.customerName || 'Khách mua',
-                  customerPhone: foundSO?.customerPhone || editingRequest.customerPhone || '',
-                });
-              }}
-              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-mono font-bold"
-              required
-            >
-              <option value="">-- Chọn đơn hàng gốc --</option>
-              <option value="ONLINE-805391">ONLINE-805391 - Nguyễn Lưu Hoàng (0901234567)</option>
-              <option value="ORD-POS-2026-818712">ORD-POS-2026-818712 - Trần Văn Nam (0988776655)</option>
-              {saleOrders.map((so) => (
-                <option key={so.id} value={so.code}>
-                  {so.code} - {so.customerName}
-                </option>
-              ))}
-            </select>
+          {/* 2. SẢN PHẨM YÊU CẦU TRẢ */}
+          <div className="p-4 bg-blue-50/30 dark:bg-blue-950/20 rounded-xl border border-blue-200 dark:border-blue-900 space-y-3">
+            <h3 className="font-bold text-blue-900 dark:text-blue-300 text-xs uppercase tracking-wider flex items-center gap-1.5 border-b pb-2 dark:border-blue-900">
+              <Package className="w-4 h-4 text-blue-600" /> 2. Sản phẩm yêu cầu trả
+            </h3>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Sản phẩm / Biến thể *</label>
+                {selectedOrderItems.length > 0 ? (
+                  <select
+                    value={editingRequest.selectedProduct || ''}
+                    onChange={(e) => {
+                      const prodName = e.target.value;
+                      const foundItem = selectedOrderItems.find((it: any) => it.productName === prodName || it.sku === prodName);
+                      const itemPrice = Number(foundItem?.unitPrice || 0);
+                      const qty = Number(editingRequest.requestedQty || 1);
+                      setEditingRequest({
+                        ...editingRequest,
+                        selectedProduct: prodName,
+                        requestedRefundAmount: itemPrice * qty,
+                      });
+                    }}
+                    className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-medium"
+                    required
+                  >
+                    <option value="">-- Chọn sản phẩm từ đơn hàng gốc --</option>
+                    {selectedOrderItems.map((it: any, idx: number) => {
+                      const pName = it.productName;
+                      const pSku = it.sku;
+                      const pQty = it.quantity;
+                      const pPrice = it.unitPrice;
+                      return (
+                        <option key={idx} value={pName}>
+                          {pName} ({pSku}) - SL mua: {pQty} - Đơn giá: {formatMoney(pPrice, 'VND')}
+                        </option>
+                      );
+                    })}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={editingRequest.selectedProduct || ''}
+                    onChange={(e) => setEditingRequest({ ...editingRequest, selectedProduct: e.target.value })}
+                    placeholder="Nhập tên sản phẩm hoặc mã SKU..."
+                    className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-medium"
+                    required
+                  />
+                )}
+              </div>
+
+              {/* Badges Thống kê số lượng */}
+              {selectedOrderItems.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 text-center text-[11px] font-bold">
+                  <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-gray-700 dark:text-gray-300">
+                    <span className="block text-[10px] text-gray-400 font-normal">Đã mua</span>
+                    {selectedOrderItems.find((it: any) => it.productName === editingRequest.selectedProduct)?.quantity || selectedOrderItems[0]?.quantity || 1}
+                  </div>
+                  <div className="p-2 bg-purple-50 dark:bg-purple-950/40 rounded-lg text-purple-700 dark:text-purple-300">
+                    <span className="block text-[10px] text-purple-400 font-normal">Đã trả trước</span>
+                    0
+                  </div>
+                  <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg text-emerald-700 dark:text-emerald-300">
+                    <span className="block text-[10px] text-emerald-400 font-normal">Có thể yêu cầu trả</span>
+                    {selectedOrderItems.find((it: any) => it.productName === editingRequest.selectedProduct)?.quantity || selectedOrderItems[0]?.quantity || 1}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Số lượng yêu cầu trả *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={selectedOrderItems.find((it: any) => (it.productName || it.name) === editingRequest.selectedProduct)?.quantity || 100}
+                    value={editingRequest.requestedQty || 1}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      const maxAvailable = selectedOrderItems.find((it: any) => (it.productName || it.name) === editingRequest.selectedProduct)?.quantity || 100;
+                      if (val > maxAvailable) {
+                        toast.warning(`Số lượng trả không thể vượt quá số lượng đã mua (${maxAvailable})`);
+                      }
+                      const foundItem = selectedOrderItems.find((it: any) => (it.productName || it.name) === editingRequest.selectedProduct) || selectedOrderItems[0];
+                      const itemPrice = Number(foundItem?.price || foundItem?.unitPrice || 0);
+
+                      setEditingRequest({
+                        ...editingRequest,
+                        requestedQty: val,
+                        requestedRefundAmount: itemPrice * val,
+                      });
+                    }}
+                    className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-bold"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Lý do trả hàng *</label>
+                  <select
+                    value={editingRequest.reason || ''}
+                    onChange={(e) => setEditingRequest({ ...editingRequest, reason: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900"
+                    required
+                  >
+                    <option value="">-- Chọn lý do --</option>
+                    <option value="Hàng lỗi / hỏng">Hàng lỗi / hỏng</option>
+                    <option value="Giao sai sản phẩm">Giao sai sản phẩm</option>
+                    <option value="Thiếu sản phẩm">Thiếu sản phẩm</option>
+                    <option value="Sản phẩm không đúng mô tả">Sản phẩm không đúng mô tả</option>
+                    <option value="Sản phẩm không còn nhu cầu">Sản phẩm không còn nhu cầu</option>
+                    <option value="Bao bì / đóng gói bị hư hỏng">Bao bì / đóng gói bị hư hỏng</option>
+                    <option value="Đặt nhầm sản phẩm">Đặt nhầm sản phẩm</option>
+                    <option value="Khác">Khác</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Tình trạng sản phẩm khách báo *</label>
+                <select
+                  value={editingRequest.itemCondition || 'CHUA_MO'}
+                  onChange={(e) => setEditingRequest({ ...editingRequest, itemCondition: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-medium"
+                >
+                  <option value="CHUA_MO">Chưa mở / Nguyên tem niêm phong</option>
+                  <option value="DA_MO">Đã mở</option>
+                  <option value="LOI_HANG">Lỗi / Hỏng</option>
+                  <option value="DA_SU_DUNG">Đã sử dụng / Trầy xước</option>
+                  <option value="KHAC">Khác</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Chi tiết lý do {editingRequest.reason === 'Khác' && <span className="text-red-500">*</span>}
+                </label>
+                <textarea
+                  rows={2}
+                  value={editingRequest.reasonDetails || ''}
+                  onChange={(e) => setEditingRequest({ ...editingRequest, reasonDetails: e.target.value })}
+                  placeholder="Nhập mô tả chi tiết lý do khách báo..."
+                  className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900"
+                  required={editingRequest.reason === 'Khác'}
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          {/* 3. HÌNH THỨC HOÀN TIỀN */}
+          <div className="p-4 bg-emerald-50/30 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-900 space-y-3">
+            <h3 className="font-bold text-emerald-900 dark:text-emerald-300 text-xs uppercase tracking-wider flex items-center gap-1.5 border-b pb-2 dark:border-emerald-900">
+              <DollarSign className="w-4 h-4 text-emerald-600" /> 3. Hình thức hoàn tiền
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Hình thức hoàn tiền mong muốn *</label>
+                <select
+                  value={editingRequest.requestedRefundMethod || 'CASH'}
+                  onChange={(e) => setEditingRequest({ ...editingRequest, requestedRefundMethod: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-medium"
+                  required
+                >
+                  <option value="CASH">Tiền mặt</option>
+                  <option value="BANK_TRANSFER">Chuyển khoản</option>
+                  <option value="STORE_CREDIT">Ví / Store Credit</option>
+                  <option value="ORIGINAL_CARD">Hoàn về phương thức thanh toán ban đầu</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Số tiền dự kiến hoàn</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={formatMoney(editingRequest.requestedRefundAmount || 0, 'VND')}
+                    className="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-gray-800 font-bold text-emerald-600 text-sm cursor-not-allowed font-mono"
+                    readOnly
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. MINH CHỨNG & GHI CHÚ KHÁCH */}
+          <div className="p-4 bg-purple-50/30 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-900 space-y-3">
+            <h3 className="font-bold text-purple-900 dark:text-purple-300 text-xs uppercase tracking-wider flex items-center gap-1.5 border-b pb-2 dark:border-purple-900">
+              <Upload className="w-4 h-4 text-purple-600" /> 4. Minh chứng & Ghi chú khách
+            </h3>
+
             <div>
-              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Tên khách hàng</label>
-              <input
-                type="text"
-                value={editingRequest.customerName || ''}
-                onChange={(e) => setEditingRequest({ ...editingRequest, customerName: e.target.value })}
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Hình ảnh / Video sản phẩm</label>
+              <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-4 text-center bg-white dark:bg-gray-900 space-y-1">
+                <Upload className="w-6 h-6 mx-auto text-purple-500" />
+                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 block">Kéo thả hoặc tải tệp lên</span>
+                <span className="text-[11px] text-gray-400 block font-mono">JPG, JPEG, PNG, WEBP, MP4 - Tối đa 10MB/tệp</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú của khách hàng</label>
+              <textarea
+                rows={2}
+                value={editingRequest.customerNotes || ''}
+                onChange={(e) => setEditingRequest({ ...editingRequest, customerNotes: e.target.value })}
+                placeholder="Nhập ghi chú hoặc phản hồi từ khách..."
                 className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900"
               />
             </div>
-            <div>
-              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại</label>
-              <input
-                type="text"
-                value={editingRequest.customerPhone || ''}
-                onChange={(e) => setEditingRequest({ ...editingRequest, customerPhone: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-mono"
-              />
+          </div>
+
+          {/* 5. XỬ LÝ YÊU CẦU NỘI BỘ */}
+          <div className="p-4 bg-amber-50/30 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-900 space-y-3">
+            <h3 className="font-bold text-amber-900 dark:text-amber-300 text-xs uppercase tracking-wider flex items-center gap-1.5 border-b pb-2 dark:border-amber-900">
+              <User className="w-4 h-4 text-amber-600" /> 5. Xử lý yêu cầu nội bộ
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái xử lý</label>
+                <select
+                  value={editingRequest.status || 'PENDING'}
+                  onChange={(e) => setEditingRequest({ ...editingRequest, status: e.target.value as any })}
+                  className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-bold text-amber-600"
+                >
+                  <option value="PENDING">Chờ duyệt</option>
+                  <option value="APPROVED">Đã duyệt</option>
+                  <option value="REJECTED">Từ chối</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Người tiếp nhận *</label>
+                <select
+                  value={editingRequest.handlerName || currentUser?.name || currentUser?.username || ''}
+                  onChange={(e) => setEditingRequest({ ...editingRequest, handlerName: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-medium"
+                >
+                  {currentUser && (
+                    <option value={currentUser.name || currentUser.username}>
+                      {currentUser.name || currentUser.username}
+                    </option>
+                  )}
+                  {users.map((u) => (
+                    <option key={u.id} value={u.fullName || u.userCode}>
+                      {u.fullName} ({u.userCode || u.assignedRole || 'Nhân viên'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú xử lý nội bộ</label>
+                <textarea
+                  rows={2}
+                  value={editingRequest.notes || ''}
+                  onChange={(e) => setEditingRequest({ ...editingRequest, notes: e.target.value })}
+                  placeholder="Nhập ghi chú xử lý nội bộ..."
+                  className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900"
+                />
+              </div>
             </div>
           </div>
 
-          <div>
-            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Số lượng yêu cầu trả *</label>
-            <input
-              type="number"
-              min={1}
-              value={editingRequest.requestedQty || 1}
-              onChange={(e) => setEditingRequest({ ...editingRequest, requestedQty: Number(e.target.value) })}
-              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-bold"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Hình thức hoàn tiền mong muốn</label>
-            <select
-              value={editingRequest.requestedRefundMethod || 'CASH'}
-              onChange={(e) => setEditingRequest({ ...editingRequest, requestedRefundMethod: e.target.value })}
-              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900"
-            >
-              <option value="CASH">Tiền mặt</option>
-              <option value="BANK_TRANSFER">Chuyển khoản ngân hàng</option>
-              <option value="STORE_CREDIT">Ví / Store Credit</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Lý do yêu cầu trả *</label>
-            <textarea
-              rows={3}
-              value={editingRequest.reason || ''}
-              onChange={(e) => setEditingRequest({ ...editingRequest, reason: e.target.value })}
-              placeholder="Nhập lý do khách báo trả hàng..."
-              className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900"
-              required
-            />
-          </div>
-
-          <div className="pt-3 border-t flex justify-end gap-2">
+          {/* FOOTER ACTIONS */}
+          <div className="pt-4 border-t flex justify-end gap-3">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded-lg hover:bg-gray-100 font-bold"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl font-bold text-xs transition-colors"
             >
               Hủy
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg"
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-blue-500/20 flex items-center gap-1.5"
             >
-              Lưu Yêu Cầu
+              <Plus className="w-4 h-4" /> Tạo yêu cầu trả hàng
             </button>
           </div>
         </form>

@@ -8,7 +8,8 @@ import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useHrStore, type DepartmentRecord } from '../store/hrStore';
-import { useUserStore, BRANCH_OPTIONS } from '../store/userStore';
+import { useUserStore } from '../store/userStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 import { toast } from 'sonner';
 import { exportToCsv } from '@/shared/utils/exportCsv';
 
@@ -22,11 +23,13 @@ const statusStyles = {
 export function DepartmentsPage() {
   const { departments: data, fetchDepartments, addDepartment, updateDepartment, deleteDepartment } = useHrStore();
   const { users, fetchUsers } = useUserStore();
+  const { branches, fetchBranches } = useBranchStore();
 
   useEffect(() => {
     fetchDepartments();
     fetchUsers();
-  }, [fetchDepartments, fetchUsers]);
+    fetchBranches();
+  }, [fetchDepartments, fetchUsers, fetchBranches]);
 
   const [search, setSearch] = useState('');
   const [selectedDept, setSelectedDept] = useState<DepartmentRecord | null>(null);
@@ -380,7 +383,7 @@ export function DepartmentsPage() {
 
               <div className="flex justify-between items-center pt-2 border-t border-gray-200 text-xs font-mono">
                 <span className="text-gray-500 font-sans">Location:</span>
-                <span className="text-gray-800">{BRANCH_OPTIONS.find(b => b.id === selectedDept.locationId)?.label || selectedDept.locationId || 'N/A'}</span>
+                <span className="text-gray-800">{branches.find(b => b.id === selectedDept.locationId)?.name || selectedDept.locationId || 'N/A'}</span>
               </div>
 
               <div className="flex justify-between items-center text-xs font-mono">
@@ -510,8 +513,8 @@ export function DepartmentsPage() {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
             >
               <option value="">-- Trụ sở chính --</option>
-              {BRANCH_OPTIONS.map(b => (
-                <option key={b.id} value={b.id}>{b.label}</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>{b.name} ({b.branchCode})</option>
               ))}
             </select>
           </div>

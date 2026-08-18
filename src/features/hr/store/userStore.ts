@@ -3,14 +3,8 @@ import { userService, normalizeSystemUser, branchLabel } from '../services/userS
 import { useAuthStore } from '@/features/auth/store/authStore';
 
 
-export const BRANCH_OPTIONS = [
-  { id: 'HQ', label: 'Trụ sở chính - TP.HCM' },
-  { id: 'BR-001', label: 'CH Quận 1' },
-  { id: 'BR-002', label: 'CH Tân Bình' },
-  { id: 'BR-003', label: 'CH Gò Vấp' },
-  { id: 'BR-004', label: 'CH Quận 7' },
-  { id: 'BR-005', label: 'CH Bình Dương' },
-] as const;
+export const BRANCH_OPTIONS: { id: string; label: string }[] = [];
+
 
 export interface SystemUserRecord {
   id: string;
@@ -115,7 +109,12 @@ export const useUserStore = create<UserStore>()((set) => ({
               ...currentAuthUser,
               role: updatedSelf.assignedRole,
               branchId: updatedSelf.branchId,
+              branchName: updatedSelf.branchLocation,
               branchLocation: updatedSelf.branchLocation,
+              branchCode: updatedSelf.branchId === '1' ? 'CN-HCM' : 
+                          updatedSelf.branchId === '2' ? 'CN-HN' : 
+                          updatedSelf.branchId === '3' ? 'CN-DN' : 
+                          updatedSelf.branchId === '4' ? 'CN-CT' : '',
             }
           });
           // Tải lại bộ mã quyền mới của vai trò được gắn mới

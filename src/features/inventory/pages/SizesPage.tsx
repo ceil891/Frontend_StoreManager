@@ -1,6 +1,6 @@
 import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Eye, Edit, Trash2, Search, Ruler } from 'lucide-react';
+import { Plus, Download, Eye, Edit, Trash2, Search, Ruler, Loader2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 
 
@@ -56,22 +56,31 @@ export function SizesPage() {
     setIsModalOpen(true);
   };
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingSize.sizeName || !editingSize.sizeCode) return;
-    if (modalMode === 'create') {
-      await addSize({
-        sizeCode: editingSize.sizeCode!,
-        sizeName: editingSize.sizeName!,
-        sizeGroup: editingSize.sizeGroup || 'GENERAL',
-        sortOrder: editingSize.sortOrder || 1,
-        description: editingSize.description,
-        status: editingSize.status || 'ACTIVE',
-      });
-    } else if (editingSize.id) {
-      await updateSize(editingSize.id, editingSize);
+    if (!editingSize.sizeName || !editingSize.sizeCode || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      if (modalMode === 'create') {
+        await addSize({
+          sizeCode: editingSize.sizeCode!,
+          sizeName: editingSize.sizeName!,
+          sizeGroup: editingSize.sizeGroup || 'GENERAL',
+          sortOrder: editingSize.sortOrder || 1,
+          description: editingSize.description,
+          status: editingSize.status || 'ACTIVE',
+        });
+      } else if (editingSize.id) {
+        await updateSize(editingSize.id, editingSize);
+      }
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsModalOpen(false);
   };
 
   const handleDeleteConfirm = async () => {
@@ -268,8 +277,11 @@ export function SizesPage() {
             </select>
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg text-sm">Hủy bỏ</button>
-            <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm">{modalMode === 'create' ? 'Tạo Mới' : 'Lưu thay đổi'}</button>
+            <button type="button" onClick={() => setIsModalOpen(false)} disabled={isSubmitting} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg text-sm">Hủy bỏ</button>
+            <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-medium rounded-lg text-sm flex items-center gap-2">
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {modalMode === 'create' ? 'Tạo Mới' : 'Lưu thay đổi'}
+            </button>
           </div>
         </form>
       </Modal>

@@ -30,17 +30,17 @@ export function LoyaltyPointHistoryPage() {
   }, [fetchLoyaltyHistories]);
 
   const data: LoyaltyPointHistoryItem[] = useMemo(() => {
-    return storeHistories.map((h: any) => ({
-      id: h.id,
-      customerName: h.customerName,
-      customerPhone: h.customerPhone,
-      pointChange: h.pointsChange,
-      transactionType: h.actionType === 'EARN' ? 'TÍCH_ĐIỂM_ĐƠN_HÀNG' : h.actionType === 'REDEEM' ? 'ĐỔI_QUÀ' : 'ĐIỀU_CHỈNH_HỆ_THỐNG',
-      referenceCode: h.referenceOrder || `REF-${h.id}`,
-      transactionDate: h.createdAt,
-      operatorName: 'Nhân viên thu ngân',
-      pointBalanceAfter: h.balanceAfter,
-      notes: h.notes,
+    return (storeHistories || []).map((h: any) => ({
+      id: h.code || h.id || `TX-${Math.random()}`,
+      customerName: h.customerName || h.name || 'Khách hàng',
+      customerPhone: h.customerPhone || h.phone || 'N/A',
+      pointChange: Number(h.pointsChange ?? h.pointChange ?? 0),
+      transactionType: h.transactionType || (h.actionType === 'EARN' ? 'TÍCH ĐIỂM BÁN HÀNG POS' : h.actionType === 'REDEEM' ? 'TIÊU ĐIỂM BÁN HÀNG POS' : 'ĐIỀU CHỈNH HỆ THỐNG'),
+      referenceCode: h.refDocument || h.referenceOrder || `REF-${h.id}`,
+      transactionDate: h.date || h.createdAt || new Date().toISOString().split('T')[0],
+      operatorName: h.operatorName || 'Nhân viên thu ngân',
+      pointBalanceAfter: Number(h.balanceAfter ?? h.pointBalanceAfter ?? 0),
+      notes: h.notes || '',
     }));
   }, [storeHistories]);
 

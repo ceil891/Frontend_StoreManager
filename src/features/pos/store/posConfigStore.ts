@@ -14,6 +14,24 @@ export interface PaymentMethodRecord {
   supportedCurrencies: string[];
   status: 'ACTIVE' | 'TESTING_MODE' | 'MAINTENANCE' | 'DISABLED';
   configuredGateways: string;
+  feeType?: 'PERCENT' | 'FIXED';
+  feeValue?: number;
+  sortOrder?: number;
+  logoUrl?: string;
+  bankName?: string;
+  bankAccount?: string;
+  bankAccountName?: string;
+  merchantId?: string;
+  apiKey?: string;
+  secretKey?: string;
+  checksumKey?: string;
+  allowPos?: boolean;
+  allowOnline?: boolean;
+  currency?: string;
+  transferSyntax?: string;
+  branchIds?: string[];
+  applyToAllBranches?: boolean;
+  ytdTotal?: number;
 }
 
 interface PosConfigState {
@@ -33,7 +51,7 @@ export const usePosConfigStore = create<PosConfigState>()(
 
       fetchPaymentMethods: async () => {
         try {
-          const response = await axiosClient.get<any, any[]>('/finance/payment-methods');
+          const response = await axiosClient.get<any, any[]>('/payment-methods');
           set({ paymentMethods: response });
         } catch (error) {
           console.error('Failed to fetch payment methods:', error);
@@ -42,7 +60,7 @@ export const usePosConfigStore = create<PosConfigState>()(
 
       addPaymentMethod: async (method) => {
         try {
-          await axiosClient.post('/finance/payment-methods', method);
+          await axiosClient.post('/payment-methods', method);
           await get().fetchPaymentMethods();
         } catch (error) {
           console.error('Fallback: Failed to add payment method via API, using local state', error);
@@ -54,7 +72,7 @@ export const usePosConfigStore = create<PosConfigState>()(
 
       updatePaymentMethod: async (id, data) => {
         try {
-          await axiosClient.put(`/finance/payment-methods/${id}`, data);
+          await axiosClient.put(`/payment-methods/${id}`, data);
           await get().fetchPaymentMethods();
         } catch (error) {
           console.error('Fallback: Failed to update payment method via API, using local state', error);
@@ -68,7 +86,7 @@ export const usePosConfigStore = create<PosConfigState>()(
 
       deletePaymentMethod: async (id) => {
         try {
-          await axiosClient.delete(`/finance/payment-methods/${id}`);
+          await axiosClient.delete(`/payment-methods/${id}`);
           await get().fetchPaymentMethods();
         } catch (error) {
           console.error('Fallback: Failed to delete payment method via API, using local state', error);

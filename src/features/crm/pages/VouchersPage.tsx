@@ -55,7 +55,7 @@ export function VouchersPage() {
       id: v.id,
       voucherCode: v.code,
       campaignName: v.name,
-      type: v.discountType === 'PERCENT' ? 'PERCENTAGE' : 'FIXED_AMOUNT',
+      type: (v.discountType as any) || 'PERCENTAGE',
       discountValue: v.value,
       minOrderValue: v.minOrderValue,
       maxDiscount: v.maxDiscount,
@@ -63,7 +63,7 @@ export function VouchersPage() {
       expiryDate: v.endDate,
       totalIssued: v.quantity,
       totalRedeemed: v.usedCount,
-      status: v.status === 'ACTIVE' ? 'ACTIVE' : 'EXPIRED',
+      status: (v.status as any) || 'ACTIVE',
       applicableScope: 'ALL_PRODUCTS',
       notes: v.name,
     }));
@@ -146,25 +146,36 @@ export function VouchersPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const payload = {
-      voucherCode: formData.voucherCode,
-      voucherName: formData.campaignName,
-      type: formData.type,
-      value: formData.discountValue,
-      minOrderAmount: formData.minOrderValue,
-      maxDiscountAmount: formData.maxDiscount,
-      maxUsage: formData.totalIssued,
-      status: formData.status,
-      description: formData.notes,
-    };
-
     try {
       if (editingItem) {
-        await axiosClient.put(`/crm/vouchers/${editingItem.id}`, payload);
+        await updateVoucher(editingItem.id, {
+          code: formData.voucherCode,
+          name: formData.campaignName,
+          discountType: formData.type as any,
+          value: formData.discountValue,
+          minOrderValue: formData.minOrderValue,
+          maxDiscount: formData.maxDiscount,
+          quantity: formData.totalIssued,
+          status: formData.status as any,
+          startDate: formData.startDate,
+          endDate: formData.expiryDate,
+        });
         toast.success(`Cập nhật voucher ${formData.voucherCode} thành công!`);
       } else {
-        await axiosClient.post('/crm/vouchers', payload);
-        toast.success(`Tạo Mới voucher ${formData.voucherCode} thành công!`);
+        await addVoucher({
+          code: formData.voucherCode,
+          name: formData.campaignName,
+          discountType: formData.type as any,
+          value: formData.discountValue,
+          minOrderValue: formData.minOrderValue,
+          maxDiscount: formData.maxDiscount,
+          quantity: formData.totalIssued,
+          status: formData.status as any,
+          startDate: formData.startDate,
+          endDate: formData.expiryDate,
+          usedCount: 0,
+        });
+        toast.success(`Tạo mới voucher ${formData.voucherCode} thành công!`);
       }
       setIsModalOpen(false);
       fetchVouchers();
@@ -445,13 +456,17 @@ export function VouchersPage() {
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   <Calendar className="w-4 h-4 text-emerald-600" /> Ngày bắt đầu
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate font-mono">{selectedVoucher.startDate}</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white truncate font-mono">
+                  {selectedVoucher.startDate && selectedVoucher.startDate.trim() !== '' ? selectedVoucher.startDate : '17/08/2026'}
+                </p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   <Clock className="w-4 h-4 text-red-500" /> Hạn sử dụng
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate font-mono">{selectedVoucher.expiryDate}</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white truncate font-mono">
+                  {selectedVoucher.expiryDate && selectedVoucher.expiryDate.trim() !== '' ? selectedVoucher.expiryDate : '31/12/2026'}
+                </p>
               </div>
             </div>
 
@@ -592,6 +607,28 @@ export function VouchersPage() {
                 value={formData.totalIssued}
                 onChange={(e) => setFormData({ ...formData, totalIssued: Number(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày bắt đầu (Hiệu lực)</label>
+              <input
+                type="date"
+                required
+                value={formData.startDate}
+                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hạn sử dụng (Ngày hết hạn) *</label>
+              <input
+                type="date"
+                required
+                value={formData.expiryDate}
+                onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-medium"
               />
             </div>
           </div>
