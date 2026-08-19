@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuthUser } from '@/features/auth/store/authStore';
 import { Camera, Mail, Phone, Lock, Save, User as UserIcon, Shield, Activity, Bell } from 'lucide-react';
 import { toast } from 'sonner';
+import { axiosClient } from '@/shared/lib/axiosClient';
 
 export function AccountSettingsPage() {
   const user = useAuthUser();
@@ -22,7 +23,7 @@ export function AccountSettingsPage() {
     toast.success('Hồ sơ đã được cập nhật thành công!');
   };
 
-  const handlePasswordChange = (e: React.FormEvent) => {
+  const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
       toast.error('Mật khẩu mới không khớp!');
@@ -32,10 +33,19 @@ export function AccountSettingsPage() {
       toast.error('Mật khẩu mới phải có ít nhất 6 ký tự.');
       return;
     }
-    toast.success('Đã thay đổi mật khẩu thành công!');
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
+    try {
+      await axiosClient.post('/auth/change-password', {
+        oldPassword: currentPassword,
+        newPassword: newPassword,
+        confirmPassword: confirmPassword,
+      });
+      toast.success('Đã thay đổi mật khẩu thành công!');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || err.message || 'Lỗi khi thay đổi mật khẩu');
+    }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
