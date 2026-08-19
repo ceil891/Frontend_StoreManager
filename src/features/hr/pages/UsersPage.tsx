@@ -925,13 +925,13 @@ export function UsersPage() {
             {formMode === 'create' && (
               <div className="p-3 bg-white dark:bg-gray-900 rounded-lg border border-emerald-200 dark:border-emerald-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                 <div>
-                  <span className="text-gray-500 font-medium">Mật khẩu khởi tạo mặc định:</span>
-                  <span className="ml-2 font-mono font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
-                    123456@Abc
+                  <span className="text-gray-500 font-medium">Mật khẩu khởi tạo:</span>
+                  <span className="ml-2 font-semibold text-emerald-700 dark:text-emerald-400">
+                    Sẽ được tạo tự động và gửi qua Email đăng ký của nhân viên
                   </span>
                 </div>
                 <span className="text-[11px] text-gray-400 italic">
-                  ✓ Bắt buộc đổi mật khẩu lần đầu đăng nhập
+                  ✓ Yêu cầu đổi mật khẩu ở lần đăng nhập đầu tiên
                 </span>
               </div>
             )}

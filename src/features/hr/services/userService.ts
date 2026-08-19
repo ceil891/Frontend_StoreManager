@@ -126,7 +126,6 @@ export const userService = {
 
     const payload = {
       username: newUser.emailAddress.split('@')[0],
-      password: 'User@123',
       fullName: newUser.fullName,
       email: newUser.emailAddress,
       phone: newUser.contactPhone,
