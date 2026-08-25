@@ -48,15 +48,41 @@ export function AccountSettingsPage() {
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result as string);
-        toast.success('Ảnh đại diện đã được cập nhật.');
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Vui lòng chọn tệp hình ảnh hợp lệ!');
+      return;
+    }
+
+    const toastId = toast.loading('Đang tải ảnh đại diện lên Cloudinary...');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', 'avatars');
+
+      const response: any = await axiosClient.post('/uploads/image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const finalUrl =
+        response?.data?.imageUrl ||
+        response?.imageUrl ||
+        response?.url ||
+        response?.data?.url ||
+        (typeof response?.data === 'string' ? response.data : null);
+
+      if (finalUrl) {
+        setAvatarPreview(finalUrl);
+        toast.success('Đã tải ảnh đại diện lên Cloudinary thành công!', { id: toastId });
+      } else {
+        setAvatarPreview(URL.createObjectURL(file));
+        toast.success('Ảnh đại diện đã được cập nhật.', { id: toastId });
+      }
+    } catch (err: any) {
+      console.error('Error uploading avatar:', err);
+      toast.error('Lỗi khi tải ảnh lên Cloudinary.', { id: toastId });
     }
   };
 

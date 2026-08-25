@@ -278,7 +278,7 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
       },
       {
         accessorKey: 'driverName',
-        header: 'Tài xế & Phương tiện',
+        header: 'Tài xế & phương tiện',
         cell: ({ row }) => (
           <div>
             <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.driverName}</p>
@@ -296,15 +296,15 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
         header: 'Số kiện',
         cell: ({ row }) => (
           <div>
-            <span className="font-bold text-gray-900 dark:text-white">{row.original.totalParcels} boxes</span>
+            <span className="font-bold text-gray-900 dark:text-white">{row.original.totalParcels} kiện</span>
             <span className="text-xs text-gray-400 block font-mono">{row.original.totalWeightKg} kg</span>
           </div>
         ),
       },
       {
         accessorKey: 'cashOnDeliveryTotal',
-        header: 'COD thu hộ',
-        cell: (info) => <span className="font-mono font-bold text-primary">{Number(info.getValue()).toLocaleString('vi-VN')} ₫</span>,
+        header: 'Tiền thu COD',
+        cell: (info) => <span className="font-mono font-bold text-primary">{Number(info.getValue()).toLocaleString('vi-VN')} đ</span>,
       },
       {
         accessorKey: 'tripStatus',
@@ -319,7 +319,10 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
               status === 'DELAYED' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' :
               'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
             }`}>
-              {status.replace('_', ' ')}
+              {status === 'COMPLETED' ? 'Hoàn thành' :
+               status === 'IN_TRANSIT' ? 'Đang di chuyển' :
+               status === 'SCHEDULED' ? 'Đã lên lịch' :
+               status === 'DELAYED' ? 'Chậm tuyến' : status.replace('_', ' ')}
             </span>
           );
         },
@@ -331,29 +334,19 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
       },
       {
         id: 'actions',
-        header: 'Actions',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
             <button
               onClick={(e) => { e.stopPropagation(); setSelectedTrip(row.original); }}
               className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+              title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleDeleteTrip(row.original.id); }}
-              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-        ),
-      },
-    ],
-    []
-  );
-
-  return (
+              cl  return (
     <>
       <datalist id="area-trip-suggestions">
         {areas.map((area) => (
@@ -365,17 +358,17 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Chuyến xe giao hàng</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Điều phối lệnh chuyển hàng giữa các cửa hàng, theo dõi đội xe, giám sát COD và xử lý chậm tuyến. Nhấn vào chuyến để xem chi tiết.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Điều phối lệnh chuyển hàng giữa các cửa hàng, theo dõi đội xe, giám sát COD và xử lý chậm tuyến</p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Xuất nhật ký điều vận
+              <Download className="w-4 h-4" /> Xuất Excel nhật ký điều vận
             </button>
             <button
               onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-medium shadow-sm"
             >
-              <Plus className="w-4 h-4" /> Tạo lệnh điều vận mới
+              <Plus className="w-4 h-4" /> Thêm mới lệnh điều vận
             </button>
           </div>
         </div>
@@ -396,7 +389,7 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
         </div>
 
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-150 dark:border-gray-700 shadow-sm">
+          <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
             <span className="text-sm font-bold text-gray-500">Đang tải danh sách chuyến xe...</span>
           </div>
@@ -405,11 +398,11 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
         )}
       </div>
 
-      {/* Modal Xem chi tiết chuyến xe căn giữa (TC-ALL-1) */}
+      {/* Modal Xem chi tiết chuyến xe */}
       <Modal
         isOpen={!!selectedTrip}
         onClose={() => setSelectedTrip(null)}
-        title={selectedTrip ? `Lệnh điều vận: ${selectedTrip.manifestNumber}` : 'Chi tiết chuyến xe'}
+        title={selectedTrip ? `Lệnh điều vận: ${selectedTrip.manifestNumber}` : 'Thông tin chuyến xe'}
         width="max-w-lg"
       >
         {selectedTrip && (
@@ -427,11 +420,16 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
                   <Truck className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Trạng thái điều vận</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-white uppercase mt-0.5">{selectedTrip.tripStatus.replace('_', ' ')}</p>
+                  <p className="text-xs font-semibold text-gray-500">Trạng thái điều vận</p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white mt-0.5">
+                    {selectedTrip.tripStatus === 'COMPLETED' ? 'Hoàn thành' :
+                     selectedTrip.tripStatus === 'IN_TRANSIT' ? 'Đang di chuyển' :
+                     selectedTrip.tripStatus === 'SCHEDULED' ? 'Đã lên lịch' :
+                     selectedTrip.tripStatus === 'DELAYED' ? 'Chậm tuyến' : selectedTrip.tripStatus.replace('_', ' ')}
+                  </p>
                 </div>
               </div>
-              <span className="px-3 py-1 rounded-full text-xs font-bold font-mono bg-indigo-100 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-200">
+              <span className="px-3 py-1 rounded-full text-xs font-semibold font-mono bg-indigo-100 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-200">
                 {selectedTrip.vehicleType.replace('_', ' ')}
               </span>
             </div>
@@ -439,31 +437,31 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <UserCheck className="w-4 h-4 text-primary" /> Tài xế giao hàng
+                  <Truck className="w-4 h-4 text-primary" /> Tài xế giao hàng
                 </div>
                 <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedTrip.driverName}</p>
                 <p className="text-xs font-mono text-gray-500">{selectedTrip.driverPhone}</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <DollarSign className="w-4 h-4 text-emerald-600" /> COD đang chờ bàn giao
+                  <Clock className="w-4 h-4 text-emerald-600" /> Tiền thu COD chờ bàn giao
                 </div>
-                <p className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 truncate">{selectedTrip.cashOnDeliveryTotal.toLocaleString('vi-VN')} ₫</p>
+                <p className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 truncate">{selectedTrip.cashOnDeliveryTotal.toLocaleString('vi-VN')} đ</p>
               </div>
             </div>
 
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 text-sm">
               <div className="flex items-start gap-2.5 text-gray-700 dark:text-gray-300">
-                <MapPin className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 flex-shrink-0" />
                 <div>
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Kho xuất phát</span>
+                  <span className="text-xs font-medium text-gray-400 block">Kho xuất phát</span>
                   <span className="font-semibold text-gray-900 dark:text-white">{selectedTrip.departureHub}</span>
                 </div>
               </div>
               <div className="flex items-start gap-2.5 text-gray-700 dark:text-gray-300 pt-2 border-t border-gray-200 dark:border-gray-700">
-                <Navigation className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                <div className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0" />
                 <div>
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Tuyến đến</span>
+                  <span className="text-xs font-medium text-gray-400 block">Tuyến đến</span>
                   <span className="font-semibold text-gray-900 dark:text-white">{selectedTrip.destinationZone}</span>
                 </div>
               </div>
@@ -486,10 +484,10 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
 
               {selectedTrip.notes && (
                 <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
-                  <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider block mb-1 flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5" /> Operations Dispatch Notes
+                  <span className="text-xs font-medium text-amber-600 dark:text-amber-400 block mb-1 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" /> Ghi chú điều vận
                   </span>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 italic bg-amber-50 dark:bg-amber-900/10 p-2 rounded border border-amber-200 dark:border-amber-900/30">
+                  <p className="text-xs text-gray-700 dark:text-gray-300 italic bg-amber-50 dark:bg-amber-900/10 p-2.5 rounded-lg border border-amber-200 dark:border-amber-900/30">
                     {selectedTrip.notes}
                   </p>
                 </div>
@@ -500,7 +498,7 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
               {selectedTrip.tripStatus === 'SCHEDULED' && (
                 <button
                   onClick={() => handleUpdateStatus(selectedTrip.id, 'IN_TRANSIT')}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
                 >
                   <Truck className="w-4 h-4" /> Bắt đầu di chuyển
                 </button>
@@ -508,14 +506,14 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
               {selectedTrip.tripStatus === 'IN_TRANSIT' && (
                 <button
                   onClick={() => handleUpdateStatus(selectedTrip.id, 'COMPLETED')}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
                 >
                   <CheckCircle2 className="w-4 h-4" /> Hoàn thành chuyến xe
                 </button>
               )}
               <button
                 onClick={() => handleUpdateStatus(selectedTrip.id, 'DELAYED')}
-                className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
+                className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
               >
                 <Clock className="w-4 h-4 inline mr-1" /> Báo chậm tuyến
               </button>
@@ -535,51 +533,50 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
       <Modal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
-        title="Tạo Lệnh Điều Vận (Dispatch Order ERP)"
+        title="Thêm mới lệnh điều vận"
         width="max-w-xl"
       >
         <form onSubmit={handleCreateTrip} className="space-y-4 text-xs">
-          
           {/* Section 1: Dispatch Order Basic Info */}
           <div className="space-y-3 p-3 bg-slate-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800">
-            <h4 className="font-bold text-gray-900 dark:text-white uppercase tracking-wider text-[11px] border-b pb-1">
+            <h4 className="font-bold text-gray-900 dark:text-white text-xs border-b border-gray-200 dark:border-gray-700 pb-1">
               1. Thông tin lệnh điều vận
             </h4>
             
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Mã lệnh điều vận *</label>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Mã lệnh điều vận *</label>
                 <input
                   type="text"
                   value={tripCode}
                   onChange={(e) => setTripCode(e.target.value)}
                   required
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono font-bold text-primary"
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono font-bold text-primary"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Đơn hàng *</label>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn hàng *</label>
                 <select
                   value={selectedOrder}
                   onChange={(e) => setSelectedOrder(e.target.value)}
                   required
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-bold text-gray-900 dark:text-white"
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-medium text-gray-900 dark:text-white"
                 >
-                  <option value="#SO-20260808-001">#SO-20260808-001 (Khách: Nguyễn Văn A - 2,500,000 ₫)</option>
-                  <option value="#SO-20260808-002">#SO-20260808-002 (Khách: Trần Thị B - 1,850,000 ₫)</option>
-                  <option value="#SO-20260808-003">#SO-20260808-003 (Khách: Công ty ABC - 15,400,000 ₫)</option>
+                  <option value="#SO-20260808-001">#SO-20260808-001 (Khách: Nguyễn Văn A - 2.500.000 đ)</option>
+                  <option value="#SO-20260808-002">#SO-20260808-002 (Khách: Trần Thị B - 1.850.000 đ)</option>
+                  <option value="#SO-20260808-003">#SO-20260808-003 (Khách: Công ty ABC - 15.400.000 đ)</option>
                 </select>
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Chi nhánh xuất *</label>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Chi nhánh xuất *</label>
                 <select
                   value={branchLocation}
                   onChange={(e) => setBranchLocation(e.target.value)}
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-medium text-gray-900 dark:text-white"
                 >
                   <option value="Chi nhánh Hà Nội (Kho chính)">Chi nhánh Hà Nội (Kho chính)</option>
                   <option value="Chi nhánh TP. HCM (Tổng kho)">Chi nhánh TP. HCM (Tổng kho)</option>
@@ -588,30 +585,30 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
               </div>
 
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Đối tác vận chuyển *</label>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Đối tác vận chuyển *</label>
                 <select
                   value={carrierName}
                   onChange={(e) => setCarrierName(e.target.value)}
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold text-emerald-600"
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold text-emerald-600"
                 >
                   <option value="Viettel Post">Viettel Post</option>
                   <option value="Giao Hàng Tiết Kiệm (GHTK)">Giao Hàng Tiết Kiệm (GHTK)</option>
                   <option value="Giao Hàng Nhanh (GHN)">Giao Hàng Nhanh (GHN)</option>
-                  <option value="Đội xe AuraMart Nội bộ">Đội xe Nội bộ RetailHub</option>
+                  <option value="Đội xe AuraMart Nội bộ">Đội xe nội bộ RetailHub</option>
                 </select>
               </div>
 
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Loại dịch vụ</label>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Loại dịch vụ</label>
                 <select
                   value={serviceType}
                   onChange={(e) => setServiceType(e.target.value)}
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold"
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-medium text-gray-900 dark:text-white"
                 >
-                  <option value="Express">Express (Hỏa tốc)</option>
-                  <option value="Standard">Standard (Tiêu chuẩn)</option>
-                  <option value="Same Day">Same Day (Trong ngày)</option>
-                  <option value="COD">COD (Thu hộ tiền)</option>
+                  <option value="Express">Hỏa tốc</option>
+                  <option value="Standard">Tiêu chuẩn</option>
+                  <option value="Same Day">Trong ngày</option>
+                  <option value="COD">Thu hộ tiền COD</option>
                 </select>
               </div>
             </div>
@@ -619,13 +616,13 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
 
           {/* Section 2: Driver & Vehicle */}
           <div className="space-y-3 p-3 bg-slate-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800">
-            <h4 className="font-bold text-gray-900 dark:text-white uppercase tracking-wider text-[11px] border-b pb-1">
-              2. Người giao hàng & Phương tiện
+            <h4 className="font-bold text-gray-900 dark:text-white text-xs border-b border-gray-200 dark:border-gray-700 pb-1">
+              2. Người giao hàng & phương tiện
             </h4>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Tài xế phân công *</label>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Tài xế phân công *</label>
                 {shippersList.length > 0 ? (
                   <select
                     value={selectedShipperId}
@@ -640,7 +637,7 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
                       }
                     }}
                     required
-                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold"
+                    className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold"
                   >
                     <option value="">-- Chọn tài xế hệ thống --</option>
                     {shippersList.map(s => (
@@ -653,44 +650,44 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
                     value={driverName}
                     onChange={(e) => setDriverName(e.target.value)}
                     placeholder="Nguyễn Văn Tuấn"
-                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold"
+                    className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold"
                     required
                   />
                 )}
               </div>
 
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Số điện thoại tài xế</label>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại tài xế</label>
                 <input
                   type="text"
                   value={driverPhone}
                   onChange={(e) => setDriverPhone(e.target.value)}
                   placeholder="0912 345 678"
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono"
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Biển số xe *</label>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Biển số xe *</label>
                 <input
                   type="text"
                   value={licensePlate}
                   onChange={(e) => setLicensePlate(e.target.value)}
                   placeholder="29C-123.45"
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono font-bold text-gray-900 dark:text-white"
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono font-bold text-gray-900 dark:text-white"
                   required
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Loại phương tiện</label>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Loại phương tiện</label>
                 <select
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold"
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-medium text-gray-900 dark:text-white"
                 >
-                  <option value="VAN">Xe tải van 1.5 Tấn</option>
-                  <option value="LIGHT_TRUCK">Xe tải nhẹ 3.5 Tấn</option>
+                  <option value="VAN">Xe tải van 1.5 tấn</option>
+                  <option value="LIGHT_TRUCK">Xe tải nhẹ 3.5 tấn</option>
                   <option value="MOTORBIKE">Xe máy giao hàng</option>
                   <option value="REFRIGERATED_TRUCK">Xe lạnh chuyên dụng</option>
                 </select>
@@ -700,23 +697,23 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
 
           {/* Section 3: Delivery Info & SLA Schedule */}
           <div className="space-y-3 p-3 bg-slate-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800">
-            <h4 className="font-bold text-gray-900 dark:text-white uppercase tracking-wider text-[11px] border-b pb-1">
-              3. Thông tin lộ trình & Thời gian dự kiến (SLA)
+            <h4 className="font-bold text-gray-900 dark:text-white text-xs border-b border-gray-200 dark:border-gray-700 pb-1">
+              3. Thông tin lộ trình & thời gian dự kiến (SLA)
             </h4>
 
             <div>
-              <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Địa chỉ lấy hàng (Kho xuất phát)</label>
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ lấy hàng (Kho xuất phát)</label>
               <input
                 type="text"
                 value={pickupAddress}
                 onChange={(e) => setPickupAddress(e.target.value)}
-                className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
+                className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs text-gray-900 dark:text-white"
                 placeholder="Địa chỉ lấy hàng..."
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Địa chỉ giao hàng (Tuyến đến) *</label>
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ giao hàng (Tuyến đến) *</label>
               <input
                 type="text"
                 list="area-trip-suggestions"
@@ -724,28 +721,28 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
                 onChange={(e) => setDeliveryAddress(e.target.value)}
                 required
                 placeholder="Nhập địa chỉ giao hàng hoặc chọn khu vực gợi ý..."
-                className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
+                className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs text-gray-900 dark:text-white"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Thời gian lấy hàng dự kiến</label>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Thời gian lấy hàng dự kiến</label>
                 <input
                   type="datetime-local"
                   value={estimatedPickupTime}
                   onChange={(e) => setEstimatedPickupTime(e.target.value)}
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono"
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono text-gray-900 dark:text-white"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Thời gian giao dự kiến (SLA)</label>
+                <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Thời gian giao dự kiến (SLA)</label>
                 <input
                   type="datetime-local"
                   value={estimatedDeliveryTime}
                   onChange={(e) => setEstimatedDeliveryTime(e.target.value)}
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono"
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono text-gray-900 dark:text-white"
                 />
               </div>
             </div>
@@ -753,29 +750,29 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
 
           {/* Section 4: Dispatch Notes */}
           <div>
-            <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Ghi chú điều vận & Thu hộ COD</label>
+            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú điều vận & thu hộ COD</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
               placeholder="Ghi chú về hàng dễ vỡ, giao giờ hành chính, thu tiền COD..."
-              className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
+              className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs text-gray-900 dark:text-white"
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-3 border-t">
+          <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
               onClick={() => setIsCreateOpen(false)}
-              className="px-4 py-2 border rounded-lg text-xs font-semibold hover:bg-gray-50 dark:hover:bg-gray-800"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
             >
               Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-bold shadow-sm"
+              className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium shadow-sm"
             >
-              Lập lệnh điều vận ERP
+              Lưu thông tin
             </button>
           </div>
         </form>
@@ -783,3 +780,4 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
     </>
   );
 }
+export default DeliveryTripsPage;

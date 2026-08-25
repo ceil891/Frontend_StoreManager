@@ -80,8 +80,28 @@ export function SuppliersPage() {
 
   const handleSaveSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingSupplier.supplierName?.trim() || !editingSupplier.code?.trim()) {
-      toast.error('Vui lòng điền Tên nhà cung cấp và Mã nhà cung cấp!');
+    if (!editingSupplier.code?.trim()) {
+      toast.error('Mã nhà cung cấp không được để trống!');
+      return;
+    }
+
+    if (!editingSupplier.supplierName?.trim() || editingSupplier.supplierName.trim().length < 3) {
+      toast.error('Tên nhà cung cấp không được để trống và phải từ 3 ký tự trở lên!');
+      return;
+    }
+
+    if (!/^(?!\d+$)[a-zA-Z0-9À-ỹ\s\-\(\)\.,&]+$/.test(editingSupplier.supplierName.trim())) {
+      toast.error('Tên nhà cung cấp chứa ký tự đặc biệt không hợp lệ hoặc chỉ chứa chữ số!');
+      return;
+    }
+
+    if (!editingSupplier.phone?.trim()) {
+      toast.error('Số điện thoại không được để trống!');
+      return;
+    }
+
+    if (!/^0[3|5|7|8|9][0-9]{8}$/.test(editingSupplier.phone.trim())) {
+      toast.error('Số điện thoại không hợp lệ (phải gồm 10 số bắt đầu bằng 03, 05, 07, 08, 09)!');
       return;
     }
 
@@ -90,8 +110,8 @@ export function SuppliersPage() {
       return;
     }
 
-    if (editingSupplier.phone?.trim() && !/^[0-9]{10,11}$/.test(editingSupplier.phone.trim())) {
-      toast.error('Số điện thoại phải từ 10 - 11 chữ số!');
+    if (!editingSupplier.address?.trim()) {
+      toast.error('Địa chỉ nhà cung cấp không được để trống!');
       return;
     }
 
@@ -686,12 +706,14 @@ export function SuppliersPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại *</label>
                   <input
                     type="text"
                     value={editingSupplier.phone || ''}
                     onChange={(e) => setEditingSupplier({ ...editingSupplier, phone: e.target.value })}
+                    placeholder="VD: 0987654321"
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-mono"
+                    required
                   />
                 </div>
                 <div>
@@ -700,6 +722,7 @@ export function SuppliersPage() {
                     type="email"
                     value={editingSupplier.email || ''}
                     onChange={(e) => setEditingSupplier({ ...editingSupplier, email: e.target.value })}
+                    placeholder="VD: contact@ncc.com"
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>

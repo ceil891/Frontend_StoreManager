@@ -175,7 +175,7 @@ export function ShippingMethodsPage() {
   }, [search, data]);
 
   const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
+    return `${Number(val || 0).toLocaleString('vi-VN')} đ`;
   };
 
   const columns = useMemo<ColumnDef<ShippingMethodRecord>[]>(
@@ -183,35 +183,35 @@ export function ShippingMethodsPage() {
       {
         accessorKey: 'methodCode',
         header: 'Mã phương thức',
-        cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-mono font-bold text-primary">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'methodName',
         header: 'Tên phương thức',
-        cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'estimatedTime',
         header: 'Hạn giao (dự kiến)',
         cell: (info) => {
           const row = info.row.original;
-          const unit = row.timeUnit === 'DAYS' ? 'Ngày' : 'Giờ';
+          const unit = row.timeUnit === 'DAYS' ? 'ngày' : 'giờ';
           return <span className="font-mono">{row.estimatedMin} - {row.estimatedMax} {unit}</span>;
         },
       },
       {
         accessorKey: 'baseFee',
         header: 'Phí cơ bản',
-        cell: (info) => <span className="font-mono text-emerald-600 font-bold">{formatCurrency(info.getValue() as number)}</span>,
+        cell: (info) => <span className="font-mono text-primary font-bold">{formatCurrency(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'status',
         header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
-          const badgeClass = status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800';
+          const badgeClass = status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300';
           const label = status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa';
-          return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
+          return <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
@@ -221,21 +221,21 @@ export function ShippingMethodsPage() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
-              className="p-1 text-gray-500 hover:text-emerald-600 rounded"
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
               title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleOpenEdit(row.original)}
-              className="p-1 text-gray-500 hover:text-blue-600 rounded"
-              title="Sửa"
+              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+              title="Chỉnh sửa"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleDelete(row.original.id)}
-              className="p-1 text-gray-500 hover:text-red-600 rounded"
+              className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               title="Xóa"
             >
               <Trash2 className="w-4 h-4" />
@@ -249,34 +249,34 @@ export function ShippingMethodsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Hình thức giao hàng (shipping methods)</h1>
-          <p className="text-sm text-gray-500">
-            Quản lý các hình thức vận chuyển, phí giao hàng cơ bản và thời gian giao hàng dự kiến phục vụ lên đơn bán hàng.
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phương thức vận chuyển</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Quản lý các hình thức vận chuyển, phí giao hàng cơ bản và thời gian giao hàng dự kiến phục vụ lên đơn bán hàng
           </p>
         </div>
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition"
+          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-medium shadow-sm"
         >
-          <Plus className="w-4 h-4" /> Thêm Hình Thức
+          <Plus className="w-4 h-4" /> Thêm mới phương thức
         </button>
       </div>
 
-      <div className="p-4 bg-white dark:bg-gray-800 rounded shadow flex items-center gap-4">
-        <Search className="w-5 h-5 text-gray-400" />
+      <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-3">
+        <Search className="w-4 h-4 text-gray-400" />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm kiếm mã phương thức, tên hình thức..."
-          className="w-full bg-transparent outline-none text-sm"
+          placeholder="Tìm kiếm theo mã phương thức, tên phương thức..."
+          className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-white"
         />
       </div>
 
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm">
+        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
           <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
           <span className="text-sm font-bold text-gray-500">Đang tải danh sách phương thức giao hàng...</span>
         </div>
@@ -287,38 +287,38 @@ export function ShippingMethodsPage() {
       <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title={`Chi tiết hình thức giao hàng: ${selected?.methodName || ''}`}
+        title={`Chi tiết phương thức: ${selected?.methodName || ''}`}
         width="max-w-lg"
       >
         {selected && (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã hình thức:</span>
-                <p className="font-mono font-semibold">{selected.methodCode}</p>
+                <span className="text-xs text-gray-500">Mã hình thức</span>
+                <p className="font-mono font-bold text-primary">{selected.methodCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Phí giao cơ bản:</span>
-                <p className="font-mono font-bold text-emerald-600">{formatCurrency(selected.baseFee)}</p>
+                <span className="text-xs text-gray-500">Phí giao cơ bản</span>
+                <p className="font-mono font-bold text-primary">{formatCurrency(selected.baseFee)}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Tên hình thức vận chuyển:</span>
-              <p className="font-semibold text-base">{selected.methodName}</p>
+              <span className="text-xs text-gray-500">Tên hình thức vận chuyển</span>
+              <p className="font-semibold text-base text-gray-900 dark:text-white">{selected.methodName}</p>
             </div>
             <div>
-              <span className="text-gray-500">Mô tả dịch vụ:</span>
-              <p className="text-gray-700 dark:text-gray-300">{selected.description}</p>
+              <span className="text-xs text-gray-500">Mô tả dịch vụ</span>
+              <p className="text-gray-700 dark:text-gray-300">{selected.description || 'Chưa cập nhật'}</p>
             </div>
-            <div className="grid grid-cols-2 gap-4 border-t pt-2">
+            <div className="grid grid-cols-2 gap-4 border-t border-gray-200 dark:border-gray-700 pt-3">
               <div>
-                <span className="text-gray-500 flex items-center gap-1">
-                  <Clock className="w-4 h-4 text-gray-400" /> Hạn Giao Dự Kiến:
+                <span className="text-xs text-gray-500 flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-gray-400" /> Hạn giao dự kiến
                 </span>
-                <p className="font-mono font-semibold">{selected.estimatedMin} - {selected.estimatedMax} {selected.timeUnit === 'DAYS' ? 'Ngày' : 'Giờ'}</p>
+                <p className="font-mono font-semibold">{selected.estimatedMin} - {selected.estimatedMax} {selected.timeUnit === 'DAYS' ? 'ngày' : 'giờ'}</p>
               </div>
               <div>
-                <span className="text-gray-500">Trạng thái:</span>
+                <span className="text-xs text-gray-500">Trạng thái</span>
                 <div>
                   <span
                     className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
@@ -330,44 +330,44 @@ export function ShippingMethodsPage() {
                 </div>
               </div>
               <div>
-                <span className="text-gray-500">Đơn vị thực hiện:</span>
+                <span className="text-xs text-gray-500">Đơn vị thực hiện</span>
                 <p className="font-semibold">{selected.fulfilledBy}</p>
               </div>
               <div>
-                <span className="text-gray-500">Freeship từ đơn:</span>
+                <span className="text-xs text-gray-500">Miễn phí vận chuyển từ đơn</span>
                 <p className="font-semibold">{selected.freeshippingThreshold ? formatCurrency(selected.freeshippingThreshold) : 'Không áp dụng'}</p>
               </div>
               <div>
-                <span className="text-gray-500">Trọng lượng cơ bản:</span>
+                <span className="text-xs text-gray-500">Trọng lượng cơ bản</span>
                 <p className="font-semibold">{selected.baseWeightKg} kg</p>
               </div>
               <div>
-                <span className="text-gray-500">Phí cộng thêm/kg:</span>
+                <span className="text-xs text-gray-500">Phí cộng thêm/kg</span>
                 <p className="font-semibold">{formatCurrency(selected.surchargePerKg)}</p>
               </div>
               <div>
-                <span className="text-gray-500">Trọng lượng tối đa:</span>
+                <span className="text-xs text-gray-500">Trọng lượng tối đa</span>
                 <p className="font-semibold">{selected.maxWeightKg} kg</p>
               </div>
               <div>
-                <span className="text-gray-500">Cho phép COD:</span>
+                <span className="text-xs text-gray-500">Cho phép COD</span>
                 <p className="font-semibold">{selected.allowCod ? 'Có' : 'Không'}</p>
               </div>
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi chú thêm:</span>
-                <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
+                <span className="text-xs text-gray-500">Ghi chú thêm</span>
+                <p className="bg-gray-50 dark:bg-gray-900 p-2.5 rounded-lg border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 text-xs">
                   {selected.notes}
                 </p>
               </div>
             )}
-            <div className="flex justify-end pt-4 border-t">
+            <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
                 onClick={() => setSelected(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-sm"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-lg text-sm"
               >
-                Đóng Hộp Thoại
+                Đóng
               </button>
             </div>
           </div>
@@ -377,18 +377,18 @@ export function ShippingMethodsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm hình thức giao hàng mới' : 'Sửa hình thức'}
+        title={modalMode === 'create' ? 'Thêm mới phương thức vận chuyển' : 'Cập nhật phương thức vận chuyển'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã phương thức *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã phương thức *</label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={editingItem.methodCode || ''}
                   onChange={(e) => setEditingItem({ ...editingItem, methodCode: e.target.value })}
-                  className="w-full p-2 border rounded font-mono"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm"
                   placeholder="SHIP-XXXX"
                   required
                   disabled={modalMode === 'edit'}
@@ -397,64 +397,64 @@ export function ShippingMethodsPage() {
                   <button
                     type="button"
                     onClick={() => setEditingItem({ ...editingItem, methodCode: generateShippingCode() })}
-                    className="px-3 py-2 bg-gray-100 border border-gray-300 rounded text-sm hover:bg-gray-200 dark:bg-gray-800 dark:border-gray-600"
+                    className="px-3 py-2 bg-gray-100 border border-gray-300 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-200 dark:bg-gray-800 whitespace-nowrap"
                   >
-                    🎲
+                    Tạo mã
                   </button>
                 )}
               </div>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tên hình thức *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên hình thức *</label>
               <input
                 type="text"
                 value={editingItem.methodName || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, methodName: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
                 placeholder="Tên phương thức"
                 required
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Mô tả dịch vụ</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mô tả dịch vụ</label>
             <input
               type="text"
               value={editingItem.description || ''}
               onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
-              className="w-full p-2 border rounded"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               placeholder="Chi tiết cách thức giao hàng"
             />
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Thời gian (từ) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thời gian (từ) *</label>
               <input
                 type="number"
                 value={editingItem.estimatedMin || 0}
                 onChange={(e) => setEditingItem({ ...editingItem, estimatedMin: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm"
                 required
                 min={1}
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Thời gian (đến) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thời gian (đến) *</label>
               <input
                 type="number"
                 value={editingItem.estimatedMax || 0}
                 onChange={(e) => setEditingItem({ ...editingItem, estimatedMax: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm"
                 required
                 min={1}
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Đơn vị *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn vị *</label>
               <select
                 value={editingItem.timeUnit || 'DAYS'}
                 onChange={(e) => setEditingItem({ ...editingItem, timeUnit: e.target.value as any })}
-                className="w-full p-2 border rounded"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               >
                 <option value="HOURS">Giờ</option>
                 <option value="DAYS">Ngày</option>
@@ -464,13 +464,13 @@ export function ShippingMethodsPage() {
           
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Đơn vị thực hiện *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn vị thực hiện *</label>
               <select
                 value={editingItem.fulfilledBy || 'INTERNAL'}
                 onChange={(e) => setEditingItem({ ...editingItem, fulfilledBy: e.target.value as any })}
-                className="w-full p-2 border rounded"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               >
-                <option value="INTERNAL">Đội nhà/Tự giao</option>
+                <option value="INTERNAL">Đội nhà / Tự giao</option>
                 <option value="GHN">Giao Hàng Nhanh</option>
                 <option value="GHTK">Giao Hàng Tiết Kiệm</option>
                 <option value="VIETTELPOST">Viettel Post</option>
@@ -478,12 +478,12 @@ export function ShippingMethodsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Phí giao hàng cơ bản (VND) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phí giao hàng cơ bản (VNĐ) *</label>
               <input
                 type="number"
                 value={editingItem.baseFee || 0}
                 onChange={(e) => setEditingItem({ ...editingItem, baseFee: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm"
                 required
               />
             </div>
@@ -491,22 +491,22 @@ export function ShippingMethodsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Trọng lượng cơ bản (kg)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trọng lượng cơ bản (kg)</label>
               <input
                 type="number"
                 value={editingItem.baseWeightKg || 0}
                 onChange={(e) => setEditingItem({ ...editingItem, baseWeightKg: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm"
                 min={0}
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Phí cộng thêm/kg (VND)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phí cộng thêm/kg (VNĐ)</label>
               <input
                 type="number"
                 value={editingItem.surchargePerKg || 0}
                 onChange={(e) => setEditingItem({ ...editingItem, surchargePerKg: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm"
                 min={0}
               />
             </div>
@@ -514,22 +514,22 @@ export function ShippingMethodsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Trọng lượng tối đa (kg)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trọng lượng tối đa (kg)</label>
               <input
                 type="number"
                 value={editingItem.maxWeightKg || 0}
                 onChange={(e) => setEditingItem({ ...editingItem, maxWeightKg: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm"
                 min={0}
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Freeship cho đơn từ (VND)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Miễn phí vận chuyển từ đơn (VNĐ)</label>
               <input
                 type="number"
                 value={editingItem.freeshippingThreshold || 0}
                 onChange={(e) => setEditingItem({ ...editingItem, freeshippingThreshold: Number(e.target.value) })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm"
                 min={0}
               />
             </div>
@@ -541,41 +541,41 @@ export function ShippingMethodsPage() {
               id="allowCod"
               checked={editingItem.allowCod !== false}
               onChange={(e) => setEditingItem({ ...editingItem, allowCod: e.target.checked })}
-              className="w-4 h-4 text-emerald-600 rounded border-gray-300"
+              className="w-4 h-4 text-primary rounded border-gray-300"
             />
-            <label htmlFor="allowCod" className="text-sm font-medium">Cho phép thanh toán COD</label>
+            <label htmlFor="allowCod" className="text-sm font-medium text-gray-700 dark:text-gray-300">Cho phép thanh toán COD</label>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Trạng thái *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái *</label>
             <select
               value={editingItem.status || 'ACTIVE'}
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-              className="w-full p-2 border rounded"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
             >
               <option value="ACTIVE">Hoạt động</option>
               <option value="INACTIVE">Tạm khóa</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border rounded"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               rows={2}
               placeholder="Ghi chú thêm..."
             />
           </div>
-          <div className="flex justify-end gap-2 pt-2 border-t">
+          <div className="flex justify-end gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded hover:bg-gray-100"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium"
             >
-              Hủy
+              Hủy bỏ
             </button>
-            <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu hình thức
+            <button type="submit" className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow-sm">
+              Lưu thông tin
             </button>
           </div>
         </form>

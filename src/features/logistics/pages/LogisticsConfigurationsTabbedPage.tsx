@@ -5,8 +5,8 @@ import { SlaConfigurationsPage } from './SlaConfigurationsPage';
 import { CarrierSyncPage } from './CarrierSyncPage';
 
 const tabs = [
-  { id: 'sla', label: 'Cấu hình Cam kết SLA', icon: ShieldCheck, permission: 'logistics:sla:view' },
-  { id: 'sync', label: 'Đồng bộ Hãng vận chuyển', icon: RefreshCw, permission: 'logistics:carrier-sync:view' },
+  { id: 'sla', label: 'Cấu hình cam kết SLA', icon: ShieldCheck, permission: 'logistics:sla:view' },
+  { id: 'sync', label: 'Đồng bộ hãng vận chuyển', icon: RefreshCw, permission: 'logistics:carrier-sync:view' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];
@@ -28,9 +28,9 @@ export function LogisticsConfigurationsTabbedPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cấu hình Vận chuyển & Cam kết SLA</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cấu hình vận chuyển & cam kết SLA</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Thiết lập các tiêu chí cam kết SLA thời gian giao hàng và quản lý đồng bộ API Hãng vận chuyển
+            Thiết lập các tiêu chí cam kết SLA thời gian giao hàng và quản lý đồng bộ API hãng vận chuyển
           </p>
         </div>
       </div>

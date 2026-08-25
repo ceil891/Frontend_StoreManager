@@ -1,17 +1,20 @@
 import { useSearchParams } from 'react-router';
-import { Package, Layers, FolderTree, Boxes } from 'lucide-react';
+import { Package, Layers, FolderTree, Boxes, FileSpreadsheet } from 'lucide-react';
 import { RoleGuard } from '@/routes/RoleGuard';
 import { InventoryPage } from './InventoryPage';
 import { ProductVariantsPage } from './ProductVariantsPage';
 import { CategoriesPage } from './CategoriesPage';
 import { CombosPage } from './CombosPage';
+import { ProductExcelImportPage } from './ProductExcelImportPage';
 
 const tabs = [
   { id: 'products', label: 'Sản phẩm', icon: Package, permission: 'catalog:product:view' },
+  { id: 'import-excel', label: 'Nhập từ Excel', icon: FileSpreadsheet, permission: 'catalog:product:create' },
   { id: 'variants', label: 'Biến thể sản phẩm', icon: Layers, permission: 'inventory:variant:view' },
   { id: 'categories', label: 'Danh mục sản phẩm', icon: FolderTree, permission: 'catalog:category:view' },
-  { id: 'combos', label: 'Gói Combo', icon: Boxes, permission: 'catalog:combo:view' },
+  { id: 'combos', label: 'Gói combo', icon: Boxes, permission: 'catalog:combo:view' },
 ] as const;
+
 
 type TabId = typeof tabs[number]['id'];
 
@@ -32,7 +35,7 @@ export function InventoryProductsTabbedPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Sản phẩm & Danh mục</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý sản phẩm & danh mục</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Quản lý danh sách sản phẩm, biến thể mẫu mã, phân loại danh mục và các gói sản phẩm combo
           </p>
@@ -49,7 +52,7 @@ export function InventoryProductsTabbedPage() {
               onClick={() => handleTabChange(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
                 isActive
-                  ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400 dark:border-emerald-400'
+                  ? 'border-primary text-primary'
                   : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
               }`}
             >
@@ -66,7 +69,13 @@ export function InventoryProductsTabbedPage() {
             <InventoryPage />
           </RoleGuard>
         )}
+        {activeTab === 'import-excel' && (
+          <RoleGuard requiredPermission="catalog:product:create">
+            <ProductExcelImportPage />
+          </RoleGuard>
+        )}
         {activeTab === 'variants' && (
+
           <RoleGuard requiredPermission="inventory:variant:view">
             <ProductVariantsPage />
           </RoleGuard>

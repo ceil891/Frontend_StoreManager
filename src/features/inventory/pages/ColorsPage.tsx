@@ -1,8 +1,8 @@
-import { Modal } from '@/shared/components/ui/Modal';
+﻿import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Eye, Edit, Trash2, Search, Palette } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-
+import { toast } from 'sonner';
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { useColorStore, type ColorRecord } from '../store/colorStore';
@@ -44,21 +44,33 @@ export function ColorsPage() {
     if (!editingColor.colorName || !editingColor.colorCode) return;
     if (modalMode === 'create') {
       await addColor({
-        colorCode: editingColor.colorCode!,
-        colorName: editingColor.colorName!,
+        colorCode: editingColor.colorCode.toUpperCase().trim(),
+        colorName: editingColor.colorName.trim(),
         hexCode: editingColor.hexCode || '#000000',
         description: editingColor.description,
         status: editingColor.status || 'ACTIVE',
       });
+      toast.success('Đã thêm màu sắc mới thành công!');
     } else if (editingColor.id) {
-      await updateColor(editingColor.id, editingColor);
+      await updateColor(editingColor.id, {
+        ...editingColor,
+        colorCode: editingColor.colorCode.toUpperCase().trim(),
+        colorName: editingColor.colorName.trim(),
+      });
+      toast.success('Đã cập nhật màu sắc thành công!');
     }
     setIsModalOpen(false);
   };
 
   const handleDeleteConfirm = async () => {
     if (!deletingColor) return;
+    if (deletingColor.status === 'ACTIVE') {
+      toast.error(`Màu sắc "${deletingColor.colorName}" đang ở trạng thái hoạt động. Vui lòng chuyển sang ngừng sử dụng trước khi xóa!`);
+      setDeletingColor(null);
+      return;
+    }
     await deleteColor(deletingColor.id);
+    toast.success(`Đã xóa màu sắc "${deletingColor.colorName}" thành công!`);
     setDeletingColor(null);
   };
 
@@ -68,7 +80,7 @@ export function ColorsPage() {
         accessorKey: 'colorCode',
         header: 'Mã màu',
         cell: (info) => (
-          <span className="font-mono font-bold text-sm text-gray-700 dark:text-gray-300">
+          <span className="font-mono font-bold text-sm text-primary">
             {info.getValue() as string}
           </span>
         ),
@@ -82,14 +94,14 @@ export function ColorsPage() {
       },
       {
         accessorKey: 'hexCode',
-        header: 'Mã hex',
+        header: 'Mã HEX',
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
             <div
               className="w-6 h-6 rounded-md border border-gray-300 dark:border-gray-600 shadow-sm flex-shrink-0"
               style={{ backgroundColor: row.original.hexCode }}
             />
-            <span className="font-mono text-sm text-gray-600 dark:text-gray-400">{row.original.hexCode}</span>
+            <span className="font-mono text-xs text-gray-600 dark:text-gray-400 font-semibold">{row.original.hexCode}</span>
           </div>
         ),
       },
@@ -97,25 +109,23 @@ export function ColorsPage() {
         accessorKey: 'description',
         header: 'Mô tả',
         cell: (info) => (
-          <span className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-[200px] block">
-            {(info.getValue() as string) || '—'}
-          </span>
+          <span className="text-gray-500 dark:text-gray-400 text-xs">{info.getValue() as string || '—'}</span>
         ),
       },
       {
         accessorKey: 'status',
         header: 'Trạng thái',
         cell: (info) => {
-          const s = info.getValue() as string;
+          const status = info.getValue() as string;
           return (
             <span
-              className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                s === 'ACTIVE'
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                status === 'ACTIVE'
                   ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
                   : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
               }`}
             >
-              {s === 'ACTIVE' ? 'Đang dùng' : 'Ngừng dùng'}
+              {status === 'ACTIVE' ? 'Đang sử dụng' : 'Ngừng sử dụng'}
             </span>
           );
         },
@@ -124,10 +134,10 @@ export function ColorsPage() {
         id: 'actions',
         header: 'Thao tác',
         cell: ({ row }) => (
-          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
-              className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
               title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
@@ -160,22 +170,22 @@ export function ColorsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Palette className="w-6 h-6 text-emerald-500" />
+              <Palette className="w-6 h-6 text-primary" />
               Quản lý màu sắc
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Quản lý danh mục màu sắc sản phẩm. Mỗi màu có mã hex để đồng bộ hiển thị trên toàn hệ thống.
+              Quản lý danh mục màu sắc sản phẩm và mã màu HEX hiển thị đồng bộ trên toàn hệ thống
             </p>
           </div>
           <div className="flex gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors shadow-sm">
-              <Download className="w-4 h-4" /> Xuất danh sách
+              <Download className="w-4 h-4" /> Xuất Excel
             </button>
             <button
               onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
             >
-              <Plus className="w-4 h-4" /> Thêm Màu Sắc
+              <Plus className="w-4 h-4" /> Thêm mới màu sắc
             </button>
           </div>
         </div>
@@ -183,10 +193,10 @@ export function ColorsPage() {
         {/* Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Tổng màu sắc', value: data.length, color: 'text-gray-900 dark:text-white' },
+            { label: 'Tổng số màu sắc', value: data.length, color: 'text-gray-900 dark:text-white' },
             { label: 'Đang sử dụng', value: data.filter((c) => c.status === 'ACTIVE').length, color: 'text-emerald-600 dark:text-emerald-400' },
             { label: 'Ngừng sử dụng', value: data.filter((c) => c.status === 'INACTIVE').length, color: 'text-red-600 dark:text-red-400' },
-            { label: 'Cập nhật gần đây', value: 3, color: 'text-blue-600 dark:text-blue-400' },
+            { label: 'Cập nhật gần đây', value: data.length > 0 ? 1 : 0, color: 'text-primary' },
           ].map(({ label, value, color }) => (
             <div key={label} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</p>
@@ -205,8 +215,8 @@ export function ColorsPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm theo mã màu hoặc tên màu..."
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all"
+              placeholder="Tìm kiếm theo mã màu hoặc tên màu..."
+              className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm transition-all"
             />
           </div>
         </div>
@@ -233,7 +243,7 @@ export function ColorsPage() {
                       : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
                   }`}
                 >
-                  {selected.status === 'ACTIVE' ? 'Đang dùng' : 'Ngừng dùng'}
+                  {selected.status === 'ACTIVE' ? 'Đang sử dụng' : 'Ngừng sử dụng'}
                 </span>
               </div>
             </div>
@@ -241,8 +251,8 @@ export function ColorsPage() {
               {[
                 ['Mã màu', selected.colorCode],
                 ['Tên màu', selected.colorName],
-                ['Mã hex', selected.hexCode],
-                ['Mô tả', selected.description || '—'],
+                ['Mã HEX', selected.hexCode],
+                ['Mô tả', selected.description || 'Chưa cập nhật'],
               ].map(([k, v]) => (
                 <div key={k} className="flex justify-between text-sm">
                   <span className="text-gray-500 dark:text-gray-400">{k}:</span>
@@ -253,7 +263,7 @@ export function ColorsPage() {
             <div className="flex gap-3 pt-2">
               <button
                 onClick={() => { setSelected(null); handleOpenEdit(selected); }}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg text-sm transition-colors"
               >
                 <Edit className="w-4 h-4" /> Chỉnh sửa
               </button>
@@ -266,7 +276,7 @@ export function ColorsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Màu Sắc mới' : 'Chỉnh sửa màu sắc'}
+        title={modalMode === 'create' ? 'Thêm mới màu sắc' : 'Chỉnh sửa màu sắc'}
         width="max-w-md"
       >
         <form onSubmit={handleSave} className="space-y-4">
@@ -277,7 +287,7 @@ export function ColorsPage() {
                 required
                 value={editingColor.colorCode || ''}
                 onChange={(e) => setEditingColor({ ...editingColor, colorCode: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary font-mono"
                 placeholder="CLR-001"
               />
             </div>
@@ -287,13 +297,13 @@ export function ColorsPage() {
                 required
                 value={editingColor.colorName || ''}
                 onChange={(e) => setEditingColor({ ...editingColor, colorName: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                placeholder="Tên màu..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                placeholder="Ví dụ: Đen nhám, Xanh coban..."
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã màu Hex *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã màu HEX *</label>
             <div className="space-y-2">
               <div className="flex items-center gap-3">
                 <div className="relative flex items-center justify-center shrink-0">
@@ -315,7 +325,7 @@ export function ColorsPage() {
                     }
                     setEditingColor({ ...editingColor, hexCode: val });
                   }}
-                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-mono"
+                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary font-mono"
                   placeholder="#000000"
                 />
               </div>
@@ -352,8 +362,8 @@ export function ColorsPage() {
               rows={2}
               value={editingColor.description || ''}
               onChange={(e) => setEditingColor({ ...editingColor, description: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none"
-              placeholder="Mô tả màu sắc..."
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary resize-none"
+              placeholder="Mô tả đặc điểm màu sắc..."
             />
           </div>
           <div>
@@ -361,7 +371,7 @@ export function ColorsPage() {
             <select
               value={editingColor.status || 'ACTIVE'}
               onChange={(e) => setEditingColor({ ...editingColor, status: e.target.value as 'ACTIVE' | 'INACTIVE' })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
             >
               <option value="ACTIVE">Đang sử dụng</option>
               <option value="INACTIVE">Ngừng sử dụng</option>
@@ -371,18 +381,18 @@ export function ColorsPage() {
             <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg text-sm transition-colors">
               Hủy bỏ
             </button>
-            <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm transition-colors">
-              {modalMode === 'create' ? 'Tạo Mới' : 'Lưu thay đổi'}
+            <button type="submit" className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg text-sm transition-colors">
+              {modalMode === 'create' ? 'Tạo mới' : 'Lưu thay đổi'}
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* Modal xóa */}
+      {/* Modal Xóa */}
       <Modal isOpen={!!deletingColor} onClose={() => setDeletingColor(null)} title="Xác nhận xóa màu sắc" isDestructive width="max-w-md">
         <div className="space-y-4">
           <p className="text-sm text-gray-600 dark:text-gray-300">
-            Bạn có chắc muốn xóa màu <strong className="text-gray-900 dark:text-white">{deletingColor?.colorName}</strong> ({deletingColor?.colorCode})?
+            Bạn có chắc chắn muốn xóa màu <strong className="text-gray-900 dark:text-white">{deletingColor?.colorName}</strong> ({deletingColor?.colorCode})?
           </p>
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button onClick={() => setDeletingColor(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg text-sm">Hủy bỏ</button>

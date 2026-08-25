@@ -38,53 +38,53 @@ export function ProductWarehousesPage() {
       {
         accessorKey: 'productCode',
         header: 'Mã SKU',
-        cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-mono font-bold text-primary">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'productName',
-        header: 'Sản phẩm',
-        cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
+        header: 'Tên sản phẩm',
+        cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'branchName',
         header: 'Chi nhánh / kho',
-        cell: (info) => <span className="font-semibold text-blue-600">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-semibold text-blue-600 dark:text-blue-400">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'quantityOnHand',
         header: 'Tổng tồn thực tế',
-        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{info.getValue() as number}</span>,
+        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{((info.getValue() as number) || 0).toLocaleString('vi-VN')}</span>,
       },
       {
         accessorKey: 'quantityAvailable',
         header: 'Khả dụng bán',
-        cell: (info) => <span className="font-mono text-emerald-600 font-bold">{info.getValue() as number}</span>,
+        cell: (info) => <span className="font-mono text-primary font-bold">{((info.getValue() as number) || 0).toLocaleString('vi-VN')}</span>,
       },
       {
         accessorKey: 'quantityReserved',
         header: 'Đang giữ chỗ',
-        cell: (info) => <span className="font-mono text-amber-600">{info.getValue() as number}</span>,
+        cell: (info) => <span className="font-mono text-amber-600">{((info.getValue() as number) || 0).toLocaleString('vi-VN')}</span>,
       },
       {
         accessorKey: 'locationBin',
-        header: 'Vị trí kệ',
-        cell: (info) => <span className="text-sm text-gray-500 font-mono">{(info.getValue() as string) || '—'}</span>,
+        header: 'Vị trí ô kệ',
+        cell: (info) => <span className="text-sm text-gray-500 dark:text-gray-400 font-mono">{(info.getValue() as string) || '—'}</span>,
       },
       {
         id: 'status',
-        header: 'Trạng thái tồn',
+        header: 'Trạng thái tồn kho',
         cell: ({ row }) => {
           const status = getStockStatus(row.original);
           let badgeClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300';
           let label = 'Còn hàng';
           if (status === 'CHAY_HANG') {
             badgeClass = 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300';
-            label = 'Cháy hàng';
+            label = 'Hết hàng';
           } else if (status === 'SAP_HET') {
             badgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
             label = 'Sắp hết hàng';
           }
-          return <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass}`}>{label}</span>;
+          return <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
@@ -94,7 +94,7 @@ export function ProductWarehousesPage() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
-              className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
               title="Xem chi tiết tồn kho"
             >
               <Eye className="w-4 h-4" />
@@ -112,7 +112,7 @@ export function ProductWarehousesPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Báo cáo tồn kho theo chi nhánh</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Xem và giám sát số lượng tồn kho chi tiết tại từng chi nhánh / kho hàng. Dữ liệu được đồng bộ trực tiếp từ hệ thống backend.
+            Xem và giám sát số lượng tồn kho chi tiết tại từng chi nhánh / kho hàng
           </p>
         </div>
         <button
@@ -130,7 +130,7 @@ export function ProductWarehousesPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm kiếm mã SKU, tên sản phẩm, chi nhánh..."
+          placeholder="Tìm kiếm theo mã SKU, tên sản phẩm, chi nhánh..."
           className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-white placeholder-gray-400"
         />
       </div>
@@ -138,7 +138,7 @@ export function ProductWarehousesPage() {
       {isLoading ? (
         <div className="flex items-center justify-center py-20 text-gray-400">
           <RefreshCw className="w-6 h-6 animate-spin mr-2" />
-          <span>Đang tải dữ liệu từ backend...</span>
+          <span>Đang tải dữ liệu từ hệ thống...</span>
         </div>
       ) : inventories.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
@@ -158,23 +158,23 @@ export function ProductWarehousesPage() {
       >
         {selected && (
           <div className="space-y-6">
-            <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
-              <p className="text-xs text-emerald-800 dark:text-emerald-400 font-semibold uppercase tracking-wider">Chi nhánh / kho</p>
-              <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-1">{selected.branchName}</p>
+            <div className="p-4 bg-primary/10 rounded-xl border border-primary/20">
+              <p className="text-xs text-primary font-semibold uppercase tracking-wider">Chi nhánh / kho</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">{selected.branchName}</p>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm text-center">
-                <p className="text-xs text-gray-500 mb-1">Tổng tồn</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">{selected.quantityOnHand}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Tổng tồn</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{(selected.quantityOnHand || 0).toLocaleString('vi-VN')}</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm text-center">
-                <p className="text-xs text-gray-500 mb-1">Khả dụng</p>
-                <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{selected.quantityAvailable}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Khả dụng</p>
+                <p className="text-2xl font-bold text-primary">{(selected.quantityAvailable || 0).toLocaleString('vi-VN')}</p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm text-center">
-                <p className="text-xs text-gray-500 mb-1">Giữ chỗ</p>
-                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{selected.quantityReserved}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Giữ chỗ</p>
+                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{(selected.quantityReserved || 0).toLocaleString('vi-VN')}</p>
               </div>
             </div>
 
@@ -189,20 +189,20 @@ export function ProductWarehousesPage() {
               </div>
               {selected.locationBin && (
                 <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
-                  <span className="text-gray-500 dark:text-gray-400">Vị trí kệ:</span>
+                  <span className="text-gray-500 dark:text-gray-400">Vị trí ô kệ:</span>
                   <span className="font-mono font-semibold text-blue-600 dark:text-blue-400">{selected.locationBin}</span>
                 </div>
               )}
               <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
                 <span className="text-gray-500 dark:text-gray-400">Trạng thái:</span>
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
+                <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                   getStockStatus(selected) === 'CON_HANG'
                     ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
                     : getStockStatus(selected) === 'SAP_HET'
                     ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
                     : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
                 }`}>
-                  {getStockStatus(selected) === 'CON_HANG' ? 'Còn hàng' : getStockStatus(selected) === 'SAP_HET' ? 'Sắp cháy hàng' : 'Hết hàng'}
+                  {getStockStatus(selected) === 'CON_HANG' ? 'Còn hàng' : getStockStatus(selected) === 'SAP_HET' ? 'Sắp hết hàng' : 'Hết hàng'}
                 </span>
               </div>
             </div>

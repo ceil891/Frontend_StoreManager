@@ -33,9 +33,9 @@ export function LoyaltyPointHistoryPage() {
     return (storeHistories || []).map((h: any) => ({
       id: h.code || h.id || `TX-${Math.random()}`,
       customerName: h.customerName || h.name || 'Khách hàng',
-      customerPhone: h.customerPhone || h.phone || 'N/A',
+      customerPhone: h.customerPhone || h.phone || 'Chưa cập nhật',
       pointChange: Number(h.pointsChange ?? h.pointChange ?? 0),
-      transactionType: h.transactionType || (h.actionType === 'EARN' ? 'TÍCH ĐIỂM BÁN HÀNG POS' : h.actionType === 'REDEEM' ? 'TIÊU ĐIỂM BÁN HÀNG POS' : 'ĐIỀU CHỈNH HỆ THỐNG'),
+      transactionType: h.transactionType || (h.actionType === 'EARN' ? 'Tích điểm bán hàng POS' : h.actionType === 'REDEEM' ? 'Tiêu điểm bán hàng POS' : 'Điều chỉnh hệ thống'),
       referenceCode: h.refDocument || h.referenceOrder || `REF-${h.id}`,
       transactionDate: h.date || h.createdAt || new Date().toISOString().split('T')[0],
       operatorName: h.operatorName || 'Nhân viên thu ngân',
@@ -46,7 +46,7 @@ export function LoyaltyPointHistoryPage() {
 
   const totalPoints = useMemo(() => {
     if (data.length > 0) {
-      return data[0].pointBalanceAfter || 0; // Or calculate sum, but using latest balance makes sense
+      return data[0].pointBalanceAfter || 0;
     }
     return 0;
   }, [data]);
@@ -90,7 +90,7 @@ export function LoyaltyPointHistoryPage() {
     () => [
       {
         accessorKey: 'id',
-        header: 'Mã GD',
+        header: 'Mã giao dịch',
         cell: (info) => (
           <span className="font-mono font-bold text-gray-900 dark:text-white">
             {info.getValue() as string}
@@ -133,7 +133,7 @@ export function LoyaltyPointHistoryPage() {
           const val = info.getValue() as string;
           const typeMap: Record<string, { label: string; color: string }> = {
             TÍCH_ĐIỂM_ĐƠN_HÀNG: { label: 'Tích điểm đơn hàng', color: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900' },
-            ĐỔI_QUÀ: { label: 'Đổi quà / Voucher', color: 'bg-blue-50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400 border border-blue-200 dark:border-blue-900' },
+            ĐỔI_QUÀ: { label: 'Đổi quà / voucher', color: 'bg-blue-50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400 border border-blue-200 dark:border-blue-900' },
             ĐIỀU_CHỈNH_HỆ_THỐNG: { label: 'Hệ thống điều chỉnh', color: 'bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 border border-amber-200 dark:border-amber-900' },
           };
           const resolved = typeMap[val] || { label: val, color: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300' };
@@ -164,7 +164,7 @@ export function LoyaltyPointHistoryPage() {
       },
       {
         accessorKey: 'pointBalanceAfter',
-        header: 'Số dư sau GD',
+        header: 'Số dư sau giao dịch',
         cell: (info) => (
           <span className="text-gray-500 font-mono text-sm">
             {info.getValue() as number}
@@ -195,14 +195,14 @@ export function LoyaltyPointHistoryPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Lịch sử tích & tiêu điểm loyalty</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Lịch sử tích & tiêu điểm thưởng</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Nhật ký tự động theo dõi biến động điểm thành viên của khách hàng qua hoạt động mua hàng, đổi quà tặng, và hiệu chỉnh hệ thống.
             </p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Xuất báo cáo biến động
+              <Download className="w-4 h-4" /> Xuất Excel
             </button>
           </div>
         </div>
@@ -247,7 +247,7 @@ export function LoyaltyPointHistoryPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm theo mã GD, khách hàng, số điện thoại, hóa đơn..."
+              placeholder="Tìm theo mã giao dịch, khách hàng, số điện thoại, hóa đơn..."
               className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
             />
           </div>
@@ -279,7 +279,7 @@ export function LoyaltyPointHistoryPage() {
             <div className="h-8 w-px bg-gray-200 dark:bg-gray-700 hidden lg:block"></div>
 
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 font-medium whitespace-nowrap hidden sm:inline">Loại GD:</span>
+              <span className="text-xs text-gray-500 font-medium whitespace-nowrap hidden sm:inline">Loại giao dịch:</span>
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
@@ -287,7 +287,7 @@ export function LoyaltyPointHistoryPage() {
               >
                 <option value="Tất cả">Tất cả loại giao dịch</option>
                 <option value="TÍCH_ĐIỂM_ĐƠN_HÀNG">Tích điểm đơn hàng</option>
-                <option value="ĐỔI_QUÀ">Đổi quà / Voucher</option>
+                <option value="ĐỔI_QUÀ">Đổi quà / voucher</option>
                 <option value="ĐIỀU_CHỈNH_HỆ_THỐNG">Hệ thống điều chỉnh</option>
               </select>
             </div>
@@ -315,7 +315,7 @@ export function LoyaltyPointHistoryPage() {
               <div>
                 <p className="text-xs text-gray-500 font-medium">Biến động điểm tích lũy</p>
                 <p className={`text-xl font-bold ${selectedItem.pointChange >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-rose-800 dark:text-rose-400'}`}>
-                  {selectedItem.pointChange >= 0 ? `+${selectedItem.pointChange}` : selectedItem.pointChange} Điểm
+                  {selectedItem.pointChange >= 0 ? `+${selectedItem.pointChange}` : selectedItem.pointChange} điểm
                 </p>
               </div>
             </div>
@@ -326,13 +326,13 @@ export function LoyaltyPointHistoryPage() {
                 <span className="font-bold text-gray-900 dark:text-white">{selectedItem.customerName}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500">Số điện thoại liên lạc:</span>
+                <span className="text-gray-500">Số điện thoại:</span>
                 <span className="font-mono text-gray-900 dark:text-white">{selectedItem.customerPhone}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500">Loại nghiệp vụ biến động:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">
-                  {selectedItem.transactionType === 'TÍCH_ĐIỂM_ĐƠN_HÀNG' ? 'Tích điểm hóa đơn bán hàng' : selectedItem.transactionType === 'ĐỔI_QUÀ' ? 'Đổi quà / Quà tặng' : 'Điều chỉnh sửa đổi hệ thống'}
+                  {selectedItem.transactionType === 'TÍCH_ĐIỂM_ĐƠN_HÀNG' ? 'Tích điểm hóa đơn bán hàng' : selectedItem.transactionType === 'ĐỔI_QUÀ' ? 'Đổi quà / quà tặng' : 'Điều chỉnh sửa đổi hệ thống'}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
@@ -348,11 +348,11 @@ export function LoyaltyPointHistoryPage() {
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedItem.operatorName}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500">Điểm khả dụng (sau GD):</span>
+                <span className="text-gray-500">Điểm khả dụng (sau giao dịch):</span>
                 <span className="font-bold text-gray-900 dark:text-white">{selectedItem.pointBalanceAfter.toLocaleString()} điểm</span>
               </div>
               <div className="border-t border-gray-200 dark:border-gray-800 pt-2">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Chi tiết nghiệp vụ & Ghi chú</span>
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Chi tiết nghiệp vụ & ghi chú</span>
                 <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedItem.notes || 'Không ghi nhận ghi chú.'}</p>
               </div>
             </div>
@@ -360,7 +360,7 @@ export function LoyaltyPointHistoryPage() {
             <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-xl flex items-start gap-2.5">
               <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
               <div className="text-xs text-amber-800 dark:text-amber-300 space-y-1">
-                <p className="font-bold uppercase">Nhật ký hệ thống tự động</p>
+                <p className="font-bold">Nhật ký hệ thống tự động</p>
                 <p>Mục này do hệ thống hạch toán tự động từ luồng nghiệp vụ POS/Bán hàng hoặc công cụ Chăm sóc khách hàng. Dữ liệu này chỉ cho phép truy xuất và đối chiếu lịch sử, không thể chỉnh sửa thủ công để đảm bảo tính minh bạch kế toán điểm.</p>
               </div>
             </div>

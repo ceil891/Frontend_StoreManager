@@ -101,7 +101,7 @@ export function PurchaseInvoicesPage() {
       const list = Array.isArray(res) ? res : (res as any)?.content || [];
       const mapped: PurchaseInvoiceRecord[] = list.map((item: any) => {
         const status: PurchaseInvoiceRecord['status'] =
-          item.status === 'DELIVERED' || item.status === 'COMPLETED'
+          item.paymentStatus === 'PAID'
             ? 'DA_THANH_TOAN'
             : item.status === 'CANCELLED'
               ? 'DA_HUY'

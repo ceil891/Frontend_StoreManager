@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { crmService } from '../services/crmService';
+import { axiosClient } from '@/shared/lib/axiosClient';
 
 export interface CustomerProfile {
   id: string;
@@ -205,6 +206,7 @@ interface CRMState {
   addCustomerVoucher: (item: Omit<CustomerVoucherRecord, 'id'>) => Promise<void>;
   updateCustomerVoucher: (id: string, data: Partial<CustomerVoucherRecord>) => Promise<void>;
   deleteCustomerVoucher: (id: string) => Promise<void>;
+  markVoucherUsed: (voucherCode: string, orderCode?: string) => Promise<void>;
 
   fetchFeedbacks: () => Promise<void>;
   addFeedback: (item: Omit<FeedbackRecord, 'id'>) => Promise<void>;
@@ -265,227 +267,11 @@ const saveLocalCustomers = (customers: CustomerProfile[]) => {
 
 export const DEFAULT_MOCK_LOYALTY_HISTORIES: LoyaltyPointHistoryRecord[] = [];
 
-export const SEEDED_CUSTOMER_VOUCHERS: CustomerVoucherRecord[] = [
-  {
-    id: '1',
-    customerName: 'Nguyễn Văn An',
-    customerPhone: '0912345678',
-    customerCode: 'CUST-001',
-    voucherCode: 'VC-2026-AN8812',
-    programId: '5',
-    programName: 'Tri Ân Hội Viên Vàng',
-    voucherName: 'Tri Ân Hội Viên Vàng',
-    discountType: 'FIXED_AMOUNT',
-    discountValue: 50000,
-    minOrderValue: 200000,
-    maxDiscount: 50000,
-    issueDate: '2026-08-13',
-    expiryDate: '2026-09-12',
-    status: 'ACTIVE',
-    notes: 'Tặng hội viên VIP Vàng tháng 8',
-  },
-  {
-    id: '2',
-    customerName: 'Nguyễn Văn An',
-    customerPhone: '0912345678',
-    customerCode: 'CUST-001',
-    voucherCode: 'VC-2026-AN9934',
-    programId: '7',
-    programName: 'Miễn Phí Vận Chuyển Toàn Quốc',
-    voucherName: 'Miễn Phí Vận Chuyển Toàn Quốc',
-    discountType: 'FREE_SHIPPING',
-    discountValue: 30000,
-    minOrderValue: 0,
-    maxDiscount: 30000,
-    issueDate: '2026-08-08',
-    expiryDate: '2026-09-07',
-    usedDate: '2026-08-16',
-    status: 'USED',
-    notes: 'Đã sử dụng cho đơn hàng giao tận nơi',
-  },
-  {
-    id: '3',
-    customerName: 'Nguyễn Văn An',
-    customerPhone: '0912345678',
-    customerCode: 'CUST-001',
-    voucherCode: 'VC-2026-AN1122',
-    programId: '8',
-    programName: 'Quà Tặng Sinh Nhật',
-    voucherName: 'Quà Tặng Sinh Nhật',
-    discountType: 'FIXED_AMOUNT',
-    discountValue: 20000,
-    minOrderValue: 50000,
-    maxDiscount: 20000,
-    issueDate: '2026-08-16',
-    expiryDate: '2026-09-15',
-    status: 'ACTIVE',
-    notes: 'Quà sinh nhật tháng 8',
-  },
-  {
-    id: '4',
-    customerName: 'Trần Thị Mai',
-    customerPhone: '0988776655',
-    customerCode: 'CUST-002',
-    voucherCode: 'VC-2026-MAI001',
-    programId: '4',
-    programName: 'Chào Bạn Mới 10%',
-    voucherName: 'Chào Bạn Mới 10%',
-    discountType: 'PERCENTAGE',
-    discountValue: 10,
-    minOrderValue: 100000,
-    maxDiscount: 50000,
-    issueDate: '2026-08-04',
-    expiryDate: '2026-09-03',
-    usedDate: '2026-08-11',
-    status: 'USED',
-    notes: 'Đã dùng áp dụng giảm 10%',
-  },
-  {
-    id: '5',
-    customerName: 'Trần Thị Mai',
-    customerPhone: '0988776655',
-    customerCode: 'CUST-002',
-    voucherCode: 'VC-2026-MAI002',
-    programId: '7',
-    programName: 'Miễn Phí Vận Chuyển Toàn Quốc',
-    voucherName: 'Miễn Phí Vận Chuyển Toàn Quốc',
-    discountType: 'FREE_SHIPPING',
-    discountValue: 30000,
-    minOrderValue: 0,
-    maxDiscount: 30000,
-    issueDate: '2026-08-15',
-    expiryDate: '2026-09-14',
-    status: 'ACTIVE',
-    notes: 'Tặng mã freeship hỗ trợ',
-  },
-  {
-    id: '6',
-    customerName: 'Công ty TNHH Thương Mại Á Châu',
-    customerPhone: '02839998888',
-    customerCode: 'CUST-003',
-    voucherCode: 'VC-2026-ACHAU1',
-    programId: '6',
-    programName: 'Đặc Quyền VIP Kim Cương',
-    voucherName: 'Đặc Quyền VIP Kim Cương',
-    discountType: 'PERCENTAGE',
-    discountValue: 15,
-    minOrderValue: 150000,
-    maxDiscount: 100000,
-    issueDate: '2026-08-13',
-    expiryDate: '2026-09-12',
-    status: 'ACTIVE',
-    notes: 'Ưu đãi đặc quyền Doanh nghiệp VIP',
-  },
-  {
-    id: '7',
-    customerName: 'Công ty TNHH Thương Mại Á Châu',
-    customerPhone: '02839998888',
-    customerCode: 'CUST-003',
-    voucherCode: 'VC-2026-ACHAU2',
-    programId: '7',
-    programName: 'Miễn Phí Vận Chuyển Toàn Quốc',
-    voucherName: 'Miễn Phí Vận Chuyển Toàn Quốc',
-    discountType: 'FREE_SHIPPING',
-    discountValue: 30000,
-    minOrderValue: 0,
-    maxDiscount: 30000,
-    issueDate: '2026-08-13',
-    expiryDate: '2026-09-12',
-    status: 'ACTIVE',
-    notes: 'Freeship cho đơn hàng công ty',
-  },
-  {
-    id: '8',
-    customerName: 'Công ty TNHH Thương Mại Á Châu',
-    customerPhone: '02839998888',
-    customerCode: 'CUST-003',
-    voucherCode: 'VC-2026-ACHAU3',
-    programId: '5',
-    programName: 'Tri Ân Hội Viên Vàng',
-    voucherName: 'Tri Ân Hội Viên Vàng',
-    discountType: 'FIXED_AMOUNT',
-    discountValue: 50000,
-    minOrderValue: 200000,
-    maxDiscount: 50000,
-    issueDate: '2026-08-06',
-    expiryDate: '2026-09-05',
-    usedDate: '2026-08-14',
-    status: 'USED',
-    notes: 'Đã dùng đơn sỉ công ty',
-  },
-  {
-    id: '9',
-    customerName: 'Lê Hoàng Nam',
-    customerPhone: '0909123123',
-    customerCode: 'CUST-004',
-    voucherCode: 'VC-2026-NAM001',
-    programId: '4',
-    programName: 'Chào Bạn Mới 10%',
-    voucherName: 'Chào Bạn Mới 10%',
-    discountType: 'PERCENTAGE',
-    discountValue: 10,
-    minOrderValue: 100000,
-    maxDiscount: 50000,
-    issueDate: '2026-08-17',
-    expiryDate: '2026-09-16',
-    status: 'ACTIVE',
-    notes: 'Hỗ trợ khách hàng mới',
-  },
-  {
-    id: '10',
-    customerName: 'Lê Hoàng Nam',
-    customerPhone: '0909123123',
-    customerCode: 'CUST-004',
-    voucherCode: 'VC-2026-NAM002',
-    programId: '7',
-    programName: 'Miễn Phí Vận Chuyển Toàn Quốc',
-    voucherName: 'Miễn Phí Vận Chuyển Toàn Quốc',
-    discountType: 'FREE_SHIPPING',
-    discountValue: 30000,
-    minOrderValue: 0,
-    maxDiscount: 30000,
-    issueDate: '2026-08-12',
-    expiryDate: '2026-09-11',
-    status: 'CANCELLED',
-    notes: 'Đã thu hồi do cấp trùng',
-  },
-  {
-    id: '11',
-    customerName: 'Phạm Thanh Hương',
-    customerPhone: '0933445566',
-    customerCode: 'CUST-005',
-    voucherCode: 'VC-2026-HUONG1',
-    programId: '4',
-    programName: 'Chào Bạn Mới 10%',
-    voucherName: 'Chào Bạn Mới 10%',
-    discountType: 'PERCENTAGE',
-    discountValue: 10,
-    minOrderValue: 100000,
-    maxDiscount: 50000,
-    issueDate: '2026-08-14',
-    expiryDate: '2026-09-13',
-    status: 'ACTIVE',
-    notes: 'Voucher chào mừng hội viên mới',
-  },
-  {
-    id: '12',
-    customerName: 'Phạm Thanh Hương',
-    customerPhone: '0933445566',
-    customerCode: 'CUST-005',
-    voucherCode: 'VC-2026-HUONG2',
-    programId: '8',
-    programName: 'Quà Tặng Sinh Nhật',
-    voucherName: 'Quà Tặng Sinh Nhật',
-    discountType: 'FIXED_AMOUNT',
-    discountValue: 20000,
-    minOrderValue: 50000,
-    maxDiscount: 20000,
-    issueDate: '2026-07-09',
-    expiryDate: '2026-08-08',
-    status: 'EXPIRED',
-    notes: 'Mã sinh nhật đợt trước đã hết hạn',
-  },
-];
+export const DEFAULT_MOCK_FEEDBACKS: FeedbackRecord[] = [];
+
+export const DEFAULT_MOCK_TICKETS: SupportTicketRecord[] = [];
+
+export const DEFAULT_MOCK_TICKET_MESSAGES: TicketMessageRecord[] = [];
 
 export const useCrmStore = create<CRMState>()((set) => ({
   customers: [],
@@ -638,14 +424,10 @@ export const useCrmStore = create<CRMState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const data = await crmService.fetchCustomerVouchers();
-      if (Array.isArray(data) && data.length > 0) {
-        set({ customerVouchers: data, isLoading: false });
-      } else {
-        set({ customerVouchers: SEEDED_CUSTOMER_VOUCHERS, isLoading: false });
-      }
+      set({ customerVouchers: Array.isArray(data) ? data : [], isLoading: false });
     } catch (e: any) {
-      console.warn('Using seeded customer vouchers fallback:', e);
-      set({ customerVouchers: SEEDED_CUSTOMER_VOUCHERS, isLoading: false });
+      console.warn('Fetch customer vouchers error:', e);
+      set({ customerVouchers: [], isLoading: false });
     }
   },
 
@@ -701,15 +483,63 @@ export const useCrmStore = create<CRMState>()((set) => ({
     }
   },
 
+  markVoucherUsed: async (voucherCode: string, orderCode?: string) => {
+    if (!voucherCode) return;
+    try {
+      const now = new Date().toISOString();
+      try {
+        await axiosClient.post('/crm/customer-vouchers/use-by-code', null, {
+          params: { code: voucherCode, orderCode }
+        });
+      } catch (apiErr) {
+        console.warn('API mark voucher used failed, updating local state:', apiErr);
+      }
+
+      set((state) => {
+        const nextCustomerVouchers = state.customerVouchers.map((cv) => {
+          if ((cv.voucherCode || '').toUpperCase() === voucherCode.toUpperCase()) {
+            return {
+              ...cv,
+              status: 'USED' as const,
+              usedDate: now,
+              usedOrderId: orderCode || cv.usedOrderId,
+            };
+          }
+          return cv;
+        });
+
+        const nextVouchers = state.vouchers.map((v) => {
+          if ((v.code || '').toUpperCase() === voucherCode.toUpperCase()) {
+            return {
+              ...v,
+              usedCount: (v.usedCount || 0) + 1,
+            };
+          }
+          return v;
+        });
+
+        return {
+          customerVouchers: nextCustomerVouchers,
+          vouchers: nextVouchers,
+        };
+      });
+    } catch (e: any) {
+      console.error('Failed to mark voucher as used:', e);
+    }
+  },
+
   fetchFeedbacks: async () => {
     set({ isLoading: true, error: null });
     try {
       const data = await crmService.fetchFeedbacks();
-      if (data.length > 0) set({ feedbacks: data });
-      set({ isLoading: false });
+      if (data && data.length > 0) {
+        set({ feedbacks: data, isLoading: false });
+      } else {
+        set({ feedbacks: DEFAULT_MOCK_FEEDBACKS, isLoading: false });
+      }
     } catch (e: any) {
       console.error(e);
-      set({ isLoading: false });
+      set({ feedbacks: DEFAULT_MOCK_FEEDBACKS, isLoading: false });
     }
   },
 
@@ -831,6 +661,11 @@ export const useCrmStore = create<CRMState>()((set) => ({
       
       const updatedCustomers = updatedCustomer ? [updatedCustomer, ...otherCustomers] : state.customers;
       saveLocalCustomers(updatedCustomers);
+      if (updatedCustomer && updatedCustomer.id) {
+        crmService.updateCustomer(String(updatedCustomer.id), updatedCustomer).catch((err) => {
+          console.warn('Background sync customer points to backend failed:', err);
+        });
+      }
 
       const newHistoryItem: LoyaltyPointHistoryRecord = {
         id: String(Date.now() + Math.floor(Math.random() * 1000)),
@@ -1140,14 +975,13 @@ export const useCrmStore = create<CRMState>()((set) => ({
   },
 
   fetchSupportTickets: async () => {
-    set({ isLoading: true, error: null });
     try {
       const data = await crmService.fetchSupportTickets();
-      if (data.length > 0) set({ supportTickets: data });
-      set({ isLoading: false });
+      if (Array.isArray(data) && data.length > 0) {
+        set({ supportTickets: data, isLoading: false });
+      }
     } catch (e: any) {
-      console.error(e);
-      set({ isLoading: false });
+      console.warn('fetchSupportTickets failed:', e);
     }
   },
 
@@ -1195,14 +1029,13 @@ export const useCrmStore = create<CRMState>()((set) => ({
   },
 
   fetchTicketMessages: async (ticketId) => {
-    set({ isLoading: true, error: null });
     try {
       const data = await crmService.fetchTicketMessages(ticketId);
-      if (data.length > 0) set({ ticketMessages: data });
-      set({ isLoading: false });
+      if (Array.isArray(data) && data.length > 0) {
+        set({ ticketMessages: data, isLoading: false });
+      }
     } catch (e: any) {
-      console.error(e);
-      set({ isLoading: false });
+      console.warn('fetchTicketMessages failed:', e);
     }
   },
 

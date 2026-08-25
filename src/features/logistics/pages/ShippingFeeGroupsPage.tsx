@@ -19,29 +19,29 @@ const DEFAULT_GROUPS: FeeGroupRecord[] = [
   {
     id: '1',
     groupCode: 'GRP-01',
-    groupName: 'Đơn hàng nhỏ (Dưới 500k)',
+    groupName: 'Đơn hàng nhỏ (dưới 500.000 đ)',
     minOrderValueVnd: 0,
     flatFeeVnd: 30000,
     status: 'ACTIVE',
-    notes: 'Phí đồng giá 30.000đ cho đơn hàng giá trị thấp'
+    notes: 'Phí đồng giá 30.000 đ cho đơn hàng giá trị thấp'
   },
   {
     id: '2',
     groupCode: 'GRP-02',
-    groupName: 'Đơn hàng trung bình (500k - 2 Tr)',
+    groupName: 'Đơn hàng trung bình (500.000 đ - 2.000.000 đ)',
     minOrderValueVnd: 500000,
     flatFeeVnd: 15000,
     status: 'ACTIVE',
-    notes: 'Hỗ trợ 50% phí ship cho khách mua đơn từ 500.000đ'
+    notes: 'Hỗ trợ 50% phí ship cho khách mua đơn từ 500.000 đ'
   },
   {
     id: '3',
     groupCode: 'GRP-03',
-    groupName: 'Miễn phí vận chuyển VIP (Từ 2 Tr)',
+    groupName: 'Miễn phí vận chuyển (từ 2.000.000 đ)',
     minOrderValueVnd: 2000000,
     flatFeeVnd: 0,
     status: 'ACTIVE',
-    notes: 'Freeship 100% cho mọi đơn hàng giá trị trên 2 triệu'
+    notes: 'Miễn phí vận chuyển cho mọi đơn hàng giá trị trên 2.000.000 đ'
   }
 ];
 
@@ -54,7 +54,7 @@ export function ShippingFeeGroupsPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<FeeGroupRecord>>({});
 
-  const formatCurrency = (val: number) => `${Math.round(val).toLocaleString('vi-VN')} VNĐ`;
+  const formatCurrency = (val: number) => `${Math.round(val).toLocaleString('vi-VN')} đ`;
 
   const handleOpenCreate = () => {
     setModalMode('create');
@@ -112,9 +112,9 @@ export function ShippingFeeGroupsPage() {
   };
 
   const handleDelete = (item: FeeGroupRecord) => {
-    setSelectedGroup(null); // Ensure detail modal does NOT open when clicking delete (TC-SHIP-27)
+    setSelectedGroup(null);
     if (item.status === 'ACTIVE') {
-      toast.error('Nhóm phí đang ở trạng thái Hoạt động. Vui lòng chuyển sang Tạm ngưng trước khi xóa!');
+      toast.error('Nhóm phí đang ở trạng thái hoạt động. Vui lòng chuyển sang tạm ngưng trước khi xóa!');
       return;
     }
 
@@ -139,7 +139,7 @@ export function ShippingFeeGroupsPage() {
       {
         accessorKey: 'groupCode',
         header: 'Mã nhóm phí',
-        cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-mono font-bold text-primary">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'groupName',
@@ -158,7 +158,7 @@ export function ShippingFeeGroupsPage() {
           const val = info.getValue() as number;
           return (
             <span className={`font-mono font-bold ${val === 0 ? 'text-emerald-600' : 'text-primary'}`}>
-              {val === 0 ? 'Miễn phí (0đ)' : formatCurrency(val)}
+              {val === 0 ? 'Miễn phí (0 đ)' : formatCurrency(val)}
             </span>
           );
         },
@@ -167,25 +167,25 @@ export function ShippingFeeGroupsPage() {
         accessorKey: 'status',
         header: 'Trạng thái',
         cell: (info) => (
-          <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${
-            info.getValue() === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'
+          <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+            info.getValue() === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
           }`}>
-            {info.getValue() === 'ACTIVE' ? 'Hoạt động' : 'Tạm ngưng'}
+            {info.getValue() === 'ACTIVE' ? 'Đang áp dụng' : 'Tạm ngưng'}
           </span>
         ),
       },
       {
         id: 'actions',
-        header: 'Hành động',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
-            <button onClick={(e) => { e.stopPropagation(); setSelectedGroup(row.original); }} className="p-1 text-gray-400 hover:text-emerald-600">
+            <button onClick={(e) => { e.stopPropagation(); setSelectedGroup(row.original); }} className="p-1 text-gray-400 hover:text-primary rounded transition-colors" title="Xem chi tiết">
               <Eye className="w-4 h-4" />
             </button>
-            <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }} className="p-1 text-gray-400 hover:text-blue-600">
+            <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }} className="p-1 text-gray-400 hover:text-blue-600 rounded transition-colors" title="Chỉnh sửa">
               <Edit className="w-4 h-4" />
             </button>
-            <button onClick={(e) => { e.stopPropagation(); handleDelete(row.original); }} className="p-1 text-gray-400 hover:text-red-600">
+            <button onClick={(e) => { e.stopPropagation(); handleDelete(row.original); }} className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors" title="Xóa">
               <Trash2 className="w-4 h-4" />
             </button>
           </div>
@@ -197,16 +197,16 @@ export function ShippingFeeGroupsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Nhóm phí vận chuyển</h1>
-          <p className="text-sm text-gray-500 mt-1">Phân loại nhóm cước phí theo giá trị đơn hàng và chính sách ưu đãi freeship.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Phân loại nhóm cước phí theo giá trị đơn hàng và chính sách ưu đãi miễn phí giao hàng</p>
         </div>
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-semibold shadow-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium transition-colors text-sm shadow-sm"
         >
-          <Plus className="w-4 h-4" /> Thêm Nhóm Phí Mới
+          <Plus className="w-4 h-4" /> Thêm mới nhóm phí
         </button>
       </div>
 
@@ -217,47 +217,47 @@ export function ShippingFeeGroupsPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Tìm theo mã nhóm, tên nhóm phí vận chuyển..."
-          className="w-full bg-transparent outline-none text-sm"
+          className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-white"
         />
       </div>
 
       <ReusableDataTable columns={columns} data={filtered} />
 
-      {/* Modal Xem chi tiết căn giữa (TC-ALL-1) */}
+      {/* Modal Xem chi tiết */}
       <Modal
         isOpen={!!selectedGroup}
         onClose={() => setSelectedGroup(null)}
-        title={selectedGroup ? `Chi tiết nhóm phí: ${selectedGroup.groupName}` : 'Thông tin nhóm phí'}
+        title={selectedGroup ? `Thông tin nhóm phí: ${selectedGroup.groupName}` : 'Thông tin nhóm phí'}
         width="max-w-md"
       >
         {selectedGroup && (
           <div className="space-y-4 text-sm">
-            <div className="flex justify-between border-b pb-2">
+            <div className="flex justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
               <span className="text-gray-500">Mã nhóm phí:</span>
-              <span className="font-mono font-bold text-emerald-600">{selectedGroup.groupCode}</span>
+              <span className="font-mono font-bold text-primary">{selectedGroup.groupCode}</span>
             </div>
-            <div className="flex justify-between border-b pb-2">
+            <div className="flex justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
               <span className="text-gray-500">Tên nhóm:</span>
-              <span className="font-bold">{selectedGroup.groupName}</span>
+              <span className="font-bold text-gray-900 dark:text-white">{selectedGroup.groupName}</span>
             </div>
-            <div className="grid grid-cols-2 gap-4 border-b pb-2">
+            <div className="grid grid-cols-2 gap-4 border-b border-gray-200 dark:border-gray-700 pb-2">
               <div>
-                <span className="text-gray-500 block">Đơn tối thiểu:</span>
-                <span className="font-mono font-bold text-gray-800">{formatCurrency(selectedGroup.minOrderValueVnd)}</span>
+                <span className="text-gray-500 block mb-1">Đơn tối thiểu:</span>
+                <span className="font-mono font-bold text-gray-800 dark:text-gray-200">{formatCurrency(selectedGroup.minOrderValueVnd)}</span>
               </div>
               <div>
-                <span className="text-gray-500 block">Phí ship áp dụng:</span>
-                <span className="font-mono font-bold text-emerald-600">{formatCurrency(selectedGroup.flatFeeVnd)}</span>
+                <span className="text-gray-500 block mb-1">Phí ship áp dụng:</span>
+                <span className="font-mono font-bold text-primary">{formatCurrency(selectedGroup.flatFeeVnd)}</span>
               </div>
             </div>
             {selectedGroup.notes && (
               <div>
                 <span className="text-xs text-gray-400 block mb-1">Ghi chú chính sách:</span>
-                <p className="p-2.5 bg-gray-50 rounded-lg italic text-gray-700">{selectedGroup.notes}</p>
+                <p className="p-2.5 bg-gray-50 dark:bg-gray-900 rounded-lg text-gray-700 dark:text-gray-300 text-xs border border-gray-200 dark:border-gray-800">{selectedGroup.notes}</p>
               </div>
             )}
-            <div className="flex justify-end pt-3 border-t">
-              <button onClick={() => setSelectedGroup(null)} className="px-4 py-2 bg-gray-100 font-bold rounded-lg">
+            <div className="flex justify-end pt-3 border-t border-gray-200 dark:border-gray-700">
+              <button onClick={() => setSelectedGroup(null)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-lg text-sm">
                 Đóng
               </button>
             </div>
@@ -269,37 +269,37 @@ export function ShippingFeeGroupsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Nhóm Phí Vận Chuyển Mới' : 'Cập Nhật Nhóm Phí'}
+        title={modalMode === 'create' ? 'Thêm mới nhóm phí vận chuyển' : 'Cập nhật nhóm phí vận chuyển'}
         width="max-w-md"
       >
-        <form onSubmit={handleSave} className="space-y-4 text-sm">
+        <form onSubmit={handleSave} className="space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Mã nhóm *</label>
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Mã nhóm *</label>
               <input
                 type="text"
                 value={editingItem.groupCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, groupCode: e.target.value })}
                 required
-                className="w-full p-2.5 border rounded-lg font-mono"
+                className="w-full p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-mono font-bold text-primary"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Tên nhóm phí *</label>
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Tên nhóm phí *</label>
               <input
                 type="text"
                 value={editingItem.groupName || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, groupName: e.target.value })}
                 required
                 placeholder="VD: Đơn dưới 500k"
-                className="w-full p-2.5 border rounded-lg"
+                className="w-full p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Giá trị đơn tối thiểu (VNĐ)</label>
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Giá trị đơn tối thiểu (đ)</label>
               <input
                 type="text"
                 value={editingItem.minOrderValueVnd ?? 0}
@@ -307,11 +307,11 @@ export function ShippingFeeGroupsPage() {
                   const clean = e.target.value.replace(/^0+(?=\d)/, '');
                   setEditingItem({ ...editingItem, minOrderValueVnd: parseFloat(clean) || 0 });
                 }}
-                className="w-full p-2.5 border rounded-lg font-mono font-bold"
+                className="w-full p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-mono font-bold text-gray-900 dark:text-white"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Mức phí áp dụng (VNĐ)</label>
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Mức phí áp dụng (đ)</label>
               <input
                 type="text"
                 value={editingItem.flatFeeVnd ?? 0}
@@ -319,39 +319,39 @@ export function ShippingFeeGroupsPage() {
                   const clean = e.target.value.replace(/^0+(?=\d)/, '');
                   setEditingItem({ ...editingItem, flatFeeVnd: parseFloat(clean) || 0 });
                 }}
-                className="w-full p-2.5 border rounded-lg font-mono text-emerald-600 font-bold"
+                className="w-full p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-mono text-primary font-bold"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">Trạng thái *</label>
+            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái *</label>
             <select
               value={editingItem.status || 'ACTIVE'}
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-              className="w-full p-2.5 border rounded-lg"
+              className="w-full p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white font-medium"
             >
-              <option value="ACTIVE">Hoạt động</option>
+              <option value="ACTIVE">Đang áp dụng</option>
               <option value="INACTIVE">Tạm ngưng</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">Ghi chú</label>
+            <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
               rows={2}
-              className="w-full p-2.5 border rounded-lg"
+              className="w-full p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white"
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-3 border-t">
-            <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border rounded-lg">
-              Hủy Bỏ
+          <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+              Hủy bỏ
             </button>
-            <button type="submit" className="px-5 py-2 bg-emerald-600 text-white font-semibold rounded-lg">
-              Lưu Nhóm Phí
+            <button type="submit" className="px-5 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow-sm transition-colors">
+              Lưu thông tin
             </button>
           </div>
         </form>

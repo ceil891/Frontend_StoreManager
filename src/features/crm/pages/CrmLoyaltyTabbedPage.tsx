@@ -28,7 +28,7 @@ export function CrmLoyaltyTabbedPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Khách hàng Thân thiết & Điểm thưởng</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Khách hàng thân thiết & điểm thưởng</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Quản lý cấp độ hạng thành viên, quyền lợi ưu đãi và lịch sử tích/đổi điểm của khách hàng
           </p>

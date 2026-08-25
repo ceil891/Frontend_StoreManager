@@ -77,6 +77,14 @@ export function SaleOrdersPage() {
 
   const filtered = useMemo(() => {
     return storeOrders.filter((item) => {
+      // Tab "Đơn bán hàng": Chỉ hiển thị đơn POS và MANUAL (tại quầy / tại cửa hàng)
+      // Đơn ONLINE và ECOMMERCE được quản lý riêng ở các tab "Đơn hàng Online" và "Đơn hàng Sàn TMĐT"
+      const origin = (item.origin || '').toUpperCase();
+      const code = (item.code || '').toUpperCase();
+      if (origin === 'ONLINE' || origin === 'WEB' || origin === 'ECOMMERCE' || origin === 'MARKETPLACE' || code.startsWith('ONLINE-') || code.startsWith('WEB-') || code.startsWith('MKT-')) {
+        return false;
+      }
+
       const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
       
       if (paymentStatusFilter !== 'all' && item.paymentStatus !== paymentStatusFilter) {
@@ -148,6 +156,10 @@ export function SaleOrdersPage() {
   };
 
   const handleOpenEdit = (order: SaleOrder) => {
+    if (order.origin === 'POS') {
+      toast.error('Đơn hàng POS khởi tạo tại quầy thu ngân đã hoàn tất hạch toán và bị khóa, không được phép chỉnh sửa!');
+      return;
+    }
     setModalMode('edit');
     setEditingOrder(order);
     setIsModalOpen(true);
@@ -155,9 +167,22 @@ export function SaleOrdersPage() {
 
   const handleSaveOrder = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingOrder.customerId || !editingOrder.code) return;
+    if (!editingOrder.customerId || !editingOrder.code) {
+      toast.error('Vui lòng chọn khách hàng và nhập mã đơn!');
+      return;
+    }
 
     const lines = editingOrder.orderLines ?? [];
+    if (!lines.length || !lines.some(l => (l.quantity || 0) > 0)) {
+      toast.error('Đơn hàng bắt buộc phải có ít nhất 1 sản phẩm với số lượng > 0!');
+      return;
+    }
+
+    if (editingOrder.origin === 'ONLINE' && !editingOrder.shippingAddress?.trim()) {
+      toast.error('Đơn hàng Online bắt buộc phải có địa chỉ nhận hàng cụ thể!');
+      return;
+    }
+
     const lineTotal = sumOrderLines(lines);
     const subTotal = lines.length ? lineTotal : Number(editingOrder.subTotal) || 0;
     const taxAmount = Number(editingOrder.taxAmount) || 0;
@@ -367,9 +392,21 @@ export function SaleOrdersPage() {
             </button>
             {canManage && (
               <button 
-                onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
-                title="Chỉnh sửa"
-                className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors shrink-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (row.original.origin === 'POS') {
+                    toast.error('Đơn hàng được lập từ quầy POS không được phép chỉnh sửa trực tiếp!');
+                    return;
+                  }
+                  handleOpenEdit(row.original);
+                }}
+                disabled={row.original.origin === 'POS'}
+                title={row.original.origin === 'POS' ? 'Đơn hàng POS đã khóa chỉnh sửa' : 'Chỉnh sửa'}
+                className={`p-1.5 rounded-lg transition-colors shrink-0 ${
+                  row.original.origin === 'POS'
+                    ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-40'
+                    : 'text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'
+                }`}
               >
                 <Edit className="w-4 h-4" />
               </button>
@@ -531,7 +568,7 @@ export function SaleOrdersPage() {
         isOpen={!!selectedOrder} 
         onClose={() => setSelectedOrder(null)}
         title={selectedOrder ? `Chi tiết đơn hàng: ${selectedOrder.code}` : 'Tóm tắt đơn hàng'}
-        width="max-w-lg"
+        size="erp"
       >
         {selectedOrder && (
           <div className="space-y-6">

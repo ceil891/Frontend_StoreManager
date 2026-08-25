@@ -96,7 +96,7 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">📦 Chi tiết sản phẩm / Variant báo giá</span>
+        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Chi tiết sản phẩm / biến thể báo giá</span>
         <button
           type="button"
           onClick={addRow}
@@ -120,7 +120,7 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
               <div className="grid grid-cols-12 gap-2 items-center">
                 {/* Variant Lookup */}
                 <div className="col-span-12 sm:col-span-5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase">Sản phẩm / Variant #{idx + 1} *</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase">Sản phẩm / biến thể #{idx + 1} *</label>
                   <QuoteVariantSelector
                     value={line.productVariantId || line.productId}
                     onChange={(sel) => handleVariantSelect(line.id, sel)}
@@ -140,12 +140,12 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
 
                 {/* Barcode */}
                 <div className="col-span-6 sm:col-span-2">
-                  <label className="text-[10px] text-gray-400 uppercase">Barcode</label>
+                  <label className="text-[10px] text-gray-400 uppercase">Mã vạch (Barcode)</label>
                   <input
                     value={line.barcode || ''}
                     onChange={(e) => updateLine(line.id, { barcode: e.target.value })}
                     className="w-full px-2 py-1.5 text-xs border rounded-lg dark:bg-gray-900 dark:border-gray-600 font-mono"
-                    placeholder="Barcode..."
+                    placeholder="Mã vạch..."
                   />
                 </div>
 
@@ -156,7 +156,7 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
                     value={line.unit || 'Cái'}
                     onChange={(e) => updateLine(line.id, { unit: e.target.value })}
                     className="w-full px-2 py-1.5 text-xs border rounded-lg dark:bg-gray-900 dark:border-gray-600"
-                    placeholder="Lon, Chai..."
+                    placeholder="Lon, chai, cái..."
                   />
                 </div>
 
@@ -207,8 +207,8 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
                       onChange={(e) => updateLine(line.id, { discountType: e.target.value as any })}
                       className="px-1.5 py-1 text-xs border rounded-lg dark:bg-gray-900 dark:border-gray-600 shrink-0"
                     >
-                      <option value="AMOUNT">Tiền</option>
-                      <option value="PERCENT">%</option>
+                      <option value="AMOUNT">Số tiền (đ)</option>
+                      <option value="PERCENT">Tỷ lệ (%)</option>
                     </select>
                     <input
                       type="number"

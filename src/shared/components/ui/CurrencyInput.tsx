@@ -16,7 +16,7 @@ export const CurrencyInput: React.FC<CurrencyInputProps> = ({
   value = 0,
   onChange,
   placeholder = '0',
-  currencySymbol = '₫',
+  currencySymbol = 'đ',
   className = '',
   disabled = false,
   required = false,
@@ -25,7 +25,7 @@ export const CurrencyInput: React.FC<CurrencyInputProps> = ({
 }) => {
   const formatDisplayValue = (val: number | undefined): string => {
     if (val === undefined || val === null || isNaN(val)) return '';
-    return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   };
 
   const [displayValue, setDisplayValue] = useState<string>(formatDisplayValue(value));
@@ -35,7 +35,7 @@ export const CurrencyInput: React.FC<CurrencyInputProps> = ({
   }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value.replace(/,/g, '');
+    const rawValue = e.target.value.replace(/\./g, '').replace(/,/g, '');
     if (rawValue === '' || /^\d+$/.test(rawValue)) {
       const numVal = rawValue === '' ? 0 : parseInt(rawValue, 10);
       setDisplayValue(formatDisplayValue(numVal));

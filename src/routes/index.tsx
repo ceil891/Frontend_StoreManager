@@ -224,7 +224,9 @@ const router = createBrowserRouter([
 
           // Inventory Legacy Redirects
           { path: 'inventory', element: <LegacyRedirect targetCanonical="/inventory/products" defaultTab="products" /> },
+          { path: 'inventory/import-excel', element: <LegacyRedirect targetCanonical="/inventory/products" defaultTab="import-excel" /> },
           { path: 'inventory/variants', element: <LegacyRedirect targetCanonical="/inventory/products" defaultTab="variants" /> },
+
           { path: 'inventory/categories', element: <LegacyRedirect targetCanonical="/inventory/products" defaultTab="categories" /> },
           { path: 'inventory/combos', element: <LegacyRedirect targetCanonical="/inventory/products" defaultTab="combos" /> },
           { path: 'inventory/units', element: <LegacyRedirect targetCanonical="/inventory/attributes" defaultTab="units" /> },

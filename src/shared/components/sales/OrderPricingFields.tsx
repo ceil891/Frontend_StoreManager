@@ -15,7 +15,7 @@ type Props = {
   currency?: 'VND' | 'USD';
 };
 
-export function OrderPricingFields({ values, onChange, showShipping = false, currency = 'USD' }: Props) {
+export function OrderPricingFields({ values, onChange, showShipping = false, currency = 'VND' }: Props) {
   const recalc = (patch: Partial<OrderPricingValues>) => {
     const next = { ...values, ...patch };
     onChange({
@@ -51,7 +51,7 @@ export function OrderPricingFields({ values, onChange, showShipping = false, cur
   return (
     <div className="grid grid-cols-2 gap-3 p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-700">
       <div>
-        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiền hàng (subTotal)</label>
+        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiền hàng</label>
         <input
           type={currency === 'VND' ? 'text' : 'number'}
           step={step}
@@ -61,7 +61,7 @@ export function OrderPricingFields({ values, onChange, showShipping = false, cur
         />
       </div>
       <div>
-        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Thuế (VAT)</label>
+        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Thuế VAT</label>
         <input
           type={currency === 'VND' ? 'text' : 'number'}
           step={step}
@@ -82,7 +82,7 @@ export function OrderPricingFields({ values, onChange, showShipping = false, cur
       </div>
       {showShipping ? (
         <div>
-          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Phí ship</label>
+          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Phí vận chuyển</label>
           <input
             type={currency === 'VND' ? 'text' : 'number'}
             step={step}
@@ -93,15 +93,13 @@ export function OrderPricingFields({ values, onChange, showShipping = false, cur
         </div>
       ) : (
         <div className="flex items-end">
-          <p className="text-xs text-gray-500">Tổng = subTotal + thuế + ship − giảm giá</p>
+          <p className="text-xs text-gray-500">Tổng cộng = Tiền hàng + Thuế + Vận chuyển − Giảm giá</p>
         </div>
       )}
       <div className="col-span-2 pt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
         <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Tổng thanh toán</span>
         <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono">
-          {currency === 'VND'
-            ? `${Math.round(values.totalAmount).toLocaleString('vi-VN')}đ`
-            : `$${values.totalAmount.toFixed(2)}`}
+          {Math.round(values.totalAmount).toLocaleString('vi-VN')} đ
         </span>
       </div>
     </div>

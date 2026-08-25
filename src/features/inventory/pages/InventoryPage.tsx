@@ -4,7 +4,7 @@ import {
   Plus, Download, Eye, Tag,
   MapPin, Image as ImageIcon, Edit, Trash2, AlertCircle, X,
   CircleDot, Package, Barcode, AlertTriangle, Package2, UploadCloud, Loader2,
-  CheckCircle2, ArrowRight
+  CheckCircle2, ArrowRight, Lock, FileSpreadsheet
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -17,16 +17,20 @@ import { axiosClient } from '@/shared/lib/axiosClient';
 import { useColorStore } from '../store/colorStore';
 import { useSizeStore } from '../store/sizeStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
+import { usePermission } from '@/shared/hooks/usePermission';
 
 import { compressImage } from '@/shared/utils/imageCompressor';
 
 export function InventoryPage() {
   const navigate = useNavigate();
+  const { user, canViewAllBranches, currentBranchId: userBranchId, currentBranchName } = usePermission();
+  const isSuperAdmin = canViewAllBranches;
+
   const [isWizardModalOpen, setIsWizardModalOpen] = useState(false);
   const [createdProductInfo, setCreatedProductInfo] = useState<{ id?: string; sku: string; name: string; costPrice?: number } | null>(null);
   const [wizardChoice, setWizardChoice] = useState<'NONE' | 'INITIAL_STOCK' | 'IMPORT_RECEIPT'>('NONE');
   const [wizardInitialStock, setWizardInitialStock] = useState<number>(100);
-  const [wizardBranchId, setWizardBranchId] = useState<string>('1');
+  const [wizardBranchId, setWizardBranchId] = useState<string>(userBranchId || '1');
   const [isSavingWizard, setIsSavingWizard] = useState(false);
   const {
     products: data, addProduct, updateProduct, deleteProduct, categories, fetchProducts, fetchCategories,
@@ -39,6 +43,12 @@ export function InventoryPage() {
   const { colors, fetchColors } = useColorStore();
   const { sizes, fetchSizes } = useSizeStore();
 
+  const userBranchName = useMemo(() => {
+    if (!userBranchId) return '';
+    const b = branches.find(item => String(item.id) === String(userBranchId));
+    return b?.name || currentBranchName || `Chi nhánh ${userBranchId}`;
+  }, [userBranchId, branches, currentBranchName]);
+
   // Load real data from backend
   const [isLoading, setIsLoading] = useState(true);
   useEffect(() => {
@@ -50,13 +60,18 @@ export function InventoryPage() {
     loadData();
   }, [fetchProducts, fetchCategories, fetchUnits, fetchBranches]);
 
-
   // Filter states
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [branchFilter, setBranchFilter] = useState<string>('all');
+  const [branchFilter, setBranchFilter] = useState<string>(!isSuperAdmin && userBranchId ? userBranchId : 'all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
+
+  useEffect(() => {
+    if (!isSuperAdmin && userBranchId) {
+      setBranchFilter(userBranchId);
+    }
+  }, [isSuperAdmin, userBranchId]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
@@ -278,6 +293,10 @@ function generateSkuCode(existingSkus: string[] = []): string {
       toast.error('Giá vốn không được là số âm!');
       return;
     }
+    if (Number(editingProduct.costPrice) > Number(editingProduct.price)) {
+      toast.error('Giá vốn không được lớn hơn giá bán lẻ! Vui lòng kiểm tra lại đơn giá.');
+      return;
+    }
     if (editingProduct.onHand !== undefined && Number(editingProduct.onHand) < 0) {
       toast.error('Số lượng tồn kho ban đầu không được là số âm!');
       return;
@@ -420,7 +439,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
       return;
     }
     exportToCsv('danh-muc-san-pham', data, [
-      { header: 'Mã hàng', accessor: (row) => row.sku },
+      { header: 'Mã SKU', accessor: (row) => row.sku },
       { header: 'Tên hàng hóa', accessor: (row) => row.name },
       { header: 'Nhóm hàng', accessor: (row) => row.category },
       { header: 'Giá bán', accessor: (row) => row.price },
@@ -428,7 +447,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
       { header: 'Tồn kho', accessor: (row) => row.onHand },
       { header: 'Trạng thái', accessor: (row) => row.status },
     ]);
-    toast.success('Đã Xuất File CSV');
+    toast.success('Đã xuất file CSV');
   };
 
   const uploadToCloudinary = async (file: File) => {
@@ -542,12 +561,12 @@ function generateSkuCode(existingSkus: string[] = []): string {
       },
       {
         accessorKey: 'sku',
-        header: 'SKU / Mã SP',
-        cell: (info) => <span className="font-mono font-bold text-emerald-600 hover:underline">{info.getValue() as string}</span>,
+        header: 'Mã SKU',
+        cell: (info) => <span className="font-mono font-bold text-primary hover:underline">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'barcodes',
-        header: 'Mã Barcode',
+        header: 'Mã barcode',
         cell: ({ row }) => {
           const barcode = (row.original.barcodes && row.original.barcodes[0]) || (row.original as any).barcode || '—';
           return <span className="font-mono text-xs text-gray-700 dark:text-gray-300 font-semibold px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">{barcode}</span>;
@@ -576,24 +595,24 @@ function generateSkuCode(existingSkus: string[] = []): string {
         accessorKey: 'category',
         header: 'Danh mục',
         cell: (info) => (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/20">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
             {info.getValue() as string}
           </span>
         ),
       },
       {
         accessorKey: 'price',
-        header: 'Giá Bán lẻ',
+        header: 'Giá bán lẻ',
         cell: (info) => (
-          <span className="font-bold text-emerald-700 dark:text-emerald-400 text-right block">
-            {(info.getValue() as number).toLocaleString('vi-VN')}₫
+          <span className="font-bold text-primary text-right block">
+            {(info.getValue() as number).toLocaleString('vi-VN')} đ
           </span>
         ),
         meta: { align: 'right' }
       },
       {
         accessorKey: 'onHand',
-        header: 'Tồn kho & Cảnh báo',
+        header: 'Tồn kho & cảnh báo',
         cell: ({ row }) => {
           const isBranchSelected = branchFilter !== 'all';
           const selectedBranch = branches.find(b => String(b.id) === branchFilter);
@@ -667,7 +686,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
               {alternateUnits.map((u) => (
                 <span 
                   key={u.id}
-                  className="inline-flex items-center text-[11px] font-semibold text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/20 px-2 py-0.5 rounded-md w-fit"
+                  className="inline-flex items-center text-[11px] font-semibold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-md w-fit"
                 >
                   1 {u.unitName || u.unitCode} = {u.conversionRate} {baseUnit}
                 </span>
@@ -679,7 +698,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
       {
         accessorKey: 'lastUpdated',
         header: 'Cập nhật',
-        cell: (info) => <span className="text-xs text-gray-500">{info.getValue() as string || 'N/A'}</span>,
+        cell: (info) => <span className="text-xs text-gray-500 dark:text-gray-400">{info.getValue() as string || 'Chưa cập nhật'}</span>,
       },
       {
         accessorKey: 'status',
@@ -688,9 +707,9 @@ function generateSkuCode(existingSkus: string[] = []): string {
           const status = info.getValue() as string;
           return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
-              status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'
+              status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
             }`}>
-              {status === 'ACTIVE' ? 'Đang bán' : 'Ngừng KD'}
+              {status === 'ACTIVE' ? 'Đang kinh doanh' : 'Ngừng kinh doanh'}
             </span>
           );
         },
@@ -703,7 +722,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
           <div className="flex items-center justify-center gap-1">
             <button
               onClick={(e) => { e.stopPropagation(); setSelectedProduct(row.original); }}
-              className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
             >
               <Eye className="w-4 h-4" />
             </button>
@@ -744,46 +763,60 @@ function generateSkuCode(existingSkus: string[] = []): string {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Danh mục hàng hóa & tồn kho</h1>
-            <p className="text-sm text-gray-500 mt-1">Quản lý danh mục hàng hóa, giá vốn, giá bán lẻ và các đơn vị tính quy đổi.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý danh mục hàng hóa, giá vốn, giá bán lẻ và các đơn vị tính quy đổi</p>
           </div>
           <div className="flex items-center gap-3">
             <button 
-              onClick={handleExportCsv}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium shadow-sm"
+              onClick={() => navigate('/inventory/products?tab=import-excel')}
+              className="flex items-center gap-2 px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 rounded-lg text-sm font-semibold shadow-sm hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors cursor-pointer"
             >
-              <Download className="w-4 h-4" /> Xuất File CSV
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Nhập Excel
             </button>
-            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm">
-              <Plus className="w-4 h-4" /> Thêm Sản Phẩm Mới
+            <button 
+              onClick={handleExportCsv}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium shadow-sm hover:bg-gray-50 cursor-pointer"
+            >
+              <Download className="w-4 h-4" /> Xuất Excel
+            </button>
+            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow-sm cursor-pointer">
+              <Plus className="w-4 h-4" /> Thêm mới sản phẩm
             </button>
           </div>
+
         </div>
 
         <div className="flex flex-col gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
           {/* Quick Filters Row */}
           <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700/60">
             <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-gray-500 font-medium">Lọc Chi nhánh:</span>
-              <select
-                value={branchFilter}
-                onChange={(e) => setBranchFilter(e.target.value)}
-                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs cursor-pointer"
-              >
-                <option value="all">Toàn hệ thống (Tất cả chi nhánh)</option>
-                {branches.map((b) => (
-                  <option key={b.id} value={String(b.id)}>
-                    {b.branchName}
-                  </option>
-                ))}
-              </select>
+              <span className="text-gray-500 dark:text-gray-400 font-medium">Chi nhánh:</span>
+              {isSuperAdmin ? (
+                <select
+                  value={branchFilter}
+                  onChange={(e) => setBranchFilter(e.target.value)}
+                  className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+                >
+                  <option value="all">Toàn hệ thống (tất cả chi nhánh)</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={String(b.id)}>
+                      {b.name || (b as any).branchName || b.branchCode || `Chi nhánh ${b.id}`}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  <Lock className="w-3 h-3 text-gray-500" />
+                  <span>{userBranchName || `Chi nhánh #${userBranchId}`}</span>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-gray-500 font-medium">Lọc Danh mục:</span>
+              <span className="text-gray-500 dark:text-gray-400 font-medium">Lọc danh mục:</span>
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs cursor-pointer"
+                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
               >
                 <option value="all">Tất cả danh mục</option>
                 {categories.map((c) => (
@@ -795,11 +828,11 @@ function generateSkuCode(existingSkus: string[] = []): string {
             </div>
 
             <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-gray-500 font-medium">Lọc Trạng thái:</span>
+              <span className="text-gray-500 dark:text-gray-400 font-medium">Lọc trạng thái:</span>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs cursor-pointer"
+                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
               >
                 <option value="all">Tất cả trạng thái</option>
                 <option value="ACTIVE">Đang kinh doanh</option>
@@ -808,21 +841,21 @@ function generateSkuCode(existingSkus: string[] = []): string {
             </div>
 
             <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-gray-500 font-medium">Cập nhật từ (dd/mm/yyyy):</span>
+              <span className="text-gray-500 dark:text-gray-400 font-medium">Từ ngày (DD/MM/YYYY):</span>
               <input 
                 type="date"
                 value={fromDate}
                 onChange={e => setFromDate(e.target.value)}
-                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs cursor-pointer"
+                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
               />
             </div>
             <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-gray-500 font-medium">Đến (dd/mm/yyyy):</span>
+              <span className="text-gray-500 dark:text-gray-400 font-medium">Đến ngày (DD/MM/YYYY):</span>
               <input 
                 type="date"
                 value={toDate}
                 onChange={e => setToDate(e.target.value)}
-                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs cursor-pointer"
+                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
               />
             </div>
 
@@ -851,9 +884,9 @@ function generateSkuCode(existingSkus: string[] = []): string {
             {data.length === 0 && (
               <button 
                 onClick={handleOpenCreate}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow-sm transition-colors"
               >
-                <Plus className="w-4 h-4" /> Thêm Sản Phẩm Mới
+                <Plus className="w-4 h-4" /> Thêm mới sản phẩm
               </button>
             )}
           </div>
@@ -862,7 +895,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
             columns={columns} 
             data={filtered} 
             isLoading={isLoading}
-            globalFilterPlaceholder="Tìm kiếm sản phẩm (Tên, SKU, Thương hiệu)..."
+            globalFilterPlaceholder="Tìm kiếm sản phẩm (tên, SKU, thương hiệu)..."
             onRowClick={(row) => setSelectedProduct(row)} 
             bulkActions={handleBulkActions}
           />
@@ -872,7 +905,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
       <Modal
         isOpen={!!selectedProduct}
         onClose={() => setSelectedProduct(null)}
-        title={selectedProduct ? `Thông tin sản phẩm` : 'Sản phẩm'}
+        title={selectedProduct ? `Thông tin chi tiết sản phẩm` : 'Sản phẩm'}
         width="max-w-3xl"
       >
         {selectedProduct && (
@@ -895,7 +928,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
                       ? 'bg-emerald-500/90 text-white' 
                       : 'bg-gray-500/90 text-white'
                   }`}>
-                    {selectedProduct.status === 'ACTIVE' ? 'Đang bán' : 'Ngừng KD'}
+                    {selectedProduct.status === 'ACTIVE' ? 'Đang kinh doanh' : 'Ngừng kinh doanh'}
                   </span>
                 </div>
               </div>
@@ -904,7 +937,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
               <div className="flex-1 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold text-indigo-700 bg-indigo-50 dark:bg-indigo-900/40 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/50 uppercase tracking-widest">
+                    <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 uppercase tracking-widest">
                       {selectedProduct.category}
                     </span>
                     <span className="text-xs font-mono font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
@@ -915,18 +948,18 @@ function generateSkuCode(existingSkus: string[] = []): string {
                     {selectedProduct.name}
                   </h2>
                   <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1.5 font-medium">
-                    <Tag className="w-4 h-4" /> Thương hiệu: <span className="text-gray-800 dark:text-gray-200">{selectedProduct.brand || 'Đang cập nhật'}</span>
+                    <Tag className="w-4 h-4" /> Thương hiệu: <span className="text-gray-800 dark:text-gray-200">{selectedProduct.brand || 'Chưa cập nhật'}</span>
                   </p>
                 </div>
 
                 <div className="mt-6 grid grid-cols-2 gap-4">
                   <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20 border border-emerald-100 dark:border-emerald-800/30 p-4 rounded-2xl">
-                    <p className="text-[10px] text-emerald-800 dark:text-emerald-400 font-bold uppercase tracking-wider mb-1">Giá bán lẻ (Cơ sở)</p>
+                    <p className="text-[10px] text-emerald-800 dark:text-emerald-400 font-bold uppercase tracking-wider mb-1">Giá bán lẻ (cơ sở)</p>
                     <p className="text-3xl font-black text-emerald-700 dark:text-emerald-500 tracking-tight">
-                      {selectedProduct.price.toLocaleString('vi-VN')}₫
+                      {selectedProduct.price.toLocaleString('vi-VN')} đ
                     </p>
                     <p className="text-xs text-emerald-600/80 dark:text-emerald-500/70 font-medium mt-1">
-                      Giá vốn: {selectedProduct.costPrice.toLocaleString('vi-VN')}₫
+                      Giá vốn: {selectedProduct.costPrice.toLocaleString('vi-VN')} đ
                     </p>
                   </div>
                   
@@ -962,7 +995,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
                       href={img}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-20 h-20 rounded-xl overflow-hidden border border-gray-200/80 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 shrink-0 hover:scale-105 hover:shadow-md hover:border-indigo-300 transition-all snap-start"
+                      className="w-20 h-20 rounded-xl overflow-hidden border border-gray-200/80 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 shrink-0 hover:scale-105 hover:shadow-md hover:border-primary transition-all snap-start"
                     >
                       <img src={img} alt={`${selectedProduct.name} gallery ${idx}`} className="w-full h-full object-cover" />
                     </a>
@@ -975,23 +1008,39 @@ function generateSkuCode(existingSkus: string[] = []): string {
             <div className="bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-gray-200/60 dark:border-gray-800 p-5">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[11px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest block">
-                  Tồn kho chi tiết từng cửa hàng / chi nhánh
+                  {isSuperAdmin ? 'Tồn kho chi tiết từng cửa hàng / chi nhánh' : `Tồn kho tại ${userBranchName || 'Chi nhánh của bạn'}`}
                 </span>
-                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
-                  Tổng tồn khả dụng: {selectedProduct.onHand} {selectedProduct.unit}
+                <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20">
+                  {isSuperAdmin 
+                    ? `Tổng toàn hệ thống: ${selectedProduct.onHand} ${selectedProduct.unit}`
+                    : `Tồn khả dụng: ${(selectedProduct as any).branchStocks?.[userBranchId || ''] ?? selectedProduct.onHand} ${selectedProduct.unit}`}
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {branches.length > 0 ? (
-                  branches.map((b, idx) => {
-                    // Tồn kho thực tế từng chi nhánh (nếu có dữ liệu chi tiết chi nhánh hoặc phân bổ cân bằng)
+                {(() => {
+                  const visibleBranches = isSuperAdmin
+                    ? branches
+                    : branches.filter(b => String(b.id) === String(userBranchId));
+
+                  if (visibleBranches.length === 0) {
+                    return (
+                      <div className="p-3.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center justify-between shadow-xs col-span-2">
+                        <span className="text-xs font-bold text-gray-900 dark:text-white">{userBranchName || 'Chi nhánh của bạn'}</span>
+                        <span className="text-sm font-black font-mono text-primary">
+                          {(selectedProduct as any).branchStocks?.[userBranchId || ''] ?? selectedProduct.onHand} {selectedProduct.unit}
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  return visibleBranches.map((b, idx) => {
                     const branchStock = (selectedProduct as any).branchStocks?.[b.id] ??
-                      (idx === 0 ? selectedProduct.onHand : 0);
+                      (idx === 0 || !isSuperAdmin ? selectedProduct.onHand : 0);
                     return (
                       <div key={b.id} className="p-3.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200/80 dark:border-gray-700/80 flex items-center justify-between shadow-xs">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 flex items-center justify-center font-bold text-xs">
+                          <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
                             {b.branchCode || `CN${idx + 1}`}
                           </div>
                           <div>
@@ -999,20 +1048,13 @@ function generateSkuCode(existingSkus: string[] = []): string {
                             <p className="text-[10px] text-gray-400 font-medium">{b.location || 'Hệ thống cửa hàng'}</p>
                           </div>
                         </div>
-                        <span className="text-sm font-black font-mono text-emerald-600 dark:text-emerald-400">
+                        <span className="text-sm font-black font-mono text-primary">
                           {branchStock} <span className="text-xs font-normal text-gray-400">{selectedProduct.unit}</span>
                         </span>
                       </div>
                     );
-                  })
-                ) : (
-                  <div className="p-3.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center justify-between shadow-xs">
-                    <span className="text-xs font-bold text-gray-900 dark:text-white">Chi nhánh Mặc định (Trụ sở chính)</span>
-                    <span className="text-sm font-black font-mono text-emerald-600 dark:text-emerald-400">
-                      {selectedProduct.onHand} {selectedProduct.unit}
-                    </span>
-                  </div>
-                )}
+                  });
+                })()}
               </div>
             </div>
 
@@ -1020,16 +1062,16 @@ function generateSkuCode(existingSkus: string[] = []): string {
             <div className="bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-gray-200/60 dark:border-gray-800 p-5">
 
               <span className="text-[11px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest block mb-4">
-                Đơn vị quy đổi & Giá bán linh hoạt
+                Đơn vị quy đổi & giá bán linh hoạt
               </span>
               
               <div className="flex flex-wrap items-center gap-3">
                 {/* Base Unit */}
-                <div className="relative group bg-white dark:bg-gray-800 border-2 border-emerald-400/50 dark:border-emerald-500/50 rounded-xl p-4 flex flex-col items-center min-w-[120px] shadow-sm hover:shadow-md hover:border-emerald-500 transition-all">
-                  <div className="absolute -top-2.5 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">CƠ SỞ</div>
-                  <CircleDot className="w-6 h-6 text-emerald-500 mb-2" />
+                <div className="relative group bg-white dark:bg-gray-800 border-2 border-primary/30 rounded-xl p-4 flex flex-col items-center min-w-[120px] shadow-sm hover:shadow-md hover:border-primary transition-all">
+                  <div className="absolute -top-2.5 bg-primary/10 text-primary text-[9px] font-bold px-2 py-0.5 rounded-full border border-primary/20">CƠ SỞ</div>
+                  <CircleDot className="w-6 h-6 text-primary mb-2" />
                   <span className="font-black text-gray-900 dark:text-white text-lg">{selectedProduct.unit}</span>
-                  <span className="text-xs font-mono font-medium text-gray-500 mt-1">{selectedProduct.price.toLocaleString('vi-VN')}₫</span>
+                  <span className="text-xs font-mono font-medium text-gray-500 mt-1">{selectedProduct.price.toLocaleString('vi-VN')} đ</span>
                 </div>
 
                 {selectedProduct.units && selectedProduct.units.length > 0 ? (
@@ -1038,16 +1080,16 @@ function generateSkuCode(existingSkus: string[] = []): string {
                     .map((u) => (
                       <React.Fragment key={u.id}>
                         <div className="flex flex-col items-center justify-center text-gray-300 dark:text-gray-600 px-2 shrink-0">
-                          <span className="text-[11px] font-black text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-md mb-1 shadow-sm border border-indigo-100 dark:border-indigo-800/30">
+                          <span className="text-[11px] font-black text-primary bg-primary/10 px-2 py-1 rounded-md mb-1 shadow-sm border border-primary/20">
                             x{u.conversionRate}
                           </span>
                           <span className="text-xl">➔</span>
                         </div>
 
-                        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col items-center min-w-[120px] shadow-sm hover:shadow-md hover:border-indigo-400 transition-all group">
-                          <Package className="w-6 h-6 text-indigo-500 mb-2 group-hover:scale-110 transition-transform" />
+                        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col items-center min-w-[120px] shadow-sm hover:shadow-md hover:border-primary transition-all group">
+                          <Package className="w-6 h-6 text-primary mb-2 group-hover:scale-110 transition-transform" />
                           <span className="font-black text-gray-900 dark:text-white text-lg">{u.unitCode}</span>
-                          <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 mt-1">{u.price.toLocaleString('vi-VN')}₫</span>
+                          <span className="text-xs font-mono font-bold text-primary mt-1">{u.price.toLocaleString('vi-VN')} đ</span>
                         </div>
                       </React.Fragment>
                     ))
@@ -1064,14 +1106,14 @@ function generateSkuCode(existingSkus: string[] = []): string {
               <div className="flex gap-2">
                 <button 
                   onClick={() => { setSelectedProduct(null); handleOpenEdit(selectedProduct); }}
-                  className="px-5 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-bold rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors shadow-sm flex items-center gap-2"
+                  className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-xl transition-colors shadow-sm flex items-center gap-2"
                 >
                   <Edit className="w-4 h-4" /> Cập nhật
                 </button>
               </div>
               <button 
                 onClick={() => setSelectedProduct(null)}
-                className="px-5 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-bold rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="px-5 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
                 Đóng
               </button>
@@ -1083,7 +1125,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Sản Phẩm mới' : 'Cập nhật sản phẩm'}
+        title={modalMode === 'create' ? 'Thêm mới sản phẩm' : 'Cập nhật sản phẩm'}
         size="erp"
       >
         {/* Premium segmented tabs */}
@@ -1091,7 +1133,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
           <button
             type="button"
             onClick={() => setActiveModalTab('basic')}
-            className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300 ${
               activeModalTab === 'basic' 
                 ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm' 
                 : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
@@ -1102,18 +1144,18 @@ function generateSkuCode(existingSkus: string[] = []): string {
           <button
             type="button"
             onClick={() => setActiveModalTab('units')}
-            className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300 ${
               activeModalTab === 'units' 
                 ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm' 
                 : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
             }`}
           >
-            Kho & Quy đổi
+            Kho & quy đổi
           </button>
           <button
             type="button"
             onClick={() => setActiveModalTab('images')}
-            className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300 ${
               activeModalTab === 'images' 
                 ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm' 
                 : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
@@ -1124,7 +1166,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
           <button
             type="button"
             onClick={() => setActiveModalTab('variants')}
-            className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all duration-300 ${
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300 ${
               activeModalTab === 'variants' 
                 ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm' 
                 : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
@@ -1142,32 +1184,32 @@ function generateSkuCode(existingSkus: string[] = []): string {
                 <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Định danh sản phẩm</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Mã SKU (để trống sẽ tự sinh)</label>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Mã SKU (để trống sẽ tự sinh)</label>
                     <input
                       type="text"
                       value={editingProduct.sku || ''}
                       onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
-                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl font-mono text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl font-mono text-sm focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all shadow-sm"
                       placeholder="Tự động sinh bởi hệ thống..."
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Barcode (để trống sẽ tự sinh)</label>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Mã barcode (để trống sẽ tự sinh)</label>
                     <input
                       type="text"
                       value={editingProduct.barcodes?.[0] || ''}
                       onChange={(e) => setEditingProduct({ ...editingProduct, barcodes: [e.target.value] })}
-                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl font-mono text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
-                      placeholder="VD: 89352..."
+                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl font-mono text-sm focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all shadow-sm"
+                      placeholder="Nhập mã barcode..."
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Tên Sản Phẩm <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Tên sản phẩm <span className="text-red-500">*</span></label>
                     <input
                       type="text"
                       value={editingProduct.name || ''}
                       onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all shadow-sm"
                       placeholder="Nhập tên sản phẩm..."
                       required
                     />
@@ -1175,43 +1217,49 @@ function generateSkuCode(existingSkus: string[] = []): string {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Danh mục</label>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Danh mục</label>
                     <select
                       value={editingProduct.category || ''}
                       onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
-                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all shadow-sm"
                     >
-                      {categories.map(c => <option key={c.id} value={c.categoryName}>{c.categoryName}</option>)}
+                      {categories
+                        .filter((c) => c.status === 'ACTIVE' && c.status !== 'ARCHIVED' && c.status !== 'INACTIVE')
+                        .map((c) => (
+                          <option key={c.id} value={c.categoryName}>
+                            {c.categoryName}
+                          </option>
+                        ))}
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Thương hiệu</label>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Thương hiệu</label>
                     <input
                       type="text"
                       value={editingProduct.brand || ''}
                       onChange={(e) => setEditingProduct({ ...editingProduct, brand: e.target.value })}
-                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
-                      placeholder="VD: Samsung, Nike..."
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all shadow-sm"
+                      placeholder="Ví dụ: Samsung, Vinamilk..."
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Trạng thái</label>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Trạng thái</label>
                     <select
                       value={editingProduct.status || 'ACTIVE'}
                       onChange={(e) => setEditingProduct({ ...editingProduct, status: e.target.value as any })}
-                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all shadow-sm"
                     >
-                      <option value="ACTIVE">Đang bán</option>
-                      <option value="INACTIVE">Ngừng KD (tắt HĐ)</option>
+                      <option value="ACTIVE">Đang kinh doanh</option>
+                      <option value="INACTIVE">Ngừng kinh doanh</option>
                     </select>
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Mô tả chi tiết</label>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Mô tả chi tiết</label>
                   <textarea
                     value={editingProduct.description || ''}
                     onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
-                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm h-28 resize-none"
+                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary/50 transition-all shadow-sm h-28 resize-none"
                     placeholder="Nhập thông tin mô tả sản phẩm..."
                   />
                 </div>
@@ -1219,28 +1267,38 @@ function generateSkuCode(existingSkus: string[] = []): string {
 
               {/* Section: Giá cả & Kho */}
               <div className="erp-form-section space-y-4">
-                <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Giá cả & Kho</h3>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Giá cả & kho</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Giá bán lẻ (₫)</label>
+                    <label className="block text-xs font-semibold text-primary">Giá bán lẻ (đ)</label>
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₫</span>
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">đ</span>
                       <input
-                        type="number"
-                        value={editingProduct.price || 0}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) })}
-                        className="w-full pl-8 pr-4 py-3 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/50 rounded-xl text-sm font-black text-emerald-700 dark:text-emerald-400 focus:ring-2 focus:ring-emerald-500/50 transition-all shadow-sm"
+                        type="text"
+                        inputMode="numeric"
+                        value={(editingProduct.price ?? 0) === 0 ? '' : Math.round(editingProduct.price ?? 0).toLocaleString('vi-VN')}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, '');
+                          setEditingProduct({ ...editingProduct, price: digits === '' ? 0 : parseInt(digits, 10) });
+                        }}
+                        placeholder="0"
+                        className="w-full pl-8 pr-4 py-3 bg-primary/5 border border-primary/20 rounded-xl text-sm font-black text-primary focus:ring-2 focus:ring-primary/50 transition-all shadow-sm"
                       />
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Giá vốn (₫)</label>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400">Giá vốn (đ)</label>
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₫</span>
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">đ</span>
                       <input
-                        type="number"
-                        value={editingProduct.costPrice || 0}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, costPrice: parseFloat(e.target.value) })}
+                        type="text"
+                        inputMode="numeric"
+                        value={(editingProduct.costPrice ?? 0) === 0 ? '' : Math.round(editingProduct.costPrice ?? 0).toLocaleString('vi-VN')}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, '');
+                          setEditingProduct({ ...editingProduct, costPrice: digits === '' ? 0 : parseInt(digits, 10) });
+                        }}
+                        placeholder="0"
                         className="w-full pl-8 pr-4 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-gray-500/50 transition-all shadow-sm"
                       />
                     </div>
@@ -1249,42 +1307,42 @@ function generateSkuCode(existingSkus: string[] = []): string {
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Trọng lượng (kg/g)</label>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Trọng lượng (kg / g)</label>
                     <input
                       type="text"
                       value={editingProduct.weight || ''}
                       onChange={(e) => setEditingProduct({ ...editingProduct, weight: e.target.value })}
-                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm"
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-primary/50 transition-all shadow-sm"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Điểm đặt hàng lại (Reorder Point)</label>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Điểm đặt hàng lại (reorder point)</label>
                     <input
                       type="number"
                       value={editingProduct.reorderPoint || 0}
                       onChange={(e) => setEditingProduct({ ...editingProduct, reorderPoint: parseFloat(e.target.value) })}
-                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm"
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-primary/50 transition-all shadow-sm"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Tồn kho tối thiểu</label>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Tồn kho tối thiểu</label>
                     <input
                       type="number"
                       value={editingProduct.minStock || 0}
                       onChange={(e) => setEditingProduct({ ...editingProduct, minStock: parseFloat(e.target.value) })}
-                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm"
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-primary/50 transition-all shadow-sm"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Tồn kho tối đa</label>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Tồn kho tối đa</label>
                     <input
                       type="number"
                       value={editingProduct.maxStock || 0}
                       onChange={(e) => setEditingProduct({ ...editingProduct, maxStock: parseFloat(e.target.value) })}
-                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm"
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-primary/50 transition-all shadow-sm"
                     />
                   </div>
                 </div>
@@ -1294,13 +1352,13 @@ function generateSkuCode(existingSkus: string[] = []): string {
 
           {activeModalTab === 'units' && (
             <div className="space-y-6 animate-fade-in">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 p-5 bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800/30 rounded-2xl">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 p-5 bg-primary/5 border border-primary/20 rounded-2xl">
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-indigo-800 dark:text-indigo-300 uppercase tracking-wide">ĐV tính cơ sở (base unit)</label>
+                  <label className="block text-xs font-semibold text-primary">Đơn vị tính cơ sở</label>
                   <select
                     value={editingProduct.unit || 'Cái'}
                     onChange={(e) => setEditingProduct({ ...editingProduct, unit: e.target.value })}
-                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-indigo-200 dark:border-indigo-700 rounded-xl text-sm font-black text-indigo-700 dark:text-indigo-400 focus:ring-2 focus:ring-indigo-500/50 uppercase shadow-sm appearance-none"
+                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-primary/30 rounded-xl text-sm font-bold text-primary focus:ring-2 focus:ring-primary/50 shadow-sm appearance-none"
                   >
                     {unitsList.length > 0 ? (
                       unitsList.map(u => <option key={u.id} value={u.unitName}>{u.unitName} ({u.code})</option>)
@@ -1310,7 +1368,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Tồn kho hiện tại</label>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Tồn kho hiện tại</label>
                   <input
                     type="number"
                     value={editingProduct.onHand || 0}
@@ -1325,9 +1383,9 @@ function generateSkuCode(existingSkus: string[] = []): string {
                 <div className="flex justify-between items-end mb-3">
                   <div>
                     <h4 className="text-sm font-bold text-gray-900 dark:text-white">Đơn vị quy đổi phụ</h4>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Thiết lập Hộp, Thùng, Lốc... và giá bán tương ứng.</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Thiết lập hộp, thùng, lốc... và giá bán tương ứng</p>
                   </div>
-                  <button type="button" onClick={handleAddUnit} className="text-xs bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 dark:text-gray-900 text-white px-4 py-2 rounded-lg font-bold shadow-sm transition-colors flex items-center gap-1.5 active:scale-95">
+                  <button type="button" onClick={handleAddUnit} className="text-xs bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-1.5 active:scale-95">
                     <Plus className="w-4 h-4" /> Thêm quy đổi
                   </button>
                 </div>
@@ -1336,45 +1394,45 @@ function generateSkuCode(existingSkus: string[] = []): string {
                   {editingUnits.length === 0 && (
                     <div className="p-8 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-2xl flex flex-col items-center justify-center text-center">
                       <Package2 className="w-8 h-8 text-gray-300 dark:text-gray-600 mb-2" />
-                      <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">Sản phẩm này chỉ bán theo Đơn vị cơ sở.</p>
-                      <p className="text-xs text-gray-400 mt-1">Nhấn "Thêm quy đổi" để thiết lập bán theo thùng/hộp.</p>
+                      <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">Sản phẩm này chỉ bán theo đơn vị cơ sở.</p>
+                      <p className="text-xs text-gray-400 mt-1">Nhấn "Thêm quy đổi" để thiết lập bán theo thùng / hộp.</p>
                     </div>
                   )}
                   {editingUnits.map((u) => (
-                    <div key={u.id} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4 rounded-2xl flex flex-col gap-4 shadow-sm hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors">
+                    <div key={u.id} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4 rounded-2xl flex flex-col gap-4 shadow-sm hover:border-primary/50 transition-colors">
                       <div className="flex gap-4 items-end">
                         <div className="flex-1 space-y-1.5">
-                          <label className="block text-[10px] text-gray-500 font-bold uppercase tracking-wider">Mã ĐV phụ</label>
+                          <label className="block text-[10px] text-gray-500 font-bold uppercase tracking-wider">Mã đơn vị phụ</label>
                           <select 
                             value={u.unitCode} 
                             onChange={(e) => handleUnitMasterChange(u.id, e.target.value)}
-                            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-bold focus:ring-2 focus:ring-indigo-500/50 appearance-none"
+                            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-bold focus:ring-2 focus:ring-primary/50 appearance-none"
                           >
-                            <option value="">Chọn ĐV</option>
+                            <option value="">Chọn đơn vị</option>
                             {unitsList.map(unit => (
                               <option key={unit.id} value={unit.code}>{unit.unitName} ({unit.code})</option>
                             ))}
                           </select>
                         </div>
                         <div className="w-24 space-y-1.5">
-                          <label className="block text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">= Base</label>
+                          <label className="block text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">= Cơ sở</label>
                           <div className="relative">
                             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs">x</span>
                             <input 
                               type="number" value={u.conversionRate} 
                               onChange={(e) => handleUpdateUnit(u.id, 'conversionRate', parseFloat(e.target.value) || 1)}
                               onBlur={() => editingProduct.id && handlePersistUnit(u)}
-                              className="w-full pl-6 pr-2 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-bold text-center focus:ring-2 focus:ring-indigo-500/50"
+                              className="w-full pl-6 pr-2 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-bold text-center focus:ring-2 focus:ring-primary/50"
                             />
                           </div>
                         </div>
                         <div className="w-32 space-y-1.5">
-                          <label className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">Giá bán (đ)</label>
+                          <label className="block text-[10px] text-primary font-bold uppercase tracking-wider">Giá bán (đ)</label>
                           <input 
                             type="number" value={u.price} 
                             onChange={(e) => handleUpdateUnit(u.id, 'price', parseFloat(e.target.value) || 0)}
                             onBlur={() => editingProduct.id && handlePersistUnit(u)}
-                            className="w-full px-3 py-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg text-sm text-emerald-700 dark:text-emerald-400 font-black text-right focus:ring-2 focus:ring-emerald-500/50"
+                            className="w-full px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg text-sm text-primary font-black text-right focus:ring-2 focus:ring-primary/50"
                           />
                         </div>
                       </div>
@@ -1385,11 +1443,11 @@ function generateSkuCode(existingSkus: string[] = []): string {
                             type="text" value={u.barcode || ''} placeholder="Mã vạch riêng cho quy cách đóng gói này..."
                             onChange={(e) => handleUpdateUnit(u.id, 'barcode', e.target.value)}
                             onBlur={() => editingProduct.id && handlePersistUnit(u)}
-                            className="w-full pl-9 pr-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500/50"
+                            className="w-full pl-9 pr-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-mono focus:ring-2 focus:ring-primary/50"
                           />
                         </div>
                         {u.id.startsWith('temp-') && editingProduct.id && (
-                          <button type="button" onClick={() => handlePersistUnit(u)} className="text-xs px-3 py-2 bg-indigo-600 text-white rounded-lg font-bold">
+                          <button type="button" onClick={() => handlePersistUnit(u)} className="text-xs px-3 py-2 bg-primary text-white rounded-lg font-medium">
                             Lưu
                           </button>
                         )}
@@ -1411,8 +1469,8 @@ function generateSkuCode(existingSkus: string[] = []): string {
                 <div 
                   className={`border-2 border-dashed rounded-2xl p-8 transition-all text-center flex flex-col items-center justify-center gap-3 cursor-pointer group ${
                     isDragging 
-                      ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' 
-                      : 'border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-indigo-300 dark:hover:border-indigo-700'
+                      ? 'border-primary bg-primary/5' 
+                      : 'border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-primary/50'
                   }`}
                   onDragOver={(e) => {
                     e.preventDefault();
@@ -1463,21 +1521,21 @@ function generateSkuCode(existingSkus: string[] = []): string {
                   ) : (
                     <>
                       <div className="w-16 h-16 rounded-full bg-white dark:bg-gray-800 shadow-sm flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
-                        <ImageIcon className="w-8 h-8 text-indigo-400" />
+                        <ImageIcon className="w-8 h-8 text-primary" />
                       </div>
                       <div>
-                        <div className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
+                        <div className="text-sm font-bold text-primary">
                           Nhấn để tải lên <span className="text-gray-500 dark:text-gray-400 font-medium">hoặc kéo thả ảnh vào đây</span>
                         </div>
                         <div className="text-xs text-gray-400 font-medium mt-1">
-                          PNG, JPG, WEBP (Tối đa 5MB)
+                          PNG, JPG, WEBP (tối đa 5MB)
                         </div>
                       </div>
                     </>
                   )}
                   {isUploading && (
                     <div className="absolute inset-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center rounded-2xl z-10">
-                      <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-2" />
+                      <Loader2 className="w-8 h-8 text-primary animate-spin mb-2" />
                       <span className="text-sm font-bold text-gray-700 dark:text-gray-300">Đang tải lên...</span>
                     </div>
                   )}
@@ -1490,12 +1548,12 @@ function generateSkuCode(existingSkus: string[] = []): string {
                     value={editingProduct.mainImage?.startsWith('blob:') ? '' : (editingProduct.mainImage || '')}
                     onChange={(e) => setEditingProduct({ ...editingProduct, mainImage: e.target.value })}
                     placeholder="https://example.com/image.jpg"
-                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-mono focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-mono focus:ring-2 focus:ring-primary/50 transition-all"
                   />
                   {editingProduct.mainImage?.startsWith('blob:') && (
                     <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 flex items-center gap-1">
                       <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                      Ảnh từ máy tính chỉ xem trước tạm thời. Để lưu vào hệ thống, hãy tải lên dịch vụ lưu trữ (Cloudinary, Imgur...) và dán URL vào ô trên.
+                      Ảnh từ máy tính chỉ xem trước tạm thời. Để lưu vào hệ thống, hãy tải lên dịch vụ lưu trữ và dán URL vào ô trên.
                     </p>
                   )}
                 </div>
@@ -1504,7 +1562,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-3">
                   <label className="block text-sm font-bold text-gray-900 dark:text-white">Thư viện ảnh phụ</label>
-                  <span className="text-xs font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-1 rounded-lg">{(editingProduct.galleryImages || []).length} / 5 ảnh</span>
+                  <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg">{(editingProduct.galleryImages || []).length} / 5 ảnh</span>
                 </div>
                 <div className="flex flex-wrap gap-3">
                   {(editingProduct.galleryImages || []).map((img, idx) => (
@@ -1524,9 +1582,9 @@ function generateSkuCode(existingSkus: string[] = []): string {
                       </button>
                     </div>
                   ))}
-                  <label className="w-24 h-24 bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-indigo-400 transition-colors group">
-                    <Plus className="w-6 h-6 text-gray-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-1" />
-                    <span className="text-[10px] font-bold text-gray-400 group-hover:text-indigo-500">Thêm ảnh</span>
+                  <label className="w-24 h-24 bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-primary transition-colors group">
+                    <Plus className="w-6 h-6 text-gray-400 group-hover:text-primary group-hover:scale-110 transition-all mb-1" />
+                    <span className="text-[10px] font-bold text-gray-400 group-hover:text-primary">Thêm ảnh</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -1558,12 +1616,12 @@ function generateSkuCode(existingSkus: string[] = []): string {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-sm font-bold text-gray-900 dark:text-white">Danh sách biến thể sản phẩm</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">Thêm các phân loại sản phẩm như kích thước (Size) hoặc màu sắc (Color) để quản lý riêng biệt.</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Thêm các phân loại sản phẩm như kích thước hoặc màu sắc để quản lý riêng biệt</p>
                   </div>
                   <button
                     type="button"
                     onClick={handleAddVariant}
-                    className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-medium rounded-xl shadow-sm transition-all"
                   >
                     <Plus className="w-3.5 h-3.5" /> Thêm biến thể
                   </button>
@@ -1582,7 +1640,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
                         <div className="col-span-4">Kích thước</div>
                         <div className="col-span-3">Hậu tố SKU</div>
 
-                        <div className="col-span-1 text-center">Xóa</div>
+                        <div className="col-span-1 text-center">Thao tác</div>
                       </div>
                       
                       {(editingProduct.variants || []).map((variant, idx) => (
@@ -1592,7 +1650,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
                             <select
                               value={variant.color || ''}
                               onChange={(e) => handleUpdateVariant(idx, 'color', e.target.value)}
-                              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium outline-none focus:ring-1 focus:ring-indigo-500"
+                              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium outline-none focus:ring-1 focus:ring-primary"
                             >
                               {colors.length > 0 ? (
                                 colors.map(c => <option key={c.id} value={c.colorName}>{c.colorName}</option>)
@@ -1607,7 +1665,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
                             <select
                               value={variant.size || ''}
                               onChange={(e) => handleUpdateVariant(idx, 'size', e.target.value)}
-                              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium outline-none focus:ring-1 focus:ring-indigo-500"
+                              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium outline-none focus:ring-1 focus:ring-primary"
                             >
                               {sizes.length > 0 ? (
                                 sizes.map(s => <option key={s.id} value={s.sizeName}>{s.sizeName}</option>)
@@ -1625,7 +1683,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
                               value={variant.skuSuffix || ''}
                               onChange={(e) => handleUpdateVariant(idx, 'skuSuffix', e.target.value)}
                               placeholder="-SUFFIX"
-                              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-mono outline-none focus:ring-1 focus:ring-indigo-500"
+                              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-mono outline-none focus:ring-1 focus:ring-primary"
                             />
                           </div>
 
@@ -1653,15 +1711,15 @@ function generateSkuCode(existingSkus: string[] = []): string {
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-6 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              className="px-6 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
             >
               Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/20 active:scale-95 transition-all"
+              className="px-8 py-2.5 bg-primary hover:bg-primary-hover text-white font-medium rounded-xl shadow-lg transition-all"
             >
-              Lưu sản phẩm
+              Lưu thông tin
             </button>
           </div>
         </form>
@@ -1675,10 +1733,10 @@ function generateSkuCode(existingSkus: string[] = []): string {
         width="max-w-md"
       >
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">Bạn có chắc chắn muốn xóa sản phẩm <strong>{deletingProduct?.name}</strong>?</p>
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <button type="button" onClick={() => setDeletingProduct(null)} className="px-4 py-2 border rounded-lg text-sm">Hủy</button>
-            <button type="button" onClick={handleDeleteConfirm} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold">Đồng ý xóa</button>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Bạn có chắc chắn muốn xóa sản phẩm <strong>{deletingProduct?.name}</strong>?</p>
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <button type="button" onClick={() => setDeletingProduct(null)} className="px-4 py-2 border rounded-lg text-sm">Hủy bỏ</button>
+            <button type="button" onClick={handleDeleteConfirm} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium">Đồng ý xóa</button>
           </div>
         </div>
       </Modal>
@@ -1718,7 +1776,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
       <Modal
         isOpen={isWizardModalOpen}
         onClose={() => { setIsWizardModalOpen(false); setWizardChoice('NONE'); }}
-        title=" Tạo sản phẩm thành công!"
+        title="Tạo sản phẩm thành công!"
         width="max-w-lg"
       >
         <div className="space-y-5">
@@ -1727,7 +1785,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
               <CheckCircle2 className="w-6 h-6" />
             </div>
             <div>
-              <h4 className="text-base font-bold text-emerald-900 dark:text-emerald-200"> Tạo sản phẩm thành công.</h4>
+              <h4 className="text-base font-bold text-emerald-900 dark:text-emerald-200">Tạo sản phẩm thành công</h4>
               <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1 leading-relaxed">
                 Sản phẩm <strong className="font-bold text-emerald-950 dark:text-white">{createdProductInfo?.name}</strong> ({createdProductInfo?.sku}) đã được thêm vào hệ thống.
               </p>
@@ -1742,13 +1800,13 @@ function generateSkuCode(existingSkus: string[] = []): string {
               onClick={() => setWizardChoice('INITIAL_STOCK')}
               className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
                 wizardChoice === 'INITIAL_STOCK' 
-                  ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30 dark:border-indigo-500 shadow-sm' 
-                  : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-indigo-300 dark:hover:border-indigo-700'
+                  ? 'border-primary bg-primary/5 dark:bg-primary/10 shadow-sm' 
+                  : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-primary/50'
               }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <input type="radio" checked={wizardChoice === 'INITIAL_STOCK'} onChange={() => setWizardChoice('INITIAL_STOCK')} className="w-4 h-4 text-indigo-600" />
+                  <input type="radio" checked={wizardChoice === 'INITIAL_STOCK'} onChange={() => setWizardChoice('INITIAL_STOCK')} className="w-4 h-4 text-primary" />
                   <div>
                     <p className="text-sm font-bold text-gray-900 dark:text-white">Nhập tồn đầu kỳ</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Khai báo ngay số lượng tồn khả dụng trong kho</p>
@@ -1757,14 +1815,14 @@ function generateSkuCode(existingSkus: string[] = []): string {
               </div>
 
               {wizardChoice === 'INITIAL_STOCK' && (
-                <div className="mt-3 pt-3 border-t border-indigo-100 dark:border-indigo-900/50 space-y-3" onClick={e => e.stopPropagation()}>
+                <div className="mt-3 pt-3 border-t border-primary/20 space-y-3" onClick={e => e.stopPropagation()}>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Chi nhánh áp dụng *</label>
+                      <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Chi nhánh áp dụng *</label>
                       <select 
                         value={wizardBranchId} 
                         onChange={e => setWizardBranchId(e.target.value)} 
-                        className="w-full px-3 py-1.5 border border-indigo-300 dark:border-indigo-700 rounded-lg bg-white dark:bg-gray-900 text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                        className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-primary"
                       >
                         {branches.map(b => (
                           <option key={b.id} value={b.id}>{b.name}</option>
@@ -1772,13 +1830,13 @@ function generateSkuCode(existingSkus: string[] = []): string {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Số lượng tồn kho đầu kỳ *</label>
+                      <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Số lượng tồn kho đầu kỳ *</label>
                       <input 
                         type="number" 
                         min="0"
                         value={wizardInitialStock} 
                         onChange={e => setWizardInitialStock(parseInt(e.target.value) || 0)} 
-                        className="w-full px-3 py-1.5 border border-indigo-300 dark:border-indigo-700 rounded-lg bg-white dark:bg-gray-900 text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                        className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-primary"
                       />
                     </div>
                   </div>
@@ -1787,7 +1845,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
                       type="button" 
                       disabled={isSavingWizard}
                       onClick={handleConfirmInitialStock}
-                      className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow transition-colors active:scale-95 flex items-center gap-1.5"
+                      className="px-4 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium shadow transition-colors active:scale-95 flex items-center gap-1.5"
                     >
                       {isSavingWizard && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       Xác nhận nhập tồn đầu kỳ
@@ -1803,28 +1861,28 @@ function generateSkuCode(existingSkus: string[] = []): string {
               onClick={() => setWizardChoice('IMPORT_RECEIPT')}
               className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
                 wizardChoice === 'IMPORT_RECEIPT' 
-                  ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30 dark:border-indigo-500 shadow-sm' 
-                  : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-indigo-300 dark:hover:border-indigo-700'
+                  ? 'border-primary bg-primary/5 dark:bg-primary/10 shadow-sm' 
+                  : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-primary/50'
               }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <input type="radio" checked={wizardChoice === 'IMPORT_RECEIPT'} onChange={() => setWizardChoice('IMPORT_RECEIPT')} className="w-4 h-4 text-indigo-600" />
+                  <input type="radio" checked={wizardChoice === 'IMPORT_RECEIPT'} onChange={() => setWizardChoice('IMPORT_RECEIPT')} className="w-4 h-4 text-primary" />
                   <div>
-                    <p className="text-sm font-bold text-gray-900 dark:text-white">Tạo phiếu nhập (Purchase Order)</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">Tạo đơn đặt mua hàng</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Tạo đơn đặt mua sỉ từ nhà cung cấp cho sản phẩm này</p>
                   </div>
                 </div>
               </div>
 
               {wizardChoice === 'IMPORT_RECEIPT' && (
-                <div className="mt-3 pt-3 border-t border-indigo-100 dark:border-indigo-900/50 flex justify-end" onClick={e => e.stopPropagation()}>
+                <div className="mt-3 pt-3 border-t border-primary/20 flex justify-end" onClick={e => e.stopPropagation()}>
                   <button 
                     type="button" 
                     onClick={handleGoToImportReceipt}
-                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow transition-colors active:scale-95 flex items-center gap-1.5"
+                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium shadow transition-colors active:scale-95 flex items-center gap-1.5"
                   >
-                    Tới Đơn Mua Hàng <ArrowRight className="w-3.5 h-3.5" />
+                    Tới đơn mua hàng <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
               )}
@@ -1835,7 +1893,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
             <button
               type="button"
               onClick={() => { setIsWizardModalOpen(false); setWizardChoice('NONE'); }}
-              className="px-5 py-2 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl font-bold text-xs transition-colors"
+              className="px-5 py-2 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl font-medium text-xs transition-colors"
             >
               Bỏ qua
             </button>

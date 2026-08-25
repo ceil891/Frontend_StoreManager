@@ -506,12 +506,12 @@ export function WarehouseBinsPage() {
         )}
       </Modal>
 
-      {/* Modal: Khai báo vị trí Ô kệ mới (Gợi ý 1 + 2 + 3 + 11) */}
+      {/* Modal: Khai báo vị trí Ô kệ mới */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? '📦 Khai báo vị trí Ô kệ mới' : '⚙️ Cập nhật vị trí Ô kệ'}
-        width="max-w-xl"
+        title={modalMode === 'create' ? 'Khai báo vị trí Ô kệ (Bin) mới' : 'Cập nhật vị trí Ô kệ (Bin)'}
+        size="erp"
       >
         <form onSubmit={handleSave} className="space-y-4 text-sm">
           {/* Section: Vị trí & Cấu hình mã (Gợi ý 2 + 11) */}

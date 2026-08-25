@@ -30,7 +30,7 @@ export function LogisticsLocationsContactsTabbedPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Địa điểm & Liên hệ Vận chuyển</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Địa điểm & liên hệ vận chuyển</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Quản lý trạm trung chuyển, danh sách địa chỉ nhận/giao và đầu mối liên hệ vận chuyển
           </p>

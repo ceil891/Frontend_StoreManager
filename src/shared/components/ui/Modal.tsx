@@ -12,17 +12,18 @@ interface ModalProps {
   isDestructive?: boolean;
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'erp';
   closeOnClickOutside?: boolean;
+  scrollable?: boolean;
 }
 
 const SIZE_CLASSES: Record<string, string> = {
-  sm: 'max-w-sm',
-  md: 'max-w-md',
-  lg: 'max-w-lg',
-  xl: 'max-w-xl',
-  erp: 'erp-form',
+  sm: 'max-w-md',
+  md: 'max-w-xl',
+  lg: 'max-w-3xl',
+  xl: 'max-w-5xl',
+  erp: 'w-[95%] md:w-[70%] max-w-5xl md:min-w-[600px]',
 };
 
-export function Modal({ isOpen, onClose, title, children, width, maxWidth, isDestructive = false, size, closeOnClickOutside = false }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, width, maxWidth, isDestructive = false, size, closeOnClickOutside = false, scrollable = true }: ModalProps) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -42,7 +43,7 @@ export function Modal({ isOpen, onClose, title, children, width, maxWidth, isDes
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose]);
 
-  const sizeClass = size ? SIZE_CLASSES[size] : (maxWidth || width || 'max-w-md');
+  const sizeClass = size ? SIZE_CLASSES[size] : (maxWidth || width || 'w-[95%] md:w-[70%] max-w-5xl md:min-w-[600px]');
 
   return (
     <AnimatePresence>
@@ -82,7 +83,7 @@ export function Modal({ isOpen, onClose, title, children, width, maxWidth, isDes
             </div>
 
             {/* Content */}
-            <div className={`p-6 overflow-y-auto ${size === 'erp' ? 'erp-form-content' : 'max-h-[80vh]'}`}>
+            <div className={`p-6 ${scrollable ? 'overflow-y-auto' : ''} ${size === 'erp' ? 'erp-form-content' : 'max-h-[80vh]'}`}>
               {children}
             </div>
           </motion.div>

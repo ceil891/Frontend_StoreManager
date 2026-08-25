@@ -164,14 +164,14 @@ export function ShippingAddressesPage() {
       {
         accessorKey: 'fullAddress',
         header: 'Địa chỉ giao hàng',
-        cell: (info) => <span className="truncate max-w-xs block">{info.getValue() as string}</span>,
+        cell: (info) => <span className="truncate max-w-xs block text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'addressType',
         header: 'Loại địa chỉ',
         cell: (info) => {
           const val = info.getValue() as string;
-          const label = val === 'VAN_PHONG' ? 'Văn Phòng' : 'Nhà riêng';
+          const label = val === 'VAN_PHONG' ? 'Văn phòng' : 'Nhà riêng';
           return <span>{label}</span>;
         },
       },
@@ -181,9 +181,9 @@ export function ShippingAddressesPage() {
         cell: (info) => {
           const val = info.getValue() as boolean;
           return val ? (
-            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Mặc định</span>
+            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300">Mặc định</span>
           ) : (
-            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">Phụ</span>
+            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">Phụ</span>
           );
         },
       },
@@ -194,21 +194,21 @@ export function ShippingAddressesPage() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
-              className="p-1 text-gray-500 hover:text-emerald-600 rounded"
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
               title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleOpenEdit(row.original)}
-              className="p-1 text-gray-500 hover:text-blue-600 rounded"
-              title="Sửa"
+              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+              title="Chỉnh sửa"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleDelete(row.original.id)}
-              className="p-1 text-gray-500 hover:text-red-600 rounded"
+              className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               title="Xóa"
             >
               <Trash2 className="w-4 h-4" />
@@ -222,34 +222,34 @@ export function ShippingAddressesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Danh mục địa chỉ nhận hàng (shipping addresses)</h1>
-          <p className="text-sm text-gray-500">
-            Xem và cấu hình sổ địa chỉ nhận hàng của khách hàng đối tác, cấu hình địa chỉ giao mặc định hỗ trợ POS lên đơn.
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Địa chỉ giao hàng</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Xem và cấu hình sổ địa chỉ nhận hàng của khách hàng đối tác, cấu hình địa chỉ giao mặc định hỗ trợ POS lên đơn
           </p>
         </div>
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition"
+          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors font-medium text-sm shadow-sm"
         >
-          <Plus className="w-4 h-4" /> Thêm Địa Chỉ
+          <Plus className="w-4 h-4" /> Thêm mới địa chỉ
         </button>
       </div>
 
-      <div className="p-4 bg-white dark:bg-gray-800 rounded shadow flex items-center gap-4">
-        <Search className="w-5 h-5 text-gray-400" />
+      <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-3">
+        <Search className="w-4 h-4 text-gray-400" />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm kiếm mã khách hàng, tên khách hàng, số điện thoại, địa chỉ..."
-          className="w-full bg-transparent outline-none text-sm"
+          placeholder="Tìm kiếm theo mã khách hàng, tên khách hàng, số điện thoại, địa chỉ..."
+          className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-white"
         />
       </div>
 
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm">
+        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
           <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
           <span className="text-sm font-bold text-gray-500">Đang tải danh sách địa chỉ giao hàng...</span>
         </div>
@@ -257,40 +257,40 @@ export function ShippingAddressesPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
       )}
 
-      {/* Modal Xem chi tiết địa chỉ căn giữa (TC-ALL-1) */}
+      {/* Modal Xem chi tiết */}
       <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title={selected ? `Chi tiết địa chỉ giao hàng: ${selected.customerName}` : 'Thông tin địa chỉ'}
+        title={selected ? `Chi tiết địa chỉ: ${selected.customerName}` : 'Thông tin địa chỉ'}
         width="max-w-lg"
       >
         {selected && (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Mã KH:</span>
-                <p className="font-mono font-semibold">{selected.customerCode}</p>
+                <span className="text-xs text-gray-500">Mã khách hàng</span>
+                <p className="font-mono font-bold text-primary">{selected.customerCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Số điện thoại:</span>
-                <p className="font-mono font-bold text-emerald-600">{selected.phone}</p>
+                <span className="text-xs text-gray-500">Số điện thoại</span>
+                <p className="font-mono font-bold text-primary">{selected.phone}</p>
               </div>
             </div>
             <div>
-              <span className="text-gray-500">Họ và tên người nhận:</span>
-              <p className="font-semibold text-base">{selected.customerName}</p>
+              <span className="text-xs text-gray-500">Họ và tên người nhận</span>
+              <p className="font-semibold text-base text-gray-900 dark:text-white">{selected.customerName}</p>
             </div>
             <div>
-              <span className="text-gray-500">Địa chỉ giao hàng đầy đủ:</span>
+              <span className="text-xs text-gray-500">Địa chỉ giao hàng đầy đủ</span>
               <p className="text-gray-700 dark:text-gray-300 font-medium">{selected.fullAddress}</p>
             </div>
-            <div className="grid grid-cols-2 gap-4 border-t pt-2">
+            <div className="grid grid-cols-2 gap-4 border-t border-gray-200 dark:border-gray-700 pt-3">
               <div>
-                <span className="text-gray-500">Phân loại địa chỉ:</span>
-                <p className="font-semibold">{selected.addressType === 'NHA_RIENG' ? 'Nhà Riêng / Cá nhân' : 'Văn Phòng / Cơ quan'}</p>
+                <span className="text-xs text-gray-500">Phân loại địa chỉ</span>
+                <p className="font-semibold">{selected.addressType === 'NHA_RIENG' ? 'Nhà riêng / cá nhân' : 'Văn phòng / cơ quan'}</p>
               </div>
               <div>
-                <span className="text-gray-500">Đặc tính:</span>
+                <span className="text-xs text-gray-500">Đặc tính</span>
                 <div>
                   <span
                     className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
@@ -304,18 +304,18 @@ export function ShippingAddressesPage() {
             </div>
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi chú giao nhận:</span>
-                <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
+                <span className="text-xs text-gray-500">Ghi chú giao nhận</span>
+                <p className="bg-gray-50 dark:bg-gray-900 p-2.5 rounded-lg border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 text-xs">
                   {selected.notes}
                 </p>
               </div>
             )}
-            <div className="flex justify-end pt-4 border-t">
+            <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
                 onClick={() => setSelected(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-sm"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-lg text-sm"
               >
-                Đóng Hộp Thoại
+                Đóng
               </button>
             </div>
           </div>
@@ -325,29 +325,29 @@ export function ShippingAddressesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm địa chỉ giao hàng mới' : 'Sửa địa chỉ giao hàng'}
+        title={modalMode === 'create' ? 'Thêm mới địa chỉ giao hàng' : 'Cập nhật địa chỉ giao hàng'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mã khách hàng *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã khách hàng *</label>
               <input
                 type="text"
                 value={editingItem.customerCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, customerCode: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-mono bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
                 placeholder="KHXXX"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tổng đài / số điện thoại *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại *</label>
               <input
                 type="text"
                 value={editingItem.phone || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, phone: e.target.value })}
-                className="w-full p-2 border rounded font-mono"
-                placeholder="Số điện thoại"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                placeholder="Nhập số điện thoại (VD: 0912345678)"
                 required
               />
             </div>
@@ -360,24 +360,24 @@ export function ShippingAddressesPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tên khách hàng *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên khách hàng *</label>
               <input
                 type="text"
                 value={editingItem.customerName || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, customerName: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
                 placeholder="Họ tên người nhận"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Địa chỉ chi tiết (Có gợi ý khu vực) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ chi tiết *</label>
               <input
                 type="text"
                 list="area-shipping-address-suggestions"
                 value={editingItem.fullAddress || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, fullAddress: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
                 placeholder="Nhập hoặc chọn gợi ý địa chỉ khu vực..."
                 required
               />
@@ -385,23 +385,23 @@ export function ShippingAddressesPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Quận / huyện *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Quận / huyện *</label>
               <input
                 type="text"
                 value={editingItem.district || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, district: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
                 placeholder="Quận/Huyện"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tỉnh / thành phố *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tỉnh / thành phố *</label>
               <input
                 type="text"
                 value={editingItem.city || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, city: e.target.value })}
-                className="w-full p-2 border rounded"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
                 placeholder="Tỉnh/Thành phố"
                 required
               />
@@ -409,14 +409,14 @@ export function ShippingAddressesPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Loại địa chỉ *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại địa chỉ *</label>
               <select
                 value={editingItem.addressType || 'NHA_RIENG'}
                 onChange={(e) => setEditingItem({ ...editingItem, addressType: e.target.value as any })}
-                className="w-full p-2 border rounded"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               >
-                <option value="NHA_RIENG">Nhà Riêng / Cá nhân</option>
-                <option value="VAN_PHONG">Văn Phòng / Cơ quan</option>
+                <option value="NHA_RIENG">Nhà riêng / cá nhân</option>
+                <option value="VAN_PHONG">Văn phòng / cơ quan</option>
               </select>
             </div>
             <div className="flex items-center pt-6">
@@ -425,33 +425,33 @@ export function ShippingAddressesPage() {
                 id="isDefault"
                 checked={editingItem.isDefault || false}
                 onChange={(e) => setEditingItem({ ...editingItem, isDefault: e.target.checked })}
-                className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
               />
-              <label htmlFor="isDefault" className="ml-2 block text-xs text-gray-700 dark:text-gray-300">
+              <label htmlFor="isDefault" className="ml-2 block text-xs font-medium text-gray-700 dark:text-gray-300">
                 Đặt làm địa chỉ mặc định
               </label>
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border rounded"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               rows={2}
               placeholder="Chỉ dẫn giao nhận..."
             />
           </div>
-          <div className="flex justify-end gap-2 pt-2 border-t">
+          <div className="flex justify-end gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded hover:bg-gray-100"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium"
             >
-              Hủy
+              Hủy bỏ
             </button>
-            <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu địa chỉ
+            <button type="submit" className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition font-medium text-sm shadow-sm">
+              Lưu thông tin
             </button>
           </div>
         </form>

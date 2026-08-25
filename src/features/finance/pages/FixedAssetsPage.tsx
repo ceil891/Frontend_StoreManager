@@ -1,9 +1,10 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Search, Download, Eye, Edit, Trash2, Plus, CalendarDays, TrendingUp, TrendingDown, Calendar } from 'lucide-react';
+import { Search, Download, Eye, Edit, Trash2, Plus } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore } from '../store/financeStore';
+import { toast } from 'sonner';
 
 export interface FixedAssetItem {
   id: string;
@@ -24,7 +25,6 @@ export interface FixedAssetItem {
 const fmt = (n: number) => (n || 0).toLocaleString('vi-VN') + ' ₫';
 
 export function FixedAssetsPage() {
-  const setData = (_fn: any) => {};
   const {
     fixedAssets: storeAssets,
     fetchFixedAssets,
@@ -38,56 +38,165 @@ export function FixedAssetsPage() {
   }, [fetchFixedAssets]);
 
   const data: FixedAssetItem[] = useMemo(() => {
-    return storeAssets.map((a) => ({
-      id: a.id,
-      assetCode: a.assetCode,
-      assetName: a.assetName,
-      category: a.category,
-      purchaseDate: a.purchasedDate,
-      originalValue: a.originalValue,
-      salvageValue: 0,
-      usefulLifeMonths: a.usefulLifeMonths,
+    return storeAssets.map((a: any) => ({
+      id: String(a.id),
+      assetCode: a.assetCode || `FA-${a.id}`,
+      assetName: a.assetName || 'Tài sản',
+      category: a.category || 'Thiết bị văn phòng',
+      purchaseDate: a.purchaseDate || a.purchasedDate || '2024-01-15',
+      originalValue: Number(a.purchasePrice || a.originalValue || 0),
+      salvageValue: Number(a.salvageValue || 0),
+      usefulLifeMonths: Number(a.usefulLifeMonths || 36),
       depreciationMethod: 'STRAIGHT_LINE',
-      accumulatedDep: a.accumulatedDepreciation,
-      netValue: a.netBookValue,
+      accumulatedDep: Number(a.accumulatedDepreciation || 0),
+      netValue: Math.max(0, Number(a.purchasePrice || a.originalValue || 0) - Number(a.accumulatedDepreciation || 0)),
       status: a.status === 'ACTIVE' ? 'HOẠT_ĐỘNG' : 'NGỪNG_SỬ_DỤNG',
       notes: a.assetName,
     }));
   }, [storeAssets]);
+
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<FixedAssetItem|null>(null);
+  const [selected, setSelected] = useState<FixedAssetItem | null>(null);
   const [isModal, setIsModal] = useState(false);
   const [form, setForm] = useState<Partial<FixedAssetItem>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const filtered = data.filter(d=> d.assetName.toLowerCase().includes(search.toLowerCase()) || d.assetCode.toLowerCase().includes(search.toLowerCase()));
+  const filtered = useMemo(() => {
+    if (!search) return data;
+    const q = search.toLowerCase();
+    return data.filter(
+      (d) =>
+        d.assetName.toLowerCase().includes(q) ||
+        d.assetCode.toLowerCase().includes(q) ||
+        d.category.toLowerCase().includes(q)
+    );
+  }, [data, search]);
 
-  const openCreate=()=>{ setForm({purchaseDate:new Date().toISOString().split('T')[0], status:'HOẠT_ĐỘNG', usefulLifeMonths: 36, depreciationMethod: 'STRAIGHT_LINE', salvageValue: 0}); setIsModal(true); };
-  const handleSave=(e:React.FormEvent)=>{ e.preventDefault(); const net = (form.originalValue||0)-(form.accumulatedDep||0); setData([{...form as FixedAssetItem,id:String(data.length+1),netValue:net}, ...data]); setIsModal(false); };
+  const openCreate = () => {
+    setForm({
+      assetCode: `FA-${Math.floor(100 + Math.random() * 900)}`,
+      assetName: '',
+      category: 'Thiết bị CNTT',
+      purchaseDate: new Date().toISOString().split('T')[0],
+      originalValue: 0,
+      salvageValue: 0,
+      usefulLifeMonths: 36,
+      depreciationMethod: 'STRAIGHT_LINE',
+      accumulatedDep: 0,
+      status: 'HOẠT_ĐỘNG',
+    });
+    setIsModal(true);
+  };
 
-  const columns = useMemo<ColumnDef<FixedAssetItem>[]>(()=>[
-    { accessorKey:'assetCode', header:'Mã tài sản' },
-    { accessorKey:'assetName', header:'Tên tài sản' },
-    { accessorKey:'purchaseDate', header:'Ngày mua', cell:info=> <span className="text-sm font-mono text-gray-700 dark:text-gray-300">{info.getValue() as string}</span> },
-    { accessorKey:'originalValue', header:'Nguyên giá', cell:info=> <span className="text-sm text-gray-900 dark:text-white">{fmt(info.getValue() as number)}</span> },
-    { accessorKey:'accumulatedDep', header:'Khấu hao lũy kế', cell:info=> <span className="text-sm text-gray-900 dark:text-white">{fmt(info.getValue() as number)}</span> },
-    { accessorKey:'netValue', header:'Giá trị còn lại', cell:info=> <span className="font-bold text-emerald-600 dark:text-emerald-400">{fmt(info.getValue() as number)}</span> },
-    { accessorKey:'status', header:'Trạng thái', cell:info=> {
-      const s = info.getValue() as string;
-      const cfg = {
-        HOẠT_ĐỘNG: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
-        NGỪNG_SỬ_DỤNG: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
-        KHẢO_SÁT: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
-      }[s];
-      return <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${cfg}`}>{s.replace('_',' ')}</span>;
-    }},
-    { id:'actions', header:'Thao tác', cell:({row})=>(
-      <div className="flex gap-1" onClick={e=>e.stopPropagation()}>
-        <button onClick={()=>setSelected(row.original)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg"><Eye className="w-4 h-4"/></button>
-        <button onClick={()=>{setForm(row.original); setIsModal(true);}} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit className="w-4 h-4"/></button>
-        <button onClick={()=>setData(data.filter(d=>d.id!==row.original.id))} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button>
-      </div>
-    )},
-  ],[data]);
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.assetCode || !form.assetName) {
+      toast.error('Vui lòng nhập đầy đủ mã và tên tài sản!');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const payload: any = {
+        assetCode: form.assetCode,
+        assetName: form.assetName,
+        category: form.category || 'Thiết bị CNTT',
+        purchaseDate: form.purchaseDate || new Date().toISOString().split('T')[0],
+        purchasedDate: form.purchaseDate || new Date().toISOString().split('T')[0],
+        purchasePrice: Number(form.originalValue) || 0,
+        originalValue: Number(form.originalValue) || 0,
+        salvageValue: Number(form.salvageValue) || 0,
+        accumulatedDepreciation: Number(form.accumulatedDep) || 0,
+        usefulLifeMonths: Number(form.usefulLifeMonths) || 36,
+        netBookValue: Math.max(0, (Number(form.originalValue) || 0) - (Number(form.accumulatedDep) || 0)),
+        status: form.status === 'NGỪNG_SỬ_DỤNG' ? 'DISPOSED' : 'ACTIVE',
+      };
+
+      if (form.id) {
+        await updateFixedAsset(form.id, payload);
+        toast.success('Cập nhật tài sản cố định thành công!');
+      } else {
+        await addFixedAsset(payload);
+        toast.success('Thêm mới tài sản cố định thành công!');
+      }
+      setIsModal(false);
+      fetchFixedAssets();
+    } catch (err: any) {
+      console.error('Save asset error:', err);
+      toast.error('Lỗi khi lưu tài sản cố định!');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (confirm('Bạn có chắc chắn muốn xóa tài sản cố định này?')) {
+      try {
+        await deleteFixedAsset(id);
+        toast.success('Đã xóa tài sản cố định!');
+        fetchFixedAssets();
+      } catch (err: any) {
+        console.error('Delete asset error:', err);
+        toast.error('Lỗi khi xóa tài sản cố định!');
+      }
+    }
+  };
+
+  const columns = useMemo<ColumnDef<FixedAssetItem>[]>(
+    () => [
+      { accessorKey: 'assetCode', header: 'Mã tài sản', cell: (info) => <span className="font-mono font-bold text-primary">{info.getValue() as string}</span> },
+      { accessorKey: 'assetName', header: 'Tên tài sản', cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span> },
+      { accessorKey: 'purchaseDate', header: 'Ngày mua', cell: (info) => <span className="text-sm font-mono text-gray-700 dark:text-gray-300">{info.getValue() as string}</span> },
+      { accessorKey: 'originalValue', header: 'Nguyên giá', cell: (info) => <span className="text-sm font-semibold text-gray-900 dark:text-white">{fmt(info.getValue() as number)}</span> },
+      { accessorKey: 'accumulatedDep', header: 'Khấu hao lũy kế', cell: (info) => <span className="text-sm text-gray-900 dark:text-white">{fmt(info.getValue() as number)}</span> },
+      { accessorKey: 'netValue', header: 'Giá trị còn lại', cell: (info) => <span className="font-bold text-emerald-600 dark:text-emerald-400">{fmt(info.getValue() as number)}</span> },
+      {
+        accessorKey: 'status',
+        header: 'Trạng thái',
+        cell: (info) => {
+          const s = info.getValue() as string;
+          const cfg = {
+            HOẠT_ĐỘNG: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+            NGỪNG_SỬ_DỤNG: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+            KHẢO_SÁT: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+          }[s] || 'bg-gray-100 text-gray-800';
+          return <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${cfg}`}>{s.replace('_', ' ')}</span>;
+        },
+      },
+      {
+        id: 'actions',
+        header: 'Thao tác',
+        cell: ({ row }) => (
+          <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setSelected(row.original)}
+              className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+              title="Xem chi tiết"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => {
+                setForm(row.original);
+                setIsModal(true);
+              }}
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+              title="Chỉnh sửa"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleDelete(row.original.id)}
+              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+              title="Xóa"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [data]
+  );
 
   return (
     <>

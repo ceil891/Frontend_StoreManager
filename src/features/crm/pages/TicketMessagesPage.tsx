@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Search, Send, User, Shield, Clock, PhoneCall, Mail, MessageSquare } from 'lucide-react';
+import { Search, Send, User, Shield, Clock, PhoneCall, Mail, MessageSquare, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCrmStore } from '../store/crmStore';
 
@@ -23,48 +23,64 @@ export function TicketMessagesPage() {
     addTicketMessage,
   } = useCrmStore();
 
+  // Initial fetch and 3s real-time polling to sync messages across FE_WebOnline and RetailHub
   useEffect(() => {
     fetchSupportTickets();
     fetchTicketMessages();
+
+    const interval = setInterval(() => {
+      fetchSupportTickets();
+      fetchTicketMessages();
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, [fetchSupportTickets, fetchTicketMessages]);
 
   const [selectedTicketId, setSelectedTicketId] = useState<string>('');
   const [inputMessage, setInputMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Automatically select first ticket when supportTickets load
+  // Automatically select first ticket when supportTickets load if none selected
   useEffect(() => {
-    if (supportTickets.length > 0 && !selectedTicketId) {
-      setSelectedTicketId(supportTickets[0].id);
+    if (supportTickets.length > 0 && (!selectedTicketId || !supportTickets.some(t => String(t.id) === String(selectedTicketId)))) {
+      setSelectedTicketId(String(supportTickets[0].id));
     }
   }, [supportTickets, selectedTicketId]);
 
   const tickets = useMemo(() => {
-    return supportTickets.map((t) => ({
-      id: t.id,
+    const list = supportTickets.map((t) => ({
+      id: String(t.id),
       ticketNumber: t.ticketCode || `TCK-${t.id}`,
-      customerName: t.customerName,
-      subject: t.subject,
+      customerName: t.customerName || 'Khách hàng Web Online',
+      customerPhone: t.customerPhone || '',
+      subject: t.subject || 'Yêu cầu hỗ trợ từ Web Online',
+      status: t.status || 'OPEN',
+      priority: t.priority || 'MEDIUM',
     }));
+    return list.sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
   }, [supportTickets]);
 
   const messages: MessageRecord[] = useMemo(() => {
     return ticketMessages.map((m) => {
-      const ticket = supportTickets.find((t) => t.id === m.ticketId);
+      const ticket = supportTickets.find((t) => String(t.id) === String(m.ticketId));
+      let timeStr = m.createdAt || '';
+      if (timeStr.includes('T')) {
+        timeStr = timeStr.replace('T', ' ').substring(0, 19);
+      }
       return {
-        id: m.id,
-        ticketId: m.ticketId,
+        id: String(m.id),
+        ticketId: String(m.ticketId),
         ticketNumber: ticket?.ticketCode || `TCK-${m.ticketId}`,
-        senderName: m.senderName,
+        senderName: m.senderName || (m.isStaff ? 'Nhân viên CSKH' : (ticket?.customerName || 'Khách hàng Web Online')),
         senderType: m.isStaff ? 'AGENT' : 'CUSTOMER',
         messageText: m.message,
-        createdAt: m.createdAt,
+        createdAt: timeStr,
       };
     });
   }, [ticketMessages, supportTickets]);
 
   const currentTicket = useMemo(() => {
-    return tickets.find((t) => t.id === selectedTicketId) || tickets[0] || null;
+    return tickets.find((t) => String(t.id) === String(selectedTicketId)) || tickets[0] || null;
   }, [tickets, selectedTicketId]);
 
   const filteredTickets = useMemo(() => {
@@ -74,33 +90,42 @@ export function TicketMessagesPage() {
       (t) =>
         t.ticketNumber.toLowerCase().includes(q) ||
         t.customerName.toLowerCase().includes(q) ||
-        t.subject.toLowerCase().includes(q)
+        t.subject.toLowerCase().includes(q) ||
+        t.customerPhone.toLowerCase().includes(q)
     );
   }, [tickets, searchQuery]);
 
   const activeMessages = useMemo(() => {
     if (!selectedTicketId) return [];
-    return messages.filter((m) => m.ticketId === selectedTicketId);
+    return messages.filter((m) => String(m.ticketId) === String(selectedTicketId));
   }, [messages, selectedTicketId]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputMessage.trim() || !selectedTicketId) return;
 
+    const text = inputMessage.trim();
+    setInputMessage('');
+
     try {
       await addTicketMessage({
-        ticketId: selectedTicketId,
-        senderName: 'Nhân viên hỗ trợ',
+        ticketId: String(selectedTicketId),
+        senderName: 'Nhân viên CSKH',
         isStaff: true,
-        message: inputMessage.trim(),
-        createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        message: text,
+        createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
       });
-      setInputMessage('');
-      toast.success('Đã gửi phản hồi ticket');
+      toast.success('Đã gửi tin nhắn hỗ trợ');
     } catch (err) {
       console.error('Error sending message:', err);
       toast.error('Không thể gửi tin nhắn');
     }
+  };
+
+  const handleManualRefresh = () => {
+    fetchSupportTickets();
+    fetchTicketMessages();
+    toast.info('Đã làm mới dữ liệu hội thoại');
   };
 
   return (
@@ -109,8 +134,20 @@ export function TicketMessagesPage() {
         {/* Left Side: Ticket List */}
         <div className="w-1/3 flex flex-col bg-white dark:bg-gray-900">
           <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-            <h1 className="text-lg font-bold text-gray-900 dark:text-white">Hội thoại hỗ trợ</h1>
-            <p className="text-xs text-gray-500 mt-0.5">Danh sách các yêu cầu chat / liên hệ</p>
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-lg font-bold text-gray-900 dark:text-white">Hội thoại hỗ trợ</h1>
+                <p className="text-xs text-gray-500 mt-0.5">Tin nhắn trực tiếp từ Web Online & Khách hàng</p>
+              </div>
+              <button
+                onClick={handleManualRefresh}
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 rounded-lg transition-colors"
+                title="Làm mới"
+              >
+                <RefreshCw size={15} />
+              </button>
+            </div>
+
             <div className="mt-3 relative">
               <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
                 <Search className="h-3.5 w-3.5 text-gray-400" />
@@ -119,7 +156,7 @@ export function TicketMessagesPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm mã phiếu hoặc khách hàng..."
+                placeholder="Tìm theo mã phiếu, tên hoặc SĐT..."
                 className="w-full pl-8 pr-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-xs bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
               />
             </div>
@@ -127,13 +164,13 @@ export function TicketMessagesPage() {
 
           <div className="flex-1 overflow-y-auto divide-y divide-gray-150 dark:divide-gray-800">
             {filteredTickets.map((t) => {
-              const isSelected = t.id === selectedTicketId;
-              const lastMsg = messages.filter((m) => m.ticketId === t.id).slice(-1)[0];
+              const isSelected = String(t.id) === String(selectedTicketId);
+              const lastMsg = messages.filter((m) => String(m.ticketId) === String(t.id)).slice(-1)[0];
 
               return (
                 <div
                   key={t.id}
-                  onClick={() => setSelectedTicketId(t.id)}
+                  onClick={() => setSelectedTicketId(String(t.id))}
                   className={`p-4 cursor-pointer transition-all ${
                     isSelected
                       ? 'bg-emerald-50/70 dark:bg-emerald-950/20 border-l-4 border-primary'
@@ -141,10 +178,13 @@ export function TicketMessagesPage() {
                   }`}
                 >
                   <div className="flex justify-between items-start">
-                    <span className="font-mono text-xs font-bold text-primary">{t.ticketNumber}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-xs font-bold text-primary">{t.ticketNumber}</span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                    </div>
                     {lastMsg && (
                       <span className="text-[10px] text-gray-400 font-mono">
-                        {lastMsg.createdAt.includes(' ') ? lastMsg.createdAt.split(' ')[1] : lastMsg.createdAt}
+                        {lastMsg.createdAt.includes(' ') ? lastMsg.createdAt.split(' ')[1].substring(0, 5) : lastMsg.createdAt}
                       </span>
                     )}
                   </div>
@@ -153,8 +193,8 @@ export function TicketMessagesPage() {
                   </h4>
                   <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{t.subject}</p>
                   {lastMsg && (
-                    <p className="text-xs text-gray-400 italic truncate mt-1.5 bg-gray-50 dark:bg-gray-950/50 p-1.5 rounded border border-gray-100 dark:border-gray-800">
-                      {lastMsg.senderType === 'CUSTOMER' ? 'Khách: ' : lastMsg.senderType === 'AGENT' ? 'Hỗ trợ: ' : ''}
+                    <p className="text-xs text-gray-500 italic truncate mt-1.5 bg-gray-50 dark:bg-gray-950/50 p-1.5 rounded border border-gray-100 dark:border-gray-800">
+                      {lastMsg.senderType === 'CUSTOMER' ? 'Khách: ' : 'CSKH: '}
                       {lastMsg.messageText}
                     </p>
                   )}
@@ -162,7 +202,7 @@ export function TicketMessagesPage() {
               );
             })}
             {filteredTickets.length === 0 && (
-              <div className="p-8 text-center text-gray-400 text-sm">Chưa có ticket hỗ trợ nào.</div>
+              <div className="p-8 text-center text-gray-400 text-sm">Chưa có hội thoại hỗ trợ nào.</div>
             )}
           </div>
         </div>
@@ -180,6 +220,9 @@ export function TicketMessagesPage() {
                     <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
                       {currentTicket.customerName}
                     </span>
+                    {currentTicket.customerPhone && (
+                      <span className="text-xs text-gray-500 font-mono">({currentTicket.customerPhone})</span>
+                    )}
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-medium">{currentTicket.subject}</p>
                 </div>
@@ -209,7 +252,7 @@ export function TicketMessagesPage() {
                       <div className={`max-w-[70%] flex gap-3 ${isAgent ? 'flex-row-reverse' : ''}`}>
                         <div
                           className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm ${
-                            isAgent ? 'bg-emerald-600' : 'bg-gray-400'
+                            isAgent ? 'bg-emerald-600' : 'bg-slate-700'
                           }`}
                         >
                           {isAgent ? <Shield className="w-4 h-4" /> : <User className="w-4 h-4" />}
@@ -268,12 +311,13 @@ export function TicketMessagesPage() {
                     type="text"
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
-                    placeholder="Nhập nội dung câu trả lời hỗ trợ..."
+                    placeholder="Nhập nội dung câu trả lời hỗ trợ khách hàng..."
                     className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                   />
                   <button
                     type="submit"
-                    className="p-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl shadow transition-colors flex items-center justify-center"
+                    disabled={!inputMessage.trim()}
+                    className="p-2.5 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-xl shadow transition-colors flex items-center justify-center cursor-pointer"
                   >
                     <Send className="w-4 h-4" />
                   </button>

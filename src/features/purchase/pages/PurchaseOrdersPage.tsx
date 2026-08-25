@@ -1,7 +1,9 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Filter, Eye, Building2, Calendar, FileText, ShieldCheck, FileCheck, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
+import { useAuthStore } from '@/features/auth/store/authStore';
 import { Modal } from '@/shared/components/ui/Modal';
+import { PermissionGuard } from '@/shared/components/ui/PermissionGuard';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePurchaseStore, type PurchaseOrderItem } from '../store/purchaseStore';
 import { axiosClient } from '@/shared/lib/axiosClient';
@@ -23,8 +25,53 @@ interface POLineItem {
   unitPrice: number;
 }
 
+const getAllowedStatusOptions = (currentStatus: string | undefined, mode: 'create' | 'edit') => {
+  if (mode === 'create') {
+    return [{ value: 'DRAFT', label: 'Bản nháp' }];
+  }
+  const status = currentStatus || 'DRAFT';
+  switch (status) {
+    case 'DRAFT':
+      return [
+        { value: 'DRAFT', label: 'Bản nháp' },
+        { value: 'PENDING_APPROVAL', label: 'Chờ duyệt' },
+        { value: 'CANCELLED', label: 'Đã hủy' }
+      ];
+    case 'PENDING_APPROVAL':
+      return [
+        { value: 'PENDING_APPROVAL', label: 'Chờ duyệt' },
+        { value: 'DRAFT', label: 'Bản nháp' },
+        { value: 'APPROVED', label: 'Đã duyệt' },
+        { value: 'CANCELLED', label: 'Đã hủy' }
+      ];
+    case 'APPROVED':
+      return [
+        { value: 'APPROVED', label: 'Đã duyệt' },
+        { value: 'DISPATCHED', label: 'Đang vận chuyển' },
+        { value: 'DELIVERED', label: 'Đã nhận hàng' }
+      ];
+    case 'DISPATCHED':
+    case 'IN_TRANSIT':
+      return [
+        { value: 'DISPATCHED', label: 'Đang vận chuyển' },
+        { value: 'DELIVERED', label: 'Đã nhận hàng' }
+      ];
+    case 'DELIVERED':
+      return [
+        { value: 'DELIVERED', label: 'Đã nhận hàng' }
+      ];
+    case 'CANCELLED':
+      return [
+        { value: 'CANCELLED', label: 'Đã hủy' }
+      ];
+    default:
+      return [{ value: status, label: status }];
+  }
+};
+
 export function PurchaseOrdersPage() {
   const { purchaseOrders: data, addPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, fetchPurchaseOrders } = usePurchaseStore();
+  const authUser = useAuthStore((s) => s.user);
   const [apiSuppliers, setApiSuppliers] = useState<string[]>([]);
   const [apiProducts, setApiProducts] = useState<{ name: string; price: number }[]>([]);
   const [apiBranches, setApiBranches] = useState<string[]>([]);
@@ -90,7 +137,7 @@ export function PurchaseOrdersPage() {
       totalCost: totalVal,
       status: 'DRAFT',
       paymentStatus: 'UNPAID',
-      orderedBy: 'Admin User',
+      orderedBy: authUser?.fullName || authUser?.email || 'Admin User',
       itemsCount: totalQty,
       notes: 'Giao hàng trong giờ hành chính, kèm đầy đủ chứng từ VAT.',
       poLines: initialLines
@@ -184,6 +231,24 @@ export function PurchaseOrdersPage() {
       toast.error('Vui lòng nhập Mã đơn mua hàng (PO)!');
       return;
     }
+
+    const orderDateVal = new Date(editingPO.orderDate || '');
+    const estDeliveryDateVal = new Date(editingPO.estDeliveryDate || '');
+    const currentDateVal = new Date();
+    currentDateVal.setHours(0,0,0,0);
+    orderDateVal.setHours(0,0,0,0);
+    estDeliveryDateVal.setHours(0,0,0,0);
+
+    if (modalMode === 'create' && orderDateVal < currentDateVal) {
+      toast.error('Ngày lập đơn không được nhỏ hơn Ngày hiện tại!');
+      return;
+    }
+
+    if (estDeliveryDateVal < orderDateVal) {
+      toast.error('Ngày nhận hàng dự kiến không được nhỏ hơn Ngày lập đơn!');
+      return;
+    }
+
     if (!editingPO.poLines || editingPO.poLines.length === 0) {
       toast.error('Vui lòng thêm ít nhất 1 sản phẩm vào đơn mua!');
       return;
@@ -191,6 +256,7 @@ export function PurchaseOrdersPage() {
 
     setIsSubmitting(true);
     try {
+      const creatorName = authUser?.fullName || authUser?.email || 'Admin User';
       if (modalMode === 'create') {
         const newPO: Omit<PurchaseOrderItem, 'id'> = {
           poNumber: editingPO.poNumber,
@@ -200,8 +266,8 @@ export function PurchaseOrdersPage() {
           estDeliveryDate: editingPO.estDeliveryDate || '',
           totalCost: Number(editingPO.totalCost) || 0,
           status: editingPO.status as any || 'DRAFT',
-          paymentStatus: editingPO.paymentStatus as any || 'UNPAID',
-          orderedBy: editingPO.orderedBy || 'Admin User',
+          paymentStatus: 'UNPAID', // force UNPAID for draft PO creation
+          orderedBy: creatorName,
           itemsCount: Number(editingPO.itemsCount) || 1,
           notes: editingPO.notes || '',
           poLines: editingPO.poLines
@@ -209,14 +275,17 @@ export function PurchaseOrdersPage() {
         await addPurchaseOrder(newPO);
         toast.success('Đã tạo đơn mua hàng thành công');
       } else if (editingPO.id) {
-        await updatePurchaseOrder(editingPO.id, editingPO);
+        await updatePurchaseOrder(editingPO.id, {
+          ...editingPO,
+          orderedBy: creatorName // force correct creator
+        });
         toast.success('Đã cập nhật đơn mua hàng');
       }
       fetchPurchaseOrders();
       setIsModalOpen(false);
     } catch (err: any) {
       console.error(err);
-      toast.error(err?.message || 'Lưu đơn mua hàng thất bại');
+      toast.error(err?.response?.data?.message || err?.message || 'Lưu đơn mua hàng thất bại');
     } finally {
       setIsSubmitting(false);
     }
@@ -225,8 +294,8 @@ export function PurchaseOrdersPage() {
   const handleDeleteConfirm = async () => {
     if (!deletingPO) return;
 
-    if (deletingPO.status === 'APPROVED' || deletingPO.status === 'DELIVERED' || deletingPO.status === 'DISPATCHED') {
-      toast.error(`Không thể xóa đơn mua hàng đang ở trạng thái ${STATUS_LABELS[deletingPO.status] || deletingPO.status}! Chỉ có thể hủy hoặc xóa đơn Nháp/Chờ duyệt.`);
+    if (deletingPO.status !== 'DRAFT') {
+      toast.error(`Không thể xóa đơn mua hàng đang ở trạng thái ${STATUS_LABELS[deletingPO.status] || deletingPO.status}! Chỉ có thể xóa đơn hàng ở trạng thái Bản nháp (DRAFT).`);
       setDeletingPO(null);
       return;
     }
@@ -316,27 +385,43 @@ export function PurchaseOrdersPage() {
         header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
-            <button
-              onClick={(e) => { e.stopPropagation(); setSelectedPO(row.original); }}
-              title="Xem chi tiết"
-              className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors shrink-0"
-            >
-              <Eye className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
-              title="Chỉnh sửa"
-              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors shrink-0"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); setDeletingPO(row.original); }}
-              title="Xóa"
-              className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors shrink-0"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            <PermissionGuard permission="purchase:order:view">
+              <button
+                onClick={(e) => { e.stopPropagation(); setSelectedPO(row.original); }}
+                title="Xem chi tiết"
+                className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors shrink-0"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="purchase:order:update">
+              <button
+                onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
+                title="Chỉnh sửa"
+                className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors shrink-0"
+              >
+                <Edit className="w-4 h-4" />
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="purchase:order:delete">
+              {row.original.status === 'DRAFT' ? (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setDeletingPO(row.original); }}
+                  title="Xóa"
+                  className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors shrink-0"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  disabled
+                  title="Chỉ được xóa đơn hàng ở trạng thái Bản nháp (DRAFT)"
+                  className="p-1.5 text-gray-200 dark:text-gray-700 cursor-not-allowed shrink-0"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </PermissionGuard>
           </div>
         ),
       },
@@ -353,15 +438,19 @@ export function PurchaseOrdersPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Tạo đơn đặt hàng mua sỉ, theo dõi tiến độ giao hàng và ngân sách thu mua. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => toast.success('Xuất Dữ Liệu đơn mua hàng thành công!')}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0"
-            >
-              <Download className="w-4 h-4" /> Xuất Dữ Liệu
-            </button>
-            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0">
-              <Plus className="w-4 h-4" /> Tạo Đơn Mua Hàng Mới
-            </button>
+            <PermissionGuard permission="purchase:order:export">
+              <button
+                onClick={() => toast.success('Xuất Dữ Liệu đơn mua hàng thành công!')}
+                className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0"
+              >
+                <Download className="w-4 h-4" /> Xuất Dữ Liệu
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="purchase:order:create">
+              <button onClick={handleOpenCreate} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0">
+                <Plus className="w-4 h-4" /> Tạo Đơn Mua Hàng Mới
+              </button>
+            </PermissionGuard>
           </div>
         </div>
 
@@ -615,8 +704,9 @@ export function PurchaseOrdersPage() {
                   <input
                     type="text"
                     value={editingPO.orderedBy || ''}
-                    onChange={(e) => setEditingPO({ ...editingPO, orderedBy: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                    disabled
+                    readOnly
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500 text-sm focus:outline-none cursor-not-allowed font-semibold"
                   />
                 </div>
                 <div>
@@ -644,26 +734,24 @@ export function PurchaseOrdersPage() {
                   <select
                     value={editingPO.status || 'DRAFT'}
                     onChange={(e) => setEditingPO({ ...editingPO, status: e.target.value as any })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
                   >
-                    <option value="DRAFT">Bản nháp</option>
-                    <option value="PENDING_APPROVAL">Chờ duyệt</option>
-                    <option value="APPROVED">Đã duyệt</option>
-                    <option value="DISPATCHED">Đang vận chuyển</option>
-                    <option value="DELIVERED">Đã nhận hàng</option>
-                    <option value="CANCELLED">Đã hủy</option>
+                    {getAllowedStatusOptions(editingPO.status, modalMode).map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái thanh toán</label>
                   <select
-                    value={editingPO.paymentStatus || 'UNPAID'}
+                    value={(!editingPO.status || editingPO.status === 'DRAFT' || editingPO.status === 'PENDING_APPROVAL') ? 'UNPAID' : (editingPO.paymentStatus || 'UNPAID')}
                     onChange={(e) => {
                       const st = e.target.value;
                       const adv = st === 'PARTIAL_ADVANCE' ? ((editingPO as any).advanceAmount || Math.round((editingPO.totalCost || 0) * 0.5)) : (st === 'PAID' ? editingPO.totalCost : 0);
                       setEditingPO({ ...editingPO, paymentStatus: st as any, advanceAmount: adv } as any);
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
+                    disabled={!editingPO.status || editingPO.status === 'DRAFT' || editingPO.status === 'PENDING_APPROVAL'}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-medium disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <option value="UNPAID">Chưa thanh toán</option>
                     <option value="PARTIAL_ADVANCE">Đã tạm ứng</option>
@@ -746,22 +834,29 @@ export function PurchaseOrdersPage() {
 
                         <div className="grid grid-cols-2 gap-2 sm:col-span-1">
                           <div>
-                            <label className="block text-[10px] font-semibold text-gray-400 uppercase">Số lượng</label>
+                            <label className="block text-[10px] font-semibold text-gray-400 uppercase">Số lượng *</label>
                             <input
-                              type="number"
-                              min="1"
-                              value={line.quantity}
-                              onChange={(e) => handlePOLineChange(idx, 'quantity', parseInt(e.target.value) || 1)}
+                              type="text"
+                              value={line.quantity ?? 1}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/\D/g, '');
+                                const num = raw === '' ? 1 : Math.max(1, parseInt(raw, 10));
+                                handlePOLineChange(idx, 'quantity', num);
+                              }}
+                              onFocus={(e) => e.target.select()}
                               className="w-full mt-0.5 px-2 py-1 text-xs border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
                             />
                           </div>
                           <div>
                             <label className="block text-[10px] font-semibold text-gray-400 uppercase">Đơn giá (₫)</label>
                             <input
-                              type="number"
-                              min="0"
-                              value={line.unitPrice}
-                              onChange={(e) => handlePOLineChange(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
+                              type="text"
+                              value={line.unitPrice ? line.unitPrice.toLocaleString('vi-VN') : '0'}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/\D/g, '');
+                                handlePOLineChange(idx, 'unitPrice', Number(raw) || 0);
+                              }}
+                              onFocus={(e) => e.target.select()}
                               className="w-full mt-0.5 px-2 py-1 text-xs border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
                             />
                           </div>

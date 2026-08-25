@@ -1,45 +1,67 @@
 import { Navigate, Outlet } from 'react-router';
-import { useAuthRole, useAuthPermissions } from '@/features/auth/store/authStore';
-import { checkPermission } from '@/shared/hooks/usePermission';
-import type { RoleType } from '@/features/auth/types';
+import { usePermission } from '@/shared/hooks/usePermission';
 
-interface RoleGuardProps {
-  allowedRoles?: RoleType[];
+export interface RoleGuardProps {
+  /**
+   * Mã quyền bắt buộc (ví dụ: 'catalog:product:view')
+   */
   requiredPermission?: string;
+  /**
+   * Danh sách mã quyền (chỉ cần có 1 trong các quyền này)
+   */
+  requiredPermissions?: string[];
+  /**
+   * Danh sách Role fallback (backward compatible)
+   */
+  allowedRoles?: string[];
   children?: React.ReactNode;
 }
 
-export function RoleGuard({ allowedRoles, requiredPermission, children }: RoleGuardProps) {
-  const role = useAuthRole();
-  const permissions = useAuthPermissions();
+/**
+ * Route Guard động 100% bảo vệ Route dựa trên Dynamic Permissions
+ */
+export function RoleGuard({ requiredPermission, requiredPermissions, allowedRoles, children }: RoleGuardProps) {
+  const { user, permissions, hasPermission, hasAnyPermission, canViewAllBranches } = usePermission();
 
-  if (!role) {
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 
   const content = children || <Outlet />;
 
-  // SUPER_ADMIN luôn có toàn quyền truy cập tất cả các route
-  if (role === 'SUPER_ADMIN') {
+  // Super Admin hoặc sở hữu quyền Wildcard (*) luôn được phép truy cập
+  if (canViewAllBranches || permissions.includes('*') || permissions.includes('ALL')) {
     return <>{content}</>;
   }
 
-  // Kiểm tra quyền động từ backend
+  // Kiểm tra requiredPermission đơn lẻ
   if (requiredPermission) {
-    // Nếu user đã đăng nhập nhưng permissions chưa được load (mảng rỗng = đang tải hoặc chưa được cấp),
-    // cho phép xem trang thay vì block 403 — trang sẽ tự hiển thị "không có dữ liệu" nếu API từ chối
     if (permissions.length === 0) {
       return <>{content}</>;
     }
-    if (!checkPermission(permissions, requiredPermission, role)) {
+    if (!hasPermission(requiredPermission)) {
       return <Navigate to="/403" replace />;
     }
     return <>{content}</>;
   }
 
-  // Fallback kiểm tra role tĩnh
-  if (allowedRoles && !allowedRoles.includes(role)) {
-    return <Navigate to="/403" replace />;
+  // Kiểm tra mảng requiredPermissions
+  if (requiredPermissions && requiredPermissions.length > 0) {
+    if (permissions.length === 0) {
+      return <>{content}</>;
+    }
+    if (!hasAnyPermission(requiredPermissions)) {
+      return <Navigate to="/403" replace />;
+    }
+    return <>{content}</>;
+  }
+
+  // Fallback backward compatible cho allowedRoles nếu route cũ chưa chuyển sang permission
+  if (allowedRoles && allowedRoles.length > 0) {
+    const userRole = user.role || '';
+    if (!allowedRoles.includes(userRole)) {
+      return <Navigate to="/403" replace />;
+    }
   }
 
   return <>{content}</>;

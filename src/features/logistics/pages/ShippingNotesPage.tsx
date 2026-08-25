@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Eye, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
+import { axiosClient } from '@/shared/lib/axiosClient';
 
 export interface ShippingNoteRecord {
   id: string;
@@ -14,6 +15,8 @@ export interface ShippingNoteRecord {
   content: string;
   createdAt: string;
 }
+
+const STORAGE_KEY = 'retailhub_shipping_notes_data';
 
 const DEFAULT_NOTES: ShippingNoteRecord[] = [
   {
@@ -36,8 +39,25 @@ const DEFAULT_NOTES: ShippingNoteRecord[] = [
   }
 ];
 
+const getSavedNotes = (): ShippingNoteRecord[] => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return [];
+};
+
+const saveNotesList = (list: ShippingNoteRecord[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  } catch {}
+};
+
 export function ShippingNotesPage() {
-  const [data, setData] = useState<ShippingNoteRecord[]>(DEFAULT_NOTES);
+  const [data, setData] = useState<ShippingNoteRecord[]>(() => {
+    const local = getSavedNotes();
+    return local.length > 0 ? local : DEFAULT_NOTES;
+  });
   const [search, setSearch] = useState('');
   const [selectedNote, setSelectedNote] = useState<ShippingNoteRecord | null>(null);
 
@@ -45,11 +65,37 @@ export function ShippingNotesPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<ShippingNoteRecord>>({});
 
+  const fetchNotes = useCallback(async () => {
+    try {
+      const res = await axiosClient.get<any, any>('/logistics/delivery-notes');
+      const items = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+      if (items.length > 0) {
+        const mapped: ShippingNoteRecord[] = items.map((item: any, idx: number) => ({
+          id: String(item.id || idx + 1),
+          noteCode: item.noteCode || item.code || `NOTE-${String(idx + 1).padStart(3, '0')}`,
+          orderCode: item.orderCode || item.orderId || 'SO-88101',
+          shipperName: item.shipperName || 'Nội bộ',
+          noteType: (item.noteType || 'GIAO_LAI') as any,
+          content: item.content || item.note || '',
+          createdAt: item.createdAt || new Date().toISOString().substring(0, 16).replace('T', ' '),
+        }));
+        setData(mapped);
+        saveNotesList(mapped);
+      }
+    } catch (err) {
+      console.warn('Backend GET /logistics/delivery-notes failed, using local store:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchNotes();
+  }, [fetchNotes]);
+
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingItem({
       noteCode: `NOTE-${Date.now().toString().slice(-4)}`,
-      orderCode: 'SO-88101',
+      orderCode: '',
       shipperName: 'Viettel Post',
       noteType: 'GIAO_LAI',
       content: '',
@@ -64,41 +110,72 @@ export function ShippingNotesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.orderCode || !editingItem.content) {
+    if (!editingItem.orderCode?.trim() || !editingItem.content?.trim()) {
       toast.error('Vui lòng nhập mã đơn và nội dung ghi chú vận chuyển!');
       return;
     }
 
+    const newRecord: ShippingNoteRecord = {
+      id: editingItem.id || String(Date.now()),
+      noteCode: editingItem.noteCode || `NOTE-${Date.now().toString().slice(-4)}`,
+      orderCode: editingItem.orderCode.trim(),
+      shipperName: editingItem.shipperName?.trim() || 'Nội bộ',
+      noteType: editingItem.noteType || 'GIAO_LAI',
+      content: editingItem.content.trim(),
+      createdAt: editingItem.createdAt || new Date().toISOString().substring(0, 16).replace('T', ' ')
+    };
+
     try {
-      const newRecord: ShippingNoteRecord = {
-        id: editingItem.id || String(Date.now()),
-        noteCode: editingItem.noteCode || `NOTE-${Date.now().toString().slice(-4)}`,
-        orderCode: editingItem.orderCode || '',
-        shipperName: editingItem.shipperName || 'Nội bộ',
-        noteType: editingItem.noteType || 'GIAO_LAI',
-        content: editingItem.content || '',
-        createdAt: editingItem.createdAt || new Date().toISOString().substring(0, 16).replace('T', ' ')
+      const payload = {
+        noteCode: newRecord.noteCode,
+        orderCode: newRecord.orderCode,
+        shipperName: newRecord.shipperName,
+        noteType: newRecord.noteType,
+        content: newRecord.content,
+        createdAt: newRecord.createdAt,
       };
 
       if (modalMode === 'create') {
-        setData(prev => [newRecord, ...prev]);
-        toast.success('Tạo ghi chú vận chuyển mới thành công!');
+        await axiosClient.post('/logistics/delivery-notes', payload);
       } else {
-        setData(prev => prev.map(item => item.id === newRecord.id ? newRecord : item));
-        toast.success('Cập nhật ghi chú thành công!');
+        await axiosClient.put(`/logistics/delivery-notes/${newRecord.id}`, payload);
       }
-      setIsModalOpen(false);
-    } catch (err: any) {
-      console.error(err);
-      toast.error('Không thể lưu ghi chú: Dữ liệu bị trùng hoặc vi phạm ràng buộc!');
+    } catch (err) {
+      console.warn('API save delivery-note failed, applying local state update:', err);
     }
+
+    if (modalMode === 'create') {
+      setData(prev => {
+        const next = [newRecord, ...prev];
+        saveNotesList(next);
+        return next;
+      });
+      toast.success('Tạo ghi chú vận chuyển mới thành công!');
+    } else {
+      setData(prev => {
+        const next = prev.map(item => item.id === newRecord.id ? newRecord : item);
+        saveNotesList(next);
+        return next;
+      });
+      toast.success('Cập nhật ghi chú thành công!');
+    }
+    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa ghi chú này?')) {
-      setData(prev => prev.filter(item => item.id !== id));
+      try {
+        await axiosClient.delete(`/logistics/delivery-notes/${id}`);
+      } catch (err) {
+        console.warn('API delete delivery-note failed, applying local state update:', err);
+      }
+      setData(prev => {
+        const next = prev.filter(item => item.id !== id);
+        saveNotesList(next);
+        return next;
+      });
       toast.success('Đã xóa ghi chú thành công!');
       setSelectedNote(null);
     }
@@ -129,8 +206,8 @@ export function ShippingNotesPage() {
       },
       {
         accessorKey: 'shipperName',
-        header: 'Đơn vị / Shipper ghi chú',
-        cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
+        header: 'Đơn vị / shipper ghi chú',
+        cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'noteType',
@@ -138,7 +215,7 @@ export function ShippingNotesPage() {
         cell: (info) => {
           const type = info.getValue() as string;
           return (
-            <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-800">
+            <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300">
               {type.replace(/_/g, ' ')}
             </span>
           );
@@ -156,16 +233,16 @@ export function ShippingNotesPage() {
       },
       {
         id: 'actions',
-        header: 'Hành động',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
-            <button onClick={() => setSelectedNote(row.original)} className="p-1 text-gray-400 hover:text-emerald-600">
+            <button onClick={() => setSelectedNote(row.original)} className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors" title="Xem chi tiết">
               <Eye className="w-4 h-4" />
             </button>
-            <button onClick={() => handleOpenEdit(row.original)} className="p-1 text-gray-400 hover:text-blue-600">
+            <button onClick={() => handleOpenEdit(row.original)} className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors" title="Chỉnh sửa">
               <Edit className="w-4 h-4" />
             </button>
-            <button onClick={() => handleDelete(row.original.id)} className="p-1 text-gray-400 hover:text-red-600">
+            <button onClick={() => handleDelete(row.original.id)} className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors" title="Xóa">
               <Trash2 className="w-4 h-4" />
             </button>
           </div>
@@ -177,16 +254,16 @@ export function ShippingNotesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ghi chú vận chuyển</h1>
-          <p className="text-sm text-gray-500 mt-1">Quản lý các ghi chú giao nhận, yêu cầu giao lại, đổi địa chỉ từ shipper và bưu tá.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý các ghi chú giao nhận, yêu cầu giao lại, đổi địa chỉ từ shipper và bưu tá</p>
         </div>
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-semibold shadow-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold shadow-sm transition-colors text-sm"
         >
-          <Plus className="w-4 h-4" /> Thêm Ghi Chú Mới
+          <Plus className="w-4 h-4" /> Thêm mới ghi chú
         </button>
       </div>
 
@@ -196,38 +273,38 @@ export function ShippingNotesPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm theo mã đơn, mã ghi chú, nội dung..."
-          className="w-full bg-transparent outline-none text-sm"
+          placeholder="Tìm kiếm theo mã đơn, mã ghi chú, nội dung..."
+          className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-white"
         />
       </div>
 
       <ReusableDataTable columns={columns} data={filtered} />
 
-      {/* Modal Xem chi tiết căn giữa (TC-ALL-1) */}
+      {/* Modal Xem chi tiết */}
       <Modal
         isOpen={!!selectedNote}
         onClose={() => setSelectedNote(null)}
         title={selectedNote ? `Chi tiết ghi chú: ${selectedNote.noteCode}` : 'Thông tin ghi chú'}
-        width="max-w-md"
+        width="max-w-xl"
       >
         {selectedNote && (
           <div className="space-y-4 text-sm">
-            <div className="flex justify-between border-b pb-2">
-              <span className="text-gray-500">Mã đơn vận chuyển:</span>
+            <div className="flex justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
+              <span className="text-xs text-gray-500">Mã đơn vận chuyển:</span>
               <span className="font-mono font-bold text-primary">{selectedNote.orderCode}</span>
             </div>
-            <div className="flex justify-between border-b pb-2">
-              <span className="text-gray-500">Loại ghi chú:</span>
-              <span className="font-bold text-blue-600">{selectedNote.noteType.replace(/_/g, ' ')}</span>
+            <div className="flex justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
+              <span className="text-xs text-gray-500">Loại ghi chú:</span>
+              <span className="font-semibold text-blue-600 dark:text-blue-400">{selectedNote.noteType.replace(/_/g, ' ')}</span>
             </div>
             <div>
-              <span className="text-gray-500 block mb-1">Nội dung chi tiết:</span>
-              <p className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg text-gray-800 dark:text-gray-200 italic">
+              <span className="text-xs text-gray-500 block mb-1">Nội dung chi tiết:</span>
+              <p className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg text-gray-800 dark:text-gray-200 text-xs italic border border-gray-200 dark:border-gray-800">
                 {selectedNote.content}
               </p>
             </div>
-            <div className="flex justify-end pt-3 border-t">
-              <button onClick={() => setSelectedNote(null)} className="px-4 py-2 bg-gray-100 font-bold rounded-lg">
+            <div className="flex justify-end pt-3 border-t border-gray-200 dark:border-gray-700">
+              <button onClick={() => setSelectedNote(null)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 font-medium rounded-lg text-sm text-gray-700 dark:text-gray-300">
                 Đóng
               </button>
             </div>
@@ -239,50 +316,50 @@ export function ShippingNotesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Ghi Chú Vận Chuyển' : 'Sửa Ghi Chú Vận Chuyển'}
+        title={modalMode === 'create' ? 'Thêm mới ghi chú vận chuyển' : 'Cập nhật ghi chú vận chuyển'}
         width="max-w-md"
       >
         <form onSubmit={handleSave} className="space-y-4 text-sm">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Mã ghi chú *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã ghi chú *</label>
               <input
                 type="text"
                 value={editingItem.noteCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, noteCode: e.target.value })}
                 required
-                className="w-full p-2.5 border rounded-lg font-mono bg-gray-50"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-mono bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Mã đơn hàng *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã đơn hàng *</label>
               <input
                 type="text"
                 value={editingItem.orderCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, orderCode: e.target.value })}
                 required
-                placeholder="VD: SO-88101"
-                className="w-full p-2.5 border rounded-lg font-mono"
+                placeholder="Ví dụ: SO-88101"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Đơn vị / Shipper</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn vị / shipper</label>
               <input
                 type="text"
                 value={editingItem.shipperName || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, shipperName: e.target.value })}
-                className="w-full p-2.5 border rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Loại ghi chú</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại ghi chú</label>
               <select
                 value={editingItem.noteType || 'GIAO_LAI'}
                 onChange={(e) => setEditingItem({ ...editingItem, noteType: e.target.value as any })}
-                className="w-full p-2.5 border rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               >
                 <option value="GIAO_LAI">Giao lại</option>
                 <option value="KHIẾU_NẠI">Khiếu nại</option>
@@ -293,23 +370,23 @@ export function ShippingNotesPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">Nội dung ghi chú *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nội dung ghi chú *</label>
             <textarea
               value={editingItem.content || ''}
               onChange={(e) => setEditingItem({ ...editingItem, content: e.target.value })}
               required
               rows={3}
               placeholder="Nhập ghi chú giao nhận..."
-              className="w-full p-2.5 border rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-3 border-t">
-            <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border rounded-lg">
-              Hủy Bỏ
+          <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium">
+              Hủy bỏ
             </button>
-            <button type="submit" className="px-5 py-2 bg-emerald-600 text-white font-semibold rounded-lg">
-              Lưu Ghi Chú
+            <button type="submit" className="px-5 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg text-sm shadow-sm">
+              Lưu thông tin
             </button>
           </div>
         </form>

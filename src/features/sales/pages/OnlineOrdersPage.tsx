@@ -9,6 +9,8 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
+import { useSalesStore } from '../store/salesStore';
+import { usePermission } from '@/shared/hooks/usePermission';
 
 export interface BranchOption {
   id: string | number;
@@ -49,6 +51,9 @@ export const mapBackendToFulfillmentStatus = (status: string): OnlineOrder['fulf
 };
 
 export function OnlineOrdersPage() {
+  const { user, canViewAllBranches, currentBranchId: userBranchId } = usePermission();
+  const isSuperAdmin = canViewAllBranches;
+
   const [orders, setOrders] = useState<OnlineOrder[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
@@ -73,34 +78,21 @@ export function OnlineOrdersPage() {
 
   const fetchBranches = async () => {
     try {
-      const res = await axiosClient.get<any, any>('/system/branches');
+      const res = await axiosClient.get<any, any>('/branches?includeDeleted=false');
       const data = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : (Array.isArray(res?.content) ? res.content : []));
       if (Array.isArray(data) && data.length > 0) {
-        setBranches(data.map((b: any) => ({
+        const mapped = data.map((b: any) => ({
           id: String(b.id),
           branchCode: b.branchCode || `CN-${b.id}`,
-          branchName: b.branchName || 'Chi nhánh',
-          address: b.address || 'Việt Nam',
-          phone: b.phone || ''
-        })));
-        setSelectedBranchId(String(data[0].id));
-      } else {
-        const defaults: BranchOption[] = [
-          { id: '1', branchCode: 'CN-HCM', branchName: 'Chi nhánh AuraMart Quận 1 (TP. Hồ Chí Minh)', address: '123 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP.HCM', phone: '028 3888 9999' },
-          { id: '2', branchCode: 'CN-HN', branchName: 'Chi nhánh AuraMart Cầu Giấy (Hà Nội)', address: '45 Cầu Giấy, Quan Hoa, Quận Cầu Giấy, Hà Nội', phone: '024 3999 8888' },
-          { id: '3', branchCode: 'KHO-TONG', branchName: 'Kho Tổng Trung Tâm AuraMart (Bình Dương)', address: 'KCN VSIP 1, Đại lộ Tự Do, TP. Thuận An, Bình Dương', phone: '0274 3777 666' }
-        ];
-        setBranches(defaults);
-        setSelectedBranchId('1');
+          branchName: b.branchName || b.name || `Chi nhánh ${b.id}`,
+          address: b.address || b.fullAddress || 'Địa chỉ chi nhánh',
+          phone: b.phone || b.contactPhone || ''
+        }));
+        setBranches(mapped);
+        setSelectedBranchId(userBranchId || String(mapped[0].id));
       }
-    } catch {
-      const defaults: BranchOption[] = [
-        { id: '1', branchCode: 'CN-HCM', branchName: 'Chi nhánh AuraMart Quận 1 (TP. Hồ Chí Minh)', address: '123 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP.HCM', phone: '028 3888 9999' },
-        { id: '2', branchCode: 'CN-HN', branchName: 'Chi nhánh AuraMart Cầu Giấy (Hà Nội)', address: '45 Cầu Giấy, Quan Hoa, Quận Cầu Giấy, Hà Nội', phone: '024 3999 8888' },
-        { id: '3', branchCode: 'KHO-TONG', branchName: 'Kho Tổng Trung Tâm AuraMart (Bình Dương)', address: 'KCN VSIP 1, Đại lộ Tự Do, TP. Thuận An, Bình Dương', phone: '0274 3777 666' }
-      ];
-      setBranches(defaults);
-      setSelectedBranchId('1');
+    } catch (err) {
+      console.error('Fetch branches from backend failed:', err);
     }
   };
 
@@ -109,14 +101,20 @@ export function OnlineOrdersPage() {
     let realOrders: OnlineOrder[] = [];
 
     try {
-      const res = await axiosClient.get<any, any>('/sales/orders');
+      const branchParam = (!isSuperAdmin && userBranchId) ? `?branchId=${userBranchId}` : '';
+      const res = await axiosClient.get<any, any>(`/sales/orders${branchParam}`);
       const rawItems = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : (Array.isArray(res?.content) ? res.content : []));
       if (Array.isArray(rawItems) && rawItems.length > 0) {
         // Chỉ lấy các đơn có nguồn Online (origin = ONLINE hoặc orderCode bắt đầu bằng ONLINE-)
         const onlineRaw = rawItems.filter((it: any) => {
           const origin = (it.origin || it.orderOrigin || '').toUpperCase();
           const code = (it.orderCode || it.code || '').toUpperCase();
-          return origin === 'ONLINE' || origin === 'WEB' || code.startsWith('ONLINE-') || code.startsWith('WEB-');
+          const isOnline = origin === 'ONLINE' || origin === 'WEB' || code.startsWith('ONLINE-') || code.startsWith('WEB-');
+          if (!isOnline) return false;
+          if (!isSuperAdmin && userBranchId) {
+            return !it.branchId && !it.branch?.id ? true : String(it.branchId || it.branch?.id) === String(userBranchId);
+          }
+          return true;
         });
 
         realOrders = onlineRaw.map((item: any) => ({
@@ -227,12 +225,15 @@ export function OnlineOrdersPage() {
       console.warn('Backend status update request failed:', err);
     }
 
+    const isSuccess = newStatus === 'GIAO_THANH_CONG';
+
     setOrders((prev) =>
       prev.map((o) => {
         if (o.id === orderId) {
           return {
             ...o,
             fulfillmentStatus: newStatus,
+            paymentStatus: isSuccess ? 'Đã thanh toán' : o.paymentStatus,
             branchId: extraData?.branchId !== undefined ? extraData.branchId : o.branchId,
             branchName: extraData?.branchName || o.branchName,
             carrier: extraData?.carrier || (newStatus === 'CHO_XAC_NHAN' ? 'Chưa chọn (Chờ đóng gói)' : o.carrier || 'Viettel Post'),
@@ -251,6 +252,7 @@ export function OnlineOrdersPage() {
           ? {
               ...prev,
               fulfillmentStatus: newStatus,
+              paymentStatus: isSuccess ? 'Đã thanh toán' : prev.paymentStatus,
               branchId: extraData?.branchId !== undefined ? extraData.branchId : prev.branchId,
               branchName: extraData?.branchName || prev.branchName,
               carrier: extraData?.carrier || (newStatus === 'CHO_XAC_NHAN' ? 'Chưa chọn (Chờ đóng gói)' : prev.carrier || 'Viettel Post'),
@@ -261,6 +263,10 @@ export function OnlineOrdersPage() {
           : null
       );
     }
+
+    try {
+      useSalesStore.getState().fetchSaleOrders?.();
+    } catch {}
 
     const labelMap: Record<OnlineOrder['fulfillmentStatus'], string> = {
       CHO_XAC_NHAN: 'Chờ xác nhận',

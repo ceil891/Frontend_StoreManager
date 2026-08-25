@@ -49,7 +49,7 @@ export function PrintInvoiceModal({ isOpen, onClose, data }: PrintInvoiceModalPr
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`🖨️ Xem bản in: ${data.code}`}
+      title={`Xem bản in: ${data.code}`}
       width="max-w-4xl"
     >
       <div className="space-y-6 text-gray-900 dark:text-gray-100">
@@ -57,14 +57,14 @@ export function PrintInvoiceModal({ isOpen, onClose, data }: PrintInvoiceModalPr
         <div className="print:hidden flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/40 p-3 rounded-xl border border-emerald-200 dark:border-emerald-800">
           <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800 dark:text-emerald-300">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Bản in chứng từ hợp chuẩn RetailHub ERP System</span>
+            <span>Bản in chứng từ hợp chuẩn RetailHub ERP</span>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow transition cursor-pointer"
             >
-              <Printer className="w-4 h-4" /> In chứng từ (Print/PDF)
+              <Printer className="w-4 h-4" /> In chứng từ
             </button>
           </div>
         </div>
@@ -83,7 +83,7 @@ export function PrintInvoiceModal({ isOpen, onClose, data }: PrintInvoiceModalPr
                 </span>
               </div>
               <p className="text-[11px] text-gray-500">Đơn vị: Công ty Cổ phần Quản lý Bán lẻ RetailHub</p>
-              <p className="text-[11px] text-gray-500">Địa chỉ: 123 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP.HCM</p>
+              <p className="text-[11px] text-gray-500">Địa chỉ: Số 123 đường Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP.HCM</p>
               <p className="text-[11px] text-gray-500">MST: 0316889988 - Hotline: 1900 6868</p>
             </div>
             <div className="text-right space-y-1">
@@ -99,7 +99,7 @@ export function PrintInvoiceModal({ isOpen, onClose, data }: PrintInvoiceModalPr
           {/* Recipient / Partner details */}
           <div className="grid grid-cols-2 gap-6 bg-gray-50 dark:bg-gray-900/60 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
             <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Thông tin đối tác / Khách hàng</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Thông tin đối tác / khách hàng</p>
               <p className="font-bold text-sm text-gray-900 dark:text-white">{data.customerOrSupplierName}</p>
               {data.phone && <p className="text-gray-600 dark:text-gray-400 mt-0.5">Điện thoại: {data.phone}</p>}
               {data.address && <p className="text-gray-600 dark:text-gray-400">Địa chỉ: {data.address}</p>}
@@ -141,12 +141,12 @@ export function PrintInvoiceModal({ isOpen, onClose, data }: PrintInvoiceModalPr
                     </td>
                     <td className="p-2.5 text-center text-gray-500">{item.unit || 'Cái'}</td>
                     <td className="p-2.5 text-center font-bold">{item.quantity}</td>
-                    <td className="p-2.5 text-right font-mono">{item.price.toLocaleString('vi-VN')} ₫</td>
+                    <td className="p-2.5 text-right font-mono">{item.price.toLocaleString('vi-VN')} đ</td>
                     <td className="p-2.5 text-right font-mono text-red-500 font-medium">
-                      {item.discount ? `${item.discount.toLocaleString('vi-VN')} ₫` : '-'}
+                      {item.discount ? `${item.discount.toLocaleString('vi-VN')} đ` : '-'}
                     </td>
                     <td className="p-2.5 text-right font-bold font-mono text-gray-900 dark:text-white">
-                      {item.total.toLocaleString('vi-VN')} ₫
+                      {item.total.toLocaleString('vi-VN')} đ
                     </td>
                   </tr>
                 ))}
@@ -165,24 +165,24 @@ export function PrintInvoiceModal({ isOpen, onClose, data }: PrintInvoiceModalPr
 
             <div className="w-64 space-y-2 text-right">
               <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                <span>Tiền hàng (Subtotal):</span>
-                <span className="font-mono font-semibold text-gray-900 dark:text-white">{data.subTotal.toLocaleString('vi-VN')} ₫</span>
+                <span>Tiền hàng:</span>
+                <span className="font-mono font-semibold text-gray-900 dark:text-white">{data.subTotal.toLocaleString('vi-VN')} đ</span>
               </div>
               {data.taxAmount != null && data.taxAmount > 0 && (
                 <div className="flex justify-between text-gray-600 dark:text-gray-400">
                   <span>Thuế VAT:</span>
-                  <span className="font-mono text-blue-600 font-semibold">+{data.taxAmount.toLocaleString('vi-VN')} ₫</span>
+                  <span className="font-mono text-blue-600 font-semibold">+{data.taxAmount.toLocaleString('vi-VN')} đ</span>
                 </div>
               )}
               {data.discountAmount != null && data.discountAmount > 0 && (
                 <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                  <span>Chiết khấu / Giảm giá:</span>
-                  <span className="font-mono text-red-500 font-semibold">-{data.discountAmount.toLocaleString('vi-VN')} ₫</span>
+                  <span>Chiết khấu / giảm giá:</span>
+                  <span className="font-mono text-red-500 font-semibold">-{data.discountAmount.toLocaleString('vi-VN')} đ</span>
                 </div>
               )}
               <div className="flex justify-between text-sm font-bold border-t border-gray-200 dark:border-gray-700 pt-2 text-emerald-600 dark:text-emerald-400">
-                <span>TỔNG CỘNG:</span>
-                <span className="font-mono text-base font-black">{data.totalAmount.toLocaleString('vi-VN')} ₫</span>
+                <span>Tổng cộng:</span>
+                <span className="font-mono text-base font-black">{data.totalAmount.toLocaleString('vi-VN')} đ</span>
               </div>
             </div>
           </div>
@@ -195,12 +195,12 @@ export function PrintInvoiceModal({ isOpen, onClose, data }: PrintInvoiceModalPr
               <p className="font-medium text-gray-700 dark:text-gray-300">{data.createdByName || 'Thủ kho / Nhân viên'}</p>
             </div>
             <div>
-              <p className="font-bold text-gray-900 dark:text-white uppercase text-[10px]">Kế toán trưởng / Duyệt</p>
+              <p className="font-bold text-gray-900 dark:text-white uppercase text-[10px]">Kế toán trưởng / duyệt</p>
               <p className="text-[10px] text-gray-400 italic mb-12">(Ký & đóng dấu)</p>
-              <p className="font-medium text-gray-700 dark:text-gray-300">Ban Giám Đốc</p>
+              <p className="font-medium text-gray-700 dark:text-gray-300">Ban giám đốc</p>
             </div>
             <div>
-              <p className="font-bold text-gray-900 dark:text-white uppercase text-[10px]">Đại diện Khách hàng / NCC</p>
+              <p className="font-bold text-gray-900 dark:text-white uppercase text-[10px]">Đại diện khách hàng / nhà cung cấp</p>
               <p className="text-[10px] text-gray-400 italic mb-12">(Ký nhận & xác nhận)</p>
               <p className="font-medium text-gray-700 dark:text-gray-300">{data.customerOrSupplierName}</p>
             </div>
