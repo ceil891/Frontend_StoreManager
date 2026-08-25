@@ -133,10 +133,10 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
   return (
     <div className="space-y-4 relative w-full max-w-full min-w-0 overflow-hidden">
       {/* Toolbar: Global Search, Column Visibility & Bulk Actions */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="flex flex-1 items-center gap-3 w-full">
           {globalFilterPlaceholder && (
-            <div className="relative w-full sm:max-w-xs">
+            <div className="relative w-full flex-1 sm:max-w-md">
               <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
                 <Search className="w-4 h-4" />
               </div>
@@ -145,7 +145,7 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder={globalFilterPlaceholder}
-                className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
+                className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all shadow-sm"
               />
             </div>
           )}
@@ -186,7 +186,7 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
 
         {/* Column Visibility Dropdown */}
         <div className="relative group shrink-0">
-          <button className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
+          <button className="flex items-center gap-2 px-3.5 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
             <Settings2 className="w-4 h-4" />
             <span className="hidden sm:inline">Cột hiển thị</span>
           </button>

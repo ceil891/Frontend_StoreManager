@@ -159,7 +159,7 @@ export function ShippingContactsPage() {
       },
       {
         accessorKey: 'fullName',
-        header: 'Họ tên & Đơn vị',
+        header: 'Họ tên & đơn vị',
         cell: ({ row }) => (
           <div>
             <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.fullName}</p>
@@ -179,9 +179,9 @@ export function ShippingContactsPage() {
           const role = info.getValue() as string;
           return (
             <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
-              role === 'TÀI_XẾ' ? 'bg-blue-100 text-blue-800' :
-              role === 'ĐIỀU_PHỐI_VIÊN' ? 'bg-purple-100 text-purple-800' :
-              'bg-emerald-100 text-emerald-800'
+              role === 'TÀI_XẾ' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300' :
+              role === 'ĐIỀU_PHỐI_VIÊN' ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300' :
+              'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300'
             }`}>
               {role.replace(/_/g, ' ')}
             </span>
@@ -197,35 +197,35 @@ export function ShippingContactsPage() {
         accessorKey: 'status',
         header: 'Trạng thái',
         cell: (info) => (
-          <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${
-            info.getValue() === 'HOẠT_ĐỘNG' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'
+          <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+            info.getValue() === 'HOẠT_ĐỘNG' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300'
           }`}>
-            {info.getValue() as string}
+            {info.getValue() === 'HOẠT_ĐỘNG' ? 'Hoạt động' : 'Tạm ngưng'}
           </span>
         ),
       },
       {
         id: 'actions',
-        header: 'Hành động',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelectedContact(row.original)}
-              className="p-1.5 text-gray-400 hover:text-primary hover:bg-gray-100 rounded-lg"
-              title="Xem thông tin"
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleOpenEdit(row.original)}
-              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
               title="Chỉnh sửa"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleDelete(row.original.id)}
-              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+              className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               title="Xóa"
             >
               <Trash2 className="w-4 h-4" />
@@ -242,13 +242,13 @@ export function ShippingContactsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Danh bạ vận chuyển</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý thông tin đầu mối liên hệ, tài xế giao hàng và chuyên viên điều phối của các đơn vị logistics.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý thông tin đầu mối liên hệ, tài xế giao hàng và chuyên viên điều phối của các đơn vị logistics</p>
         </div>
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-medium shadow-sm"
         >
-          <Plus className="w-4 h-4" /> Thêm Liên Hệ Mới
+          <Plus className="w-4 h-4" /> Thêm mới liên hệ
         </button>
       </div>
 
@@ -259,15 +259,15 @@ export function ShippingContactsPage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm theo họ tên, số điện thoại, đơn vị vận chuyển..."
-            className="w-full pl-10 pr-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-900 text-sm"
+            placeholder="Tìm kiếm theo họ tên, số điện thoại, đơn vị vận chuyển..."
+            className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-sm text-gray-900 dark:text-white"
           />
         </div>
       </div>
 
       <ReusableDataTable columns={columns} data={filtered} />
 
-      {/* Modal Xem chi tiết căn giữa (TC-ALL-1) */}
+      {/* Modal Xem chi tiết */}
       <Modal
         isOpen={!!selectedContact}
         onClose={() => setSelectedContact(null)}
@@ -276,48 +276,48 @@ export function ShippingContactsPage() {
       >
         {selectedContact && (
           <div className="space-y-4 text-sm">
-            <div className="flex items-center gap-3 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
-              <User className="w-8 h-8 text-emerald-600" />
+            <div className="flex items-center gap-3 p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800">
+              <User className="w-8 h-8 text-primary" />
               <div>
-                <h3 className="font-bold text-gray-900">{selectedContact.fullName}</h3>
+                <h3 className="font-bold text-gray-900 dark:text-white">{selectedContact.fullName}</h3>
                 <p className="text-xs text-gray-500 font-mono">{selectedContact.contactCode} - {selectedContact.carrierCompany}</p>
               </div>
             </div>
 
-            <div className="space-y-2 border-t pt-2">
+            <div className="space-y-2 border-t border-gray-200 dark:border-gray-700 pt-2">
               <div className="flex justify-between">
-                <span className="text-gray-500">Số điện thoại:</span>
+                <span className="text-xs text-gray-500">Số điện thoại</span>
                 <span className="font-mono font-bold">{selectedContact.phone}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Email:</span>
+                <span className="text-xs text-gray-500">Email</span>
                 <span>{selectedContact.email || 'Chưa cập nhật'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Vai trò:</span>
+                <span className="text-xs text-gray-500">Vai trò</span>
                 <span className="font-semibold">{selectedContact.role.replace(/_/g, ' ')}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Biển số xe:</span>
-                <span className="font-mono font-bold">{selectedContact.vehiclePlate || 'N/A'}</span>
+                <span className="text-xs text-gray-500">Biển số xe</span>
+                <span className="font-mono font-bold">{selectedContact.vehiclePlate || '—'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Loại phương tiện:</span>
-                <span>{selectedContact.vehicleType || 'N/A'}</span>
+                <span className="text-xs text-gray-500">Loại phương tiện</span>
+                <span>{selectedContact.vehicleType || '—'}</span>
               </div>
             </div>
 
             {selectedContact.notes && (
-              <div className="border-t pt-2">
-                <span className="text-xs text-gray-400 block mb-1">Ghi chú:</span>
-                <p className="italic text-gray-700 bg-gray-50 p-2 rounded">{selectedContact.notes}</p>
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-2">
+                <span className="text-xs text-gray-500 block mb-1">Ghi chú</span>
+                <p className="text-xs italic text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-900 p-2.5 rounded-lg border border-gray-200 dark:border-gray-800">{selectedContact.notes}</p>
               </div>
             )}
 
-            <div className="flex justify-end pt-3 border-t">
+            <div className="flex justify-end pt-3 border-t border-gray-200 dark:border-gray-700">
               <button
                 onClick={() => setSelectedContact(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-semibold"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300"
               >
                 Đóng
               </button>
@@ -330,41 +330,41 @@ export function ShippingContactsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Liên Hệ Danh Bạ Mới' : 'Cập Nhật Thông Tin Liên Hệ'}
+        title={modalMode === 'create' ? 'Thêm mới liên hệ' : 'Cập nhật thông tin liên hệ'}
         width="max-w-md"
       >
         <form onSubmit={handleSave} className="space-y-4 text-sm">
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">Họ và tên *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Họ và tên *</label>
             <input
               type="text"
               value={editingItem.fullName || ''}
               onChange={(e) => setEditingItem({ ...editingItem, fullName: e.target.value })}
               required
-              className="w-full p-2.5 border rounded-lg"
-              placeholder="VD: Nguyễn Văn A"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              placeholder="Ví dụ: Nguyễn Văn A"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Số điện thoại *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại *</label>
               <input
                 type="text"
                 value={editingItem.phone || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, phone: e.target.value })}
                 required
-                className="w-full p-2.5 border rounded-lg font-mono"
-                placeholder="VD: 0912345678"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                placeholder="Ví dụ: 0912345678"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Email</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
               <input
                 type="email"
                 value={editingItem.email || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, email: e.target.value })}
-                className="w-full p-2.5 border rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
                 placeholder="email@domain.com"
               />
             </div>
@@ -372,21 +372,21 @@ export function ShippingContactsPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Đơn vị vận chuyển</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn vị vận chuyển</label>
               <input
                 type="text"
                 value={editingItem.carrierCompany || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, carrierCompany: e.target.value })}
-                className="w-full p-2.5 border rounded-lg"
-                placeholder="VD: Viettel Post, GHN..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                placeholder="Ví dụ: Viettel Post, GHN..."
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Vai trò</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Vai trò</label>
               <select
                 value={editingItem.role || 'TÀI_XẾ'}
                 onChange={(e) => setEditingItem({ ...editingItem, role: e.target.value as any })}
-                className="w-full p-2.5 border rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               >
                 <option value="TÀI_XẾ">Tài xế giao hàng</option>
                 <option value="ĐIỀU_PHỐI_VIÊN">Điều phối viên</option>
@@ -397,50 +397,51 @@ export function ShippingContactsPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Biển số xe</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Biển số xe</label>
               <input
                 type="text"
                 value={editingItem.vehiclePlate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, vehiclePlate: e.target.value })}
-                className="w-full p-2.5 border rounded-lg font-mono"
-                placeholder="VD: 29C-123.45"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                placeholder="Ví dụ: 29C-123.45"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Loại phương tiện</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại phương tiện</label>
               <input
                 type="text"
                 value={editingItem.vehicleType || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, vehicleType: e.target.value })}
-                className="w-full p-2.5 border rounded-lg"
-                placeholder="VD: Xe tải 1.5 tấn"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                placeholder="Ví dụ: Xe tải 1.5 tấn"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">Ghi chú</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
               rows={2}
-              className="w-full p-2.5 border rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              placeholder="Ghi chú thêm..."
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-3 border-t">
+          <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded-lg"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium"
             >
-              Hủy Bỏ
+              Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg"
+              className="px-5 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg text-sm shadow-sm"
             >
-              Lưu Liên Hệ
+              Lưu thông tin
             </button>
           </div>
         </form>

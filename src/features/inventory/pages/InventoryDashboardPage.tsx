@@ -54,11 +54,11 @@ export function InventoryDashboardPage() {
     }
 
     return [
-      { id: '1', type: 'IMPORT', code: 'IM-2026-981', item: 'Sữa tươi Vinamilk 1L', qty: 200, time: '10 phút trước', user: 'Lưu hữu phước' },
-      { id: '2', type: 'EXPORT', code: 'SOUT-2026-001', item: 'Nước ngọt Coca-Cola 320ml', qty: -48, time: '25 phút trước', user: 'Nguyễn Văn thủ kho' },
-      { id: '3', type: 'ADJUST', code: 'IADJ-2026-001', item: 'Gạo tám thơm điện biên 5kg', qty: 5, time: '1 giờ trước', user: 'Lưu hữu phước' },
-      { id: '4', type: 'IMPORT', code: 'IM-2026-982', item: 'Điện thoại Samsung Galaxy S24 Ultra', qty: 15, time: '2 giờ trước', user: 'Trần Thị kho' },
-      { id: '5', type: 'EXPORT', code: 'SOUT-2026-002', item: 'Bánh quy Oreo 248g', qty: -30, time: '3 giờ trước', user: 'Nguyễn Văn thủ kho' },
+      { id: '1', type: 'IMPORT', code: 'IM-2026-981', item: 'Sữa tươi Vinamilk 1L', qty: 200, time: '10 phút trước', user: 'Lưu Hữu Phước' },
+      { id: '2', type: 'EXPORT', code: 'SOUT-2026-001', item: 'Nước ngọt Coca-Cola 320ml', qty: -48, time: '25 phút trước', user: 'Nguyễn Văn Thủ Kho' },
+      { id: '3', type: 'ADJUST', code: 'IADJ-2026-001', item: 'Gạo tám thơm Điện Biên 5kg', qty: 5, time: '1 giờ trước', user: 'Lưu Hữu Phước' },
+      { id: '4', type: 'IMPORT', code: 'IM-2026-982', item: 'Điện thoại Samsung Galaxy S24 Ultra', qty: 15, time: '2 giờ trước', user: 'Trần Thị Kho' },
+      { id: '5', type: 'EXPORT', code: 'SOUT-2026-002', item: 'Bánh quy Oreo 248g', qty: -30, time: '3 giờ trước', user: 'Nguyễn Văn Thủ Kho' },
     ];
   }, [stockLedger]);
 
@@ -81,7 +81,7 @@ export function InventoryDashboardPage() {
 
     if (entries.length === 0) {
       return [
-        { name: 'Sữa & Thực phẩm', value: 450000000, percentage: 36 },
+        { name: 'Sữa & thực phẩm', value: 450000000, percentage: 36 },
         { name: 'Nước giải khát', value: 300000000, percentage: 24 },
         { name: 'Thiết bị điện tử', value: 350000000, percentage: 28 },
         { name: 'Đồ gia dụng & khác', value: 150000000, percentage: 12 },
@@ -92,26 +92,26 @@ export function InventoryDashboardPage() {
   }, [products]);
 
   const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
+    return `${val.toLocaleString('vi-VN')} đ`;
   };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Báo cáo tổng quan kho hàng</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Xem chỉ số thống kê, giá trị tài sản lưu kho, danh mục sản phẩm và biến động xuất nhập tồn thời gian thực.
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          Xem chỉ số thống kê, giá trị tài sản lưu kho, danh mục sản phẩm và biến động xuất nhập tồn thời gian thực
         </p>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="p-6 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 flex items-center gap-4">
-          <div className="p-3 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 rounded-xl">
+          <div className="p-3 bg-primary/10 text-primary rounded-xl">
             <Package className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Tổng số mặt hàng (SKUs)</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Tổng số mặt hàng</span>
             <h3 className="text-2xl font-bold font-mono text-gray-900 dark:text-white">{stats.totalSkus}</h3>
           </div>
         </div>
@@ -132,7 +132,7 @@ export function InventoryDashboardPage() {
           </div>
           <div>
             <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Tổng số lượng tồn kho</span>
-            <h3 className="text-2xl font-bold font-mono text-gray-900 dark:text-white">{stats.totalStockQty.toLocaleString()} sản phẩm</h3>
+            <h3 className="text-2xl font-bold font-mono text-gray-900 dark:text-white">{stats.totalStockQty.toLocaleString('vi-VN')} sản phẩm</h3>
           </div>
         </div>
 
@@ -142,7 +142,7 @@ export function InventoryDashboardPage() {
           </div>
           <div>
             <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Cảnh báo sắp hết hàng</span>
-            <h3 className="text-2xl font-bold font-mono text-red-600 dark:text-red-400">{stats.lowStockCount} SKUs</h3>
+            <h3 className="text-2xl font-bold font-mono text-red-600 dark:text-red-400">{stats.lowStockCount} mặt hàng</h3>
           </div>
         </div>
       </div>
@@ -152,9 +152,9 @@ export function InventoryDashboardPage() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Activity className="w-5 h-5 text-emerald-600" /> Phân Phối Giá Trị Tồn Kho Theo Danh Mục
+              <Activity className="w-5 h-5 text-primary" /> Phân phối giá trị tồn kho theo danh mục
             </h2>
-            <p className="text-xs text-gray-500">Tỷ trọng giá trị tài sản kho theo nhóm danh mục chính</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Tỷ trọng giá trị tài sản kho theo nhóm danh mục chính</p>
           </div>
         </div>
 
@@ -163,7 +163,7 @@ export function InventoryDashboardPage() {
             <div key={cat.name} className="space-y-1.5">
               <div className="flex justify-between items-center text-xs font-semibold">
                 <span className="text-gray-700 dark:text-gray-300">{cat.name}</span>
-                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+                <span className="font-mono text-primary font-bold">
                   {formatCurrency(cat.value)} ({cat.percentage}%)
                 </span>
               </div>
@@ -171,7 +171,7 @@ export function InventoryDashboardPage() {
                 <div
                   className={`h-full rounded-full transition-all duration-500 ${
                     idx === 0
-                      ? 'bg-emerald-500'
+                      ? 'bg-primary'
                       : idx === 1
                       ? 'bg-blue-500'
                       : idx === 2
@@ -191,7 +191,7 @@ export function InventoryDashboardPage() {
         {/* Left: Recent Activities */}
         <div className="lg:col-span-2 p-6 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800">
           <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <RefreshCw className="w-5 h-5 text-emerald-600" /> Biến Động Nhập Xuất Tồn Gần Đây
+            <RefreshCw className="w-5 h-5 text-primary" /> Biến động xuất nhập tồn gần đây
           </h2>
           <div className="space-y-4">
             {recentActivities.map((act) => (
@@ -208,7 +208,7 @@ export function InventoryDashboardPage() {
                   </span>
                   <div>
                     <p className="font-semibold text-sm text-gray-900 dark:text-white">{act.item}</p>
-                    <span className="text-xs font-mono text-gray-500">{act.code} - {act.user}</span>
+                    <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{act.code} - {act.user}</span>
                   </div>
                 </div>
                 <div className="text-right">
@@ -225,7 +225,7 @@ export function InventoryDashboardPage() {
         {/* Right: Low Stock Alerts */}
         <div className="p-6 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800">
           <h2 className="text-base font-bold mb-4 flex items-center gap-2 text-red-600 dark:text-red-400">
-            <AlertTriangle className="w-5 h-5" /> Báo Động Hết Hàng
+            <AlertTriangle className="w-5 h-5" /> Báo động hết hàng
           </h2>
           <div className="space-y-3">
             {stats.lowStockItems.length > 0 ? (
@@ -233,26 +233,26 @@ export function InventoryDashboardPage() {
                 <div key={p.id} className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 rounded-xl flex justify-between items-center">
                   <div>
                     <p className="font-semibold text-xs text-red-900 dark:text-red-200">{p.name}</p>
-                    <span className="text-xs text-red-700 dark:text-red-300">Tồn: {p.onHand} (Min: {p.minStock || 5})</span>
+                    <span className="text-xs text-red-700 dark:text-red-300">Tồn: {p.onHand} (tối thiểu: {p.minStock || 5})</span>
                   </div>
-                  <span className="text-[10px] px-2 py-0.5 bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200 rounded-full font-bold">Gấp</span>
+                  <span className="text-[10px] px-2 py-0.5 bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200 rounded-full font-bold">Khẩn cấp</span>
                 </div>
               ))
             ) : (
               <>
                 <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 rounded-xl flex justify-between items-center">
                   <div>
-                    <p className="font-semibold text-xs text-red-900 dark:text-red-200">Coca Cola Lon 320ml</p>
-                    <span className="text-xs text-red-700 dark:text-red-300">Tồn: 8 lon (Định mức min: 50)</span>
+                    <p className="font-semibold text-xs text-red-900 dark:text-red-200">Coca-Cola lon 320ml</p>
+                    <span className="text-xs text-red-700 dark:text-red-300">Tồn: 8 lon (định mức tối thiểu: 50)</span>
                   </div>
-                  <span className="text-[10px] px-2 py-0.5 bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200 rounded-full font-bold">Gấp</span>
+                  <span className="text-[10px] px-2 py-0.5 bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200 rounded-full font-bold">Khẩn cấp</span>
                 </div>
                 <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 rounded-xl flex justify-between items-center">
                   <div>
                     <p className="font-semibold text-xs text-red-900 dark:text-red-200">Dầu ăn Simply 1L</p>
-                    <span className="text-xs text-red-700 dark:text-red-300">Tồn: 12 chai (Định mức min: 40)</span>
+                    <span className="text-xs text-red-700 dark:text-red-300">Tồn: 12 chai (định mức tối thiểu: 40)</span>
                   </div>
-                  <span className="text-[10px] px-2 py-0.5 bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200 rounded-full font-bold">Gấp</span>
+                  <span className="text-[10px] px-2 py-0.5 bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200 rounded-full font-bold">Khẩn cấp</span>
                 </div>
               </>
             )}
@@ -262,5 +262,4 @@ export function InventoryDashboardPage() {
     </div>
   );
 }
-
 export default InventoryDashboardPage;

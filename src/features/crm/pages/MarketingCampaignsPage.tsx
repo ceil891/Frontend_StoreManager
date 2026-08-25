@@ -23,6 +23,13 @@ const statusStyles: Record<Campaign['status'], string> = {
   TẠM_DỪNG: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
 };
 
+const statusLabels: Record<Campaign['status'], string> = {
+  ĐANG_LÊN_KẾ_HOẠCH: 'Đang lên kế hoạch',
+  ĐANG_CHẠY: 'Đang diễn ra',
+  ĐÃ_KẾT_THÚC: 'Đã kết thúc',
+  TẠM_DỪNG: 'Tạm dừng',
+};
+
 import { axiosClient } from '@/shared/lib/axiosClient';
 
 export function MarketingCampaignsPage() {
@@ -80,27 +87,38 @@ export function MarketingCampaignsPage() {
 
   const columns = useMemo<ColumnDef<Campaign>[]>(
     () => [
-      { accessorKey: 'code', header: 'Mã chiến dịch' },
-      { accessorKey: 'name', header: 'Tên chiến dịch' },
+      {
+        accessorKey: 'code',
+        header: 'Mã chiến dịch',
+        cell: (info) => <span className="font-mono font-bold text-primary">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'name',
+        header: 'Tên chiến dịch',
+        cell: (info) => <span className="font-medium text-gray-900 dark:text-white">{info.getValue() as string}</span>,
+      },
       {
         accessorKey: 'budget',
         header: 'Ngân sách',
         cell: (info) => (
-          <span className="font-medium text-gray-900 dark:text-white">
-            {Number(info.getValue() ?? 0).toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}
+          <span className="font-medium text-gray-900 dark:text-white font-mono">
+            {Number(info.getValue() ?? 0).toLocaleString('vi-VN')} đ
           </span>
         ),
       },
-      { accessorKey: 'startDate', header: 'Bắt đầu', cell: (info) => <span>{String(info.getValue() || '')}</span> },
-      { accessorKey: 'endDate', header: 'Kết thúc', cell: (info) => <span>{String(info.getValue() || '')}</span> },
+      { accessorKey: 'startDate', header: 'Bắt đầu', cell: (info) => <span className="font-mono text-sm">{String(info.getValue() || '')}</span> },
+      { accessorKey: 'endDate', header: 'Kết thúc', cell: (info) => <span className="font-mono text-sm">{String(info.getValue() || '')}</span> },
       {
         accessorKey: 'status',
         header: 'Trạng thái',
-        cell: (info) => (
-          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusStyles[info.getValue<Campaign['status']>()] || 'bg-gray-100 text-gray-800'}`}>
-            {String(info.getValue() || '').replace(/_/g, ' ')}
-          </span>
-        ),
+        cell: (info) => {
+          const val = info.getValue<Campaign['status']>();
+          return (
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusStyles[val] || 'bg-gray-100 text-gray-800'}`}>
+              {statusLabels[val] || val}
+            </span>
+          );
+        },
       },
       {
         id: 'actions',
@@ -125,7 +143,7 @@ export function MarketingCampaignsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selected?.code || !selected?.name) return toast.error('Vui lòng nhập Mã và Tên chiến dịch');
+    if (!selected?.code || !selected?.name) return toast.error('Vui lòng nhập mã và tên chiến dịch');
 
     if (!selected.startDate) {
       return toast.error('Vui lòng chọn ngày bắt đầu chiến dịch!');
@@ -137,7 +155,7 @@ export function MarketingCampaignsPage() {
 
     // Validate: ngày kết thúc phải >= ngày bắt đầu
     if (selected.startDate && selected.endDate && selected.endDate < selected.startDate) {
-      toast.error('❌ Ngày kết thúc không thể nhỏ hơn ngày bắt đầu! Vui lòng kiểm tra lại.');
+      toast.error('Ngày kết thúc không thể nhỏ hơn ngày bắt đầu. Vui lòng kiểm tra lại.');
       return;
     }
 
@@ -165,7 +183,7 @@ export function MarketingCampaignsPage() {
         toast.success(`Cập nhật chiến dịch ${selected.name} thành công!`);
       } else {
         await addMarketingCampaign(payload as any);
-        toast.success(`Tạo mới chiến dịch ${selected.name} thành công!`);
+        toast.success(`Thêm mới chiến dịch ${selected.name} thành công!`);
       }
       setModalOpen(false);
       fetchMarketingCampaigns();
@@ -176,13 +194,17 @@ export function MarketingCampaignsPage() {
   };
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <h1 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Chiến dịch Marketing</h1>
-      <div className="flex justify-between items-center mb-3">
-        <div className="text-sm text-gray-600 dark:text-gray-400">Tổng số chiến dịch: {data.length}</div>
-        <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">
-          <Plus size={16} /> Thêm chiến dịch
-        </button>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Chiến dịch marketing</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Tổng số chiến dịch: {data.length}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow-sm">
+            <Plus size={16} /> Thêm mới chiến dịch
+          </button>
+        </div>
       </div>
       <div className="flex mb-4">
         <div className="relative flex-1 max-w-md">
@@ -190,8 +212,8 @@ export function MarketingCampaignsPage() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Tìm kiếm mã, tên hoặc trạng thái..."
-            className="w-full pl-10 pr-3 py-2 border rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary"
+            placeholder="Tìm kiếm theo mã, tên hoặc trạng thái..."
+            className="w-full pl-10 pr-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary text-sm"
           />
         </div>
       </div>
@@ -200,93 +222,108 @@ export function MarketingCampaignsPage() {
       {/* Drawer chi tiết */}
       <Modal isOpen={!!selected && !isModalOpen} onClose={() => setSelected(null)} title="Chi tiết chiến dịch" width="max-w-lg">
         {selected && (
-          <div className="space-y-2 text-sm">
-            <p><strong>Mã:</strong> {selected.code}</p>
-            <p><strong>Tên:</strong> {selected.name}</p>
-            <p><strong>Ngân sách:</strong> {Number(selected.budget || 0).toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</p>
-            <p><strong>Thời gian:</strong> {selected.startDate} → {selected.endDate}</p>
-            <p><strong>Trạng thái:</strong> {(selected.status || '').replace(/_/g, ' ')}</p>
+          <div className="space-y-3 text-sm">
+            <div>
+              <span className="text-xs text-gray-500 block">Mã chiến dịch</span>
+              <span className="font-mono font-bold text-primary">{selected.code}</span>
+            </div>
+            <div>
+              <span className="text-xs text-gray-500 block">Tên chiến dịch</span>
+              <span className="font-medium text-gray-900 dark:text-white">{selected.name}</span>
+            </div>
+            <div>
+              <span className="text-xs text-gray-500 block">Ngân sách</span>
+              <span className="font-bold text-gray-900 dark:text-white font-mono">{Number(selected.budget || 0).toLocaleString('vi-VN')} đ</span>
+            </div>
+            <div>
+              <span className="text-xs text-gray-500 block">Thời gian diễn ra</span>
+              <span className="font-mono text-gray-700 dark:text-gray-300">{selected.startDate} → {selected.endDate}</span>
+            </div>
+            <div>
+              <span className="text-xs text-gray-500 block">Trạng thái</span>
+              <span className="font-semibold">{statusLabels[selected.status] || selected.status}</span>
+            </div>
           </div>
         )}
       </Modal>
 
       {/* Modal Thêm / Sửa */}
-      <Modal isOpen={isModalOpen} onClose={() => setModalOpen(false)} title={isEdit ? 'Chỉnh sửa chiến dịch' : 'Thêm chiến dịch'} width="max-w-lg">
+      <Modal isOpen={isModalOpen} onClose={() => setModalOpen(false)} title={isEdit ? 'Cập nhật chiến dịch' : 'Thêm mới chiến dịch'} width="max-w-lg">
         <form onSubmit={handleSave} className="space-y-4 p-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Mã chiến dịch *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã chiến dịch *</label>
               <input
                 type="text"
                 value={selected?.code || ''}
                 onChange={e => setSelected({ ...selected!, code: e.target.value })}
-                className="w-full border rounded px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
                 disabled={isEdit}
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Tên chiến dịch *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên chiến dịch *</label>
               <input
                 type="text"
                 value={selected?.name || ''}
                 onChange={e => setSelected({ ...selected!, name: e.target.value })}
-                className="w-full border rounded px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 required
               />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Ngân sách (VND) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngân sách (VNĐ) *</label>
               <input
                 type="number"
                 value={selected?.budget || 0}
                 onChange={e => setSelected({ ...selected!, budget: Number(e.target.value) })}
-                className="w-full border rounded px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Trạng thái *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái *</label>
               <select
                 value={selected?.status || 'ĐANG_LÊN_KẾ_HOẠCH'}
                 onChange={e => setSelected({ ...selected!, status: e.target.value as Campaign['status'] })}
-                className="w-full border rounded px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
               >
-                <option value="ĐANG_LÊN_KẾ_HOẠCH">ĐANG LÊN KẾ HOẠCH</option>
-                <option value="ĐANG_CHẠY">ĐANG CHẠY</option>
-                <option value="ĐÃ_KẾT_THÚC">ĐÃ KẾT THÚC</option>
-                <option value="TẠM_DỪNG">TẠM DỪNG</option>
+                <option value="ĐANG_LÊN_KẾ_HOẠCH">Đang lên kế hoạch</option>
+                <option value="ĐANG_CHẠY">Đang diễn ra</option>
+                <option value="ĐÃ_KẾT_THÚC">Đã kết thúc</option>
+                <option value="TẠM_DỪNG">Tạm dừng</option>
               </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Ngày bắt đầu *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày bắt đầu *</label>
               <input
                 type="date"
                 value={selected?.startDate || ''}
                 onChange={e => setSelected({ ...selected!, startDate: e.target.value })}
-                className="w-full border rounded px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Ngày kết thúc *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày kết thúc *</label>
               <input
                 type="date"
                 min={selected?.startDate || undefined}
                 value={selected?.endDate || ''}
                 onChange={e => setSelected({ ...selected!, endDate: e.target.value })}
-                className="w-full border rounded px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
                 required
               />
             </div>
           </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 border rounded hover:bg-gray-100 text-sm">Hủy</button>
-            <button type="submit" className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded text-sm">Lưu</button>
+          <div className="flex justify-end gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+            <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm">Hủy bỏ</button>
+            <button type="submit" className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm">{isEdit ? 'Lưu thông tin' : 'Thêm mới'}</button>
           </div>
         </form>
       </Modal>

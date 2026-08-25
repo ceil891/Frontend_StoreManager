@@ -483,8 +483,8 @@ export function WarehouseZonesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => !isSaving && setIsModalOpen(false)}
-        title={modalMode === 'create' ? '📦 Khai báo phân khu kho mới' : '⚙️ Cập nhật thông tin phân khu'}
-        width="max-w-xl"
+        title={modalMode === 'create' ? 'Khai báo phân khu kho mới' : 'Cập nhật thông tin phân khu'}
+        size="erp"
       >
         <form onSubmit={handleSave} className="space-y-4 text-sm relative">
           {/* Overlay spinner when saving */}

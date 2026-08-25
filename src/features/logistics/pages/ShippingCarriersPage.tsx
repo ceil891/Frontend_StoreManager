@@ -41,13 +41,13 @@ export interface CarrierRecord {
 }
 
 const AVAILABLE_SERVICES = [
-  { id: 'Standard', label: 'Standard (Tiêu chuẩn)' },
-  { id: 'Express', label: 'Express (Hỏa tốc)' },
-  { id: 'Same Day', label: 'Same Day (Trong ngày)' },
-  { id: 'Next Day', label: 'Next Day (Qua ngày)' },
-  { id: 'COD', label: 'COD (Thu hộ tiền)' },
-  { id: 'International', label: 'International (Quốc tế)' },
-  { id: 'Cold Chain', label: 'Cold Chain (Bảo quản lạnh)' }
+  { id: 'Standard', label: 'Tiêu chuẩn' },
+  { id: 'Express', label: 'Hỏa tốc' },
+  { id: 'Same Day', label: 'Trong ngày' },
+  { id: 'Next Day', label: 'Qua ngày' },
+  { id: 'COD', label: 'Thu hộ tiền COD' },
+  { id: 'International', label: 'Quốc tế' },
+  { id: 'Cold Chain', label: 'Bảo quản lạnh' }
 ];
 
 const COVERAGE_OPTIONS = ['Toàn quốc', 'Miền Bắc', 'Miền Trung', 'Miền Nam', 'Quốc tế'];
@@ -105,9 +105,9 @@ export function ShippingCarriersPage() {
             carrierCode: item.carrierCode || `SHIP${codeNum}`,
             carrierName: item.carrierName || 'Đơn vị vận chuyển',
             logoUrl: item.logoUrl || PRESET_LOGOS[idx % PRESET_LOGOS.length].logo,
-            phone: item.phone || '1900 8888',
-            email: item.email || `cskh@carrier${item.id}.vn`,
-            website: item.website || `https://carrier${item.id}.vn`,
+            phone: item.phone || '',
+            email: item.email || '',
+            website: item.website || '',
             contactPerson: item.contactPerson || 'Nguyễn Văn A',
             country: 'Việt Nam',
             province: item.province || 'Hà Nội',
@@ -215,14 +215,15 @@ export function ShippingCarriersPage() {
       errs.carrierName = 'Vui lòng nhập tên đối tác vận chuyển.';
     }
 
-    if (!formState.phone?.trim()) {
-      errs.phone = 'Vui lòng nhập Hotline / Tổng đài hỗ trợ.';
-    } else if (!/^[0-9\s-]{8,15}$/.test(formState.phone.trim())) {
-      errs.phone = 'Hotline hỗ trợ không đúng định dạng (VD: 1900 8888 hoặc 0988123456).';
+    const cleanPhone = formState.phone?.trim() || '';
+    if (!cleanPhone) {
+      errs.phone = 'Vui lòng nhập Hotline / Số điện thoại hỗ trợ.';
+    } else if (!/^(0[35789]\d{8}|(1900|1800)\d{4,6}|02\d{9})$/.test(cleanPhone)) {
+      errs.phone = 'Số điện thoại phải là đầu số di động VN (03, 05, 07, 08, 09 đủ 10 số) hoặc số hotline tổng đài hợp lệ (VD: 0912345678, 19008888).';
     }
 
     if (formState.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formState.email.trim())) {
-      errs.email = 'Email liên hệ không đúng định dạng (VD: cskh@carrier.vn).';
+      errs.email = 'Email liên hệ không đúng định dạng (VD: admin@storemanager.com).';
     }
 
     if (formState.website && !/^(https?:\/\/)?([\w.-]+)\.([a-z]{2,})(:\d{1,5})?(\/.*)?$/i.test(formState.website.trim())) {
@@ -256,9 +257,9 @@ export function ShippingCarriersPage() {
       carrierCode: formState.carrierCode || generateNextCarrierCode(),
       carrierName: formState.carrierName || 'Đối tác vận chuyển',
       logoUrl: formState.logoUrl || PRESET_LOGOS[0].logo,
-      phone: formState.phone || '1900 8888',
-      email: formState.email || 'cskh@partner.vn',
-      website: formState.website || 'https://partner.vn',
+      phone: formState.phone?.trim() || '',
+      email: formState.email?.trim() || '',
+      website: formState.website?.trim() || '',
       contactPerson: formState.contactPerson || 'Nguyễn Văn A (Đầu mối đối tác)',
       country: formState.country || 'Việt Nam',
       province: formState.province || 'Hà Nội',
@@ -291,9 +292,10 @@ export function ShippingCarriersPage() {
         note: recordToSave.notes
       };
 
+      const isNumericId = recordToSave.id && /^\d+$/.test(String(recordToSave.id));
       if (modalMode === 'create') {
         await axiosClient.post('/logistics/carriers', payload);
-      } else {
+      } else if (isNumericId) {
         await axiosClient.put(`/logistics/carriers/${recordToSave.id}`, payload);
       }
     } catch (err) {
@@ -328,15 +330,18 @@ export function ShippingCarriersPage() {
   const handleDelete = async (id: string) => {
     const target = data.find(item => item.id === id);
     if (target && target.contractStatus === 'ACTIVE') {
-      toast.error('Không thể xóa đối tác vận chuyển đang ở trạng thái Hoạt động! Vui lòng chuyển trạng thái sang Tạm ngưng/Hết hạn hợp đồng trước khi xóa.');
+      toast.error('Không thể xóa đối tác đang hoạt động! Vui lòng chuyển trạng thái hợp đồng trước khi xóa.');
       return;
     }
 
-    if (confirm('Bạn có chắc chắn muốn xóa đối tác vận chuyển này?')) {
-      try {
-        await axiosClient.delete(`/logistics/carriers/${id}`);
-      } catch (err) {
-        console.warn('API delete carrier failed, applying local state update:', err);
+    if (confirm('Bạn có chắc chắn muốn xóa đối tác này?')) {
+      const isNumericId = /^\d+$/.test(String(id));
+      if (isNumericId) {
+        try {
+          await axiosClient.delete(`/logistics/carriers/${id}`);
+        } catch (err) {
+          console.warn('API delete carrier failed, applying local state update:', err);
+        }
       }
       setData(prev => {
         const next = prev.filter(item => item.id !== id);
@@ -523,21 +528,21 @@ export function ShippingCarriersPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Truck className="text-emerald-600" /> Đối tác vận chuyển
+            <Truck className="text-primary" /> Đối tác vận chuyển
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Quản lý danh mục hãng vận chuyển liên kết, cấu hình tích hợp API tự động tạo đơn và cam kết SLA.
+            Quản lý danh mục hãng vận chuyển liên kết, cấu hình tích hợp API tự động tạo đơn và cam kết SLA
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-50 transition-colors text-xs font-semibold shadow-sm">
-            <Download className="w-4 h-4" /> Xuất Ma Trận Đối Tác
+          <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-50 transition-colors text-xs font-medium shadow-sm">
+            <Download className="w-4 h-4" /> Xuất Excel ma trận đối tác
           </button>
           <button
             onClick={handleOpenCreate}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all text-xs font-bold shadow-md cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all text-xs font-semibold shadow-sm cursor-pointer"
           >
-            <Plus className="w-4 h-4" /> Thêm Đối Tác Vận Chuyển
+            <Plus className="w-4 h-4" /> Thêm mới đối tác vận chuyển
           </button>
         </div>
       </div>
@@ -548,25 +553,25 @@ export function ShippingCarriersPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm kiếm đối tác theo Mã đối tác, Tên công ty, Hotline, Đầu mối liên hệ, Email..."
+          placeholder="Tìm kiếm theo mã đối tác, tên công ty, hotline, đầu mối liên hệ, email..."
           className="w-full bg-transparent outline-none text-xs text-slate-800 dark:text-slate-200"
         />
       </div>
 
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 shadow-sm">
-          <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
           <span className="text-xs font-bold text-slate-500">Đang tải danh sách đối tác vận chuyển...</span>
         </div>
       ) : (
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
       )}
 
-      {/* Modal Xem hồ sơ đối tác vận chuyển căn giữa (TC-ALL-1) */}
+      {/* Modal Xem hồ sơ đối tác vận chuyển */}
       <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title={selected ? `Hồ sơ đối tác vận chuyển: ${selected.carrierName} (${selected.carrierCode})` : 'Thông tin đối tác'}
+        title={selected ? `Hồ sơ đối tác: ${selected.carrierName} (${selected.carrierCode})` : 'Thông tin đối tác'}
         width="max-w-xl"
       >
         {selected && (
@@ -592,13 +597,13 @@ export function ShippingCarriersPage() {
             {/* Address & SLA */}
             <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-800">
               <div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Địa chỉ trụ sở ERP</span>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Địa chỉ trụ sở</span>
                 <p className="font-medium text-slate-800 dark:text-slate-200">{selected.address}</p>
               </div>
               <div>
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Website chính thức</span>
                 {selected.website ? (
-                  <a href={selected.website} target="_blank" rel="noreferrer" className="text-emerald-600 underline font-medium">
+                  <a href={selected.website} target="_blank" rel="noreferrer" className="text-primary underline font-medium">
                     {selected.website}
                   </a>
                 ) : (
@@ -610,11 +615,11 @@ export function ShippingCarriersPage() {
             {/* SLA & COD */}
             <div className="grid grid-cols-3 gap-3">
               <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 text-center">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">SLA Giao Nội thành</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">SLA giao nội thành</span>
                 <p className="text-sm font-extrabold text-emerald-600 mt-1">{selected.slaInnerCity}</p>
               </div>
               <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 text-center">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">SLA Giao Ngoại tỉnh</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">SLA giao ngoại tỉnh</span>
                 <p className="text-sm font-extrabold text-blue-600 mt-1">{selected.slaOuterProvince}</p>
               </div>
               <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 text-center">
@@ -630,7 +635,7 @@ export function ShippingCarriersPage() {
                   <Server size={14} className="text-emerald-400" /> Cấu hình tích hợp API
                 </span>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selected.hasApi ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'}`}>
-                  {selected.hasApi ? `API ACTIVE (${selected.apiEnvironment})` : 'TẮT KẾT NỐI API'}
+                  {selected.hasApi ? `API kích hoạt (${selected.apiEnvironment})` : 'Tắt kết nối API'}
                 </span>
               </div>
               {selected.hasApi ? (
@@ -641,7 +646,7 @@ export function ShippingCarriersPage() {
                   </div>
                   <div>
                     <span className="text-slate-400 text-[11px]">Cơ chế đồng bộ:</span>
-                    <p className="text-emerald-400 font-semibold">Chủ động API Polling (Không dùng Webhook)</p>
+                    <p className="text-emerald-400 font-semibold">Chủ động API polling (không dùng webhook)</p>
                   </div>
                 </div>
               ) : (
@@ -651,7 +656,7 @@ export function ShippingCarriersPage() {
 
             {selected.notes && (
               <div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Ghi chú & Tài khoản đối soát</span>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Ghi chú & tài khoản đối soát</span>
                 <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 text-slate-700 dark:text-slate-300">
                   {selected.notes}
                 </div>
@@ -660,57 +665,56 @@ export function ShippingCarriersPage() {
             <div className="flex justify-end pt-4 border-t">
               <button
                 onClick={() => setSelected(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 font-bold rounded-lg text-slate-700"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 font-medium rounded-lg text-slate-700"
               >
-                Đóng Hộp Thoại
+                Đóng
               </button>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* Complete Redesigned ERP Carrier Form Modal */}
+      {/* Modal Thêm/Sửa đối tác */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm đơn vị vận chuyển đối tác (Carrier ERP)' : 'Cấu hình & Chỉnh sửa đối tác'}
+        title={modalMode === 'create' ? 'Thêm mới đơn vị vận chuyển đối tác' : 'Cập nhật đơn vị vận chuyển đối tác'}
       >
         <form onSubmit={handleSave} className="space-y-5 text-xs">
-          
           {/* Section 1: Basic Info */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-              <Building size={16} className="text-emerald-600" />
-              <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">
-                1. Thông tin cơ bản & Đầu mối liên hệ
+              <Building size={16} className="text-primary" />
+              <h4 className="font-bold text-slate-900 dark:text-white text-xs">
+                1. Thông tin cơ bản & đầu mối liên hệ
               </h4>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
                   <span>Mã đối tác *</span>
                   <span className="text-[10px] text-slate-400 font-normal flex items-center gap-0.5">
-                    <Lock size={10} /> Auto Generate
+                    <Lock size={10} /> Tự động tạo
                   </span>
                 </label>
                 <input
                   type="text"
                   value={formState.carrierCode || ''}
                   readOnly
-                  className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl font-mono font-bold text-slate-600 cursor-not-allowed text-xs"
+                  className="w-full p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono font-bold text-slate-600 dark:text-slate-400 cursor-not-allowed text-xs"
                 />
                 {formErrors.carrierCode && <p className="text-[11px] text-rose-500 mt-1">{formErrors.carrierCode}</p>}
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Hotline hỗ trợ / CSKH *</label>
+                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Hotline hỗ trợ / CSKH *</label>
                 <input
                   type="text"
                   value={formState.phone || ''}
                   onChange={(e) => setFormState({ ...formState, phone: e.target.value })}
-                  className={`w-full p-2.5 bg-slate-50 border rounded-xl font-mono text-xs focus:outline-none focus:border-slate-900 ${
-                    formErrors.phone ? 'border-rose-500 bg-rose-50' : 'border-slate-200'
+                  className={`w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono text-xs focus:outline-none focus:border-slate-900 ${
+                    formErrors.phone ? 'border-rose-500 bg-rose-50' : 'border-slate-200 dark:border-slate-700'
                   }`}
                   placeholder="1900 8888 hoặc 0988123456"
                 />
@@ -719,13 +723,13 @@ export function ShippingCarriersPage() {
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Tên đối tác vận chuyển *</label>
+              <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Tên đối tác vận chuyển *</label>
               <input
                 type="text"
                 value={formState.carrierName || ''}
                 onChange={(e) => setFormState({ ...formState, carrierName: e.target.value })}
-                className={`w-full p-2.5 bg-slate-50 border rounded-xl text-xs focus:outline-none focus:border-slate-900 ${
-                  formErrors.carrierName ? 'border-rose-500 bg-rose-50' : 'border-slate-200'
+                className={`w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl text-xs focus:outline-none focus:border-slate-900 ${
+                  formErrors.carrierName ? 'border-rose-500 bg-rose-50' : 'border-slate-200 dark:border-slate-700'
                 }`}
                 placeholder="Ví dụ: Viettel Post, Giao Hàng Tiết Kiệm, GHN..."
               />
@@ -733,13 +737,13 @@ export function ShippingCarriersPage() {
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Email đối soát / Liên hệ</label>
+              <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Email đối soát / liên hệ</label>
               <input
                 type="email"
                 value={formState.email || ''}
                 onChange={(e) => setFormState({ ...formState, email: e.target.value })}
-                className={`w-full p-2.5 bg-slate-50 border rounded-xl font-mono text-xs focus:outline-none focus:border-slate-900 ${
-                  formErrors.email ? 'border-rose-500 bg-rose-50' : 'border-slate-200'
+                className={`w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl font-mono text-xs focus:outline-none focus:border-slate-900 ${
+                  formErrors.email ? 'border-rose-500 bg-rose-50' : 'border-slate-200 dark:border-slate-700'
                 }`}
                 placeholder="cskh@viettelpost.com.vn"
               />
@@ -749,30 +753,30 @@ export function ShippingCarriersPage() {
 
           {/* Section 2: Address */}
           <div className="space-y-3 pt-2">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-              <MapPin size={16} className="text-emerald-600" />
-              <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">
-                2. Địa chỉ trụ sở ERP (Phân rã hành chính)
+            <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+              <MapPin size={16} className="text-primary" />
+              <h4 className="font-bold text-slate-900 dark:text-white text-xs">
+                2. Địa chỉ trụ sở
               </h4>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Quốc gia</label>
+                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Quốc gia</label>
                 <input
                   type="text"
                   value="Việt Nam"
                   readOnly
-                  className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 cursor-not-allowed"
+                  className="w-full p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 cursor-not-allowed"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Tỉnh / Thành phố</label>
+                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Tỉnh / thành phố</label>
                 <select
                   value={formState.province || 'Hà Nội'}
                   onChange={(e) => setFormState({ ...formState, province: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-900 font-semibold"
+                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:border-slate-900 font-semibold text-slate-900 dark:text-white"
                 >
                   {VIETNAM_PROVINCES.map(p => (
                     <option key={p} value={p}>{p}</option>
@@ -781,25 +785,25 @@ export function ShippingCarriersPage() {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Quận / Huyện</label>
+                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Quận / huyện</label>
                 <input
                   type="text"
                   value={formState.district || ''}
                   onChange={(e) => setFormState({ ...formState, district: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-900"
+                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:border-slate-900 text-slate-900 dark:text-white"
                   placeholder="Quận Ba Đình, Cầu Giấy..."
                 />
               </div>
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Địa chỉ trụ sở chính * (Có gợi ý)</label>
+              <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Địa chỉ trụ sở chính *</label>
               <input
                 type="text"
                 list="area-carrier-suggestions"
                 value={formState.addressDetail || formState.address || ''}
                 onChange={(e) => setFormState({ ...formState, addressDetail: e.target.value, address: e.target.value })}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-900"
+                className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:border-slate-900 text-slate-900 dark:text-white"
                 placeholder="Nhập địa chỉ hoặc chọn gợi ý khu vực..."
               />
             </div>
@@ -807,16 +811,16 @@ export function ShippingCarriersPage() {
 
           {/* Section 3: Services & SLA */}
           <div className="space-y-3 pt-2">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-              <Truck size={16} className="text-emerald-600" />
-              <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">
-                3. Dịch vụ cung cấp, SLA & Trạng thái hợp đồng
+            <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+              <Truck size={16} className="text-primary" />
+              <h4 className="font-bold text-slate-900 dark:text-white text-xs">
+                3. Dịch vụ cung cấp, SLA & trạng thái hợp đồng
               </h4>
             </div>
 
             {/* Service Multi Select */}
             <div>
-              <label className="block font-bold text-slate-700 mb-2">Dịch vụ cung cấp (Multi-Select) *</label>
+              <label className="block font-medium text-slate-700 dark:text-slate-300 mb-2">Dịch vụ cung cấp *</label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {AVAILABLE_SERVICES.map(srv => {
                   const isChecked = (formState.serviceTypes || []).includes(srv.id);
@@ -826,11 +830,11 @@ export function ShippingCarriersPage() {
                       onClick={() => toggleServiceType(srv.id)}
                       className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-all ${
                         isChecked
-                          ? 'border-emerald-600 bg-emerald-50/80 text-emerald-900 font-bold'
-                          : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'
+                          ? 'border-primary bg-primary/10 text-primary font-bold'
+                          : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-slate-300'
                       }`}
                     >
-                      {isChecked ? <CheckSquare size={16} className="text-emerald-600" /> : <Square size={16} className="text-slate-400" />}
+                      {isChecked ? <CheckSquare size={16} className="text-primary" /> : <Square size={16} className="text-slate-400" />}
                       <span className="text-xs">{srv.label}</span>
                     </div>
                   );
@@ -841,7 +845,7 @@ export function ShippingCarriersPage() {
             {/* Coverage Regions & Status */}
             <div className="grid grid-cols-2 gap-3 pt-2">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Vùng giao hàng khả dụng</label>
+                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Vùng giao hàng khả dụng</label>
                 <div className="flex flex-wrap gap-1.5">
                   {COVERAGE_OPTIONS.map(reg => {
                     const isSelected = (formState.coverageRegions || []).includes(reg);
@@ -851,7 +855,7 @@ export function ShippingCarriersPage() {
                         type="button"
                         onClick={() => toggleCoverageRegion(reg)}
                         className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                          isSelected ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          isSelected ? 'bg-primary text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
                         }`}
                       >
                         {reg}
@@ -862,15 +866,15 @@ export function ShippingCarriersPage() {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Trạng thái hợp đồng 3PL *</label>
+                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Trạng thái hợp đồng *</label>
                 <select
                   value={formState.contractStatus || 'ACTIVE'}
                   onChange={(e) => setFormState({ ...formState, contractStatus: e.target.value as any })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-900"
+                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium focus:outline-none focus:border-slate-900 text-slate-900 dark:text-white"
                 >
-                  <option value="ACTIVE">🟢 Đang hoạt động (ACTIVE)</option>
-                  <option value="ON_HOLD">🟡 Tạm ngưng (ON_HOLD)</option>
-                  <option value="EXPIRED">🔴 Hết hạn hợp đồng (EXPIRED)</option>
+                  <option value="ACTIVE">Đang hoạt động</option>
+                  <option value="ON_HOLD">Tạm ngưng</option>
+                  <option value="EXPIRED">Hết hạn hợp đồng</option>
                 </select>
               </div>
             </div>
@@ -878,23 +882,23 @@ export function ShippingCarriersPage() {
             {/* SLA & Vehicles */}
             <div className="grid grid-cols-3 gap-3 pt-2">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Số lượng phương tiện</label>
+                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Số lượng phương tiện</label>
                 <input
                   type="text"
                   value={formState.slaInnerCity || ''}
                   onChange={(e) => setFormState({ ...formState, slaInnerCity: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
+                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
                   placeholder="10 phương tiện"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Thời gian giao tối đa (giờ)</label>
+                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Thời gian giao tối đa (giờ)</label>
                 <input
                   type="text"
                   value={formState.slaOuterProvince || ''}
                   onChange={(e) => setFormState({ ...formState, slaOuterProvince: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
+                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
                   placeholder="24 giờ"
                 />
               </div>
@@ -902,10 +906,10 @@ export function ShippingCarriersPage() {
               <div className="flex items-center pt-5">
                 <label
                   onClick={() => setFormState({ ...formState, supportCod: !formState.supportCod })}
-                  className="flex items-center gap-2 cursor-pointer select-none font-bold text-slate-800"
+                  className="flex items-center gap-2 cursor-pointer select-none font-medium text-slate-800 dark:text-slate-200"
                 >
-                  {formState.supportCod ? <CheckSquare size={18} className="text-emerald-600" /> : <Square size={18} className="text-slate-400" />}
-                  <span>☑ Hỗ trợ COD</span>
+                  {formState.supportCod ? <CheckSquare size={18} className="text-primary" /> : <Square size={18} className="text-slate-400" />}
+                  <span>Thu hộ tiền COD</span>
                 </label>
               </div>
             </div>
@@ -913,22 +917,22 @@ export function ShippingCarriersPage() {
 
           {/* Section 4: API Integration Toggle & Sub-fields */}
           <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
               <div className="flex items-center gap-2">
-                <Server size={16} className="text-emerald-600" />
-                <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">
-                  4. Đồng bộ API & Cấu hình kỹ thuật
+                <Server size={16} className="text-primary" />
+                <h4 className="font-bold text-slate-900 dark:text-white text-xs">
+                  4. Đồng bộ API & cấu hình kỹ thuật
                 </h4>
               </div>
 
               {/* Toggle Switch */}
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-700">Kết nối API:</span>
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Kết nối API:</span>
                 <button
                   type="button"
                   onClick={() => setFormState({ ...formState, hasApi: !formState.hasApi })}
-                  className={`px-3 py-1 rounded-full text-xs font-extrabold transition-all cursor-pointer ${
-                    formState.hasApi ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-200 text-slate-600'
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                    formState.hasApi ? 'bg-primary text-white shadow-sm' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
                   }`}
                 >
                   {formState.hasApi ? 'Có (Tự động)' : 'Không (Thủ công)'}
@@ -938,10 +942,10 @@ export function ShippingCarriersPage() {
 
             {/* Conditional API Fields */}
             {formState.hasApi ? (
-              <div className="p-4 rounded-2xl bg-slate-900 text-white space-y-3 animate-fade-in">
+              <div className="p-4 rounded-2xl bg-slate-900 text-white space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-300 mb-1">API Key *</label>
+                    <label className="block text-[11px] font-medium text-slate-300 mb-1">API Key *</label>
                     <input
                       type="text"
                       value={formState.apiKey || ''}
@@ -952,7 +956,7 @@ export function ShippingCarriersPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-300 mb-1">API Secret / Token *</label>
+                    <label className="block text-[11px] font-medium text-slate-300 mb-1">API Secret / Token *</label>
                     <input
                       type="password"
                       value={formState.apiSecret || ''}
@@ -965,7 +969,7 @@ export function ShippingCarriersPage() {
 
                 <div className="grid grid-cols-3 gap-3">
                   <div className="col-span-2">
-                    <label className="block text-[11px] font-bold text-slate-300 mb-1">API Base URL / Endpoint</label>
+                    <label className="block text-[11px] font-medium text-slate-300 mb-1">API Base URL / Endpoint</label>
                     <input
                       type="text"
                       value={formState.website || ''}
@@ -976,20 +980,20 @@ export function ShippingCarriersPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-300 mb-1">Môi trường</label>
+                    <label className="block text-[11px] font-medium text-slate-300 mb-1">Môi trường</label>
                     <select
                       value={formState.apiEnvironment || 'PRODUCTION'}
                       onChange={(e) => setFormState({ ...formState, apiEnvironment: e.target.value as any })}
-                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-emerald-400 focus:outline-none focus:border-emerald-500"
+                      className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-medium text-emerald-400 focus:outline-none focus:border-emerald-500"
                     >
-                      <option value="PRODUCTION">⚡ PRODUCTION (Vận hành)</option>
-                      <option value="SANDBOX">🧪 SANDBOX (Kiểm thử)</option>
+                      <option value="PRODUCTION">Vận hành (Production)</option>
+                      <option value="SANDBOX">Kiểm thử (Sandbox)</option>
                     </select>
                   </div>
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-slate-500 italic bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <p className="text-xs text-slate-500 italic bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
                 Khi chọn "Không", đơn hàng sẽ được xử lý giao dịch thủ công qua bưu cục mà không tự động gửi lệnh tạo đơn qua API.
               </p>
             )}
@@ -997,30 +1001,30 @@ export function ShippingCarriersPage() {
 
           {/* Section 5: Notes */}
           <div className="space-y-2 pt-2">
-            <label className="block font-bold text-slate-700 mb-1">Ghi chú đối tác</label>
+            <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Ghi chú đối tác</label>
             <textarea
               value={formState.notes || ''}
               onChange={(e) => setFormState({ ...formState, notes: e.target.value })}
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-900"
+              className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:border-slate-900 text-slate-900 dark:text-white"
               rows={2}
               placeholder="Ghi chú đối tác vận chuyển..."
             />
           </div>
 
           {/* Buttons */}
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-5 py-2.5 border border-slate-300 rounded-xl font-bold text-slate-700 hover:bg-slate-100 transition-colors"
+              className="px-5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
               Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl transition-all shadow-md cursor-pointer"
+              className="px-6 py-2.5 bg-primary hover:bg-primary-hover text-white font-medium rounded-xl transition-all shadow-md cursor-pointer"
             >
-              {modalMode === 'create' ? 'Lưu đối tác' : 'Lưu thay đổi'}
+              Lưu thông tin
             </button>
           </div>
         </form>

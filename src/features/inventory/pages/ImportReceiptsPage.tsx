@@ -39,6 +39,79 @@ export function ImportReceiptsPage() {
   const [editingReceipt, setEditingReceipt] = useState<Partial<ImportReceiptItem>>({});
   const [deletingReceipt, setDeletingReceipt] = useState<ImportReceiptItem | null>(null);
 
+  const [selectedPoDetails, setSelectedPoDetails] = useState<any | null>(null);
+  
+  useEffect(() => {
+    if (selectedReceipt && selectedReceipt.poNumber) {
+      axiosClient.get(`/purchase/orders?search=${selectedReceipt.poNumber}`)
+        .then((res: any) => {
+          const list = res.data?.content || res.content || res.data || [];
+          if (Array.isArray(list) && list.length > 0) {
+            const matched = list.find((o: any) => o.poCode === selectedReceipt.poNumber);
+            if (matched) {
+              setSelectedPoDetails(matched);
+            }
+          }
+        })
+        .catch(() => {});
+    } else {
+      setSelectedPoDetails(null);
+    }
+  }, [selectedReceipt]);
+
+  const handleReceiveRemaining = () => {
+    if (!selectedReceipt || !selectedPoDetails) return;
+    
+    const remainingLines = selectedReceipt.lines.map((line) => {
+      const prod = products.find(p => String(p.id) === String(line.productVariantId)) ||
+        products.find(p => p.sku === line.sku);
+      const prodName = line.productName || prod?.name || `Biến thể #${line.productVariantId}`;
+      const poLine = selectedPoDetails.details?.find((d: any) => d.productName === prodName || d.productCode === line.sku);
+      const orderedQty = poLine ? Number(poLine.quantity) : 0;
+      const receivedQty = Number(line.quantity);
+      const missingQty = Math.max(0, orderedQty - receivedQty);
+      return {
+        ...line,
+        quantity: missingQty,
+      };
+    }).filter(l => l.quantity > 0);
+
+    if (remainingLines.length === 0) {
+      toast.info('Tất cả các sản phẩm đã được nhận đủ so với PO!');
+      return;
+    }
+
+    setModalMode('create');
+    setEditingReceipt({
+      grnNumber: `GRN-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      poNumber: selectedReceipt.poNumber,
+      supplierName: selectedReceipt.supplierName,
+      supplierId: (selectedReceipt as any).supplierId,
+      receivingStore: selectedReceipt.receivingStore,
+      branchId: (selectedReceipt as any).branchId,
+      receivedDate: new Date().toISOString().split('T')[0],
+      totalItems: remainingLines.reduce((acc, l) => acc + l.quantity, 0),
+      acceptedItems: remainingLines.reduce((acc, l) => acc + l.quantity, 0),
+      rejectedItems: 0,
+      totalValuation: remainingLines.reduce((acc, l) => acc + (l.quantity * l.unitPrice), 0),
+      status: 'PENDING_INSPECTION',
+      inspectedBy: '',
+      notes: `Nhận bổ sung cho phiếu ${selectedReceipt.grnNumber}`,
+      lines: remainingLines.map(l => ({
+        productVariantId: l.productVariantId,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        targetBinId: l.targetBinId,
+        batchCode: `BATCH-${Date.now().toString().slice(-4)}`,
+        manufactureDate: new Date().toISOString().split('T')[0],
+        expiryDate: l.expiryDate || new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0]
+      }))
+    } as any);
+
+    setSelectedReceipt(null);
+    setIsModalOpen(true);
+  };
+
   const [suppliersList, setSuppliersList] = useState<any[]>([]);
   const [branchesList, setBranchesList] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
@@ -306,33 +379,50 @@ export function ImportReceiptsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveReceipt = (e: React.FormEvent) => {
+  const handleSaveReceipt = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingReceipt.grnNumber || !editingReceipt.supplierName) return;
 
-    if (modalMode === 'create') {
-      const newReceipt: Omit<ImportReceiptItem, 'id'> = {
-        grnNumber: editingReceipt.grnNumber,
-        poNumber: editingReceipt.poNumber || '',
-        supplierName: editingReceipt.supplierName,
-        supplierId: (editingReceipt as any).supplierId,
-        receivingStore: editingReceipt.receivingStore || 'Main Flagship / HQ',
-        branchId: (editingReceipt as any).branchId || 1,
-        receivedDate: editingReceipt.receivedDate || new Date().toISOString().split('T')[0],
-        totalItems: Number(editingReceipt.totalItems) || 0,
-        acceptedItems: Number(editingReceipt.acceptedItems) || 0,
-        rejectedItems: Number(editingReceipt.rejectedItems) || 0,
-        totalValuation: Number(editingReceipt.totalValuation) || 0,
-        status: editingReceipt.status as any || 'PENDING_INSPECTION',
-        inspectedBy: editingReceipt.inspectedBy || 'Warehouse Staff',
-        notes: editingReceipt.notes || '',
-        lines: editingReceipt.lines || []
-      };
-      addImportReceipt(newReceipt);
-    } else if (editingReceipt.id) {
-      updateImportReceipt(editingReceipt.id, editingReceipt);
+    if (editingReceipt.receivedDate) {
+      const selectedDate = new Date(editingReceipt.receivedDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (selectedDate < today) {
+        toast.error('Ngày dự kiến nhận không được nằm trong quá khứ!');
+        return;
+      }
     }
-    setIsModalOpen(false);
+
+    try {
+      if (modalMode === 'create') {
+        const newReceipt: Omit<ImportReceiptItem, 'id'> = {
+          grnNumber: editingReceipt.grnNumber,
+          poNumber: editingReceipt.poNumber || '',
+          supplierName: editingReceipt.supplierName,
+          supplierId: (editingReceipt as any).supplierId,
+          receivingStore: editingReceipt.receivingStore || 'Main Flagship / HQ',
+          branchId: (editingReceipt as any).branchId || 1,
+          receivedDate: editingReceipt.receivedDate || new Date().toISOString().split('T')[0],
+          totalItems: Number(editingReceipt.totalItems) || 0,
+          acceptedItems: Number(editingReceipt.acceptedItems) || 0,
+          rejectedItems: Number(editingReceipt.rejectedItems) || 0,
+          totalValuation: Number(editingReceipt.totalValuation) || 0,
+          status: editingReceipt.status as any || 'PENDING_INSPECTION',
+          inspectedBy: editingReceipt.inspectedBy || 'Warehouse Staff',
+          notes: editingReceipt.notes || '',
+          lines: editingReceipt.lines || []
+        };
+        await addImportReceipt(newReceipt);
+        toast.success(`Đã tạo phiếu nhập kho ${newReceipt.grnNumber} thành công!`);
+      } else if (editingReceipt.id) {
+        await updateImportReceipt(editingReceipt.id, editingReceipt);
+        toast.success(`Đã cập nhật phiếu nhập kho ${editingReceipt.grnNumber} thành công!`);
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || 'Lỗi khi lưu phiếu nhập kho';
+      toast.error(msg);
+    }
   };
 
   const handleDeleteConfirm = () => {
@@ -638,7 +728,9 @@ export function ImportReceiptsPage() {
                       <th className="p-2.5">Sản phẩm</th>
                       <th className="p-2.5">Vị trí Ô kệ (Bin)</th>
                       <th className="p-2.5">Mã lô (Batch)</th>
-                      <th className="p-2.5 text-right">SL</th>
+                      <th className="p-2.5 text-right">SL nhận</th>
+                      {selectedPoDetails && <th className="p-2.5 text-right">SL đặt PO</th>}
+                      {selectedPoDetails && <th className="p-2.5 text-right">Còn thiếu</th>}
                       <th className="p-2.5 text-right">Đơn giá</th>
                       <th className="p-2.5 text-right">Thành tiền</th>
                     </tr>
@@ -651,6 +743,11 @@ export function ImportReceiptsPage() {
                         const bin = warehouseBins.find(b => Number(b.id) === line.targetBinId);
                         const binLabel = line.targetBinCode || (bin ? `${bin.binCode} (${bin.areaName || bin.zoneCode || 'Kho'})` : `Ô kệ ID #${line.targetBinId}`);
                         const prodName = line.productName || prod?.name || `Biến thể #${line.productVariantId}`;
+                        
+                        const poLine = selectedPoDetails?.details?.find((d: any) => d.productName === prodName || d.productCode === line.sku);
+                        const orderedQty = poLine ? Number(poLine.quantity) : undefined;
+                        const missingQty = orderedQty !== undefined ? Math.max(0, orderedQty - line.quantity) : 0;
+                        
                         return (
                           <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                             <td className="p-2.5 font-medium text-gray-900 dark:text-white">
@@ -667,6 +764,12 @@ export function ImportReceiptsPage() {
                               {line.expiryDate && <div className="text-[10px] text-amber-600">HSD: {line.expiryDate}</div>}
                             </td>
                             <td className="p-2.5 text-right font-bold text-gray-900 dark:text-white">{line.quantity}</td>
+                            {selectedPoDetails && <td className="p-2.5 text-right text-gray-500 font-semibold">{orderedQty ?? '—'}</td>}
+                            {selectedPoDetails && (
+                              <td className="p-2.5 text-right font-bold text-red-500">
+                                {missingQty > 0 ? `${missingQty} sp` : 'Đủ'}
+                              </td>
+                            )}
                             <td className="p-2.5 text-right text-gray-600 dark:text-gray-300">{fmtVND(line.unitPrice)}</td>
                             <td className="p-2.5 text-right font-bold text-emerald-600">{fmtVND(line.quantity * line.unitPrice)}</td>
                           </tr>
@@ -674,7 +777,7 @@ export function ImportReceiptsPage() {
                       })
                     ) : (
                       <tr>
-                        <td colSpan={6} className="p-4 text-center text-gray-400 italic">
+                        <td colSpan={selectedPoDetails ? 8 : 6} className="p-4 text-center text-gray-400 italic">
                           Không có thông tin dòng hàng chi tiết
                         </td>
                       </tr>
@@ -727,9 +830,17 @@ export function ImportReceiptsPage() {
                   </button>
                 </>
               )}
+              {selectedReceipt.status === 'PARTIAL_ACCEPTANCE' && selectedPoDetails && (
+                <button
+                  onClick={handleReceiveRemaining}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow transition-colors text-sm min-w-[180px]"
+                >
+                  <Plus className="w-4 h-4" /> Nhận tiếp số lượng còn thiếu
+                </button>
+              )}
               <button
                 onClick={() => toast.success('Đã gửi yêu cầu in phiếu GRN!')}
-                className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
+                className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm font-semibold"
               >
                 <FileText className="w-4 h-4 inline mr-1" /> In phiếu GRN
               </button>

@@ -33,6 +33,11 @@ function normalizeCustomer(partial: Partial<CustomerProfile> & Pick<CustomerProf
     lastActive: partial.lastActive ?? new Date().toISOString().split('T')[0],
     status: partial.status ?? 'ACTIVE',
     notes: partial.notes,
+    taxCode: partial.taxCode,
+    gender: partial.gender,
+    dateOfBirth: partial.dateOfBirth,
+    groupId: partial.groupId,
+    areaId: partial.areaId,
   };
 }
 
@@ -59,7 +64,12 @@ function mapCustomer(item: any): CustomerProfile {
     loyaltyPoints: typeof item.points === 'number' ? item.points : Number(item.points || 0),
     lifetimeSpent: typeof item.totalSpend === 'number' ? item.totalSpend : Number(item.totalSpend || 0),
     status: item.isActive === false ? 'DORMANT' : 'ACTIVE',
-    notes: item.notes || '',
+    notes: item.note || item.notes || '',
+    taxCode: item.taxCode || '',
+    gender: item.gender || '',
+    dateOfBirth: item.dob || '',
+    groupId: item.groupId ? String(item.groupId) : '',
+    areaId: item.areaId ? String(item.areaId) : '',
   });
 }
 
@@ -79,8 +89,14 @@ export const crmService = {
       email: customer.email,
       address: customer.address,
       customerCode: customer.customerCode,
-      notes: customer.notes,
+      note: customer.notes,
       isActive: true,
+      dob: customer.dateOfBirth,
+      taxCode: customer.taxCode,
+      gender: customer.gender,
+      groupId: customer.groupId,
+      areaId: customer.areaId,
+      avatarUrl: customer.avatarUrl,
     });
     const res = await axiosClient.post<any, any>('/partnerarea/customers', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -100,8 +116,17 @@ export const crmService = {
       email: data.email,
       address: data.address,
       customerCode: data.customerCode,
-      notes: data.notes,
+      note: data.notes,
       isActive: data.status ? data.status === 'ACTIVE' : true,
+      dob: data.dateOfBirth,
+      taxCode: data.taxCode,
+      gender: data.gender,
+      groupId: data.groupId,
+      areaId: data.areaId,
+      avatarUrl: data.avatarUrl,
+      membershipRank: data.loyaltyTier,
+      points: data.loyaltyPoints,
+      totalSpend: data.lifetimeSpent,
     });
     const res = await axiosClient.put<any, any>(`/partnerarea/customers/${id}`, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -305,18 +330,19 @@ export const crmService = {
 
   // --- Loyalty Point Histories ---
   async fetchLoyaltyHistories(): Promise<LoyaltyPointHistoryRecord[]> {
-    const res = await axiosClient.get<any, any[]>('/crm/loyalty-histories');
-    const list = Array.isArray(res) ? res : (res?.content || []);
+    const res = await axiosClient.get<any, any>('/crm/loyalty-histories');
+    const list = extractPageContent<any>(res);
+    if (!Array.isArray(list)) return [];
     return list.map((item: any) => ({
       id: String(item.id),
-      customerName: item.customerName || '',
-      customerPhone: item.customerPhone || '',
-      actionType: item.actionType || 'EARN',
-      pointsChange: Number(item.pointsChange || 0),
-      balanceAfter: Number(item.balanceAfter || 0),
-      referenceOrder: item.referenceOrder,
-      notes: item.notes || '',
-      createdAt: item.createdAt ? item.createdAt.split('T')[0] : '',
+      customerName: item.customerName || item.customer?.name || item.name || 'Khách hàng',
+      customerPhone: item.customerPhone || item.customer?.phone || item.phone || '',
+      actionType: item.actionType || item.transactionType || 'EARN',
+      pointsChange: Number(item.pointsChange || item.pointChange || 0),
+      balanceAfter: Number(item.balanceAfter || item.currentPoints || item.pointBalanceAfter || 0),
+      referenceOrder: item.referenceOrder || item.refCode || item.refDocument || `REF-${item.id}`,
+      notes: item.notes || item.description || '',
+      createdAt: item.createdAt ? (typeof item.createdAt === 'string' ? item.createdAt.split('T')[0] : item.createdAt) : new Date().toISOString().split('T')[0],
     }));
   },
 
@@ -504,19 +530,29 @@ export const crmService = {
 
   // --- Support Tickets ---
   async fetchSupportTickets(): Promise<SupportTicketRecord[]> {
-    const res = await axiosClient.get<any, any[]>('/crm/support-tickets');
-    const list = Array.isArray(res) ? res : (res?.content || []);
+    const res = await axiosClient.get<any, any>('/crm/support-tickets');
+    let list: any[] = [];
+    if (Array.isArray(res)) {
+      list = res;
+    } else if (Array.isArray(res?.data)) {
+      list = res.data;
+    } else if (Array.isArray(res?.content)) {
+      list = res.content;
+    } else if (Array.isArray(res?.data?.content)) {
+      list = res.data.content;
+    }
+
     return list.map((item: any) => ({
       id: String(item.id),
-      ticketCode: item.ticketCode || '',
-      customerName: item.customerName || '',
+      ticketCode: item.ticketCode || `TCK-${item.id}`,
+      customerName: item.customerName || 'Khách hàng Web Online',
       customerPhone: item.customerPhone || '',
-      subject: item.subject || '',
+      subject: item.subject || item.title || 'Yêu cầu hỗ trợ',
       priority: item.priority || 'MEDIUM',
       category: item.category || 'GENERAL',
-      assignedTo: item.assignedTo || 'Unassigned',
+      assignedTo: item.assignedTo || 'Nhân viên CSKH',
       status: item.status || 'OPEN',
-      createdDate: item.createdDate ? item.createdDate.split('T')[0] : '',
+      createdDate: item.createdDate ? (item.createdDate.includes('T') ? item.createdDate.split('T')[0] : item.createdDate) : '',
     }));
   },
 
@@ -542,16 +578,32 @@ export const crmService = {
   // --- Ticket Messages ---
   async fetchTicketMessages(ticketId?: string): Promise<TicketMessageRecord[]> {
     const url = ticketId ? `/crm/support-tickets/${ticketId}/messages` : '/crm/ticket-messages';
-    const res = await axiosClient.get<any, any[]>(url);
-    const list = Array.isArray(res) ? res : (res?.content || []);
-    return list.map((item: any) => ({
-      id: String(item.id),
-      ticketId: String(item.ticketId || ticketId || '1'),
-      senderName: item.senderName || '',
-      isStaff: !!item.isStaff,
-      message: item.message || '',
-      createdAt: item.createdAt ? item.createdAt.split('T')[0] : '',
-    }));
+    const res = await axiosClient.get<any, any>(url);
+    let list: any[] = [];
+    if (Array.isArray(res)) {
+      list = res;
+    } else if (Array.isArray(res?.data)) {
+      list = res.data;
+    } else if (Array.isArray(res?.content)) {
+      list = res.content;
+    } else if (Array.isArray(res?.data?.content)) {
+      list = res.data.content;
+    }
+
+    return list.map((item: any) => {
+      let timeStr = item.createdAt || '';
+      if (timeStr.includes('T')) {
+        timeStr = timeStr.replace('T', ' ').substring(0, 19);
+      }
+      return {
+        id: String(item.id),
+        ticketId: String(item.ticketId || ticketId || '1'),
+        senderName: item.senderName || (item.isStaff ? 'Nhân viên CSKH' : 'Khách hàng Web Online'),
+        isStaff: Boolean(item.isStaff),
+        message: item.message || '',
+        createdAt: timeStr,
+      };
+    });
   },
 
   async addTicketMessage(item: Omit<TicketMessageRecord, 'id'>): Promise<TicketMessageRecord> {

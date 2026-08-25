@@ -116,7 +116,7 @@ export const SearchLookupModal: React.FC<SearchLookupModalProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Nhập từ khóa tìm kiếm (Tên, Mã, SĐT...)..."
+              placeholder="Nhập từ khóa tìm kiếm (tên, mã, SĐT...)..."
               className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary"
               autoFocus
             />

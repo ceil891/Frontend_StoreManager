@@ -36,8 +36,11 @@ export interface PaymentMethodRecord {
 
 interface PosConfigState {
   paymentMethods: PaymentMethodRecord[];
-  
+  enableOfflineMode: boolean;
+
   // Actions
+  setEnableOfflineMode: (enabled: boolean) => void;
+  clearLocalOfflineDeductions: () => void;
   fetchPaymentMethods: () => Promise<void>;
   addPaymentMethod: (method: Omit<PaymentMethodRecord, 'id'>) => Promise<void>;
   updatePaymentMethod: (id: string, data: Partial<PaymentMethodRecord>) => Promise<void>;
@@ -48,51 +51,76 @@ export const usePosConfigStore = create<PosConfigState>()(
   persist(
     (set, get) => ({
       paymentMethods: [],
+      enableOfflineMode: false,
+
+      setEnableOfflineMode: (enabled: boolean) => {
+        set({ enableOfflineMode: enabled });
+        if (!enabled) {
+          try {
+            localStorage.removeItem('retailhub_pos_stock_deductions');
+          } catch {}
+        }
+      },
+
+      clearLocalOfflineDeductions: () => {
+        try {
+          localStorage.removeItem('retailhub_pos_stock_deductions');
+        } catch {}
+      },
 
       fetchPaymentMethods: async () => {
         try {
           const response = await axiosClient.get<any, any[]>('/payment-methods');
-          set({ paymentMethods: response });
+          const list: any[] = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : (response?.content || []));
+          if (list.length > 0) {
+            set({ paymentMethods: list });
+          }
         } catch (error) {
           console.error('Failed to fetch payment methods:', error);
         }
       },
 
       addPaymentMethod: async (method) => {
+        const localItem = { id: Date.now().toString(), ...method } as PaymentMethodRecord;
+        set((state) => ({
+          paymentMethods: [localItem, ...state.paymentMethods],
+        }));
         try {
-          await axiosClient.post('/payment-methods', method);
+          const res: any = await axiosClient.post('/payment-methods', method);
+          const saved = res?.data || res;
+          if (saved && saved.id) {
+            set((state) => ({
+              paymentMethods: state.paymentMethods.map(p => p.id === localItem.id ? { ...p, ...saved, id: String(saved.id) } : p)
+            }));
+          }
           await get().fetchPaymentMethods();
         } catch (error) {
-          console.error('Fallback: Failed to add payment method via API, using local state', error);
-          set((state) => ({
-            paymentMethods: [{ id: Date.now().toString(), ...method } as PaymentMethodRecord, ...state.paymentMethods],
-          }));
+          console.warn('API sync failed, using persisted local storage for payment methods', error);
         }
       },
 
       updatePaymentMethod: async (id, data) => {
+        set((state) => ({
+          paymentMethods: state.paymentMethods.map((m) =>
+            m.id === id ? { ...m, ...data } : m
+          ),
+        }));
         try {
           await axiosClient.put(`/payment-methods/${id}`, data);
           await get().fetchPaymentMethods();
         } catch (error) {
-          console.error('Fallback: Failed to update payment method via API, using local state', error);
-          set((state) => ({
-            paymentMethods: state.paymentMethods.map((m) =>
-              m.id === id ? { ...m, ...data } : m
-            ),
-          }));
+          console.warn('API sync failed, updated locally', error);
         }
       },
 
       deletePaymentMethod: async (id) => {
+        set((state) => ({
+          paymentMethods: state.paymentMethods.filter((m) => m.id !== id),
+        }));
         try {
           await axiosClient.delete(`/payment-methods/${id}`);
-          await get().fetchPaymentMethods();
         } catch (error) {
-          console.error('Fallback: Failed to delete payment method via API, using local state', error);
-          set((state) => ({
-            paymentMethods: state.paymentMethods.filter((m) => m.id !== id),
-          }));
+          console.warn('API sync failed, deleted locally', error);
         }
       },
     }),

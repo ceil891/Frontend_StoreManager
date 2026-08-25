@@ -18,6 +18,8 @@ export interface VoucherInfo {
   code: string;
   type: 'PERCENT' | 'FLAT';
   value: number;
+  maxDiscount?: number;
+  minOrderValue?: number;
 }
 
 export interface CartTab {

@@ -89,7 +89,7 @@ export function MobileInventoryPage() {
   });
 
   // Filter categories
-  const categories = ['All', 'Footwear', 'Electronics', 'Accessories'];
+  const categories = ['Tất cả', 'Giày dép', 'Điện tử', 'Phụ kiện'];
 
   // Handle live search & filtering
   const filteredProducts = useMemo(() => {
@@ -99,7 +99,7 @@ export function MobileInventoryPage() {
         item.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.brand.toLowerCase().includes(searchQuery.toLowerCase());
       
-      const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
+      const matchesCategory = selectedCategory === 'Tất cả' || item.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
   }, [products, searchQuery, selectedCategory]);
@@ -109,7 +109,7 @@ export function MobileInventoryPage() {
     setFormData({
       sku: '',
       name: '',
-      category: 'Footwear',
+      category: 'Giày dép',
       price: 0,
       costPrice: 0,
       brand: '',
@@ -134,7 +134,7 @@ export function MobileInventoryPage() {
     const payload = {
       sku: formData.sku?.toUpperCase() || `SKU-${Date.now().toString().slice(-4)}`,
       name: formData.name || 'Sản phẩm mới',
-      category: formData.category || 'Footwear',
+      category: formData.category || 'Giày dép',
       price: formData.price || 0,
       costPrice: formData.costPrice || 0,
       brand: formData.brand || 'Unbranded',
@@ -201,13 +201,13 @@ export function MobileInventoryPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mobile UI Live Preview</h1>
-            <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300">
-              <Sparkles className="w-3 h-3 text-indigo-500" /> Interactive Mockup
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mô phỏng giao diện di động</h1>
+            <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
+              <Sparkles className="w-3 h-3 text-primary" /> Bản xem trước trực quan
             </span>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Mô phỏng giao diện ứng dụng di động tối giản, nền gradient hoa oải hương với bố cục hai cột gọn gàng và khả năng tương tác trực tiếp.
+            Mô phỏng giao diện ứng dụng di động tối giản với bố cục hai cột gọn gàng và khả năng tương tác trực tiếp.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -298,7 +298,7 @@ export function MobileInventoryPage() {
                         : 'bg-white/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:bg-white border border-white/40 dark:border-slate-700/40'
                     }`}
                   >
-                    {cat === 'All' ? 'Tất cả' : cat}
+                    {cat}
                   </button>
                 ))}
               </div>
@@ -326,17 +326,17 @@ export function MobileInventoryPage() {
                             ? 'bg-emerald-500/90 text-white' 
                             : 'bg-slate-500/95 text-white'
                         }`}>
-                          {prod.status === 'ACTIVE' ? 'Còn hàng' : 'Ngừng bán'}
+                          {prod.status === 'ACTIVE' ? 'Đang kinh doanh' : 'Ngừng kinh doanh'}
                         </span>
                       </div>
 
                       {/* Product Specs */}
-                      <span className="text-[9px] font-extrabold text-indigo-600 dark:text-indigo-400 tracking-wider uppercase">{prod.brand}</span>
-                      <h3 className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-1 mt-0.5 group-hover:text-indigo-600 transition-colors">{prod.name}</h3>
+                      <span className="text-[9px] font-extrabold text-primary tracking-wider uppercase">{prod.brand || 'Khác'}</span>
+                      <h3 className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-1 mt-0.5 group-hover:text-primary transition-colors">{prod.name}</h3>
                       
                       {/* Pricing and Stock */}
                       <div className="flex items-baseline justify-between mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-700/50">
-                        <span className="text-xs font-black text-slate-900 dark:text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(prod.price)}</span>
+                        <span className="text-xs font-black text-slate-900 dark:text-white">{prod.price.toLocaleString('vi-VN')} đ</span>
                         <span className={`text-[10px] font-extrabold flex items-center gap-0.5 ${
                           isLowStock(prod) ? 'text-red-500' :
                           prod.onHand > 10 ? 'text-emerald-600 dark:text-emerald-400' :
@@ -361,8 +361,7 @@ export function MobileInventoryPage() {
             {/* Floating Action Button (FAB) (Coral orange accent color, micro-interactive) */}
             <button
               onClick={openCreateForm}
-              className="absolute bottom-20 right-5 w-12 h-12 rounded-full bg-gradient-to-tr from-coral-500 to-orange-500 hover:from-coral-600 hover:to-orange-600 text-white flex items-center justify-center shadow-lg shadow-orange-500/20 active:scale-90 hover:scale-105 active:rotate-90 transition-all z-20"
-              style={{ backgroundColor: '#ff6f61' }} // Coral orange accent
+              className="absolute bottom-20 right-5 w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center shadow-lg active:scale-90 hover:scale-105 active:rotate-90 transition-all z-20"
             >
               <Plus className="w-6 h-6 stroke-[2.5]" />
             </button>
@@ -371,28 +370,28 @@ export function MobileInventoryPage() {
             <div className="absolute bottom-0 inset-x-0 bg-white/70 dark:bg-slate-950/80 backdrop-blur-md border-t border-white/50 dark:border-slate-800/80 px-6 py-3 flex items-center justify-between z-20">
               <button 
                 onClick={() => setActiveTab('home')}
-                className={`flex flex-col items-center gap-0.5 transition-transform active:scale-90 ${activeTab === 'home' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}
+                className={`flex flex-col items-center gap-0.5 transition-transform active:scale-90 ${activeTab === 'home' ? 'text-primary' : 'text-slate-400 dark:text-slate-500'}`}
               >
                 <Home className="w-5 h-5 stroke-[2]" />
                 <span className="text-[8px] font-bold">Tổng quan</span>
               </button>
               <button 
                 onClick={() => setActiveTab('inventory')}
-                className={`flex flex-col items-center gap-0.5 transition-transform active:scale-90 ${activeTab === 'inventory' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}
+                className={`flex flex-col items-center gap-0.5 transition-transform active:scale-90 ${activeTab === 'inventory' ? 'text-primary' : 'text-slate-400 dark:text-slate-500'}`}
               >
                 <Folder className="w-5 h-5 stroke-[2]" />
                 <span className="text-[8px] font-bold">Danh mục</span>
               </button>
               <button 
                 onClick={() => setActiveTab('stats')}
-                className={`flex flex-col items-center gap-0.5 transition-transform active:scale-90 ${activeTab === 'stats' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}
+                className={`flex flex-col items-center gap-0.5 transition-transform active:scale-90 ${activeTab === 'stats' ? 'text-primary' : 'text-slate-400 dark:text-slate-500'}`}
               >
                 <BarChart2 className="w-5 h-5 stroke-[2]" />
                 <span className="text-[8px] font-bold">Báo cáo</span>
               </button>
               <button 
                 onClick={() => setActiveTab('settings')}
-                className={`flex flex-col items-center gap-0.5 transition-transform active:scale-90 ${activeTab === 'settings' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}
+                className={`flex flex-col items-center gap-0.5 transition-transform active:scale-90 ${activeTab === 'settings' ? 'text-primary' : 'text-slate-400 dark:text-slate-500'}`}
               >
                 <SettingsIcon className="w-5 h-5 stroke-[2]" />
                 <span className="text-[8px] font-bold">Cài đặt</span>
@@ -414,11 +413,11 @@ export function MobileInventoryPage() {
                   {/* Header info */}
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">{selectedProduct.brand}</span>
+                      <span className="text-[10px] font-black text-primary uppercase tracking-widest">{selectedProduct.brand}</span>
                       <h3 className="text-lg font-black text-slate-800 dark:text-white mt-0.5 leading-tight">{selectedProduct.name}</h3>
-                      <p className="text-[11px] font-bold text-slate-400 font-mono mt-1">SKU: {selectedProduct.sku}</p>
+                      <p className="text-[11px] font-bold text-slate-400 font-mono mt-1">Mã SKU: {selectedProduct.sku}</p>
                       {selectedProduct.barcodes?.[0] && (
-                        <p className="text-[10px] text-slate-500 font-mono">Barcode: {selectedProduct.barcodes.join(', ')}</p>
+                        <p className="text-[10px] text-slate-500 font-mono">Mã barcode: {selectedProduct.barcodes.join(', ')}</p>
                       )}
                     </div>
                     <button 
@@ -436,8 +435,8 @@ export function MobileInventoryPage() {
                     </div>
                     <div className="flex-1 grid grid-cols-2 gap-2.5">
                       <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                        <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Giá bán</span>
-                        <p className="text-base font-black text-slate-800 dark:text-white mt-0.5">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(selectedProduct.price)}</p>
+                        <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Giá bán lẻ</span>
+                        <p className="text-base font-black text-slate-800 dark:text-white mt-0.5">{selectedProduct.price.toLocaleString('vi-VN')} đ</p>
                       </div>
                       <div className={`p-2.5 rounded-xl border ${isLowStock(selectedProduct) ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800'}`}>
                         <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Tồn kho</span>
@@ -451,10 +450,10 @@ export function MobileInventoryPage() {
 
                   {/* Attributes Grid List */}
                   <div className="mt-5 space-y-3">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800 pb-1">Thuộc tính đầy đủ</h4>
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800 pb-1">Thuộc tính chi tiết</h4>
                     <div className="grid grid-cols-2 gap-3.5">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 flex items-center justify-center text-indigo-600 shrink-0">
+                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
                           <Tag className="w-4 h-4" />
                         </div>
                         <div>
@@ -468,7 +467,7 @@ export function MobileInventoryPage() {
                         </div>
                         <div>
                           <p className="text-[9px] text-slate-400 font-bold">Giá vốn</p>
-                          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(selectedProduct.costPrice)}</p>
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{selectedProduct.costPrice.toLocaleString('vi-VN')} đ</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -492,10 +491,10 @@ export function MobileInventoryPage() {
                     </div>
                     {selectedProduct.variants.length > 0 && (
                       <div className="mt-3">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">Biến thể (Size/Color)</p>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">Biến thể (kích thước / màu sắc)</p>
                         <div className="flex flex-wrap gap-1.5">
                           {selectedProduct.variants.map((v, i) => (
-                            <span key={i} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300">
+                            <span key={i} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
                               {[v.size, v.color].filter(Boolean).join(' / ') || v.skuSuffix}
                             </span>
                           ))}
@@ -508,13 +507,13 @@ export function MobileInventoryPage() {
                   <div className="flex gap-3 mt-6 pt-5 border-t border-slate-100 dark:border-slate-800">
                     <button
                       onClick={() => openEditForm(selectedProduct)}
-                      className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+                      className="flex-1 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
                     >
                       <Edit className="w-3.5 h-3.5" /> Chỉnh sửa
                     </button>
                     <button
                       onClick={() => setProductToDelete(selectedProduct)}
-                      className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 active:scale-95 transition-transform border border-red-200"
+                      className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 active:scale-95 transition-transform border border-red-200"
                     >
                       <Trash2 className="w-3.5 h-3.5" /> Xóa
                     </button>
@@ -529,7 +528,7 @@ export function MobileInventoryPage() {
                 <div className="bg-white dark:bg-slate-900 rounded-[28px] w-full max-w-[340px] p-5 shadow-xl border border-slate-100 dark:border-slate-800 max-h-[85%] overflow-y-auto animate-fade-in no-scrollbar">
                   <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800">
                     <h3 className="text-sm font-black text-slate-800 dark:text-white">
-                      {editingProduct ? 'Chỉnh sửa sản phẩm' : 'Thêm Sản Phẩm di động'}
+                      {editingProduct ? 'Chỉnh sửa sản phẩm' : 'Thêm mới sản phẩm di động'}
                     </h3>
                     <button 
                       onClick={() => setIsFormOpen(false)}
@@ -550,7 +549,7 @@ export function MobileInventoryPage() {
                         value={formData.sku || ''}
                         onChange={(e) => setFormData(p => ({ ...p, sku: e.target.value.toUpperCase() }))}
                         placeholder="Ví dụ: NK-AM24"
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:outline-none font-mono disabled:opacity-50 text-slate-800 dark:text-white"
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-primary/20 focus:outline-none font-mono disabled:opacity-50 text-slate-800 dark:text-white"
                       />
                     </div>
 
@@ -562,8 +561,8 @@ export function MobileInventoryPage() {
                         required
                         value={formData.name || ''}
                         onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
-                        placeholder="Nike Air Max..."
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:outline-none font-semibold text-slate-800 dark:text-white"
+                        placeholder="Ví dụ: Giày thể thao nam..."
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-primary/20 focus:outline-none font-semibold text-slate-800 dark:text-white"
                       />
                     </div>
 
@@ -576,20 +575,20 @@ export function MobileInventoryPage() {
                           value={formData.brand || ''}
                           onChange={(e) => setFormData(p => ({ ...p, brand: e.target.value }))}
                           placeholder="Nike, Apple..."
-                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:outline-none font-semibold text-slate-800 dark:text-white"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-primary/20 focus:outline-none font-semibold text-slate-800 dark:text-white"
                         />
                       </div>
                       <div>
                         <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Danh mục *</label>
                         <select 
                           required
-                          value={formData.category || 'Footwear'}
+                          value={formData.category || 'Giày dép'}
                           onChange={(e) => setFormData(p => ({ ...p, category: e.target.value }))}
-                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:outline-none font-semibold text-slate-800 dark:text-white"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-primary/20 focus:outline-none font-semibold text-slate-800 dark:text-white"
                         >
-                          <option value="Footwear">Footwear</option>
-                          <option value="Electronics">Electronics</option>
-                          <option value="Accessories">Accessories</option>
+                          <option value="Giày dép">Giày dép</option>
+                          <option value="Điện tử">Điện tử</option>
+                          <option value="Phụ kiện">Phụ kiện</option>
                         </select>
                       </div>
                     </div>
@@ -597,37 +596,37 @@ export function MobileInventoryPage() {
                     {/* Giá & Giá vốn */}
                     <div className="grid grid-cols-2 gap-2.5">
                       <div>
-                        <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Giá bán *</label>
+                        <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Giá bán lẻ (đ) *</label>
                         <input 
                           type="number"
-                          step="0.01"
+                          step="1"
                           required
                           value={formData.price ?? ''}
                           onChange={(e) => setFormData(p => ({ ...p, price: parseFloat(e.target.value) || 0 }))}
-                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:outline-none font-semibold text-slate-800 dark:text-white"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-primary/20 focus:outline-none font-semibold text-slate-800 dark:text-white"
                         />
                       </div>
                       <div>
-                        <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Giá vốn *</label>
+                        <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Giá vốn (đ) *</label>
                         <input 
                           type="number"
-                          step="0.01"
+                          step="1"
                           required
                           value={formData.costPrice ?? ''}
                           onChange={(e) => setFormData(p => ({ ...p, costPrice: parseFloat(e.target.value) || 0 }))}
-                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:outline-none font-semibold text-slate-800 dark:text-white"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-primary/20 focus:outline-none font-semibold text-slate-800 dark:text-white"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Mã vạch (Barcode)</label>
+                      <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Mã barcode</label>
                       <input
                         type="text"
                         value={(formData.barcodes ?? []).join(', ')}
                         onChange={(e) => setFormData(p => ({ ...p, barcodes: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
-                        placeholder="893..., nhiều mã cách nhau bởi dấu phẩy"
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:outline-none text-slate-800 dark:text-white"
+                        placeholder="Nhập mã barcode..."
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-primary/20 focus:outline-none text-slate-800 dark:text-white"
                       />
                     </div>
 
@@ -638,12 +637,12 @@ export function MobileInventoryPage() {
                           className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs font-semibold" />
                       </div>
                       <div>
-                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Min</label>
+                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Tồn tối thiểu</label>
                         <input type="number" value={formData.minStock ?? 0} onChange={(e) => setFormData(p => ({ ...p, minStock: parseInt(e.target.value, 10) || 0 }))}
                           className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs font-semibold" />
                       </div>
                       <div>
-                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Max</label>
+                        <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Tồn tối đa</label>
                         <input type="number" value={formData.maxStock ?? 0} onChange={(e) => setFormData(p => ({ ...p, maxStock: parseInt(e.target.value, 10) || 0 }))}
                           className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs font-semibold" />
                       </div>
@@ -652,22 +651,22 @@ export function MobileInventoryPage() {
                     {/* Tồn kho & Vị trí */}
                     <div className="grid grid-cols-2 gap-2.5">
                       <div>
-                        <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Số lượng *</label>
+                        <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Số lượng tồn *</label>
                         <input 
                           type="number"
                           required
                           value={formData.onHand ?? ''}
                           onChange={(e) => setFormData(p => ({ ...p, onHand: parseInt(e.target.value, 10) || 0 }))}
-                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:outline-none font-semibold text-slate-800 dark:text-white"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-primary/20 focus:outline-none font-semibold text-slate-800 dark:text-white"
                         />
                       </div>
                       <div>
-                        <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Vị trí</label>
+                        <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Vị trí kho</label>
                         <input 
                           type="text"
                           value={formData.location || ''}
                           onChange={(e) => setFormData(p => ({ ...p, location: e.target.value }))}
-                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:outline-none font-semibold text-slate-800 dark:text-white"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-primary/20 focus:outline-none font-semibold text-slate-800 dark:text-white"
                         />
                       </div>
                     </div>
@@ -712,14 +711,14 @@ export function MobileInventoryPage() {
                           <button
                             type="button"
                             onClick={() => document.getElementById('mobile-image-input')?.click()}
-                            className="px-3 py-1.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-[10px] font-bold rounded-lg text-slate-700 dark:text-slate-200 shadow-sm"
+                            className="px-3 py-1.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-[10px] font-medium rounded-lg text-slate-700 dark:text-slate-200 shadow-sm"
                           >
                             Tải ảnh lên
                           </button>
                           <button
                             type="button"
                             onClick={() => setFormData(p => ({ ...p, imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&q=80' }))}
-                            className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline"
+                            className="text-[10px] text-primary font-medium hover:underline"
                           >
                             Mẫu
                           </button>
@@ -735,9 +734,9 @@ export function MobileInventoryPage() {
                           name="mobile_status" 
                           checked={formData.status === 'ACTIVE'}
                           onChange={() => setFormData(p => ({ ...p, status: 'ACTIVE' }))}
-                          className="text-indigo-600 focus:ring-indigo-500" 
+                          className="text-primary focus:ring-primary" 
                         />
-                        <span>Còn hàng</span>
+                        <span>Đang kinh doanh</span>
                       </label>
                       <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 font-semibold cursor-pointer">
                         <input 
@@ -745,9 +744,9 @@ export function MobileInventoryPage() {
                           name="mobile_status" 
                           checked={formData.status === 'INACTIVE'}
                           onChange={() => setFormData(p => ({ ...p, status: 'INACTIVE' }))}
-                          className="text-indigo-600 focus:ring-indigo-500" 
+                          className="text-primary focus:ring-primary" 
                         />
-                        <span>Ngừng bán</span>
+                        <span>Ngừng kinh doanh</span>
                       </label>
                     </div>
 
@@ -755,15 +754,15 @@ export function MobileInventoryPage() {
                       <button
                         type="button"
                         onClick={() => setIsFormOpen(false)}
-                        className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                        className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 transition-colors"
                       >
-                        Hủy
+                        Hủy bỏ
                       </button>
                       <button
                         type="submit"
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-sm"
+                        className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-medium shadow-sm"
                       >
-                        {editingProduct ? 'Cập nhật' : 'Tạo Mới'}
+                        {editingProduct ? 'Cập nhật' : 'Lưu thông tin'}
                       </button>
                     </div>
                   </form>
@@ -778,24 +777,24 @@ export function MobileInventoryPage() {
                   <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-950/30 flex items-center justify-center text-red-500 mx-auto mb-3">
                     <AlertTriangle className="w-6 h-6" />
                   </div>
-                  <h3 className="text-sm font-black text-slate-800 dark:text-white">Xác nhận xóa sản phẩm?</h3>
+                  <h3 className="text-sm font-black text-slate-800 dark:text-white">Xác nhận xóa sản phẩm</h3>
                   <p className="text-xs text-slate-500 mt-2 leading-relaxed">
                     Bạn có chắc chắn muốn xóa sản phẩm <strong className="text-slate-900 dark:text-white font-bold">{productToDelete.name}</strong> khỏi kho di động?
                   </p>
                   <p className="text-[10px] font-semibold text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-100 p-2 rounded-xl mt-3 leading-tight">
-                    Lưu ý: Hành động này là hủy diệt và không thể hoàn tác!
+                    Lưu ý: Hành động này không thể hoàn tác!
                   </p>
                   
                   <div className="flex gap-2.5 mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
                     <button
                       onClick={() => setProductToDelete(null)}
-                      className="flex-1 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors"
+                      className="flex-1 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-500 hover:bg-slate-50 transition-colors"
                     >
-                      Bỏ qua
+                      Hủy bỏ
                     </button>
                     <button
                       onClick={handleDelete}
-                      className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black shadow-md shadow-red-600/10 active:scale-95 transition-transform"
+                      className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-medium shadow-md shadow-red-600/10 active:scale-95 transition-transform"
                     >
                       Đồng ý xóa
                     </button>

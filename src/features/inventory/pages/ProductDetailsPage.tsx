@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, Tag, Layers, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
 import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { TreeSelect } from '@/shared/components/ui/TreeSelect';
@@ -9,6 +8,7 @@ import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore } from '../store/inventoryStore';
+import { toast } from 'sonner';
 
 interface ProductDetailRecord {
   id: string;
@@ -20,6 +20,10 @@ interface ProductDetailRecord {
   costPrice: number;
   status: 'DANG_KINH_DOANH' | 'NGUNG_KINH_DOANH';
   notes?: string;
+  unit?: string;
+  reorderPoint?: number;
+  safetyStock?: number;
+  vatRate?: number;
 }
 
 export function ProductDetailsPage() {
@@ -40,6 +44,10 @@ export function ProductDetailsPage() {
       costPrice: p.costPrice || 0,
       status: p.status === 'INACTIVE' ? 'NGUNG_KINH_DOANH' : 'DANG_KINH_DOANH',
       notes: (p as any).notes || '',
+      unit: (p as any).unit || 'Cái',
+      reorderPoint: (p as any).minStock || 10,
+      safetyStock: (p as any).safetyStock || 5,
+      vatRate: (p as any).vatRate || 10,
     }));
   }, [storeProducts]);
 
@@ -72,6 +80,10 @@ export function ProductDetailsPage() {
       costPrice: 0,
       status: 'DANG_KINH_DOANH',
       notes: '',
+      unit: 'Cái',
+      reorderPoint: 10,
+      safetyStock: 5,
+      vatRate: 10,
     });
     setIsModalOpen(true);
   };
@@ -95,25 +107,17 @@ export function ProductDetailsPage() {
       costPrice: Number(editingItem.costPrice || 0),
       status: editingItem.status === 'NGUNG_KINH_DOANH' ? 'INACTIVE' : 'ACTIVE',
       notes: editingItem.notes || '',
+      unit: editingItem.unit || 'Cái',
     };
 
     if (modalMode === 'create') {
       await addProduct(payload);
+      toast.success('Đã thêm sản phẩm mới thành công!');
     } else if (editingItem.id) {
       await updateProduct(editingItem.id, payload);
+      toast.success('Đã cập nhật chi tiết sản phẩm thành công!');
     }
     setIsModalOpen(false);
-  };
-
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa sản phẩm này khỏi hệ thống?')) {
-      await deleteProduct(id);
-      if (selected?.id === id) setSelected(null);
-    }
-  };
-
-  const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
   };
 
   const columns = useMemo<ColumnDef<ProductDetailRecord>[]>(
@@ -121,53 +125,53 @@ export function ProductDetailsPage() {
       {
         accessorKey: 'barcode',
         header: 'Mã barcode',
-        cell: (info) => <span className="font-mono font-semibold text-emerald-600">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-mono font-semibold text-primary">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'productName',
         header: 'Tên sản phẩm',
-        cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'categoryName',
         header: 'Danh mục',
-        cell: (info) => <span>{info.getValue() as string}</span>,
+        cell: (info) => <span className="text-gray-700 dark:text-gray-300">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'brand',
         header: 'Thương hiệu',
-        cell: (info) => <span>{info.getValue() as string}</span>,
+        cell: (info) => <span className="text-gray-700 dark:text-gray-300">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'sellingPrice',
         header: 'Giá bán',
-        cell: (info) => <span className="font-mono text-emerald-600 font-bold">{formatCurrency(info.getValue() as number)}</span>,
+        cell: (info) => <span className="font-bold text-primary">{((info.getValue() as number) || 0).toLocaleString('vi-VN')} đ</span>,
       },
       {
         accessorKey: 'status',
         header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
-          const badgeClass = status === 'DANG_KINH_DOANH' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800';
+          const badgeClass = status === 'DANG_KINH_DOANH' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
           const label = status === 'DANG_KINH_DOANH' ? 'Đang kinh doanh' : 'Ngừng kinh doanh';
-          return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
+          return <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Hành động',
+        header: 'Thao tác',
         cell: ({ row }) => (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => setSelected(row.original)}
-              className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
               title="Xem thông tin chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleOpenEdit(row.original)}
-              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
               title="Chỉnh sửa chi tiết"
             >
               <Edit className="w-4 h-4" />
@@ -181,29 +185,40 @@ export function ProductDetailsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Chi tiết sản phẩm kho</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Tra cứu và cập nhật thông tin chi tiết từng sản phẩm, mã vạch barcode, giá vốn, giá bán và thuộc tính lưu kho.
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Tra cứu và cập nhật thông tin chi tiết từng sản phẩm, mã vạch barcode, giá vốn, giá bán và thuộc tính lưu kho
           </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
+            <Download className="w-4 h-4" /> Xuất Excel
+          </button>
+          <button
+            onClick={handleOpenCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-medium shadow-sm"
+          >
+            <Plus className="w-4 h-4" /> Thêm mới sản phẩm
+          </button>
         </div>
       </div>
 
-      <div className="p-4 bg-white dark:bg-gray-800 rounded shadow flex items-center gap-4">
-        <Search className="w-5 h-5 text-gray-400" />
+      <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-3">
+        <Search className="w-5 h-5 text-gray-400 shrink-0" />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm kiếm mã barcode, tên sản phẩm, thương hiệu, danh mục..."
-          className="w-full bg-transparent outline-none text-sm"
+          placeholder="Tìm kiếm theo mã barcode, tên sản phẩm, thương hiệu, danh mục..."
+          className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-white placeholder-gray-400"
         />
       </div>
 
       <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelected(row)} />
 
-      {/* Modal Xem chi tiết sản phẩm kho căn giữa (TC-ALL-1) */}
+      {/* Modal Xem chi tiết */}
       <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
@@ -212,68 +227,73 @@ export function ProductDetailsPage() {
       >
         {selected && (
           <div className="space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-4 bg-gray-50 dark:bg-gray-900 p-3 rounded-xl">
+            <div className="grid grid-cols-2 gap-4 bg-gray-50 dark:bg-gray-900 p-3 rounded-xl border border-gray-200 dark:border-gray-800">
               <div>
-                <span className="text-xs text-gray-500">Mã vạch (Barcode):</span>
-                <p className="font-mono font-bold text-emerald-600">{selected.barcode}</p>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Mã barcode:</span>
+                <p className="font-mono font-bold text-primary">{selected.barcode}</p>
               </div>
               <div>
-                <span className="text-xs text-gray-500">Thương hiệu:</span>
-                <p className="font-semibold">{selected.brand}</p>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Thương hiệu:</span>
+                <p className="font-semibold text-gray-900 dark:text-white">{selected.brand}</p>
               </div>
             </div>
             <div>
-              <span className="text-xs text-gray-500">Tên sản phẩm:</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">Tên sản phẩm:</span>
               <p className="font-bold text-base text-gray-900 dark:text-white">{selected.productName}</p>
             </div>
             <div>
-              <span className="text-xs text-gray-500">Danh mục phân loại:</span>
-              <p className="font-semibold text-emerald-600">{selected.categoryName}</p>
+              <span className="text-xs text-gray-500 dark:text-gray-400">Danh mục phân loại:</span>
+              <p className="font-semibold text-primary">{selected.categoryName}</p>
             </div>
-            <div className="grid grid-cols-2 gap-4 border-t pt-2">
+            <div className="grid grid-cols-2 gap-4 border-t border-gray-200 dark:border-gray-700 pt-3">
               <div>
-                <span className="text-xs text-gray-500">Giá nhập (VND):</span>
-                <p className="font-mono text-red-500 font-bold">{formatCurrency(selected.costPrice)}</p>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Giá nhập (giá vốn):</span>
+                <p className="font-mono text-gray-900 dark:text-white font-bold">{selected.costPrice.toLocaleString('vi-VN')} đ</p>
               </div>
               <div>
-                <span className="text-xs text-gray-500">Giá bán lẻ (VND):</span>
-                <p className="font-mono text-emerald-600 font-bold text-base">{formatCurrency(selected.sellingPrice)}</p>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Giá bán lẻ:</span>
+                <p className="font-mono text-primary font-bold text-base">{selected.sellingPrice.toLocaleString('vi-VN')} đ</p>
               </div>
             </div>
-            <div className="border-t pt-2">
-              <span className="text-xs text-gray-500">Trạng thái kinh doanh:</span>
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+              <span className="text-xs text-gray-500 dark:text-gray-400">Trạng thái kinh doanh:</span>
               <div className="mt-1">
                 <span
-                  className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                    selected.status === 'DANG_KINH_DOANH' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                  className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                    selected.status === 'DANG_KINH_DOANH' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
                   }`}
                 >
-                  {selected.status === 'DANG_KINH_DOANH' ? 'Đang kinh doanh' : 'Ngưng kinh doanh'}
+                  {selected.status === 'DANG_KINH_DOANH' ? 'Đang kinh doanh' : 'Ngừng kinh doanh'}
                 </span>
               </div>
             </div>
-            <div className="flex justify-end gap-2 pt-3 border-t">
-              <button
-                onClick={() => handleOpenEdit(selected)}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-sm"
-              >
-                Chỉnh Sửa Chi Tiết
-              </button>
+            <div className="flex justify-end gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
                 onClick={() => setSelected(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-sm"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg text-sm transition-colors"
               >
                 Đóng
+              </button>
+              <button
+                onClick={() => {
+                  const s = selected;
+                  setSelected(null);
+                  handleOpenEdit(s);
+                }}
+                className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg text-sm transition-colors"
+              >
+                Chỉnh sửa
               </button>
             </div>
           </div>
         )}
       </Modal>
 
+      {/* Modal Create/Edit */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Sản Phẩm mới' : 'Sửa thông tin sản phẩm'}
+        title={modalMode === 'create' ? 'Thêm mới sản phẩm' : 'Sửa thông tin sản phẩm'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -291,7 +311,7 @@ export function ProductDetailsPage() {
                     }
                     className="text-[10px] text-primary hover:underline font-medium"
                   >
-                    Tự sinh EAN-13
+                    Tự sinh mã EAN-13
                   </button>
                 )}
               </div>
@@ -330,7 +350,7 @@ export function ProductDetailsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên ngắn / Viết tắt (Short Name - In HĐ/POS)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên rút gọn (in bill POS)</label>
               <input
                 type="text"
                 value={(editingItem as any).shortName || ''}
@@ -343,81 +363,35 @@ export function ProductDetailsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhà cung cấp cung ứng chính (Supplier)</label>
-              <SearchLookupModal
-                title="Chọn Nhà Cung Cấp Mặc Định"
-                iconType="building"
-                placeholder="Chọn nhà cung cấp chính..."
-                value={(editingItem as any).supplierId}
-                options={[
-                  { id: 'SUP-VINAMILK', code: 'SUP-01', name: 'Vinamilk Corporation', subtitle: 'Hàng tiêu dùng' },
-                  { id: 'SUP-UNILEVER', code: 'SUP-02', name: 'Unilever Việt Nam', subtitle: 'Hóa mỹ phẩm' },
-                  { id: 'SUP-SAMSUNG', code: 'SUP-03', name: 'Samsung Electronics', subtitle: 'Thiết bị điện tử' },
-                ]}
-                onChange={(val) => setEditingItem(prev => ({ ...prev, supplierId: val } as any))}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thẻ phân loại (Tags)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục sản phẩm *</label>
               <input
                 type="text"
-                value={(editingItem as any).tags || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, tags: e.target.value } as any)}
+                value={editingItem.categoryName || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, categoryName: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
-                placeholder="VD: Best-Seller, Hang-Khuyen-Mai, Hot..."
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Danh mục sản phẩm *</label>
-              <TreeSelect
-                value={editingItem.categoryName}
-                onChange={(val) => setEditingItem({ ...editingItem, categoryName: val })}
-                placeholder="-- Chọn danh mục sản phẩm --"
-                options={[
-                  {
-                    id: 'Điện tử / Công nghệ',
-                    name: 'Điện tử & Công nghệ',
-                    children: [
-                      { id: 'Điện thoại & Máy tính bảng', name: 'Điện thoại & Máy tính bảng' },
-                      { id: 'Phụ kiện máy tính', name: 'Phụ kiện máy tính' },
-                    ],
-                  },
-                  {
-                    id: 'Thực phẩm & Đồ uống',
-                    name: 'Thực phẩm & Đồ uống',
-                    children: [
-                      { id: 'Nước giải khát', name: 'Nước giải khát' },
-                      { id: 'Thực phẩm đóng hộp', name: 'Thực phẩm đóng hộp' },
-                    ],
-                  },
-                  { id: 'Thời trang & Phụ kiện', name: 'Thời trang & Phụ kiện' },
-                  { id: 'Gia dụng & Đời sống', name: 'Gia dụng & Đời sống' },
-                ]}
+                placeholder="Ví dụ: Đồ uống, Bánh kẹo..."
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn vị tính Master (UOM) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn vị tính (UOM) *</label>
               <select
                 value={editingItem.unit || 'Cái'}
                 onChange={(e) => setEditingItem({ ...editingItem, unit: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
               >
-                <option value="Cái">Cái / Chiếc (Unit)</option>
-                <option value="Hộp">Hộp (Box)</option>
-                <option value="Thùng">Thùng (Carton)</option>
-                <option value="Chai">Chai / Lọ (Bottle)</option>
-                <option value="Kg">Kilogram (Kg)</option>
-                <option value="Gói">Gói (Pack)</option>
+                <option value="Cái">Cái / Chiếc</option>
+                <option value="Hộp">Hộp</option>
+                <option value="Thùng">Thùng</option>
+                <option value="Chai">Chai / Lọ</option>
+                <option value="Kg">Kilogram (kg)</option>
+                <option value="Gói">Gói</option>
               </select>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá vốn mặc định (Cost Price) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá vốn mặc định *</label>
               <CurrencyInput
                 value={editingItem.costPrice || 0}
                 onChange={(val) => setEditingItem({ ...editingItem, costPrice: val })}
@@ -425,7 +399,7 @@ export function ProductDetailsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá bán lẻ đề xuất (List Price) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá bán lẻ đề xuất *</label>
               <CurrencyInput
                 value={editingItem.sellingPrice || 0}
                 onChange={(val) => setEditingItem({ ...editingItem, sellingPrice: val })}
@@ -435,10 +409,10 @@ export function ProductDetailsPage() {
           </div>
 
           <div className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/60">
-            <span className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Định mức Kho & Tồn kho an toàn</span>
+            <span className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Định mức kho & tồn kho an toàn</span>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Định mức đặt hàng lại (Reorder Level)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Định mức đặt hàng lại</label>
                 <input
                   type="number"
                   value={editingItem.reorderPoint ?? 10}
@@ -448,7 +422,7 @@ export function ProductDetailsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tồn kho an toàn tối thiểu (Safety Stock)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tồn kho an toàn tối thiểu</label>
                 <input
                   type="number"
                   value={editingItem.safetyStock ?? 5}
@@ -468,10 +442,10 @@ export function ProductDetailsPage() {
                 onChange={(e) => setEditingItem({ ...editingItem, vatRate: parseInt(e.target.value) || 0 })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
               >
-                <option value={0}>0% (Miễn thuế / Không chịu thuế)</option>
+                <option value={0}>0% (Miễn thuế VAT)</option>
                 <option value={5}>5% (Thuế suất ưu đãi)</option>
-                <option value={8}>8% (Nghị định giảm thuế VAT)</option>
-                <option value={10}>10% (Thuế suất chuẩn GTGT)</option>
+                <option value={8}>8% (Nghị định giảm VAT)</option>
+                <option value={10}>10% (Thuế suất chuẩn)</option>
               </select>
             </div>
             <div>
@@ -481,51 +455,33 @@ export function ProductDetailsPage() {
                 onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
               >
-                <option value="DANG_KINH_DOANH">Đang kinh doanh (Active)</option>
-                <option value="NGUNG_KINH_DOANH">Ngừng Kinh Doanh (Inactive)</option>
+                <option value="DANG_KINH_DOANH">Đang kinh doanh</option>
+                <option value="NGUNG_KINH_DOANH">Ngừng kinh doanh</option>
               </select>
             </div>
           </div>
 
           <div>
-            <FileDropzone
-              accept=".png,.jpg,.jpeg,.pdf"
-              label="Bộ sưu tập ảnh sản phẩm & Tài liệu kỹ thuật"
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú sản phẩm</label>
+            <textarea
+              value={editingItem.notes || ''}
+              onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary resize-none"
+              rows={2}
+              placeholder="Ghi chú thêm về thông số kỹ thuật, lưu ý bảo quản..."
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú in hóa đơn (External Note)</label>
-              <textarea
-                value={editingItem.notes || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary resize-none"
-                rows={2}
-                placeholder="Mô tả in trên phiếu xuất..."
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú nội bộ (Internal Note - Chỉ nhân viên thấy)</label>
-              <textarea
-                value={(editingItem as any).internalNote || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, internalNote: e.target.value } as any)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500 resize-none"
-                rows={2}
-                placeholder="Lưu ý bảo quản, thông số kỹ thuật nội bộ..."
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2 border-t">
+          <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded hover:bg-gray-100"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors"
             >
-              Hủy
+              Hủy bỏ
             </button>
-            <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
-              Lưu sản phẩm
+            <button type="submit" className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow-sm transition-colors">
+              {modalMode === 'create' ? 'Tạo mới' : 'Lưu thay đổi'}
             </button>
           </div>
         </form>

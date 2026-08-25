@@ -146,6 +146,57 @@ export function VouchersPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    const today = new Date().toISOString().split('T')[0];
+
+    if (!editingItem && formData.startDate && formData.startDate < today) {
+      toast.error('Ngày bắt đầu không được ở trong quá khứ! Tối thiểu phải từ hôm nay trở đi.');
+      return;
+    }
+
+    if (formData.startDate && formData.expiryDate) {
+      if (formData.expiryDate < formData.startDate) {
+        toast.error('Hạn sử dụng (Ngày kết thúc) không được nhỏ hơn Ngày bắt đầu!');
+        return;
+      }
+      if (!editingItem && formData.startDate < today && formData.expiryDate < today) {
+        toast.error('Không cho phép tạo voucher với khoảng thời gian hoàn toàn trong quá khứ!');
+        return;
+      }
+    }
+
+    if (formData.discountValue <= 0) {
+      toast.error('Giá trị giảm giá phải lớn hơn 0!');
+      return;
+    }
+
+    if (formData.type === 'PERCENTAGE' && formData.discountValue > 100) {
+      toast.error('Mức giảm theo phần trăm không được vượt quá 100%!');
+      return;
+    }
+
+    if (formData.minOrderValue > 0) {
+      if (formData.type === 'FIXED_AMOUNT' && formData.discountValue > formData.minOrderValue) {
+        toast.error(`Số tiền giảm (${Math.round(formData.discountValue).toLocaleString('vi-VN')} ₫) không được vượt quá Giá trị đơn tối thiểu (${Math.round(formData.minOrderValue).toLocaleString('vi-VN')} ₫)!`);
+        return;
+      }
+      if (formData.type === 'PERCENTAGE' && formData.maxDiscount && formData.maxDiscount > formData.minOrderValue) {
+        toast.error(`Mức giảm tối đa (${Math.round(formData.maxDiscount).toLocaleString('vi-VN')} ₫) không được vượt quá Giá trị đơn tối thiểu (${Math.round(formData.minOrderValue).toLocaleString('vi-VN')} ₫)!`);
+        return;
+      }
+    }
+
+    // Tự động tính trạng thái theo thời gian khi tạo mới
+    let computedStatus: RewardVoucherRecord['status'] = 'ACTIVE';
+    if (formData.startDate > today) {
+      computedStatus = 'SCHEDULED';
+    } else if (formData.expiryDate < today) {
+      computedStatus = 'EXPIRED';
+    } else {
+      computedStatus = 'ACTIVE';
+    }
+
+    const finalStatus = editingItem ? formData.status : computedStatus;
+
     try {
       if (editingItem) {
         await updateVoucher(editingItem.id, {
@@ -156,7 +207,7 @@ export function VouchersPage() {
           minOrderValue: formData.minOrderValue,
           maxDiscount: formData.maxDiscount,
           quantity: formData.totalIssued,
-          status: formData.status as any,
+          status: finalStatus as any,
           startDate: formData.startDate,
           endDate: formData.expiryDate,
         });
@@ -170,12 +221,12 @@ export function VouchersPage() {
           minOrderValue: formData.minOrderValue,
           maxDiscount: formData.maxDiscount,
           quantity: formData.totalIssued,
-          status: formData.status as any,
+          status: finalStatus as any,
           startDate: formData.startDate,
           endDate: formData.expiryDate,
           usedCount: 0,
         });
-        toast.success(`Tạo mới voucher ${formData.voucherCode} thành công!`);
+        toast.success(`Tạo mới voucher ${formData.voucherCode} thành công (Trạng thái: ${finalStatus === 'SCHEDULED' ? 'Đã lên lịch' : 'Đang hoạt động'})!`);
       }
       setIsModalOpen(false);
       fetchVouchers();
@@ -204,7 +255,7 @@ export function VouchersPage() {
     () => [
       {
         accessorKey: 'voucherCode',
-        header: 'Mã Voucher',
+        header: 'Mã voucher',
         cell: (info) => (
           <span className="font-mono font-bold text-primary px-2 py-0.5 bg-primary/10 rounded border border-primary/20 hover:underline">
             {info.getValue() as string}
@@ -228,7 +279,7 @@ export function VouchersPage() {
           };
           return (
             <span className="font-bold text-gray-900 dark:text-white text-sm">
-              {type === 'PERCENTAGE' ? `${val}%` : type === 'FIXED_AMOUNT' ? `$${val.toFixed(2)}` : typeMap[type] || type}
+              {type === 'PERCENTAGE' ? `${val}%` : type === 'FIXED_AMOUNT' ? `${Math.round(val).toLocaleString('vi-VN')} đ` : typeMap[type] || type}
             </span>
           );
         },
@@ -236,7 +287,7 @@ export function VouchersPage() {
       {
         accessorKey: 'minOrderValue',
         header: 'Đơn tối thiểu',
-        cell: (info) => <span className="font-mono text-gray-700 dark:text-gray-300">${(info.getValue() as number).toFixed(2)}</span>,
+        cell: (info) => <span className="font-mono text-gray-700 dark:text-gray-300">{Math.round(info.getValue() as number).toLocaleString('vi-VN')} đ</span>,
       },
       {
         accessorKey: 'applicableScope',
@@ -252,7 +303,7 @@ export function VouchersPage() {
       },
       {
         accessorKey: 'totalRedeemed',
-        header: 'Đã dùng / Đã phát hành',
+        header: 'Đã dùng / đã phát hành',
         cell: ({ row }) => (
           <div>
             <span className="font-bold text-gray-900 dark:text-white">{row.original.totalRedeemed}</span>
@@ -335,18 +386,18 @@ export function VouchersPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mã khuyến mãi & chiến dịch ưu đãi (vouchers)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mã khuyến mãi & chiến dịch ưu đãi</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý và tạo mã giảm giá, thiết lập điều kiện áp dụng và theo dõi hiệu quả khuyến mãi trên toàn hệ thống. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Xuất danh sách voucher
+              <Download className="w-4 h-4" /> Xuất Excel
             </button>
             <button
               onClick={handleOpenCreate}
               className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
             >
-              <Plus className="w-4 h-4" /> Tạo mã khuyến mãi mới
+              <Plus className="w-4 h-4" /> Thêm mới voucher
             </button>
           </div>
         </div>
@@ -369,7 +420,7 @@ export function VouchersPage() {
 
           <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700/60">
             <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-gray-500 font-medium">Lọc Trạng thái:</span>
+              <span className="text-gray-500 font-medium">Lọc trạng thái:</span>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
@@ -392,10 +443,10 @@ export function VouchersPage() {
                 className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
               >
                 <option value="all">Tất cả loại voucher</option>
-                <option value="PERCENTAGE">PERCENTAGE (Phần trăm)</option>
-                <option value="FIXED_AMOUNT">FIXED AMOUNT (Cố định)</option>
-                <option value="FREE_SHIPPING">FREE SHIPPING (Phí vận chuyển)</option>
-                <option value="FREE_ITEM">FREE ITEM (Tặng quà)</option>
+                <option value="PERCENTAGE">Phần trăm (%)</option>
+                <option value="FIXED_AMOUNT">Số tiền cố định (đ)</option>
+                <option value="FREE_SHIPPING">Miễn phí vận chuyển</option>
+                <option value="FREE_ITEM">Tặng quà / sản phẩm</option>
               </select>
             </div>
 
@@ -417,8 +468,8 @@ export function VouchersPage() {
       <Modal
         isOpen={!!selectedVoucher}
         onClose={() => setSelectedVoucher(null)}
-        title={selectedVoucher ? `Chiến Dịch: ${selectedVoucher.voucherCode}` : 'Chi tiết mã khuyến mãi'}
-        width="max-w-lg"
+        title={selectedVoucher ? `Chi tiết voucher: ${selectedVoucher.voucherCode}` : 'Chi tiết mã khuyến mãi'}
+        size="erp"
       >
         {selectedVoucher && (
           <div className="space-y-6">
@@ -438,7 +489,13 @@ export function VouchersPage() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Giá trị khuyến mãi</p>
                   <p className="text-xl font-bold text-gray-900 dark:text-white">
-                    {selectedVoucher.type === 'PERCENTAGE' ? `${selectedVoucher.discountValue}% GIẢM` : selectedVoucher.type === 'FIXED_AMOUNT' ? `$${selectedVoucher.discountValue.toFixed(2)} GIẢM` : selectedVoucher.type === 'FREE_SHIPPING' ? 'Miễn phí vận chuyển' : 'Tặng sản phẩm'}
+                    {selectedVoucher.type === 'PERCENTAGE'
+                      ? `${selectedVoucher.discountValue}% giảm`
+                      : selectedVoucher.type === 'FIXED_AMOUNT'
+                      ? `${Math.round(selectedVoucher.discountValue).toLocaleString('vi-VN')} đ giảm`
+                      : selectedVoucher.type === 'FREE_SHIPPING'
+                      ? 'Miễn phí vận chuyển'
+                      : 'Tặng sản phẩm'}
                   </p>
                 </div>
               </div>
@@ -481,16 +538,20 @@ export function VouchersPage() {
 
               <div className="flex justify-between items-center text-sm pt-2">
                 <span className="text-gray-500 dark:text-gray-400">Giá trị đơn hàng tối thiểu:</span>
-                <span className="font-bold font-mono text-gray-900 dark:text-white">${selectedVoucher.minOrderValue.toFixed(2)}</span>
+                <span className="font-bold font-mono text-gray-900 dark:text-white">
+                  {Math.round(selectedVoucher.minOrderValue).toLocaleString('vi-VN')} đ
+                </span>
               </div>
-              {selectedVoucher.maxDiscount && (
+              {selectedVoucher.maxDiscount ? (
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">Mức giảm tối đa (Capped):</span>
-                  <span className="font-semibold font-mono text-primary">${selectedVoucher.maxDiscount.toFixed(2)}</span>
+                  <span className="text-gray-500 dark:text-gray-400">Mức giảm tối đa (giới hạn trần):</span>
+                  <span className="font-semibold font-mono text-emerald-600">
+                    {Math.round(selectedVoucher.maxDiscount).toLocaleString('vi-VN')} đ
+                  </span>
                 </div>
-              )}
+              ) : null}
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Lượt sử dụng / Tổng số lượng:</span>
+                <span className="text-gray-500 dark:text-gray-400">Lượt sử dụng / tổng số lượng:</span>
                 <span className="font-bold text-gray-900 dark:text-white">{selectedVoucher.totalRedeemed} / {selectedVoucher.totalIssued} mã</span>
               </div>
 
@@ -520,140 +581,218 @@ export function VouchersPage() {
       </Modal>
 
       {/* Create / Edit Modal */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Chỉnh sửa Voucher' : 'Tạo Mới Voucher'} width="max-w-lg">
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Cập nhật voucher' : 'Thêm mới voucher'} size="erp">
         <form onSubmit={handleSave} className="p-4 space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã Voucher</label>
-            <input
-              type="text"
-              required
-              value={formData.voucherCode}
-              onChange={(e) => setFormData({ ...formData, voucherCode: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên chiến dịch / Tên Voucher</label>
-            <input
-              type="text"
-              required
-              value={formData.campaignName}
-              onChange={(e) => setFormData({ ...formData, campaignName: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại ưu đãi</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã voucher *</label>
+              <input
+                type="text"
+                required
+                value={formData.voucherCode}
+                onChange={(e) => setFormData({ ...formData, voucherCode: e.target.value.toUpperCase().trim() })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono font-bold text-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên chiến dịch / tên voucher *</label>
+              <input
+                type="text"
+                required
+                value={formData.campaignName}
+                onChange={(e) => setFormData({ ...formData, campaignName: e.target.value })}
+                placeholder="VD: Tri ân khách hàng thân thiết..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-medium"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại ưu đãi *</label>
               <select
                 value={formData.type}
                 onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-semibold"
               >
                 <option value="PERCENTAGE">Phần trăm (%)</option>
-                <option value="FIXED_AMOUNT">Số tiền cố định (VNĐ)</option>
+                <option value="FIXED_AMOUNT">Số tiền cố định (đ)</option>
                 <option value="FREE_SHIPPING">Miễn phí vận chuyển</option>
-                <option value="FREE_ITEM">Tặng quà</option>
               </select>
             </div>
+
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá trị giảm</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {formData.type === 'PERCENTAGE'
+                  ? 'Mức giảm (%) * (Tối đa 100%)'
+                  : formData.type === 'FIXED_AMOUNT'
+                  ? 'Số tiền giảm (đ) *'
+                  : 'Mức miễn phí vận chuyển tối đa (đ) *'}
+              </label>
               <input
-                type="number"
-                value={formData.discountValue}
-                onChange={(e) => setFormData({ ...formData, discountValue: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                type="text"
+                value={formData.discountValue === 0 ? '' : formData.type === 'PERCENTAGE' ? String(formData.discountValue) : Math.round(formData.discountValue).toLocaleString('vi-VN')}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '');
+                  let num = digits === '' ? 0 : parseInt(digits, 10);
+                  if (formData.type === 'PERCENTAGE' && num > 100) num = 100;
+                  setFormData({ ...formData, discountValue: Math.max(0, num) });
+                }}
+                placeholder={formData.type === 'PERCENTAGE' ? 'Nhập số % (1-100)...' : 'Nhập số tiền...'}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-bold font-mono text-emerald-600"
+                required
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn tối thiểu (VNĐ)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá trị đơn tối thiểu (đ)</label>
               <input
-                type="number"
-                value={formData.minOrderValue}
-                onChange={(e) => setFormData({ ...formData, minOrderValue: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                type="text"
+                value={formData.minOrderValue === 0 ? '' : Math.round(formData.minOrderValue).toLocaleString('vi-VN')}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '');
+                  const num = digits === '' ? 0 : parseInt(digits, 10);
+                  setFormData({ ...formData, minOrderValue: Math.max(0, num) });
+                }}
+                placeholder="0 (Không giới hạn)"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono"
               />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giảm tối đa (VNĐ)</label>
-              <input
-                type="number"
-                value={formData.maxDiscount}
-                onChange={(e) => setFormData({ ...formData, maxDiscount: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
-              />
-            </div>
+
+            {formData.type === 'PERCENTAGE' ? (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mức giảm tối đa (đ) (giới hạn trần)</label>
+                <input
+                  type="text"
+                  value={formData.maxDiscount === 0 ? '' : Math.round(formData.maxDiscount).toLocaleString('vi-VN')}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '');
+                    const num = digits === '' ? 0 : parseInt(digits, 10);
+                    setFormData({ ...formData, maxDiscount: Math.max(0, num) });
+                  }}
+                  placeholder="0 (Không khống chế trần)"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng số lượt phát hành *</label>
+                <input
+                  type="text"
+                  value={formData.totalIssued === 0 ? '' : Math.round(formData.totalIssued).toLocaleString('vi-VN')}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '');
+                    const num = digits === '' ? 0 : parseInt(digits, 10);
+                    setFormData({ ...formData, totalIssued: Math.max(1, num) });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono"
+                  required
+                />
+              </div>
+            )}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+
+          {formData.type === 'PERCENTAGE' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng số lượt phát hành *</label>
+                <input
+                  type="text"
+                  value={formData.totalIssued === 0 ? '' : Math.round(formData.totalIssued).toLocaleString('vi-VN')}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '');
+                    const num = digits === '' ? 0 : parseInt(digits, 10);
+                    setFormData({ ...formData, totalIssued: Math.max(1, num) });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono"
+                  required
+                />
+              </div>
+              {editingItem && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-semibold"
+                  >
+                    <option value="ACTIVE">Đang hoạt động</option>
+                    <option value="SCHEDULED">Đã lên lịch</option>
+                    <option value="PAUSED">Tạm dừng</option>
+                    <option value="EXPIRED">Đã kết thúc</option>
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+
+          {formData.type !== 'PERCENTAGE' && editingItem && (
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
               <select
                 value={formData.status}
                 onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-semibold"
               >
-                <option value="ACTIVE">Hoạt động</option>
+                <option value="ACTIVE">Đang hoạt động</option>
                 <option value="SCHEDULED">Đã lên lịch</option>
                 <option value="PAUSED">Tạm dừng</option>
-                <option value="EXPIRED">Đã hết hạn</option>
+                <option value="EXPIRED">Đã kết thúc</option>
               </select>
             </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng số lượt phát hành</label>
-              <input
-                type="number"
-                value={formData.totalIssued}
-                onChange={(e) => setFormData({ ...formData, totalIssued: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày bắt đầu (Hiệu lực)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày bắt đầu (hiệu lực) *</label>
               <input
                 type="date"
                 required
+                min={!editingItem ? new Date().toISOString().split('T')[0] : undefined}
                 value={formData.startDate}
                 onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hạn sử dụng (Ngày hết hạn) *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hạn sử dụng (ngày hết hạn) *</label>
               <input
                 type="date"
                 required
+                min={formData.startDate || new Date().toISOString().split('T')[0]}
                 value={formData.expiryDate}
                 onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-medium"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono font-medium"
               />
             </div>
           </div>
+
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú chiến lược khuyến mãi</label>
             <textarea
               rows={2}
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              placeholder="Ghi chú điều kiện áp dụng..."
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
             />
           </div>
+
           <div className="pt-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
               className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700"
             >
-              Hủy
+              Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium"
+              className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold shadow-sm"
             >
-              Lưu Voucher
+              {editingItem ? 'Lưu thông tin' : 'Thêm mới'}
             </button>
           </div>
         </form>

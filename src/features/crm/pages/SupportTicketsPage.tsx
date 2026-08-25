@@ -86,20 +86,25 @@ export function SupportTicketsPage() {
   }, [fetchSupportTickets]);
 
   const data: SupportTicketRecord[] = useMemo(() => {
-    return storeTickets.map((t) => ({
-      id: t.id,
-      ticketNumber: t.ticketCode,
-      customerName: t.customerName,
-      customerEmail: `${t.customerName.toLowerCase().replace(/\s+/g, '.')}@email.com`,
-      subject: t.subject,
-      category: 'GENERAL_INQUIRY',
-      priority: t.priority as any,
-      status: (t.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : t.status === 'CLOSED' ? 'CLOSED' : 'OPEN') as any,
-      assignedAgent: t.assignee || 'Chưa phân công',
-      createdAt: t.createdAt,
-      updatedAt: t.createdAt,
-      lastMessage: t.subject,
-    }));
+    return storeTickets.map((t) => {
+      const custName = t.customerName || 'Nguyễn Văn An (Web Online)';
+      const safeEmail = (t.customerPhone ? `${t.customerPhone}@email.com` : `${custName.toLowerCase().replace(/[^a-z0-9]/g, '.')}@email.com`);
+      return {
+        id: t.id,
+        ticketNumber: t.ticketCode || `TCK-${t.id}`,
+        customerName: custName,
+        customerEmail: safeEmail,
+        customerPhone: t.customerPhone || '0901234567',
+        subject: t.subject || 'Hỗ trợ khách hàng',
+        category: (t.category as any) || 'GENERAL_INQUIRY',
+        priority: (t.priority as any) || 'MEDIUM',
+        status: (t.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : t.status === 'CLOSED' ? 'CLOSED' : 'OPEN') as any,
+        assignedAgent: t.assignedTo || 'Nhân viên CSKH',
+        createdAt: t.createdDate || new Date().toISOString().split('T')[0],
+        updatedAt: t.createdDate || new Date().toISOString().split('T')[0],
+        lastMessage: t.subject || 'Hỗ trợ khách hàng',
+      };
+    });
   }, [storeTickets]);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -291,18 +296,18 @@ export function SupportTicketsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hỗ trợ khách hàng (support helpdesk)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu hỗ trợ khách hàng</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý các yêu cầu hỗ trợ từ nhiều kênh, xử lý bảo hành thiết bị và khiếu nại dịch vụ. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Xuất Dữ Liệu hỗ trợ
+              <Download className="w-4 h-4" /> Xuất Excel
             </button>
             <button
               onClick={handleOpenCreate}
               className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
             >
-              <Plus className="w-4 h-4" /> Tạo phiếu hỗ trợ mới
+              <Plus className="w-4 h-4" /> Thêm mới phiếu hỗ trợ
             </button>
           </div>
         </div>
@@ -333,7 +338,7 @@ export function SupportTicketsPage() {
       <Modal
         isOpen={!!selectedTicket}
         onClose={() => setSelectedTicket(null)}
-        title={selectedTicket ? `Phiếu Hỗ Trợ: ${selectedTicket.ticketNumber}` : 'Chi tiết phiếu'}
+        title={selectedTicket ? `Chi tiết phiếu hỗ trợ: ${selectedTicket.ticketNumber}` : 'Chi tiết phiếu hỗ trợ'}
         width="max-w-lg"
       >
         {selectedTicket && (
@@ -352,7 +357,7 @@ export function SupportTicketsPage() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Độ khẩn cấp</p>
                   <span className={`inline-block mt-0.5 px-2 py-0.5 rounded text-xs font-bold ${priorityStyles[selectedTicket.priority]}`}>
-                    ƯU TIÊN {priorityMap[selectedTicket.priority] || selectedTicket.priority}
+                    Ưu tiên {priorityMap[selectedTicket.priority]?.toLowerCase() || selectedTicket.priority}
                   </span>
                 </div>
               </div>
@@ -377,7 +382,7 @@ export function SupportTicketsPage() {
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   <Clock className="w-4 h-4 text-blue-500" /> Cập nhật lần cuối
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedTicket.updatedAt}</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white truncate font-mono">{selectedTicket.updatedAt}</p>
               </div>
             </div>
 
@@ -409,7 +414,7 @@ export function SupportTicketsPage() {
               {selectedTicket.internalNotes && (
                 <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
                   <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider block mb-1 flex items-center gap-1">
-                    <ShieldAlert className="w-3.5 h-3.5" /> Ghi chú nội bộ (Bảo mật)
+                    <ShieldAlert className="w-3.5 h-3.5" /> Ghi chú nội bộ (bảo mật)
                   </span>
                   <p className="text-sm text-gray-700 dark:text-gray-300 font-mono bg-amber-50 dark:bg-amber-900/10 p-2 rounded border border-amber-200 dark:border-amber-900/30">
                     {selectedTicket.internalNotes}
@@ -436,7 +441,7 @@ export function SupportTicketsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Tạo phiếu hỗ trợ mới' : 'Chỉnh sửa phiếu hỗ trợ'}
+        title={modalMode === 'create' ? 'Thêm mới phiếu hỗ trợ' : 'Cập nhật phiếu hỗ trợ'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveTicket} className="space-y-4">
@@ -497,7 +502,7 @@ export function SupportTicketsPage() {
                 value={editingTicket.customerPhone || ''}
                 onChange={(e) => setEditingTicket({ ...editingTicket, customerPhone: e.target.value })}
                 placeholder="0912 345 678"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary font-mono"
                 required
               />
             </div>
@@ -516,13 +521,13 @@ export function SupportTicketsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã tham chiếu (Đơn hàng / Mã POS)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã tham chiếu (đơn hàng / mã POS)</label>
               <input
                 type="text"
                 value={editingTicket.referenceCode || ''}
                 onChange={(e) => setEditingTicket({ ...editingTicket, referenceCode: e.target.value })}
                 placeholder="#DH-xxxxx hoặc POS-01"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary font-mono"
               />
             </div>
           </div>
@@ -542,10 +547,10 @@ export function SupportTicketsPage() {
                 }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
               >
-                <option value="LOW">Thấp (low)</option>
-                <option value="MEDIUM">Trung bình (Med)</option>
-                <option value="HIGH">Cao (High)</option>
-                <option value="URGENT">Khẩn cấp (Urgent)</option>
+                <option value="LOW">Thấp</option>
+                <option value="MEDIUM">Trung bình</option>
+                <option value="HIGH">Cao</option>
+                <option value="URGENT">Khẩn cấp</option>
               </select>
             </div>
             <div>
@@ -554,14 +559,14 @@ export function SupportTicketsPage() {
                 type="text"
                 value={editingTicket.dueDate || ''}
                 readOnly
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none cursor-default"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none cursor-default font-mono"
               />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái xử lý</label>
               {modalMode === 'create' ? (
                 <div className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white text-sm cursor-default font-medium">
-                  Mới mở (OPEN)
+                  Mới mở
                 </div>
               ) : (
                 <select
@@ -601,7 +606,7 @@ export function SupportTicketsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">Ghi chú nội bộ (Không hiển thị cho khách)</label>
+            <label className="block text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">Ghi chú nội bộ (không hiển thị cho khách hàng)</label>
             <textarea
               rows={2}
               value={editingTicket.internalNotes || ''}
@@ -623,7 +628,7 @@ export function SupportTicketsPage() {
               type="submit"
               className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              {modalMode === 'create' ? 'Tạo Mới' : 'Lưu thay đổi'}
+              {modalMode === 'create' ? 'Thêm mới' : 'Lưu thông tin'}
             </button>
           </div>
         </form>

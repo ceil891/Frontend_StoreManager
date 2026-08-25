@@ -195,7 +195,7 @@ export function WarrantyClaimsPage() {
     () => [
       {
         accessorKey: 'claimCode',
-        header: 'Mã Yêu cầu',
+        header: 'Mã yêu cầu',
         cell: (info) => (
           <span className="font-mono font-bold text-primary px-2 py-0.5 bg-primary/10 rounded border border-primary/20 hover:underline">
             {info.getValue() as string}
@@ -204,7 +204,7 @@ export function WarrantyClaimsPage() {
       },
       {
         accessorKey: 'warrantyCode',
-        header: 'Mã Bảo hành',
+        header: 'Mã bảo hành',
         cell: (info) => <span className="font-medium text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
@@ -287,13 +287,13 @@ export function WarrantyClaimsPage() {
     <>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Yêu cầu Bảo hành</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Yêu cầu bảo hành</h1>
           <div className="flex items-center gap-3">
             <button
               className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-medium shadow-sm"
               onClick={handleOpenCreate}
             >
-              <Plus className="w-4 h-4" /> Tạo Mới
+              <Plus className="w-4 h-4" /> Thêm mới yêu cầu
             </button>
           </div>
         </div>
@@ -304,7 +304,7 @@ export function WarrantyClaimsPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm kiếm mã yêu cầu, mã bảo hành, người xử lý..."
+              placeholder="Tìm kiếm theo mã yêu cầu, mã bảo hành, người xử lý..."
               className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-all"
             />
           </div>
@@ -313,16 +313,16 @@ export function WarrantyClaimsPage() {
       </div>
 
       {/* Drawer chi tiết */}
-      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết Yêu cầu: ${selected.claimCode}` : ''} width="max-w-lg">
+      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Chi tiết yêu cầu: ${selected.claimCode}` : ''} width="max-w-lg">
         {selected && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-xs text-gray-500">Mã Yêu cầu</p>
+                <p className="text-xs text-gray-500">Mã yêu cầu</p>
                 <p className="font-mono font-bold text-primary">{selected.claimCode}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">Mã Bảo hành</p>
+                <p className="text-xs text-gray-500">Mã bảo hành</p>
                 <p className="font-medium text-gray-900 dark:text-white">{selected.warrantyCode}</p>
               </div>
             </div>
@@ -356,7 +356,7 @@ export function WarrantyClaimsPage() {
               </div>
               <div>
                 <p className="text-xs text-gray-500">Chi phí sửa (nếu có)</p>
-                <p>{selected.repairCost ? selected.repairCost.toLocaleString() + ' đ' : '-'}</p>
+                <p>{selected.repairCost ? selected.repairCost.toLocaleString('vi-VN') + ' đ' : '-'}</p>
               </div>
             </div>
 
@@ -378,7 +378,7 @@ export function WarrantyClaimsPage() {
       </Modal>
 
       {/* Modal tạo / sửa yêu cầu bảo hành */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Chỉnh sửa Yêu cầu Bảo hành' : 'Tạo Yêu cầu Bảo hành mới'} width="max-w-2xl">
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Cập nhật yêu cầu bảo hành' : 'Thêm mới yêu cầu bảo hành'} width="max-w-2xl">
         <form onSubmit={handleSave} className="p-4 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -389,10 +389,10 @@ export function WarrantyClaimsPage() {
                   required
                   value={form.claimCode}
                   onChange={(e) => setForm({ ...form, claimCode: e.target.value })}
-                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono"
                 />
                 <button type="button" onClick={generateClaimCode} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-lg text-sm border border-gray-300 dark:border-gray-600 whitespace-nowrap">
-                  🎲 Tạo mã
+                  Tạo mã tự động
                 </button>
               </div>
             </div>
@@ -404,7 +404,7 @@ export function WarrantyClaimsPage() {
                 value={form.warrantyCode}
                 onBlur={handleWarrantyCodeBlur}
                 onChange={(e) => setForm({ ...form, warrantyCode: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono"
               />
               {mockCustomer && (
                 <div className="mt-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800/30 text-sm">
@@ -417,18 +417,18 @@ export function WarrantyClaimsPage() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tình trạng ngoại quan khi nhận máy (*)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tình trạng ngoại quan khi nhận máy *</label>
               <textarea
                 required
                 rows={2}
-                placeholder="Máy trày nhẹ 4 góc, màn hình không xước..."
+                placeholder="Máy trầy nhẹ 4 góc, màn hình không xước..."
                 value={form.conditionOnReceive}
                 onChange={(e) => setForm({ ...form, conditionOnReceive: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mô tả sự cố khách báo</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mô tả sự cố khách báo *</label>
               <textarea
                 required
                 rows={2}
@@ -472,7 +472,7 @@ export function WarrantyClaimsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chi phí sửa chữa (Nếu từ chối bảo hành)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chi phí sửa chữa (nếu từ chối bảo hành)</label>
               <input
                 type="number"
                 placeholder="0"
@@ -487,7 +487,7 @@ export function WarrantyClaimsPage() {
                 type="date"
                 value={form.estimatedReturnDate}
                 onChange={(e) => setForm({ ...form, estimatedReturnDate: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono"
               />
             </div>
           </div>
@@ -508,13 +508,13 @@ export function WarrantyClaimsPage() {
               onClick={() => setIsModalOpen(false)}
               className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700"
             >
-              Hủy
+              Hủy bỏ
             </button>
             <button
               type="submit"
               className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium"
             >
-              Lưu Yêu cầu
+              {editingItem ? 'Lưu thông tin' : 'Thêm mới'}
             </button>
           </div>
         </form>

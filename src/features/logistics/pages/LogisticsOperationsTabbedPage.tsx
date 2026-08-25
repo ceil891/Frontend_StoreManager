@@ -7,7 +7,7 @@ import { CodReconciliationPage } from './CodReconciliationPage';
 
 const tabs = [
   { id: 'methods', label: 'Phương thức vận chuyển', icon: Route, permission: 'logistics:method:view' },
-  { id: 'vehicles', label: 'Quản lý Đội xe / Phương tiện', icon: Car, permission: 'logistics:vehicle:view' },
+  { id: 'vehicles', label: 'Đội xe & phương tiện', icon: Car, permission: 'logistics:vehicle:view' },
   { id: 'cod', label: 'Đối soát tiền COD', icon: Banknote, permission: 'logistics:cod:view' },
 ] as const;
 
@@ -30,7 +30,7 @@ export function LogisticsOperationsTabbedPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Vận hành Giao vận & COD</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Vận hành giao vận & COD</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Thiết lập hình thức giao hàng, quản lý phương tiện vận chuyển và đối soát dòng tiền thu hộ COD
           </p>

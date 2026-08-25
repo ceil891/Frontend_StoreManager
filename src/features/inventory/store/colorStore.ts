@@ -39,16 +39,44 @@ export const useColorStore = create<ColorState>()((set, get) => ({
         description: c.description || '',
         status: (c.isActive !== false ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE',
       }));
-      const unique = mapped.filter((c, idx, self) =>
+
+      // Apply LocalStorage Persistence Fallback
+      let finalColors = mapped;
+      try {
+        const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_colors') || '[]');
+        const editedMap: Record<string, ColorRecord> = JSON.parse(localStorage.getItem('retailhub_edited_colors') || '{}');
+        
+        finalColors = mapped
+          .filter(c => !deletedIds.includes(String(c.id)) && !deletedIds.includes(c.colorCode))
+          .map(c => editedMap[c.id] ? { ...c, ...editedMap[c.id] } : c);
+
+        // Include any newly added items stored locally
+        Object.keys(editedMap).forEach(key => {
+          if (!deletedIds.includes(key) && !finalColors.some(c => c.id === key || c.colorCode === editedMap[key].colorCode)) {
+            finalColors.unshift(editedMap[key]);
+          }
+        });
+      } catch (e) {}
+
+      const unique = finalColors.filter((c, idx, self) =>
         idx === self.findIndex((t) => String(t.id) === String(c.id) || (t.colorName && t.colorName.trim().toLowerCase() === c.colorName.trim().toLowerCase()))
       );
       set({ colors: unique, isLoading: false });
     } catch (err: any) {
       console.error('Failed to fetch colors:', err);
+      // If API fails, try loading purely from local cache
+      try {
+        const editedMap: Record<string, ColorRecord> = JSON.parse(localStorage.getItem('retailhub_edited_colors') || '{}');
+        const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_colors') || '[]');
+        const localList = Object.values(editedMap).filter(c => !deletedIds.includes(c.id) && !deletedIds.includes(c.colorCode));
+        if (localList.length > 0) {
+          set({ colors: localList, isLoading: false });
+          return;
+        }
+      } catch (e) {}
       set({ isLoading: false, error: err.message || 'Lỗi khi tải danh sách màu sắc' });
     }
   },
-
 
   addColor: async (color) => {
     const tempId = `clr_${Date.now()}`;
@@ -57,6 +85,16 @@ export const useColorStore = create<ColorState>()((set, get) => ({
       ...color,
     };
     set((state) => ({ colors: [newRecord, ...state.colors] }));
+
+    try {
+      const editedMap = JSON.parse(localStorage.getItem('retailhub_edited_colors') || '{}');
+      editedMap[tempId] = newRecord;
+      localStorage.setItem('retailhub_edited_colors', JSON.stringify(editedMap));
+
+      const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_colors') || '[]');
+      const filteredDeleted = deletedIds.filter(id => id !== tempId && id !== color.colorCode);
+      localStorage.setItem('retailhub_deleted_colors', JSON.stringify(filteredDeleted));
+    } catch (e) {}
 
     try {
       const payload = {
@@ -74,11 +112,19 @@ export const useColorStore = create<ColorState>()((set, get) => ({
   },
 
   updateColor: async (id, data) => {
+    const original = get().colors.find((c) => c.id === id);
+    const updated = original ? { ...original, ...data } : (data as ColorRecord);
     set((state) => ({
-      colors: state.colors.map((c) => (c.id === id ? { ...c, ...data } : c)),
+      colors: state.colors.map((c) => (c.id === id ? { ...c, ...data } : s => s)),
     }));
+
     try {
-      const original = get().colors.find((c) => c.id === id);
+      const editedMap = JSON.parse(localStorage.getItem('retailhub_edited_colors') || '{}');
+      editedMap[id] = updated;
+      localStorage.setItem('retailhub_edited_colors', JSON.stringify(editedMap));
+    } catch (e) {}
+
+    try {
       const payload = {
         colorCode: data.colorCode || original?.colorCode,
         colorName: data.colorName || original?.colorName,
@@ -93,9 +139,23 @@ export const useColorStore = create<ColorState>()((set, get) => ({
   },
 
   deleteColor: async (id) => {
+    const target = get().colors.find((c) => c.id === id);
     set((state) => ({
       colors: state.colors.filter((c) => c.id !== id),
     }));
+
+    try {
+      const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_colors') || '[]');
+      if (!deletedIds.includes(String(id))) deletedIds.push(String(id));
+      if (target?.colorCode && !deletedIds.includes(target.colorCode)) deletedIds.push(target.colorCode);
+      localStorage.setItem('retailhub_deleted_colors', JSON.stringify(deletedIds));
+
+      const editedMap = JSON.parse(localStorage.getItem('retailhub_edited_colors') || '{}');
+      delete editedMap[id];
+      if (target?.colorCode) delete editedMap[target.colorCode];
+      localStorage.setItem('retailhub_edited_colors', JSON.stringify(editedMap));
+    } catch (e) {}
+
     try {
       await axiosClient.delete(`/colors/${id}`).catch(() => {});
     } catch (err: any) {

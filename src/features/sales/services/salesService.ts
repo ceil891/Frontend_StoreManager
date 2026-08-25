@@ -59,9 +59,21 @@ export const salesService = {
       unitPriceSnapshot: Number(d.unitPriceSnapshot || d.unitPrice || d.price || (order.totalAmount || 0)),
     }));
 
+    let validOrderDate = new Date().toISOString().slice(0, 19);
+    if (order.date) {
+      if (order.date.includes('T')) {
+        validOrderDate = order.date.slice(0, 19);
+      } else if (order.date.includes(' ')) {
+        const parts = order.date.split(' ');
+        validOrderDate = `${parts[0]}T${parts[1] ? (parts[1].length === 5 ? `${parts[1]}:00` : parts[1]) : '00:00:00'}`;
+      } else {
+        validOrderDate = `${order.date}T00:00:00`;
+      }
+    }
+
     const payload = {
       orderCode: order.code || `SO-${Date.now()}`,
-      orderDate: order.date ? `${order.date}T00:00:00` : new Date().toISOString(),
+      orderDate: validOrderDate,
       customerId: Number(order.customerId) || 1,
       branchId: Number(order.branchId) || 1,
       status: order.status || 'COMPLETED',
@@ -71,8 +83,8 @@ export const salesService = {
       orderOrigin: order.origin || 'POS',
       paymentStatus: order.paymentStatus || 'PAID',
       note: (order as any).note || '',
-      paymentMethodId: (order as any).paymentMethodId,
-      paymentMethodCode: (order as any).paymentMethodCode,
+      paymentMethodId: (order as any).paymentMethodId ? Number((order as any).paymentMethodId) : null,
+      paymentMethodCode: (order as any).paymentMethodCode || null,
       details: formattedDetails.length > 0 ? formattedDetails : [
         {
           productVariantId: 1,

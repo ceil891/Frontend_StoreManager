@@ -182,9 +182,10 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         isAuthenticated: state.isAuthenticated,
       }),
       onRehydrateStorage: () => (state) => {
-        // Sanity check: nếu isAuthenticated là true nhưng user hoặc user.role bị null, tự động reset
-        if (state && state.isAuthenticated && (!state.user || !state.user.role)) {
-          console.warn('[AuthStore] Corrupted auth state detected on rehydrate. Resetting auth state.');
+        // Sanity check: nếu isAuthenticated là true nhưng user, role hoặc access_token bị null, tự động reset
+        const hasToken = !!localStorage.getItem('access_token');
+        if (state && state.isAuthenticated && (!state.user || !state.user.role || !hasToken)) {
+          console.warn('[AuthStore] Corrupted or expired auth state detected on rehydrate. Resetting auth state.');
           useAuthStore.setState({
             user: null,
             accessToken: null,
@@ -193,6 +194,7 @@ export const useAuthStore = create<AuthState & AuthActions>()(
           });
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
+          localStorage.removeItem('retailhub-auth');
         }
       },
     }

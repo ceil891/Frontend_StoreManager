@@ -6,7 +6,7 @@ import { PermissionsPage } from './PermissionsPage';
 
 const tabs = [
   { id: 'roles', label: 'Vai trò người dùng', icon: Shield, permission: 'system:role:view' },
-  { id: 'permissions', label: 'Ma trận Quyền hạn (Permissions)', icon: Key, permission: 'system:permission:view' },
+  { id: 'permissions', label: 'Danh mục Quyền hạn (Permissions)', icon: Key, permission: 'system:permission:view' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];

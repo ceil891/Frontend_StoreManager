@@ -92,7 +92,7 @@ export const userService = {
         fullName: u.fullName || '',
         emailAddress: u.email || '',
         contactPhone: u.phone || '',
-        avatarUrl: buildUserAvatarUrl(u.email || ''),
+        avatarUrl: u.avatar || u.avatarUrl || buildUserAvatarUrl(u.email || ''),
         assignedRole: roleCode,
         departmentId,
         branchId: rawBranchId,
@@ -125,7 +125,7 @@ export const userService = {
     const parsedBranchId = Number(String(newUser.branchId || '1').replace(/[^0-9]/g, '')) || 1;
 
     const payload = {
-      username: newUser.emailAddress.split('@')[0],
+      username: newUser.emailAddress.split('@')[0] || `user_${Date.now()}`,
       fullName: newUser.fullName,
       email: newUser.emailAddress,
       phone: newUser.contactPhone,
@@ -137,6 +137,7 @@ export const userService = {
       dateOfBirth: newUser.dateOfBirth || '',
       departmentId: newUser.departmentId || '',
       positionId: newUser.positionId || '',
+      avatar: newUser.avatarUrl || '',
     };
     const res = await axiosClient.post<any, any>('/users', payload);
     const item = res?.data || res;
@@ -193,6 +194,7 @@ export const userService = {
       dateOfBirth: updatedUser.dateOfBirth || '',
       departmentId: updatedUser.departmentId || '',
       positionId: updatedUser.positionId || '',
+      avatar: updatedUser.avatarUrl || '',
     };
     if (roleId) {
       payload.roleId = roleId;

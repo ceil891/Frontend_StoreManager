@@ -57,7 +57,7 @@ export function QuoteVariantSelector({ value, onChange }: QuoteVariantSelectorPr
     id: String(v.id),
     code: v.sku || v.variantCode || `VAR-${v.id}`,
     name: v.productName || v.product?.name || v.name || 'Biến thể sản phẩm',
-    subtitle: `SKU: ${v.sku || 'N/A'} | Mã vạch: ${v.barcode || 'N/A'} | ĐVT: ${v.unit || 'Cái'} | Giá: ${Number(v.price || 0).toLocaleString('vi-VN')} đ`,
+    subtitle: `SKU: ${v.sku || 'Không có'} | Mã vạch: ${v.barcode || 'Không có'} | ĐVT: ${v.unit || 'Cái'} | Giá: ${Number(v.price || 0).toLocaleString('vi-VN')} đ`,
   }));
 
   const handleSelect = (selectedId: string) => {
@@ -77,9 +77,9 @@ export function QuoteVariantSelector({ value, onChange }: QuoteVariantSelectorPr
 
   return (
     <SearchLookupModal
-      title="Chọn Sản Phẩm / Variant (Biến thể)"
+      title="Chọn sản phẩm / biến thể"
       iconType="package"
-      placeholder={loading ? "Đang tải danh sách biến thể..." : "Tìm theo tên, SKU, barcode..."}
+      placeholder={loading ? "Đang tải danh sách biến thể..." : "Tìm theo tên, SKU, mã vạch..."}
       value={value || ''}
       options={options}
       onChange={(selectedId) => handleSelect(selectedId)}

@@ -65,7 +65,7 @@ export function PromotionsPage() {
       promoCode: p.promoCode,
       campaignTitle: p.promoName,
       discountType: 'PERCENTAGE',
-      discountValue: p.discountType === 'PERCENT' ? `${p.discountValue}%` : `${p.discountValue.toLocaleString()}đ`,
+      discountValue: p.discountType === 'PERCENT' ? `${p.discountValue}%` : `${p.discountValue.toLocaleString('vi-VN')} đ`,
       startDate: p.startDate,
       endDate: p.endDate,
       minSpendRequired: 100000,
@@ -115,7 +115,7 @@ export function PromotionsPage() {
           endDate: editingPromo.endDate || '',
           status: editingPromo.status === 'EXPIRED' ? 'EXPIRED' : 'ACTIVE',
         });
-        toast.success('Khởi chạy chương trình khuyến mãi mới thành công!');
+        toast.success('Thêm mới chương trình khuyến mãi thành công!');
       } else if (editingPromo.id) {
         await updatePromotion(editingPromo.id, {
           promoCode: editingPromo.promoCode,
@@ -151,32 +151,46 @@ export function PromotionsPage() {
       },
       {
         accessorKey: 'campaignTitle',
-        header: 'Chiến dịch & Loại',
-        cell: ({ row }) => (
-          <div>
-            <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.campaignTitle}</p>
-            <p className="text-xs text-gray-500 font-mono">Loại: {row.original.discountType.replace(/_/g, ' ')}</p>
-          </div>
-        ),
+        header: 'Chiến dịch & loại',
+        cell: ({ row }) => {
+          const typeMap: Record<string, string> = {
+            PERCENTAGE: 'Giảm theo %',
+            BUNDLE_DEAL: 'Mua combo',
+            BUY_X_GET_Y: 'Mua X tặng Y',
+            TIERED_BASKET_DISCOUNT: 'Giảm theo tầng đơn hàng'
+          };
+          return (
+            <div>
+              <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.campaignTitle}</p>
+              <p className="text-xs text-gray-500 font-medium">Loại: {typeMap[row.original.discountType] || row.original.discountType}</p>
+            </div>
+          );
+        },
       },
       {
         accessorKey: 'discountValue',
-        header: 'Cơ cấu giảm giá',
+        header: 'Mức giảm giá',
         cell: (info) => <span className="font-bold text-gray-900 dark:text-white text-sm">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'minSpendRequired',
-        header: 'Số tiền tối thiểu',
-        cell: (info) => <span className="font-mono text-gray-700 dark:text-gray-300">${(info.getValue() as number).toFixed(2)}</span>,
+        header: 'Đơn tối thiểu',
+        cell: (info) => <span className="font-mono text-gray-700 dark:text-gray-300">{(info.getValue() as number).toLocaleString('vi-VN')} đ</span>,
       },
       {
         accessorKey: 'targetSegment',
         header: 'Phân khúc khách hàng',
         cell: (info) => {
           const segment = info.getValue() as PromotionCampaignRecord['targetSegment'];
+          const segmentLabels: Record<string, string> = {
+            ALL_CUSTOMERS: 'Tất cả khách hàng',
+            VIP_LOYALTY_ONLY: 'Khách VIP / thân thiết',
+            NEW_REGISTRATIONS: 'Khách hàng mới',
+            INACTIVE_WINBACK: 'Khách hàng cũ'
+          };
           return (
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${segmentBadgeStyles[segment]}`}>
-              {segment.replace(/_/g, ' ')}
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${segmentBadgeStyles[segment]}`}>
+              {segmentLabels[segment] || segment.replace(/_/g, ' ')}
             </span>
           );
         },
@@ -186,13 +200,14 @@ export function PromotionsPage() {
         header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
-          const cfg: Record<string, string> = {
-            ACTIVE: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
-            UPCOMING: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
-            EXPIRED: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
-            PAUSED: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+          const cfg: Record<string, { cls: string; label: string }> = {
+            ACTIVE: { cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300', label: 'Đang chạy' },
+            UPCOMING: { cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300', label: 'Sắp diễn ra' },
+            EXPIRED: { cls: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400', label: 'Đã kết thúc' },
+            PAUSED: { cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300', label: 'Tạm dừng' },
           };
-          return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${cfg[status] || ''}`}>{status}</span>;
+          const item = cfg[status] || { cls: 'bg-gray-100 text-gray-800', label: status };
+          return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${item.cls}`}>{item.label}</span>;
         },
       },
       {
@@ -221,15 +236,15 @@ export function PromotionsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Khuyến mãi và Chiến dịch Marketing</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Cấu hình chương trình giảm giá, khuyến mãi bundle, BOGO và đánh giá mức hoàn tiền khuyến mãi.</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý khuyến mãi và chiến dịch tiếp thị</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Cấu hình chương trình giảm giá, khuyến mãi combo, mua tặng và theo dõi hiệu quả chiết khấu</p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
               <Download className="w-4 h-4" /> Xuất nhật ký chiến dịch
             </button>
-            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
-              <Plus className="w-4 h-4" /> Khởi chạy chương trình
+            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-medium shadow-sm">
+              <Plus className="w-4 h-4" /> Thêm mới chương trình
             </button>
           </div>
         </div>
@@ -243,12 +258,12 @@ export function PromotionsPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm kiếm theo mã, tiêu đề hoặc phân khúc khách hàng..."
+              placeholder="Tìm kiếm theo mã, tên chiến dịch hoặc phân khúc khách hàng..."
               className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-all"
             />
           </div>
           <button className="flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors text-sm">
-            <Filter className="w-4 h-4" /> Lọc khuyến mãi
+            <Filter className="w-4 h-4" /> Lọc dữ liệu
           </button>
         </div>
 
@@ -256,11 +271,11 @@ export function PromotionsPage() {
       </div>
 
       {/* Detail Drawer */}
-      {/* Modal Xem chi tiết khuyến mãi căn giữa (TC-ALL-1) */}
+      {/* Modal Xem chi tiết khuyến mãi */}
       <Modal
         isOpen={!!selectedPromo}
         onClose={() => setSelectedPromo(null)}
-        title={selectedPromo ? `Hồ sơ chương trình: ${selectedPromo.promoCode}` : 'Thông tin chương trình'}
+        title={selectedPromo ? `Thông tin chương trình: ${selectedPromo.promoCode}` : 'Thông tin chương trình'}
         width="max-w-lg"
       >
         {selectedPromo && (
@@ -279,16 +294,16 @@ export function PromotionsPage() {
                   <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Công thức chiết khấu</p>
+                  <p className="text-xs font-semibold text-gray-500">Công thức chiết khấu</p>
                   <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{selectedPromo.discountValue}</p>
                 </div>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                 selectedPromo.status === 'ACTIVE' ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
                 selectedPromo.status === 'UPCOMING' ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100' :
                 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
               }`}>
-                {selectedPromo.status}
+                {selectedPromo.status === 'ACTIVE' ? 'Đang chạy' : selectedPromo.status === 'UPCOMING' ? 'Sắp diễn ra' : selectedPromo.status === 'PAUSED' ? 'Tạm dừng' : 'Đã kết thúc'}
               </span>
             </div>
 
@@ -303,23 +318,23 @@ export function PromotionsPage() {
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   <DollarSign className="w-4 h-4 text-emerald-600" /> Tổng tiền chiết khấu
                 </div>
-                <p className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 truncate">{selectedPromo.totalDiscountGivenUsd.toLocaleString('vi-VN')} VNĐ</p>
+                <p className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 truncate">{selectedPromo.totalDiscountGivenUsd.toLocaleString('vi-VN')} đ</p>
               </div>
             </div>
 
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 text-sm">
               <div className="border-b border-gray-200 dark:border-gray-700 pb-3">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Tên chiến dịch</span>
+                <span className="text-xs font-medium text-gray-400 block mb-1">Tên chiến dịch</span>
                 <h3 className="text-base font-bold text-gray-900 dark:text-white">{selectedPromo.campaignTitle}</h3>
               </div>
 
               <div className="grid grid-cols-2 pt-2 text-xs font-mono">
                 <div>
-                  <span className="text-gray-400 block mb-0.5 font-sans font-semibold">Bắt đầu từ:</span>
+                  <span className="text-gray-400 block mb-0.5 font-sans font-medium">Bắt đầu từ:</span>
                   <span className="text-gray-800 dark:text-gray-200">{selectedPromo.startDate}</span>
                 </div>
                 <div>
-                  <span className="text-gray-400 block mb-0.5 font-sans font-semibold">Kết thúc vào:</span>
+                  <span className="text-gray-400 block mb-0.5 font-sans font-medium">Kết thúc vào:</span>
                   <span className="text-red-500 font-semibold">{selectedPromo.endDate}</span>
                 </div>
               </div>
@@ -328,9 +343,9 @@ export function PromotionsPage() {
             <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-2">
               <button
                 onClick={() => setSelectedPromo(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-sm"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:text-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 font-medium rounded-lg text-sm"
               >
-                Đóng Hộp Thoại
+                Đóng
               </button>
             </div>
           </div>
@@ -341,7 +356,7 @@ export function PromotionsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Khởi chạy Chương trình Khuyến mãi' : `Cập nhật: ${editingPromo.promoCode}`}
+        title={modalMode === 'create' ? 'Thêm mới chương trình khuyến mãi' : `Cập nhật chương trình: ${editingPromo.promoCode}`}
         size="erp"
       >
         <form onSubmit={handleSave}>
@@ -379,10 +394,10 @@ export function PromotionsPage() {
                   onChange={e => setEditingPromo({ ...editingPromo, status: e.target.value as PromotionCampaignRecord['status'] })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
                 >
-                  <option value="UPCOMING">Sắp triển khai (UPCOMING)</option>
-                  <option value="ACTIVE">Đang chạy (ACTIVE)</option>
-                  <option value="PAUSED">Tạm dừng (PAUSED)</option>
-                  <option value="EXPIRED">Đã hết hạn (EXPIRED)</option>
+                  <option value="UPCOMING">Sắp diễn ra</option>
+                  <option value="ACTIVE">Đang chạy</option>
+                  <option value="PAUSED">Tạm dừng</option>
+                  <option value="EXPIRED">Đã kết thúc</option>
                 </select>
               </div>
               <div>
@@ -393,9 +408,9 @@ export function PromotionsPage() {
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
                 >
                   <option value="ALL_CUSTOMERS">Tất cả khách hàng</option>
-                  <option value="VIP_LOYALTY_ONLY">Khách VIP / Loyalty</option>
+                  <option value="VIP_LOYALTY_ONLY">Khách VIP / thân thiết</option>
                   <option value="NEW_REGISTRATIONS">Khách hàng mới</option>
-                  <option value="INACTIVE_WINBACK">Khách hàng không hoạt động</option>
+                  <option value="INACTIVE_WINBACK">Khách hàng cũ</option>
                 </select>
               </div>
             </div>
@@ -410,9 +425,9 @@ export function PromotionsPage() {
                   onChange={e => setEditingPromo({ ...editingPromo, discountType: e.target.value as PromotionCampaignRecord['discountType'] })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
                 >
-                  <option value="PERCENTAGE">Giảm theo % (Percentage)</option>
-                  <option value="BUNDLE_DEAL">Mua combo (Bundle Deal)</option>
-                  <option value="BUY_X_GET_Y">Mua X tặng Y (BOGO)</option>
+                  <option value="PERCENTAGE">Giảm theo %</option>
+                  <option value="BUNDLE_DEAL">Mua combo</option>
+                  <option value="BUY_X_GET_Y">Mua X tặng Y</option>
                   <option value="TIERED_BASKET_DISCOUNT">Giảm theo tầng đơn hàng</option>
                 </select>
               </div>
@@ -423,15 +438,14 @@ export function PromotionsPage() {
                   type="text"
                   value={editingPromo.discountValue || ''}
                   onChange={e => setEditingPromo({ ...editingPromo, discountValue: e.target.value })}
-                  placeholder="VD: 20% OFF, Buy 2 Get 1 Free, $50 OFF"
+                  placeholder="VD: 20%, Mua 2 tặng 1, 50.000 đ"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá trị đơn tối thiểu ($)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá trị đơn tối thiểu (đ)</label>
                 <input
                   type="number"
-                  step="0.01"
                   min="0"
                   value={editingPromo.minSpendRequired ?? 0}
                   onChange={e => setEditingPromo({ ...editingPromo, minSpendRequired: parseFloat(e.target.value) || 0 })}
@@ -450,10 +464,9 @@ export function PromotionsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng tiền chiết khấu ($)</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng tiền chiết khấu (đ)</label>
                   <input
                     type="number"
-                    step="0.01"
                     min="0"
                     value={editingPromo.totalDiscountGivenUsd ?? 0}
                     onChange={e => setEditingPromo({ ...editingPromo, totalDiscountGivenUsd: parseFloat(e.target.value) || 0 })}
@@ -465,7 +478,7 @@ export function PromotionsPage() {
 
             {/* Section 3: Thời hạn & Ghi chú */}
             <div className="erp-form-section space-y-4">
-              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Thời hạn & Ghi chú</h3>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Thời hạn & ghi chú</h3>
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày bắt đầu *</label>
                 <input
@@ -487,7 +500,7 @@ export function PromotionsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú truyền thông</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú chiến dịch</label>
                 <textarea
                   rows={6}
                   value={editingPromo.marketingNotes || ''}
@@ -510,9 +523,9 @@ export function PromotionsPage() {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow transition-colors text-sm"
+              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow-sm transition-colors text-sm"
             >
-              {modalMode === 'create' ? 'Khởi chạy chiến dịch' : 'Lưu cập nhật'}
+              Lưu thông tin
             </button>
           </div>
         </form>
@@ -520,3 +533,4 @@ export function PromotionsPage() {
     </>
   );
 }
+export default PromotionsPage;

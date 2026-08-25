@@ -142,10 +142,10 @@ export function SlaConfigurationsPage() {
       },
       {
         accessorKey: 'slaName',
-        header: 'Tên SLA & Loại',
+        header: 'Tên SLA & loại',
         cell: ({ row }) => (
           <div>
-            <p className="font-bold text-gray-900 dark:text-white text-sm">{row.original.slaName}</p>
+            <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.slaName}</p>
             <p className="text-xs text-gray-500">{row.original.carrierName} ({row.original.shippingMethod})</p>
           </div>
         ),
@@ -156,19 +156,19 @@ export function SlaConfigurationsPage() {
         cell: ({ row }) => (
           <div className="font-mono text-xs">
             <p className="font-bold text-emerald-600 dark:text-emerald-400">
-              {row.original.minDuration} - {row.original.maxDuration} {row.original.durationUnit === 'HOURS' ? 'Giờ' : 'Ngày'}
+              {row.original.minDuration} - {row.original.maxDuration} {row.original.durationUnit === 'HOURS' ? 'giờ' : 'ngày'}
             </p>
-            <p className="text-gray-500">Cut-off: {row.original.cutoffTime}</p>
+            <p className="text-gray-500">Giờ chốt: {row.original.cutoffTime}</p>
           </div>
         ),
       },
       {
         accessorKey: 'warningThresholdPercent',
-        header: 'Cảnh báo Breach %',
+        header: 'Cảnh báo quá hạn SLA',
         cell: ({ row }) => (
           <div className="font-mono text-xs">
-            <p className="text-amber-600 font-bold">Warning: {row.original.warningThresholdPercent}% SLA</p>
-            <p className="text-rose-600 font-bold">Breach: {row.original.breachThresholdPercent}% SLA</p>
+            <p className="text-amber-600 dark:text-amber-400 font-semibold">Cảnh báo: {row.original.warningThresholdPercent}% SLA</p>
+            <p className="text-rose-600 dark:text-rose-400 font-semibold">Vi phạm: {row.original.breachThresholdPercent}% SLA</p>
           </div>
         ),
       },
@@ -176,7 +176,7 @@ export function SlaConfigurationsPage() {
         accessorKey: 'status',
         header: 'Trạng thái',
         cell: (info) => (
-          <span className={`text-xs px-2.5 py-1 rounded-full font-bold border ${info.getValue() === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-200'}`}>
+          <span className={`text-xs px-2.5 py-1 rounded-full font-medium border ${info.getValue() === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700'}`}>
             {info.getValue() === 'ACTIVE' ? 'Đang hoạt động' : 'Tạm khóa'}
           </span>
         ),
@@ -186,21 +186,21 @@ export function SlaConfigurationsPage() {
   );
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Clock className="w-7 h-7 text-primary" /> Cấu Hình SLA Vận Chuyển
+            <Clock className="w-6 h-6 text-primary" /> Cấu hình SLA vận chuyển
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Thiết lập thời gian cam kết lấy hàng, giao hàng và ngưỡng cảnh báo quá hạn SLA cho đối tác.
+            Thiết lập thời gian cam kết lấy hàng, giao hàng và ngưỡng cảnh báo quá hạn SLA cho đối tác
           </p>
         </div>
         <button
           onClick={handleOpenCreate}
-          className="px-4 py-2.5 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg shadow flex items-center gap-2 text-sm"
+          className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow-sm flex items-center gap-2 text-sm transition-colors"
         >
-          <Plus className="w-4 h-4" /> Thêm SLA Mới
+          <Plus className="w-4 h-4" /> Thêm mới cấu hình SLA
         </button>
       </div>
 
@@ -209,10 +209,10 @@ export function SlaConfigurationsPage() {
           <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
           <input
             type="text"
-            placeholder="Tìm theo tên SLA, mã SLA, tên hãng vận chuyển..."
+            placeholder="Tìm kiếm theo tên SLA, mã SLA, tên hãng vận chuyển..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary"
+            className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary text-gray-900 dark:text-white"
           />
         </div>
       </div>
@@ -221,66 +221,66 @@ export function SlaConfigurationsPage() {
         <ReusableDataTable columns={columns} data={filtered} />
       </div>
 
-      {/* Modal Form Thêm SLA (Form 16) */}
+      {/* Modal Form Thêm SLA */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Cấu Hình Quy Tắc SLA Mới"
+        title="Thêm mới quy tắc SLA"
         width="max-w-2xl"
       >
         <form onSubmit={handleSave} className="space-y-4 text-sm">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mã SLA *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã SLA *</label>
               <input
                 type="text"
                 required
                 value={formState.slaCode || ''}
                 onChange={(e) => setFormState({ ...formState, slaCode: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm text-gray-900 dark:text-white"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tên quy tắc SLA *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên quy tắc SLA *</label>
               <input
                 type="text"
                 required
-                placeholder="SLA Giao Hỏa Tốc..."
+                placeholder="Ví dụ: SLA giao hỏa tốc nội thành..."
                 value={formState.slaName || ''}
                 onChange={(e) => setFormState({ ...formState, slaName: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Loại SLA *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại SLA *</label>
               <select
                 value={formState.slaType || 'DELIVERY'}
                 onChange={(e) => setFormState({ ...formState, slaType: e.target.value as any })}
-                className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white font-medium"
               >
-                <option value="PICKUP">PICKUP - Lấy hàng</option>
-                <option value="DELIVERY">DELIVERY - Giao hàng</option>
-                <option value="RETURN">RETURN - Hoàn hàng</option>
+                <option value="PICKUP">Lấy hàng</option>
+                <option value="DELIVERY">Giao hàng</option>
+                <option value="RETURN">Hoàn hàng</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Thời gian cam kết (Max)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thời gian cam kết (tối đa)</label>
               <input
                 type="number"
                 value={formState.maxDuration || 24}
                 onChange={(e) => setFormState({ ...formState, maxDuration: Number(e.target.value) })}
-                className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm font-mono text-gray-900 dark:text-white"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Đơn vị *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn vị thời gian *</label>
               <select
                 value={formState.durationUnit || 'HOURS'}
                 onChange={(e) => setFormState({ ...formState, durationUnit: e.target.value as any })}
-                className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white font-medium"
               >
                 <option value="HOURS">Giờ</option>
                 <option value="DAYS">Ngày</option>
@@ -292,15 +292,15 @@ export function SlaConfigurationsPage() {
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-semibold"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
             >
-              Hủy
+              Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold shadow"
+              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow-sm"
             >
-              Lưu Cấu Hình SLA
+              Lưu thông tin
             </button>
           </div>
         </form>
@@ -308,3 +308,4 @@ export function SlaConfigurationsPage() {
     </div>
   );
 }
+export default SlaConfigurationsPage;

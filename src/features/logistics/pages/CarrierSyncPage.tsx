@@ -80,7 +80,7 @@ export function CarrierSyncPage() {
         )
       );
       setIsSyncing(null);
-      toast.success('Kích hoạt đồng bộ API Carrier thành công!');
+      toast.success('Kích hoạt đồng bộ API đối tác vận chuyển thành công!');
     }, 1200);
   };
 
@@ -93,13 +93,13 @@ export function CarrierSyncPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <RefreshCw className="w-7 h-7 text-primary" /> Đồng Bộ Carrier (Active API Sync)
+            <RefreshCw className="w-7 h-7 text-primary" /> Đồng bộ đối tác vận chuyển
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Đồng bộ chủ động trạng thái vận đơn, đơn hàng và COD qua Carrier API (Không dùng Webhook callback).
+            Đồng bộ chủ động trạng thái vận đơn, đơn hàng và tiền thu COD qua API của đơn vị vận chuyển
           </p>
         </div>
         <button
@@ -107,13 +107,13 @@ export function CarrierSyncPage() {
             setIsSyncing('ALL');
             setTimeout(() => {
               setIsSyncing(null);
-              toast.success('Đã đồng bộ toàn bộ các đối tác Carrier!');
+              toast.success('Đã đồng bộ toàn bộ các đối tác vận chuyển!');
             }, 2000);
           }}
           disabled={Boolean(isSyncing)}
-          className="px-4 py-2.5 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg shadow flex items-center gap-2 text-sm disabled:opacity-60"
+          className="px-4 py-2.5 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow-sm flex items-center gap-2 text-sm disabled:opacity-60 transition-colors"
         >
-          <RefreshCw className={`w-4 h-4 ${isSyncing === 'ALL' ? 'animate-spin' : ''}`} /> Đồng Bộ Tất Cả Ngay
+          <RefreshCw className={`w-4 h-4 ${isSyncing === 'ALL' ? 'animate-spin' : ''}`} /> Đồng bộ tất cả ngay
         </button>
       </div>
 
@@ -123,9 +123,9 @@ export function CarrierSyncPage() {
             <CheckCircle2 className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase">Cơ chế đồng bộ</p>
+            <p className="text-xs font-semibold text-gray-500">Cơ chế đồng bộ</p>
             <p className="text-lg font-bold text-gray-900 dark:text-white">Active API Polling</p>
-            <p className="text-xs text-emerald-600 font-semibold mt-0.5">Xóa hoàn toàn Webhook</p>
+            <p className="text-xs text-emerald-600 font-semibold mt-0.5">Không sử dụng webhook</p>
           </div>
         </div>
 
@@ -134,7 +134,7 @@ export function CarrierSyncPage() {
             <Activity className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase">Tổng bản ghi đã đồng bộ</p>
+            <p className="text-xs font-semibold text-gray-500">Tổng bản ghi đã đồng bộ</p>
             <p className="text-2xl font-bold font-mono text-gray-900 dark:text-white">
               {jobs.reduce((acc, j) => acc + j.syncedRecords, 0).toLocaleString()}
             </p>
@@ -146,7 +146,7 @@ export function CarrierSyncPage() {
             <Clock className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase">Chu kỳ polling trung bình</p>
+            <p className="text-xs font-semibold text-gray-500">Chu kỳ polling trung bình</p>
             <p className="text-2xl font-bold font-mono text-gray-900 dark:text-white">15 phút / lần</p>
           </div>
         </div>
@@ -154,8 +154,8 @@ export function CarrierSyncPage() {
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
-          <h2 className="font-bold text-gray-900 dark:text-white text-base">Danh Sách Tiến Trình Đồng Bộ Carrier API</h2>
-          <span className="text-xs bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 font-semibold px-2.5 py-1 rounded-full border border-emerald-200">
+          <h2 className="font-bold text-gray-900 dark:text-white text-base">Danh sách tiến trình đồng bộ API đối tác vận chuyển</h2>
+          <span className="text-xs bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 font-semibold px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
             HTTP REST Polling Engine Active
           </span>
         </div>
@@ -167,10 +167,10 @@ export function CarrierSyncPage() {
                 <div className="flex items-center gap-3">
                   <h3 className="font-bold text-gray-900 dark:text-white text-base">{job.carrierName}</h3>
                   <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary font-mono font-bold rounded">
-                    Dữ liệu: {job.dataType}
+                    Dữ liệu: {job.dataType === 'TRACKING' ? 'Mã tracking' : job.dataType === 'SHIPMENT' ? 'Vận đơn' : job.dataType === 'COD' ? 'Tiền thu COD' : job.dataType}
                   </span>
                   <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold rounded">
-                    Phạm vi: {job.scope}
+                    Phạm vi: {job.scope === 'TODAY' ? 'Hôm nay' : job.scope === '7_DAYS' ? '7 ngày gần nhất' : job.scope === '30_DAYS' ? '30 ngày gần nhất' : job.scope}
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 flex items-center gap-3 pt-1">
@@ -187,7 +187,7 @@ export function CarrierSyncPage() {
 
               <div className="flex items-center gap-6">
                 <div className="text-right font-mono text-xs">
-                  <p className="font-bold text-emerald-600 dark:text-emerald-400">{job.syncedRecords.toLocaleString()} bản ghi OK</p>
+                  <p className="font-bold text-emerald-600 dark:text-emerald-400">{job.syncedRecords.toLocaleString()} bản ghi thành công</p>
                   {job.errorRecords > 0 && (
                     <p className="text-red-500 font-bold">{job.errorRecords} bản ghi lỗi</p>
                   )}
@@ -198,17 +198,17 @@ export function CarrierSyncPage() {
                     onClick={() => handleToggleAutoSync(job.id)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
                       job.autoSync
-                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'
                     }`}
                   >
-                    Auto Sync: {job.autoSync ? `BẬT (${job.cycleIntervalMinutes}m)` : 'TẮT'}
+                    Tự động đồng bộ: {job.autoSync ? `Bật (${job.cycleIntervalMinutes} phút)` : 'Tắt'}
                   </button>
 
                   <button
                     onClick={() => handleTriggerSync(job.id)}
                     disabled={isSyncing === job.id}
-                    className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-semibold rounded-lg shadow flex items-center gap-1.5 disabled:opacity-60"
+                    className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-medium rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-60 transition-colors"
                   >
                     <Play className={`w-3.5 h-3.5 ${isSyncing === job.id ? 'animate-spin' : ''}`} /> Đồng bộ ngay
                   </button>
@@ -221,3 +221,4 @@ export function CarrierSyncPage() {
     </div>
   );
 }
+export default CarrierSyncPage;

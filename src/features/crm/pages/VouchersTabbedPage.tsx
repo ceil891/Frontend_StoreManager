@@ -5,8 +5,8 @@ import { RoleGuard } from '@/routes/RoleGuard';
 import { Percent, Ticket } from 'lucide-react';
 
 const tabs = [
-  { id: 'vouchers', label: 'Chương trình Voucher', icon: Percent, permission: 'crm:voucher:view' },
-  { id: 'customer-vouchers', label: 'Voucher của Khách hàng', icon: Ticket, permission: 'crm:customer-voucher:view' },
+  { id: 'vouchers', label: 'Chương trình voucher', icon: Percent, permission: 'crm:voucher:view' },
+  { id: 'customer-vouchers', label: 'Voucher của khách hàng', icon: Ticket, permission: 'crm:customer-voucher:view' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];
@@ -28,9 +28,9 @@ export function VouchersTabbedPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mã giảm giá & Voucher</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mã giảm giá & voucher</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Thiết lập các chương trình khuyến mãi Voucher và theo dõi mã giảm giá do khách hàng nắm giữ
+            Thiết lập các chương trình khuyến mãi voucher và theo dõi mã giảm giá do khách hàng nắm giữ
           </p>
         </div>
       </div>

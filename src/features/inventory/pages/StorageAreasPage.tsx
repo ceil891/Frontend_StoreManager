@@ -145,27 +145,27 @@ export function StorageAreasPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Bãi kho lưu trữ (storage areas)</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bãi kho lưu trữ (Storage Areas)</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             Xem và cấu hình các bãi kho lưu trữ chính trực thuộc các phân khu (Zones) trong kho của từng chi nhánh.
           </p>
         </div>
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition"
+          className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors"
         >
           <Plus className="w-4 h-4" /> Thêm Bãi Kho
         </button>
       </div>
 
-      <div className="p-4 bg-white dark:bg-gray-800 rounded shadow flex items-center gap-4">
+      <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
         <Search className="w-5 h-5 text-gray-400" />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Tìm kiếm mã bãi kho, tên bãi kho, phân khu, chi nhánh..."
-          className="w-full bg-transparent outline-none text-sm"
+          className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-white"
         />
       </div>
 
@@ -175,49 +175,69 @@ export function StorageAreasPage() {
         isOpen={!!selected}
         onClose={() => setSelected(null)}
         title={`Chi tiết bãi kho: ${selected?.areaName}`}
+        size="erp"
       >
         {selected && (
           <div className="space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800">
               <div>
-                <span className="text-gray-500">Mã bãi kho:</span>
-                <p className="font-mono font-semibold">{selected.areaCode}</p>
+                <span className="text-xs text-gray-500 block mb-1">Mã bãi kho</span>
+                <p className="font-mono font-bold text-emerald-600 text-base">{selected.areaCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Tên bãi kho:</span>
-                <p className="font-semibold">{selected.areaName}</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 border-t pt-2">
-              <div>
-                <span className="text-gray-500">Thuộc phân khu (zone):</span>
-                <p className="font-semibold text-purple-600">{selected.zoneName}</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Chi nhánh quản lý:</span>
-                <p className="font-semibold text-blue-600">{selected.branchName || 'N/A'}</p>
+                <span className="text-xs text-gray-500 block mb-1">Tên bãi kho</span>
+                <p className="font-bold text-gray-900 dark:text-white text-base">{selected.areaName}</p>
               </div>
             </div>
-            <div>
-              <span className="text-gray-500">Trạng thái:</span>
+
+            <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800">
               <div>
+                <span className="text-xs text-gray-500 block mb-1">Thuộc phân khu (Zone)</span>
+                <p className="font-semibold text-purple-600 dark:text-purple-400">{selected.zoneName}</p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500 block mb-1">Chi nhánh quản lý</span>
+                <p className="font-semibold text-blue-600 dark:text-blue-400">{selected.branchName || 'Toàn hệ thống'}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800">
+              <div>
+                <span className="text-xs text-gray-500 block mb-1">Trạng thái vận hành</span>
                 <span
-                  className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
-                    selected.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                  className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${
+                    selected.isActive
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                      : 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300'
                   }`}
                 >
-                  {selected.isActive ? 'Hoạt động' : 'Tạm khóa'}
+                  {selected.isActive ? '🟢 Đang hoạt động' : '🔴 Tạm khóa bãi'}
                 </span>
               </div>
-            </div>
-            {selected.description && (
               <div>
-                <span className="text-gray-500">Ghi chú vận hành:</span>
-                <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
+                <span className="text-xs text-gray-500 block mb-1">Thủ kho phụ trách</span>
+                <p className="font-semibold text-gray-900 dark:text-white">{(selected as any).managerName || 'Trần Thủ Kho (CN Chính)'}</p>
+              </div>
+            </div>
+
+            {selected.description && (
+              <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800">
+                <span className="text-xs text-gray-500 block mb-1">Ghi chú & Quy định lưu trữ</span>
+                <p className="text-sm text-gray-700 dark:text-gray-300">
                   {selected.description}
                 </p>
               </div>
             )}
+
+            <div className="flex justify-end pt-3 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-medium transition-colors"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         )}
       </Modal>
@@ -225,8 +245,8 @@ export function StorageAreasPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? '📦 Thêm bãi kho (Storage Area) mới' : '⚙️ Sửa thông tin bãi kho'}
-        width="max-w-xl"
+        title={modalMode === 'create' ? 'Thêm bãi kho (Storage Area) mới' : 'Chỉnh sửa thông tin bãi kho'}
+        size="erp"
       >
         <form onSubmit={handleSave} className="space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-4">
@@ -332,15 +352,15 @@ export function StorageAreasPage() {
               placeholder="Ghi chú vận hành, loại hàng hóa lưu trữ tối ưu..."
             />
           </div>
-          <div className="flex justify-end gap-2 pt-2 border-t">
+          <div className="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded hover:bg-gray-100"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
               Hủy
             </button>
-            <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
+            <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors font-semibold">
               Lưu bãi kho
             </button>
           </div>

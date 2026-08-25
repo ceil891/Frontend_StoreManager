@@ -41,16 +41,44 @@ export const useSizeStore = create<SizeState>()((set, get) => ({
         description: s.description || '',
         status: (s.isActive !== false ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE',
       }));
-      const unique = mapped.filter((s, idx, self) =>
+
+      // Apply LocalStorage Persistence Fallback
+      let finalSizes = mapped;
+      try {
+        const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_sizes') || '[]');
+        const editedMap: Record<string, SizeRecord> = JSON.parse(localStorage.getItem('retailhub_edited_sizes') || '{}');
+        
+        finalSizes = mapped
+          .filter(s => !deletedIds.includes(String(s.id)) && !deletedIds.includes(s.sizeCode))
+          .map(s => editedMap[s.id] ? { ...s, ...editedMap[s.id] } : s);
+
+        // Include any newly added items stored locally
+        Object.keys(editedMap).forEach(key => {
+          if (!deletedIds.includes(key) && !finalSizes.some(s => s.id === key || s.sizeCode === editedMap[key].sizeCode)) {
+            finalSizes.unshift(editedMap[key]);
+          }
+        });
+      } catch (e) {}
+
+      const unique = finalSizes.filter((s, idx, self) =>
         idx === self.findIndex((t) => String(t.id) === String(s.id) || (t.sizeName && t.sizeName.trim().toLowerCase() === s.sizeName.trim().toLowerCase()))
       );
       set({ sizes: unique, isLoading: false });
     } catch (err: any) {
       console.error('Failed to fetch sizes:', err);
+      // If API fails, try loading purely from local cache
+      try {
+        const editedMap: Record<string, SizeRecord> = JSON.parse(localStorage.getItem('retailhub_edited_sizes') || '{}');
+        const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_sizes') || '[]');
+        const localList = Object.values(editedMap).filter(s => !deletedIds.includes(s.id) && !deletedIds.includes(s.sizeCode));
+        if (localList.length > 0) {
+          set({ sizes: localList, isLoading: false });
+          return;
+        }
+      } catch (e) {}
       set({ isLoading: false, error: err.message || 'Lỗi khi tải danh sách kích thước' });
     }
   },
-
 
   addSize: async (size) => {
     const tempId = `sz_${Date.now()}`;
@@ -59,6 +87,16 @@ export const useSizeStore = create<SizeState>()((set, get) => ({
       ...size,
     };
     set((state) => ({ sizes: [newRecord, ...state.sizes] }));
+
+    try {
+      const editedMap = JSON.parse(localStorage.getItem('retailhub_edited_sizes') || '{}');
+      editedMap[tempId] = newRecord;
+      localStorage.setItem('retailhub_edited_sizes', JSON.stringify(editedMap));
+
+      const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_sizes') || '[]');
+      const filteredDeleted = deletedIds.filter(id => id !== tempId && id !== size.sizeCode);
+      localStorage.setItem('retailhub_deleted_sizes', JSON.stringify(filteredDeleted));
+    } catch (e) {}
 
     try {
       const payload = {
@@ -75,11 +113,19 @@ export const useSizeStore = create<SizeState>()((set, get) => ({
   },
 
   updateSize: async (id, data) => {
+    const original = get().sizes.find((s) => s.id === id);
+    const updated = original ? { ...original, ...data } : (data as SizeRecord);
     set((state) => ({
       sizes: state.sizes.map((s) => (s.id === id ? { ...s, ...data } : s)),
     }));
+
     try {
-      const original = get().sizes.find((s) => s.id === id);
+      const editedMap = JSON.parse(localStorage.getItem('retailhub_edited_sizes') || '{}');
+      editedMap[id] = updated;
+      localStorage.setItem('retailhub_edited_sizes', JSON.stringify(editedMap));
+    } catch (e) {}
+
+    try {
       const payload = {
         sizeCode: data.sizeCode || original?.sizeCode,
         sizeName: data.sizeName || original?.sizeName,
@@ -93,9 +139,23 @@ export const useSizeStore = create<SizeState>()((set, get) => ({
   },
 
   deleteSize: async (id) => {
+    const target = get().sizes.find((s) => s.id === id);
     set((state) => ({
       sizes: state.sizes.filter((s) => s.id !== id),
     }));
+
+    try {
+      const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_sizes') || '[]');
+      if (!deletedIds.includes(String(id))) deletedIds.push(String(id));
+      if (target?.sizeCode && !deletedIds.includes(target.sizeCode)) deletedIds.push(target.sizeCode);
+      localStorage.setItem('retailhub_deleted_sizes', JSON.stringify(deletedIds));
+
+      const editedMap = JSON.parse(localStorage.getItem('retailhub_edited_sizes') || '{}');
+      delete editedMap[id];
+      if (target?.sizeCode) delete editedMap[target.sizeCode];
+      localStorage.setItem('retailhub_edited_sizes', JSON.stringify(editedMap));
+    } catch (e) {}
+
     try {
       await axiosClient.delete(`/sizes/${id}`).catch(() => {});
     } catch (err: any) {

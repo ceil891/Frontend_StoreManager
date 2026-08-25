@@ -2,13 +2,14 @@ import { useMemo, useState, useEffect } from 'react';
 import { 
   Plus, Download, Search, Eye, Clock, Wallet, Receipt, 
   AlertCircle, CheckCircle2, ShieldCheck, Printer, Edit, Trash2, 
-  Fingerprint, Sparkles, UserCheck, AlertTriangle, Loader2
+  Fingerprint, Sparkles, UserCheck, AlertTriangle, Loader2, Lock
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { axiosClient } from '@/shared/lib/axiosClient';
+import { useSalesStore, type SaleOrder } from '@/features/sales/store/salesStore';
 
 interface PosSessionRecord {
   id: string;
@@ -23,8 +24,11 @@ interface PosSessionRecord {
   cashDiscrepancyVnd?: number;
   totalTransactionsCount: number;
   totalGrossRevenueVnd: number;
+  cashRevenueVnd: number;
+  nonCashRevenueVnd: number;
   status: 'IN_PROGRESS' | 'PENDING_AUDIT_VERIFICATION' | 'CLOSED_VERIFIED' | 'DISCREPANCY_FLAGGED';
   supervisorSignoff?: string;
+  ordersList?: SaleOrder[];
 }
 
 const fmtVnd = (n: number) => n.toLocaleString('vi-VN') + '₫';
@@ -56,28 +60,75 @@ export function PosSessionsPage() {
     closeSession,
   } = usePosSessionStore();
 
+  const { saleOrders, fetchSaleOrders } = useSalesStore();
+
   useEffect(() => {
     fetchSessions();
-  }, [fetchSessions]);
+    fetchSaleOrders();
+  }, [fetchSessions, fetchSaleOrders]);
 
   const data: PosSessionRecord[] = useMemo(() => {
-    return storeSessions.map((s) => ({
-      id: s.id,
-      sessionCode: s.sessionCode,
-      terminalId: s.terminalCode,
-      cashierName: s.cashierName,
-      openedTimestamp: s.openingTime,
-      closedTimestamp: s.closingTime,
-      openingCashFloatVnd: s.openingCash,
-      expectedClosingCashVnd: s.expectedCash,
-      actualClosingCashVnd: s.actualCash,
-      cashDiscrepancyVnd: s.cashDifference,
-      totalTransactionsCount: 25,
-      totalGrossRevenueVnd: s.expectedCash - s.openingCash,
-      status: s.status === 'OPEN' ? 'IN_PROGRESS' : 'CLOSED_VERIFIED',
-      supervisorSignoff: 'Lê Quản lý',
-    }));
-  }, [storeSessions]);
+    return storeSessions.map((s) => {
+      const isOpen = s.status === 'OPEN';
+
+      // Find matching orders for this shift
+      const matchingOrders = saleOrders.filter((o) => {
+        if (o.status === 'CANCELLED') return false;
+
+        // 1. Match by explicit shiftId / session code
+        if (o.shiftId && (o.shiftId === s.id || o.shiftId === s.sessionCode)) return true;
+
+        // 2. Match by timeframe within this shift
+        if (s.openingTime) {
+          const orderTime = new Date(o.date || (o as any).createdAt || (o as any).orderDate || 0).getTime();
+          const openTime = new Date(s.openingTime).getTime();
+          const closeTime = s.closingTime ? new Date(s.closingTime).getTime() : Date.now();
+
+          if (orderTime >= openTime - 120000 && orderTime <= closeTime + 120000) {
+            return true;
+          }
+        }
+        return false;
+      });
+
+      const totalTransactions = matchingOrders.length;
+      const totalRevenue = matchingOrders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+
+      const cashRevenue = matchingOrders
+        .filter((o) => {
+          const pm = (o.paymentMethod || '').toLowerCase();
+          return pm.includes('tiền mặt') || pm.includes('cash') || pm.includes('quầy') || pm === 'fb-cash' || pm === '';
+        })
+        .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+
+      const nonCashRevenue = totalRevenue - cashRevenue;
+
+      // Expected cash = Opening cash + Cash collected from sales
+      const expectedCash = (s.openingCash || 0) + cashRevenue;
+      const actualCash = s.status === 'CLOSED' ? (s.actualCash ?? expectedCash) : undefined;
+      const discrepancy = s.status === 'CLOSED' && s.actualCash !== undefined ? (s.actualCash - expectedCash) : 0;
+
+      return {
+        id: s.id,
+        sessionCode: s.sessionCode,
+        terminalId: s.terminalCode,
+        cashierName: s.cashierName,
+        openedTimestamp: s.openingTime,
+        closedTimestamp: s.closingTime,
+        openingCashFloatVnd: s.openingCash || 0,
+        expectedClosingCashVnd: expectedCash,
+        actualClosingCashVnd: actualCash,
+        cashDiscrepancyVnd: discrepancy,
+        totalTransactionsCount: totalTransactions,
+        totalGrossRevenueVnd: totalRevenue,
+        cashRevenueVnd: cashRevenue,
+        nonCashRevenueVnd: nonCashRevenue,
+        status: isOpen ? 'IN_PROGRESS' : discrepancy === 0 ? 'CLOSED_VERIFIED' : 'DISCREPANCY_FLAGGED',
+        supervisorSignoff: s.status === 'CLOSED' ? 'Lê Quản lý' : undefined,
+        ordersList: matchingOrders,
+      };
+    });
+  }, [storeSessions, saleOrders]);
 
   const setData = (_fn: any) => {};
 
@@ -103,6 +154,19 @@ export function PosSessionsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newTerminalId, setNewTerminalId] = useState('TERM-01-MAIN');
   const [newCashierName, setNewCashierName] = useState('Trần Văn Hùng');
+  const [newShiftType, setNewShiftType] = useState('SHIFT_MORNING');
+  const [openingCashReason, setOpeningCashReason] = useState('');
+
+  // Compute default opening cash from latest closed session or 2.000.000₫
+  const defaultOpeningCash = useMemo(() => {
+    const closed = storeSessions.filter(s => s.status === 'CLOSED');
+    if (closed.length > 0) {
+      const last = closed[0];
+      return String(last.actualCash || last.expectedCash || 2000000);
+    }
+    return '2000000';
+  }, [storeSessions]);
+
   const [newOpeningCash, setNewOpeningCash] = useState('2000000');
 
   // Edit Session Modal state
@@ -197,6 +261,13 @@ export function PosSessionsPage() {
   const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
     const openingCash = parseInt(newOpeningCash.replace(/\D/g, ''), 10) || 0;
+    const defaultVal = parseInt(defaultOpeningCash.replace(/\D/g, ''), 10) || 0;
+
+    if (openingCash !== defaultVal && !openingCashReason.trim()) {
+      toast.error('Vui lòng nhập lý do điều chỉnh số tiền quỹ đầu ca khác với ca trước!');
+      return;
+    }
+
     const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const currentDaySessions = data.filter(s => s.sessionCode.includes(todayStr));
     const nextSessionNum = String(currentDaySessions.length + 1).padStart(2, '0');
@@ -215,6 +286,7 @@ export function PosSessionsPage() {
         status: 'OPEN',
       });
       setIsCreateModalOpen(false);
+      setOpeningCashReason('');
       toast.success(`Đã mở thành công ca làm việc mới: ${sessionCode} tại quầy ${newTerminalId}!`);
     } catch (err) {
       console.error('Failed to create POS session:', err);
@@ -342,6 +414,20 @@ export function PosSessionsPage() {
         header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1.5">
+            {row.original.status === 'IN_PROGRESS' && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedSessionId(row.original.id);
+                  setActualClosingCashInput(String(row.original.expectedClosingCashVnd || row.original.openingCashFloatVnd || ''));
+                  setIsCloseShiftModalOpen(true);
+                }}
+                title="Đóng ca & chốt quỹ"
+                className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors border border-transparent hover:border-red-500/20 font-bold"
+              >
+                <Lock className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); setSelectedSessionId(row.original.id); }}
               title="Xem chi tiết"
@@ -394,7 +480,10 @@ export function PosSessionsPage() {
               <Printer className="w-4 h-4" /> Báo cáo tổng Z-Report
             </button>
             <button 
-              onClick={() => setIsCreateModalOpen(true)}
+              onClick={() => {
+                setNewOpeningCash(defaultOpeningCash);
+                setIsCreateModalOpen(true);
+              }}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 h-11 bg-primary hover:bg-primary/90 text-white rounded-xl transition-all text-sm font-bold shadow-md shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] focus:outline-none min-w-[160px]"
             >
               <Plus className="w-4.5 h-4.5" /> Mở ca làm việc mới
@@ -539,13 +628,41 @@ export function PosSessionsPage() {
                   <span className="text-gray-400 font-medium">Tồn quỹ dự kiến kết ca:</span>
                   <span className="font-mono font-bold text-gray-800 dark:text-gray-200">{fmtVnd(selectedSession.expectedClosingCashVnd)}</span>
                 </div>
+                <div className="flex justify-between font-sans text-emerald-600 dark:text-emerald-400">
+                  <span className="font-medium">↳ Doanh thu Tiền mặt quầy:</span>
+                  <span className="font-mono font-bold">+{fmtVnd(selectedSession.cashRevenueVnd)}</span>
+                </div>
+                <div className="flex justify-between font-sans text-blue-600 dark:text-blue-400">
+                  <span className="font-medium">↳ Chuyển khoản / QR / Thẻ:</span>
+                  <span className="font-mono font-bold">{fmtVnd(selectedSession.nonCashRevenueVnd)}</span>
+                </div>
                 {selectedSession.actualClosingCashVnd !== undefined && (
-                  <div className="flex justify-between font-sans">
+                  <div className="flex justify-between font-sans pt-2 border-t border-gray-200 dark:border-gray-800">
                     <span className="text-gray-400 font-medium">Tiền thực tế kiểm đếm:</span>
                     <span className="font-mono font-bold text-gray-950 dark:text-white text-sm">{fmtVnd(selectedSession.actualClosingCashVnd)}</span>
                   </div>
                 )}
               </div>
+
+              {/* Order List in Shift */}
+              {selectedSession.ordersList && selectedSession.ordersList.length > 0 && (
+                <div className="pt-4 border-t border-gray-200 dark:border-gray-800 space-y-2">
+                  <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block">
+                    Đơn hàng trong ca ({selectedSession.ordersList.length})
+                  </span>
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                    {selectedSession.ordersList.map((ord) => (
+                      <div key={ord.id} className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 text-xs">
+                        <div>
+                          <p className="font-mono font-bold text-primary">{ord.code}</p>
+                          <p className="text-[10px] text-gray-400">{ord.paymentMethod || 'Tiền mặt'} • {ord.date ? new Date(ord.date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''}</p>
+                        </div>
+                        <span className="font-mono font-bold text-gray-900 dark:text-white">{fmtVnd(ord.totalAmount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* TC-07 Discrepancy Highlight */}
               {selectedSession.status === 'DISCREPANCY_FLAGGED' && (
@@ -596,19 +713,19 @@ export function PosSessionsPage() {
       <Modal
         isOpen={isBiometricModalOpen}
         onClose={() => setIsBiometricModalOpen(false)}
-        title="Phê duyệt Sinh trắc học & Đối soát chênh lệch"
+        title="Phê duyệt sinh trắc học & đối soát chênh lệch"
       >
         <div className="space-y-6">
           <div className="text-center space-y-2">
-            <h3 className="font-bold text-gray-900 dark:text-white text-base">Hệ thống Đối soát Quỹ Tiền POS</h3>
+            <h3 className="font-bold text-gray-900 dark:text-white text-base">Hệ thống đối soát quỹ tiền POS</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Vui lòng nhập tên người xác nhận và thực hiện quét vân tay / FaceID của Quản lý để ký nhận.
+              Vui lòng nhập tên người xác nhận và thực hiện quét vân tay / FaceID của quản lý để ký nhận.
             </p>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-1.5">Tên Quản lý Ký duyệt</label>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-1.5">Tên quản lý ký duyệt</label>
               <div className="relative">
                 <input
                   type="text"
@@ -663,14 +780,14 @@ export function PosSessionsPage() {
               onClick={() => setIsBiometricModalOpen(false)}
               className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 text-gray-700 dark:text-gray-200 font-bold rounded-xl transition-all text-sm focus:outline-none"
             >
-              Hủy
+              Hủy bỏ
             </button>
             <button
               onClick={handleConfirmSignoff}
               disabled={biometricStep !== 'SUCCESS'}
               className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold rounded-xl transition-all text-sm shadow-md shadow-amber-500/10 focus:outline-none"
             >
-              Xác nhận kết sổ & Đóng ca
+              Xác nhận kết sổ & đóng ca
             </button>
           </div>
         </div>
@@ -680,7 +797,7 @@ export function PosSessionsPage() {
       <Modal
         isOpen={isCloseShiftModalOpen}
         onClose={() => setIsCloseShiftModalOpen(false)}
-        title="Đối soát & Chốt sổ quỹ tiền mặt"
+        title="Đối soát & chốt sổ quỹ tiền mặt"
       >
         <div className="space-y-5">
           <div className="space-y-1">
@@ -701,7 +818,7 @@ export function PosSessionsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-1.5">Tiền mặt thực tế kiểm đếm (VND)</label>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-1.5">Tiền mặt thực tế kiểm đếm (VNĐ)</label>
             <input
               type="text"
               value={actualClosingCashInput ? parseInt(actualClosingCashInput, 10).toLocaleString('vi-VN') : ''}
@@ -742,7 +859,7 @@ export function PosSessionsPage() {
               onClick={() => setIsCloseShiftModalOpen(false)}
               className="flex-1 py-2.5 bg-gray-150 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 text-gray-700 dark:text-gray-200 font-bold rounded-xl transition-all text-sm"
             >
-              Hủy
+              Hủy bỏ
             </button>
             <button
               onClick={handleConfirmCloseShift}
@@ -759,49 +876,84 @@ export function PosSessionsPage() {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         title="Mở ca làm việc POS mới"
+        size="erp"
       >
         <form onSubmit={handleCreateSession} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Mã quầy thu ngân</label>
-            <select
-              value={newTerminalId}
-              onChange={(e) => setNewTerminalId(e.target.value)}
-              className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm"
-            >
-              <option value="TERM-01-MAIN">TERM-01-MAIN (Quầy chính sảnh)</option>
-              <option value="TERM-02-KIOSK">TERM-02-KIOSK (Kiosk tự phục vụ)</option>
-              <option value="TERM-03-BACKOFFICE">TERM-03-BACKOFFICE (Quầy kho nội bộ)</option>
-              <option value="TERM-04-EXPRESS">TERM-04-EXPRESS (Quầy thanh toán nhanh)</option>
-            </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Mã quầy thu ngân</label>
+              <select
+                value={newTerminalId}
+                onChange={(e) => setNewTerminalId(e.target.value)}
+                className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm"
+              >
+                <option value="TERM-01-MAIN">TERM-01-MAIN (Quầy chính sảnh)</option>
+                <option value="TERM-02-KIOSK">TERM-02-KIOSK (Kiosk tự phục vụ)</option>
+                <option value="TERM-03-BACKOFFICE">TERM-03-BACKOFFICE (Quầy kho nội bộ)</option>
+                <option value="TERM-04-EXPRESS">TERM-04-EXPRESS (Quầy thanh toán nhanh)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Ca làm việc *</label>
+              <select
+                value={newShiftType}
+                onChange={(e) => setNewShiftType(e.target.value)}
+                className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm"
+              >
+                <option value="SHIFT_MORNING">Ca sáng (06:00 - 14:00)</option>
+                <option value="SHIFT_AFTERNOON">Ca chiều (14:00 - 22:00)</option>
+                <option value="SHIFT_NIGHT">Ca đêm (22:00 - 06:00)</option>
+                <option value="SHIFT_OFFICE">Ca hành chính (08:00 - 17:00)</option>
+              </select>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Nhân viên thu ngân</label>
-            <select
-              value={newCashierName}
-              onChange={(e) => setNewCashierName(e.target.value)}
-              className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm"
-            >
-              <option value="Trần Văn Hùng">Trần Văn Hùng (Quản trị viên)</option>
-              <option value="Nguyễn Văn an">Nguyễn Văn An (Nhân viên ca sáng)</option>
-              <option value="Trần thị Bích">Trần Thị Bích (Nhân viên ca tối)</option>
-              <option value="Phạm minh châu">Phạm Minh Châu (Nhân viên bán thời gian)</option>
-            </select>
-          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Nhân viên thu ngân</label>
+              <select
+                value={newCashierName}
+                onChange={(e) => setNewCashierName(e.target.value)}
+                className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm"
+              >
+                <option value="Trần Văn Hùng">Trần Văn Hùng (Quản trị viên)</option>
+                <option value="Nguyễn Văn An">Nguyễn Văn An (Nhân viên ca sáng)</option>
+                <option value="Trần Thị Bích">Trần Thị Bích (Nhân viên ca tối)</option>
+                <option value="Phạm Minh Châu">Phạm Minh Châu (Nhân viên bán thời gian)</option>
+              </select>
+            </div>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Tiền quỹ đầu ca (₫)</label>
-            <input
-              type="text"
-              value={newOpeningCash ? parseInt(newOpeningCash, 10).toLocaleString('vi-VN') : ''}
-              onChange={(e) => {
-                const numeric = e.target.value.replace(/\D/g, '');
-                setNewOpeningCash(numeric ? String(parseInt(numeric, 10)) : '');
-              }}
-              required
-              placeholder="Nhập số tiền mặt đầu ca..."
-              className="block w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono font-bold focus:ring-2 focus:ring-primary focus:outline-none text-sm"
-            />
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Tiền quỹ đầu ca (đ) *</label>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Tự động lấy ca trước: {fmtVnd(parseInt(defaultOpeningCash, 10) || 0)}</span>
+              </div>
+              <input
+                type="text"
+                value={newOpeningCash ? parseInt(newOpeningCash, 10).toLocaleString('vi-VN') : ''}
+                onChange={(e) => {
+                  const numeric = e.target.value.replace(/\D/g, '');
+                  setNewOpeningCash(numeric ? String(parseInt(numeric, 10)) : '');
+                }}
+                required
+                placeholder="Nhập số tiền mặt đầu ca..."
+                className="block w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono font-bold focus:ring-2 focus:ring-primary focus:outline-none text-sm"
+              />
+              {parseInt(newOpeningCash.replace(/\D/g, ''), 10) !== parseInt(defaultOpeningCash.replace(/\D/g, ''), 10) && (
+                <div className="mt-2">
+                  <label className="block text-[11px] font-bold text-amber-600 dark:text-amber-400 mb-1">Lý do điều chỉnh tiền quỹ khác ca trước *</label>
+                  <input
+                    type="text"
+                    value={openingCashReason}
+                    onChange={(e) => setOpeningCashReason(e.target.value)}
+                    required
+                    placeholder="Nhập lý do nạp thêm hoặc rút bớt tiền quỹ đầu ca..."
+                    className="block w-full px-3 py-1.5 border border-amber-300 dark:border-amber-700 rounded-lg bg-amber-50 dark:bg-amber-950/20 text-xs text-gray-900 dark:text-white"
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex gap-3 pt-3">
@@ -810,7 +962,7 @@ export function PosSessionsPage() {
               onClick={() => setIsCreateModalOpen(false)}
               className="flex-1 py-2 bg-gray-150 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 text-gray-700 dark:text-gray-200 font-bold rounded-xl transition-all text-sm"
             >
-              Hủy
+              Hủy bỏ
             </button>
             <button
               type="submit"
@@ -842,28 +994,43 @@ export function PosSessionsPage() {
 
             <div>
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Thu ngân viên</label>
-              <input
-                type="text"
+              <select
                 value={editingSession.cashierName}
                 onChange={(e) => setEditingSession({ ...editingSession, cashierName: e.target.value })}
                 required
-                className="block w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:outline-none"
-              />
+                className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:outline-none"
+              >
+                <option value="Trần Văn Hùng">Trần Văn Hùng (Quản trị viên)</option>
+                <option value="Nguyễn Văn An">Nguyễn Văn An (Nhân viên ca sáng)</option>
+                <option value="Trần Thị Bích">Trần Thị Bích (Nhân viên ca tối)</option>
+                <option value="Phạm Minh Châu">Phạm Minh Châu (Nhân viên bán thời gian)</option>
+                <option value="Lê Văn Đức">Lê Văn Đức (Thu ngân)</option>
+                {!['Trần Văn Hùng', 'Nguyễn Văn An', 'Trần Thị Bích', 'Phạm Minh Châu', 'Lê Văn Đức'].includes(editingSession.cashierName) && (
+                  <option value={editingSession.cashierName}>{editingSession.cashierName}</option>
+                )}
+              </select>
             </div>
 
             <div>
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Mã quầy</label>
-              <input
-                type="text"
+              <select
                 value={editingSession.terminalId}
                 onChange={(e) => setEditingSession({ ...editingSession, terminalId: e.target.value })}
                 required
-                className="block w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:outline-none"
-              />
+                className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:outline-none"
+              >
+                <option value="TERM-01-MAIN">TERM-01-MAIN (Quầy chính sảnh)</option>
+                <option value="TERM-02-KIOSK">TERM-02-KIOSK (Kiosk tự phục vụ)</option>
+                <option value="TERM-03-BACKOFFICE">TERM-03-BACKOFFICE (Quầy kho nội bộ)</option>
+                <option value="TERM-04-EXPRESS">TERM-04-EXPRESS (Quầy thanh toán nhanh)</option>
+                {!['TERM-01-MAIN', 'TERM-02-KIOSK', 'TERM-03-BACKOFFICE', 'TERM-04-EXPRESS'].includes(editingSession.terminalId) && (
+                  <option value={editingSession.terminalId}>{editingSession.terminalId}</option>
+                )}
+              </select>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Tiền quỹ đầu ca (₫)</label>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Tiền quỹ đầu ca (đ)</label>
               <input
                 type="text"
                 value={editingSession.openingCashFloatVnd === 0 ? '' : editingSession.openingCashFloatVnd.toLocaleString('vi-VN')}
@@ -882,13 +1049,13 @@ export function PosSessionsPage() {
                 onClick={() => setIsEditModalOpen(false)}
                 className="flex-1 py-2 bg-gray-150 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 text-gray-700 dark:text-gray-200 font-bold rounded-xl transition-all text-sm"
               >
-                Hủy
+                Hủy bỏ
               </button>
               <button
                 type="submit"
                 className="flex-1 py-2 bg-primary hover:bg-primary/95 text-white font-bold rounded-xl transition-all text-sm shadow-md"
               >
-                Lưu thay đổi
+                Lưu thông tin
               </button>
             </div>
           </form>
@@ -899,12 +1066,12 @@ export function PosSessionsPage() {
       <Modal
         isOpen={isZReportModalOpen}
         onClose={() => setIsZReportModalOpen(false)}
-        title="Báo cáo Tổng hợp ca Z-Report (Trong ngày)"
+        title="Báo cáo tổng hợp ca Z-Report trong ngày"
       >
         <div className="space-y-5">
           <div className="text-center pb-2 border-b border-gray-150 dark:border-gray-800">
-            <h3 className="font-black text-gray-900 dark:text-white text-base">Z-REPORT HÀNG NGÀY</h3>
-            <p className="text-[10px] text-gray-400 dark:text-gray-550 font-bold tracking-widest mt-0.5">HỆ THỐNG QUẦY QUỸ RETAILHUB</p>
+            <h3 className="font-black text-gray-900 dark:text-white text-base">Báo cáo Z-Report hàng ngày</h3>
+            <p className="text-[10px] text-gray-400 dark:text-gray-550 font-bold tracking-widest mt-0.5">Hệ thống quầy quỹ RetailHub</p>
           </div>
 
           <div className="space-y-3.5 text-sm">
@@ -925,7 +1092,7 @@ export function PosSessionsPage() {
               <span className="font-mono font-bold text-gray-800 dark:text-gray-250">{fmtVnd(zReportAgg.totalOpeningCash)}</span>
             </div>
             <div className="flex justify-between border-t-2 border-double border-gray-200 dark:border-gray-800 pt-2.5">
-              <span className="text-gray-900 dark:text-white font-black">TỔNG KIỂM QUỸ THỰC TẾ:</span>
+              <span className="text-gray-900 dark:text-white font-black">Tổng kiểm quỹ thực tế:</span>
               <span className="font-mono font-black text-primary text-base">{fmtVnd(zReportAgg.totalClosingCash)}</span>
             </div>
           </div>
@@ -939,7 +1106,7 @@ export function PosSessionsPage() {
             </button>
             <button
               onClick={() => {
-                toast.success('Lệnh Z-Report đã được chuyển thành công tới máy in chính!');
+                toast.success('Lệnh in Z-Report đã được chuyển thành công tới máy in chính!');
                 setIsZReportModalOpen(false);
               }}
               className="flex-1 py-2.5 bg-primary hover:bg-primary/95 text-white font-bold rounded-xl transition-all text-sm shadow-md"

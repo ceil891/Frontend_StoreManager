@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import {
-  UserPlus, Download, Star, Eye, Edit, Trash2, Award, Gift, Zap, BadgeCheck, Users, Camera, Upload, KeyRound, Lock,
+  UserPlus, Download, Star, Eye, Edit, Trash2, Award, Gift, Zap, BadgeCheck, Users, Camera, Upload, KeyRound, Lock, Loader2,
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -17,6 +17,50 @@ import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import { compressImage } from '@/shared/utils/imageCompressor';
+import { PermissionGuard } from '@/shared/components/ui/PermissionGuard';
+
+const parseAddressString = (fullAddress: string | undefined) => {
+  if (!fullAddress) {
+    return { province: '', district: '', ward: '', addressDetail: '' };
+  }
+  const parts = fullAddress.split(',').map(s => s.trim()).filter(Boolean);
+  if (parts.length >= 4) {
+    const province = parts[parts.length - 1];
+    const district = parts[parts.length - 2];
+    const ward = parts[parts.length - 3];
+    const addressDetail = parts.slice(0, parts.length - 3).join(', ');
+    return { province, district, ward, addressDetail };
+  } else if (parts.length === 3) {
+    const province = parts[2];
+    const district = parts[1];
+    const ward = parts[0];
+    return { province, district, ward, addressDetail: '' };
+  } else if (parts.length === 2) {
+    const province = parts[1];
+    const district = parts[0];
+    return { province, district, ward: '', addressDetail: '' };
+  } else {
+    return { province: '', district: '', ward: '', addressDetail: fullAddress };
+  }
+};
+
+const genderLabel: Record<string, string> = {
+  MALE: 'Nam',
+  FEMALE: 'Nữ',
+  OTHER: 'Khác'
+};
+
+const groupLabel: Record<string, string> = {
+  'GRP-VIP': 'Khách hàng VIP / Doanh nghiệp',
+  'GRP-RETAIL': 'Khách hàng Bán lẻ',
+  'GRP-WHOLESALE': 'Đại lý / Bán sỉ'
+};
+
+const areaLabel: Record<string, string> = {
+  'AREA-HN': 'Khu vực Hà Nội & Miền Bắc',
+  'AREA-HCM': 'Khu vực TP. Hồ Chí Minh & Miền Nam',
+  'AREA-DN': 'Khu vực Đà Nẵng & Miền Trung'
+};
 
 const TIER_THRESHOLDS = {
   BRONZE: 0,
@@ -66,6 +110,7 @@ export function CustomersPage() {
   const [isAutoCode, setIsAutoCode] = useState(true);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingCustomer, setEditingCustomer] = useState<Partial<CustomerProfile>>({});
+  const [addrPieces, setAddrPieces] = useState({ province: '', district: '', ward: '', addressDetail: '' });
   const [deletingCustomer, setDeletingCustomer] = useState<CustomerProfile | null>(null);
 
   const filtered = data.filter((item) => {
@@ -81,10 +126,11 @@ export function CustomersPage() {
   const handleOpenCreate = () => {
     setModalMode('create');
     setIsAutoCode(true);
+    setAddrPieces({ province: '', district: '', ward: '', addressDetail: '' });
     setEditingCustomer({
       customerCode: `CUST-${Math.floor(10000 + Math.random() * 90000)}`,
       name: '', phone: '', email: '', address: '',
-      avatarUrl: buildUserAvatarUrl('new-customer@retailhub.vn'),
+      avatarUrl: '',
       loyaltyTier: 'BRONZE', loyaltyPoints: 0, lifetimeSpent: 0,
       status: 'ACTIVE',
       registeredDate: new Date().toISOString().split('T')[0],
@@ -98,13 +144,15 @@ export function CustomersPage() {
     setModalMode('edit');
     setIsAutoCode(false);
     setEditingCustomer(customer);
+    setAddrPieces(parseAddressString(customer.address));
     setIsModalOpen(true);
   };
 
-  const handleSaveCustomer = (e: React.FormEvent) => {
+  const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = editingCustomer.name?.trim();
     const cleanPhone = editingCustomer.phone?.trim().replace(/\s+/g, '');
+    const cleanEmail = editingCustomer.email?.trim();
 
     if (!cleanName) {
       toast.error('Vui lòng nhập Họ & Tên khách hàng!');
@@ -119,9 +167,21 @@ export function CustomersPage() {
       toast.error('Họ & Tên khách hàng phải có tối thiểu 2 ký tự!');
       return;
     }
-    if (!cleanPhone || !/^[0-9]{10,11}$/.test(cleanPhone)) {
-      toast.error('Số điện thoại không hợp lệ! Vui lòng nhập từ 10 đến 11 chữ số.');
+    
+    // Validation SĐT: Đầu số VN hợp lệ (03, 05, 07, 08, 09) và đủ 10 số
+    const phoneRegex = /^(0[35789])[0-9]{8}$/;
+    if (!cleanPhone || !phoneRegex.test(cleanPhone)) {
+      toast.error('Số điện thoại không hợp lệ! Vui lòng nhập số điện thoại Việt Nam đủ 10 chữ số (Đầu số 03, 05, 07, 08, 09. Ví dụ: 0912345678).');
       return;
+    }
+
+    // Validation Email / Gmail
+    if (cleanEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(cleanEmail)) {
+        toast.error('Địa chỉ email không đúng định dạng (Ví dụ: khachhang@gmail.com)!');
+        return;
+      }
     }
 
     if (editingCustomer.dateOfBirth) {
@@ -140,7 +200,7 @@ export function CustomersPage() {
         customerCode:   editingCustomer.customerCode || `CUST-${Math.floor(10000 + Math.random() * 90000)}`,
         name:           cleanName,
         phone:          cleanPhone,
-        email:          editingCustomer.email?.trim() || '',
+        email:          cleanEmail || '',
         address:        editingCustomer.address || '',
         taxCode:        editingCustomer.taxCode || '',
         gender:         editingCustomer.gender || 'OTHER',
@@ -148,7 +208,7 @@ export function CustomersPage() {
         creditLimit:    editingCustomer.creditLimit || 0,
         groupId:        editingCustomer.groupId || '',
         areaId:         editingCustomer.areaId || '',
-        avatarUrl:      editingCustomer.avatarUrl?.trim() || buildUserAvatarUrl(editingCustomer.email || cleanName || 'customer'),
+        avatarUrl:      editingCustomer.avatarUrl?.trim() || '',
         loyaltyTier:    autoTier,
         loyaltyPoints:  editingCustomer.loyaltyPoints || 0,
         lifetimeSpent:  editingCustomer.lifetimeSpent || 0,
@@ -157,14 +217,16 @@ export function CustomersPage() {
         status:         editingCustomer.status || 'ACTIVE',
         notes:          editingCustomer.notes,
       };
-      addCustomer(newCust);
+      await addCustomer(newCust);
       toast.success(`Đã thêm khách hàng mới: ${cleanName}`);
     } else if (editingCustomer.id) {
-      updateCustomer(editingCustomer.id, { ...editingCustomer, name: cleanName, phone: cleanPhone, loyaltyTier: autoTier });
+      await updateCustomer(editingCustomer.id, { ...editingCustomer, name: cleanName, phone: cleanPhone, email: cleanEmail, loyaltyTier: autoTier });
       toast.success(`Đã cập nhật thông tin khách hàng: ${cleanName}`);
     }
     setIsModalOpen(false);
   };
+
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -173,20 +235,55 @@ export function CustomersPage() {
       toast.error('Vui lòng chọn tệp hình ảnh (JPG, PNG, WebP)!');
       return;
     }
+
+    const toastId = toast.loading('Đang tải ảnh đại diện...');
+    setIsUploadingAvatar(true);
+
     try {
-      const compressed = await compressImage(file, { maxWidth: 400, maxHeight: 400, quality: 0.85 });
       const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64Url = event.target?.result as string;
+      reader.onload = (uploadEvent) => {
+        const base64Url = uploadEvent.target?.result as string;
         if (base64Url) {
           setEditingCustomer((prev) => ({ ...prev, avatarUrl: base64Url }));
-          toast.success('Đã chọn & tải ảnh đại diện thành công!');
         }
       };
-      reader.readAsDataURL(compressed);
-    } catch (err) {
-      console.error('Error processing avatar image:', err);
-      toast.error('Lỗi khi xử lý hình ảnh!');
+      reader.readAsDataURL(file);
+
+      const compressed = await compressImage(file, { maxWidth: 600, maxHeight: 600, quality: 0.85 });
+      const formData = new FormData();
+      formData.append('file', compressed);
+      formData.append('folder', 'customers');
+
+      try {
+        const response: any = await axiosClient.post('/uploads/image', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+
+        const finalUrl =
+          response?.data?.imageUrl ||
+          response?.imageUrl ||
+          response?.url ||
+          response?.data?.url ||
+          (typeof response?.data === 'string' ? response.data : null);
+
+        if (finalUrl) {
+          setEditingCustomer((prev) => ({ ...prev, avatarUrl: finalUrl }));
+          toast.success('Đã tải ảnh lên hệ thống thành công!', { id: toastId });
+        } else {
+          toast.success('Đã nhận ảnh đại diện!', { id: toastId });
+        }
+      } catch (uploadErr) {
+        console.warn('Upload to server failed, using local Base64 image:', uploadErr);
+        toast.success('Đã nhận ảnh đại diện (chế độ ảnh trực tiếp)!', { id: toastId });
+      }
+    } catch (err: any) {
+      console.error('Error processing avatar:', err);
+      toast.error('Không thể xử lý ảnh! Vui lòng thử lại.', { id: toastId });
+    } finally {
+      setIsUploadingAvatar(false);
+      e.target.value = '';
     }
   };
 
@@ -248,11 +345,11 @@ export function CustomersPage() {
       },
       {
         accessorKey: 'email',
-        header: 'Email / Địa chỉ',
+        header: 'Email / địa chỉ',
         cell: ({ row }) => (
           <div>
-            <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">{row.original.email || 'N/A'}</p>
-            <p className="text-[11px] text-gray-400 truncate max-w-[180px]">{row.original.address || 'N/A'}</p>
+            <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">{row.original.email || 'Chưa cập nhật'}</p>
+            <p className="text-[11px] text-gray-400 truncate max-w-[180px]">{row.original.address || 'Chưa cập nhật'}</p>
           </div>
         ),
       },
@@ -302,38 +399,46 @@ export function CustomersPage() {
         header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
-            <button
-              onClick={(e) => { e.stopPropagation(); setSelectedCustomer(row.original); }}
-              title="Xem chi tiết"
-              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
-            >
-              <Eye className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
-              title="Chỉnh sửa"
-              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setResetPasswordCustomer(row.original);
-                setNewPasswordInput('RetailHub@123');
-              }}
-              title="Cấp lại mật khẩu"
-              className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors"
-            >
-              <KeyRound className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); setDeletingCustomer(row.original); }}
-              title="Xóa"
-              className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            <PermissionGuard permission="crm:customer:view">
+              <button
+                onClick={(e) => { e.stopPropagation(); setSelectedCustomer(row.original); }}
+                title="Xem chi tiết"
+                className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="crm:customer:update">
+              <button
+                onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
+                title="Chỉnh sửa"
+                className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+              >
+                <Edit className="w-4 h-4" />
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="crm:customer:update">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setResetPasswordCustomer(row.original);
+                  setNewPasswordInput('RetailHub@123');
+                }}
+                title="Cấp lại mật khẩu"
+                className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors"
+              >
+                <KeyRound className="w-4 h-4" />
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="crm:customer:delete">
+              <button
+                onClick={(e) => { e.stopPropagation(); setDeletingCustomer(row.original); }}
+                title="Xóa"
+                className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </PermissionGuard>
           </div>
         ),
       },
@@ -348,35 +453,39 @@ export function CustomersPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Khách hàng</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý khách hàng</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Quản lý hồ sơ khách hàng, theo dõi điểm thưởng tích lũy và giám sát lịch sử chi tiêu. Nhấp vào dòng để xem chi tiết.
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                exportToCsv('danh_sach_khach_hang', filtered, [
-                  { header: 'Họ tên', accessor: r => r.name },
-                  { header: 'Email', accessor: r => r.email },
-                  { header: 'Số điện thoại', accessor: r => r.phone },
-                  { header: 'Hạng thẻ', accessor: r => tierLabel[r.loyaltyTier] || r.loyaltyTier },
-                  { header: 'Điểm tích lũy', accessor: r => r.loyaltyPoints },
-                  { header: 'Tổng chi tiêu ($)', accessor: r => r.lifetimeSpent },
-                  { header: 'Lần mua cuối', accessor: r => r.lastActive },
-                ]);
-                toast.success('Đã xuất danh sách khách hàng dạng CSV!');
-              }}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap"
-            >
-              <Download className="w-4 h-4" /> Xuất danh sách
-            </button>
-            <button
-              onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap"
-            >
-              <UserPlus className="w-4 h-4" /> Thêm Khách Hàng mới
-            </button>
+            <PermissionGuard permission="crm:customer:export">
+              <button
+                onClick={() => {
+                  exportToCsv('danh_sach_khach_hang', filtered, [
+                    { header: 'Họ tên', accessor: (r: any) => r.name },
+                    { header: 'Email', accessor: (r: any) => r.email },
+                    { header: 'Số điện thoại', accessor: (r: any) => r.phone },
+                    { header: 'Hạng thẻ', accessor: (r: any) => tierLabel[r.loyaltyTier] || r.loyaltyTier },
+                    { header: 'Điểm tích lũy', accessor: (r: any) => r.loyaltyPoints },
+                    { header: 'Tổng chi tiêu', accessor: (r: any) => r.lifetimeSpent },
+                    { header: 'Lần mua cuối', accessor: (r: any) => r.lastActive },
+                  ]);
+                  toast.success('Đã xuất danh sách khách hàng dạng CSV!');
+                }}
+                className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap"
+              >
+                <Download className="w-4 h-4" /> Xuất Excel
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="crm:customer:create">
+              <button
+                onClick={handleOpenCreate}
+                className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap"
+              >
+                <UserPlus className="w-4 h-4" /> Thêm mới khách hàng
+              </button>
+            </PermissionGuard>
           </div>
         </div>
 
@@ -398,21 +507,21 @@ export function CustomersPage() {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="w-full sm:w-80">
+        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="flex-1 w-full">
             <input
               type="text"
               placeholder="Tìm theo tên, SĐT, email..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
             />
           </div>
-          <div className="w-full sm:w-auto flex items-center gap-3">
+          <div className="w-full sm:w-auto flex items-center gap-3 shrink-0">
             <select
               value={selectedTier}
               onChange={(e) => setSelectedTier(e.target.value)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary"
+              className="w-full sm:w-auto px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
             >
               <option value="">-- Tất cả hạng thẻ --</option>
               <option value="BRONZE">Đồng</option>
@@ -436,8 +545,8 @@ export function CustomersPage() {
         <Modal
           isOpen={Boolean(selectedCustomer)}
           onClose={() => setSelectedCustomer(null)}
-          title={`Chi tiết Khách hàng: ${selectedCustomer.name}`}
-          size="lg"
+          title={`Chi tiết khách hàng: ${selectedCustomer.name}`}
+          size="erp"
         >
           <div className="space-y-4 p-2">
             <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
@@ -456,16 +565,31 @@ export function CustomersPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               <div className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800">
-                <span className="text-gray-400 block font-semibold mb-1">EMAIL & ĐỊA CHỈ</span>
+                <span className="text-gray-400 block font-semibold mb-1">Email & địa chỉ</span>
                 <p className="font-medium text-gray-900 dark:text-white">{selectedCustomer.email || 'Chưa cập nhật'}</p>
                 <p className="text-gray-500 mt-1">{selectedCustomer.address || 'Chưa cập nhật'}</p>
               </div>
               <div className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800">
-                <span className="text-gray-400 block font-semibold mb-1">TÍCH ĐIỂM & CHI TIÊU</span>
+                <span className="text-gray-400 block font-semibold mb-1">Tích điểm & chi tiêu</span>
                 <p className="font-bold text-emerald-600 text-sm">{selectedCustomer.loyaltyPoints} điểm khả dụng</p>
-                <p className="text-gray-500 mt-1">Tổng chi tiêu: ${(selectedCustomer.lifetimeSpent || 0).toLocaleString()}</p>
+                <p className="text-gray-500 mt-1">Tổng chi tiêu: {(selectedCustomer.lifetimeSpent || 0).toLocaleString('vi-VN')} đ</p>
+              </div>
+              <div className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800">
+                <span className="text-gray-400 block font-semibold mb-1">Thông tin cá nhân</span>
+                <p className="text-gray-500">Mã số thuế: <span className="font-semibold text-gray-900 dark:text-white font-mono">{selectedCustomer.taxCode || 'Chưa cập nhật'}</span></p>
+                <p className="text-gray-500 mt-1">Giới tính: <span className="font-semibold text-gray-900 dark:text-white">{selectedCustomer.gender ? (genderLabel[selectedCustomer.gender] || selectedCustomer.gender) : 'Chưa cập nhật'}</span></p>
+                <p className="text-gray-500 mt-1">Ngày sinh: <span className="font-semibold text-gray-900 dark:text-white">{selectedCustomer.dateOfBirth || 'Chưa cập nhật'}</span></p>
+              </div>
+              <div className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800">
+                <span className="text-gray-400 block font-semibold mb-1">Phân loại & chăm sóc khách hàng</span>
+                <p className="text-gray-500">Nhóm: <span className="font-semibold text-gray-900 dark:text-white">{selectedCustomer.groupId ? (groupLabel[selectedCustomer.groupId] || selectedCustomer.groupId) : 'Chưa cập nhật'}</span></p>
+                <p className="text-gray-500 mt-1">Khu vực: <span className="font-semibold text-gray-900 dark:text-white">{selectedCustomer.areaId ? (areaLabel[selectedCustomer.areaId] || selectedCustomer.areaId) : 'Chưa cập nhật'}</span></p>
+                <p className="text-gray-500 mt-1">Hạn mức nợ: <span className="font-bold text-red-600 font-mono">{(selectedCustomer.creditLimit || 0).toLocaleString('vi-VN')} đ</span></p>
+                {selectedCustomer.notes && (
+                  <p className="text-gray-500 mt-1 italic">Ghi chú: "{selectedCustomer.notes}"</p>
+                )}
               </div>
             </div>
           </div>
@@ -477,12 +601,12 @@ export function CustomersPage() {
         <Modal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
-          title={modalMode === 'create' ? 'Thêm Khách Hàng Mới' : 'Chỉnh Sửa Hồ Sơ Khách Hàng'}
-          size="2xl"
+          title={modalMode === 'create' ? 'Thêm mới khách hàng' : 'Cập nhật thông tin khách hàng'}
+          size="erp"
         >
           <form onSubmit={handleSaveCustomer} className="space-y-6">
             <div className="erp-form-section space-y-4">
-              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-150 dark:border-gray-700 pb-2 mb-4">Thông tin cơ bản & Định danh</h3>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-150 dark:border-gray-700 pb-2 mb-4">Thông tin cơ bản & định danh</h3>
 
               {/* Avatar Upload Block */}
               <div className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 mb-4">
@@ -494,25 +618,25 @@ export function CustomersPage() {
                       <UserAvatar name={editingCustomer.name || 'Khách hàng'} size="lg" />
                     )}
                   </div>
-                  <label className="absolute bottom-0 right-0 p-1 bg-emerald-600 text-white rounded-full cursor-pointer shadow hover:bg-emerald-700 transition-all hover:scale-110">
-                    <Camera className="w-3.5 h-3.5" />
-                    <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
+                  <label className={`absolute bottom-0 right-0 p-1 bg-emerald-600 text-white rounded-full cursor-pointer shadow hover:bg-emerald-700 transition-all hover:scale-110 ${isUploadingAvatar ? 'opacity-70 pointer-events-none' : ''}`}>
+                    {isUploadingAvatar ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+                    <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
                   </label>
                 </div>
                 <div className="flex-1">
                   <p className="text-xs font-semibold text-gray-900 dark:text-white">Ảnh đại diện khách hàng</p>
                   <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Nhấp để chọn tệp ảnh từ máy tính (PNG, JPG, WebP) hoặc dán liên kết ảnh bên dưới.</p>
                   <div className="mt-2 flex items-center gap-2">
-                    <label className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs font-semibold cursor-pointer hover:bg-emerald-100 transition-colors">
-                      <Upload className="w-3.5 h-3.5" />
-                      Tải ảnh lên
-                      <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
+                    <label className={`inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs font-semibold cursor-pointer hover:bg-emerald-100 transition-colors ${isUploadingAvatar ? 'opacity-70 pointer-events-none' : ''}`}>
+                      {isUploadingAvatar ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      {isUploadingAvatar ? 'Đang tải lên...' : 'Tải ảnh lên'}
+                      <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
                     </label>
                     <input
                       type="text"
                       value={editingCustomer.avatarUrl || ''}
                       onChange={(e) => setEditingCustomer((prev) => ({ ...prev, avatarUrl: e.target.value }))}
-                      placeholder="Hoặc dán URL ảnh..."
+                      placeholder="Hoặc dán liên kết ảnh..."
                       className="flex-1 px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono"
                     />
                   </div>
@@ -522,7 +646,7 @@ export function CustomersPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã KH *</label>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã khách hàng *</label>
                   </div>
                   <input
                     type="text"
@@ -535,7 +659,7 @@ export function CustomersPage() {
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Họ và Tên khách hàng *</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Họ và tên khách hàng *</label>
                   <input
                     type="text"
                     value={editingCustomer.name || ''}
@@ -554,13 +678,13 @@ export function CustomersPage() {
                     type="text"
                     value={editingCustomer.phone || ''}
                     onChange={(e) => setEditingCustomer({ ...editingCustomer, phone: e.target.value })}
-                    placeholder="09xx xxx xxx"
+                    placeholder="Nhập số điện thoại (VD: 0912345678)"
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary font-mono"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ Email</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ email</label>
                   <input
                     type="email"
                     value={editingCustomer.email || ''}
@@ -569,10 +693,6 @@ export function CustomersPage() {
                       setEditingCustomer((p) => ({
                         ...p,
                         email,
-                        avatarUrl:
-                          modalMode === 'create' && (!p.avatarUrl || p.avatarUrl.includes('new-customer'))
-                            ? buildUserAvatarUrl(email || 'customer')
-                            : p.avatarUrl,
                       }));
                     }}
                     placeholder="email@example.com"
@@ -585,7 +705,7 @@ export function CustomersPage() {
                     type="text"
                     value={editingCustomer.taxCode || ''}
                     onChange={(e) => setEditingCustomer({ ...editingCustomer, taxCode: e.target.value })}
-                    placeholder="MST"
+                    placeholder="Nhập mã số thuế..."
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary font-mono"
                   />
                 </div>
@@ -617,9 +737,13 @@ export function CustomersPage() {
 
               <div>
                 <AddressCascadeSelect
-                  addressDetail={editingCustomer.address || ''}
-                  onChange={({ province, district, ward, addressDetail }) => {
-                    const fullAddr = [addressDetail, ward, district, province].filter(Boolean).join(', ');
+                  province={addrPieces.province}
+                  district={addrPieces.district}
+                  ward={addrPieces.ward}
+                  addressDetail={addrPieces.addressDetail}
+                  onChange={(newPieces) => {
+                    setAddrPieces(newPieces);
+                    const fullAddr = [newPieces.addressDetail, newPieces.ward, newPieces.district, newPieces.province].filter(Boolean).join(', ');
                     setEditingCustomer(prev => ({ ...prev, address: fullAddr }));
                   }}
                 />
@@ -627,13 +751,13 @@ export function CustomersPage() {
             </div>
 
             <div className="erp-form-section space-y-4">
-              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-150 dark:border-gray-700 pb-2 mb-4">Tài chính, phân loại & CSKH</h3>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-150 dark:border-gray-700 pb-2 mb-4">Tài chính, phân loại & chăm sóc khách hàng</h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhóm khách hàng</label>
                   <SearchLookupModal
-                    title="Chọn Nhóm Khách Hàng"
+                    title="Chọn nhóm khách hàng"
                     iconType="building"
                     placeholder="Chọn nhóm khách hàng..."
                     value={editingCustomer.groupId}
@@ -648,7 +772,7 @@ export function CustomersPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khu vực địa lý</label>
                   <SearchLookupModal
-                    title="Chọn Khu Vực"
+                    title="Chọn khu vực"
                     iconType="location"
                     placeholder="Chọn khu vực..."
                     value={editingCustomer.areaId}
@@ -701,18 +825,18 @@ export function CustomersPage() {
                   onChange={(e) => setEditingCustomer({ ...editingCustomer, status: e.target.value as any })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
                 >
-                  <option value="ACTIVE">Đang hoạt động (ACTIVE)</option>
-                  <option value="DORMANT">Tạm ngưng (DORMANT)</option>
-                  <option value="CHURNED">Đã rời đi (CHURNED)</option>
+                  <option value="ACTIVE">Đang hoạt động</option>
+                  <option value="DORMANT">Tạm ngưng</option>
+                  <option value="CHURNED">Đã rời đi</option>
                 </select>
               </div>
 
               <div>
-                <FileDropzone label="Hồ sơ & Giấy tờ đính kèm" />
+                <FileDropzone label="Hồ sơ & giấy tờ đính kèm" />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú & Lưu ý</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú & lưu ý</label>
                 <textarea
                   rows={3}
                   value={editingCustomer.notes || ''}
@@ -735,7 +859,7 @@ export function CustomersPage() {
                 type="submit"
                 className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-bold shadow transition-all active:scale-95"
               >
-                {modalMode === 'create' ? 'Thêm Khách Hàng' : 'Lưu Thay Đổi'}
+                {modalMode === 'create' ? 'Thêm mới' : 'Lưu thông tin'}
               </button>
             </div>
           </form>
@@ -747,7 +871,7 @@ export function CustomersPage() {
         <Modal
           isOpen={Boolean(deletingCustomer)}
           onClose={() => setDeletingCustomer(null)}
-          title="Xác Nhận Xóa Khách Hàng"
+          title="Xác nhận xóa khách hàng"
           size="sm"
         >
           <div className="space-y-4">
@@ -767,7 +891,7 @@ export function CustomersPage() {
                 onClick={handleDeleteConfirm}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-bold shadow transition-all active:scale-95"
               >
-                Xóa Khách Hàng
+                Xóa khách hàng
               </button>
             </div>
           </div>
@@ -779,7 +903,7 @@ export function CustomersPage() {
         <Modal
           isOpen={Boolean(resetPasswordCustomer)}
           onClose={() => setResetPasswordCustomer(null)}
-          title={`CẤP LẠI MẬT KHẨU KHÁCH HÀNG: ${resetPasswordCustomer.name}`}
+          title={`Cấp lại mật khẩu: ${resetPasswordCustomer.name}`}
           maxWidth="max-w-md"
         >
           <form onSubmit={handleAdminResetPassword} className="space-y-4">

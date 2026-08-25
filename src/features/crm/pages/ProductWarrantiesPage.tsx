@@ -174,12 +174,17 @@ export function ProductWarrantiesPage() {
         header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
+          const labelMap: Record<string, string> = {
+            HOẠT_ĐỘNG: 'Đang hoạt động',
+            HẾT_HẠN: 'Hết hạn',
+            HỦY: 'Đã hủy',
+          };
           const badge = {
             HOẠT_ĐỘNG: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
             HẾT_HẠN: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
             HỦY: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300',
           }[status] || 'bg-gray-100 text-gray-800';
-          return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${badge}`}>{status}</span>;
+          return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${badge}`}>{labelMap[status] || status}</span>;
         },
       },
       {
@@ -222,15 +227,15 @@ export function ProductWarrantiesPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sổ bảo hành sản phẩm</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Quản lý các hồ sơ bảo hành, theo dõi thời gian và điều kiện bảo hành.
+              Quản lý các hồ sơ bảo hành, theo dõi thời gian và điều kiện bảo hành sản phẩm.
             </p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
-              <Download className="w-4 h-4" /> Xuất Dữ Liệu
+              <Download className="w-4 h-4" /> Xuất Excel
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg">
-              <Plus className="w-4 h-4" /> Thêm sổ bảo hành
+              <Plus className="w-4 h-4" /> Thêm mới sổ bảo hành
             </button>
           </div>
         </div>
@@ -243,19 +248,19 @@ export function ProductWarrantiesPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm kiếm mã, khách hàng, serial…"
+              placeholder="Tìm kiếm theo mã, khách hàng, serial/IMEI…"
               className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary"
             />
           </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+            className="px-2.5 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
           >
             <option value="Tất cả">Tất cả trạng thái</option>
-            <option value="HOẠT_ĐỘNG">HOẠT ĐỘNG</option>
-            <option value="HẾT_HẠN">HẾT HẠN</option>
-            <option value="HỦY">HỦY</option>
+            <option value="HOẠT_ĐỘNG">Đang hoạt động</option>
+            <option value="HẾT_HẠN">Hết hạn</option>
+            <option value="HỦY">Đã hủy</option>
           </select>
         </div>
         <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row) => setSelectedItem(row)} />
@@ -276,19 +281,21 @@ export function ProductWarrantiesPage() {
               </div>
               <div>
                 <span className="text-xs text-gray-500">Serial / IMEI</span>
-                <p className="text-sm text-gray-700 dark:text-gray-300">{selectedItem.serialOrIMEI}</p>
+                <p className="text-sm text-gray-700 dark:text-gray-300 font-mono">{selectedItem.serialOrIMEI}</p>
               </div>
               <div>
                 <span className="text-xs text-gray-500">Ngày bắt đầu</span>
-                <p className="font-medium text-gray-900 dark:text-white">{selectedItem.startDate}</p>
+                <p className="font-medium text-gray-900 dark:text-white font-mono">{selectedItem.startDate}</p>
               </div>
               <div>
                 <span className="text-xs text-gray-500">Ngày hết hạn</span>
-                <p className="font-medium text-gray-900 dark:text-white">{selectedItem.expiryDate}</p>
+                <p className="font-medium text-gray-900 dark:text-white font-mono">{selectedItem.expiryDate}</p>
               </div>
               <div>
                 <span className="text-xs text-gray-500">Trạng thái</span>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${selectedItem.status === 'HOẠT_ĐỘNG' ? 'bg-emerald-100 text-emerald-800' : selectedItem.status === 'HẾT_HẠN' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>{selectedItem.status}</span>
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${selectedItem.status === 'HOẠT_ĐỘNG' ? 'bg-emerald-100 text-emerald-800' : selectedItem.status === 'HẾT_HẠN' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>
+                  {selectedItem.status === 'HOẠT_ĐỘNG' ? 'Đang hoạt động' : selectedItem.status === 'HẾT_HẠN' ? 'Hết hạn' : 'Đã hủy'}
+                </span>
               </div>
             </div>
             <div className="border-t pt-4">
@@ -300,7 +307,7 @@ export function ProductWarrantiesPage() {
       </Modal>
 
       {/* Modal tạo / sửa */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalMode === 'create' ? 'Thêm sổ bảo hành mới' : 'Cập nhật sổ bảo hành'}>
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalMode === 'create' ? 'Thêm mới sổ bảo hành' : 'Cập nhật sổ bảo hành'}>
         <form onSubmit={handleSave} className="space-y-4 p-4">
           <div>
             <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">Mã bảo hành *</label>
@@ -308,7 +315,7 @@ export function ProductWarrantiesPage() {
               type="text"
               value={editingItem.warrantyCode || ''}
               onChange={(e) => setEditingItem({ ...editingItem, warrantyCode: e.target.value })}
-              className="w-full px-3 py-2 border rounded text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+              className="w-full px-3 py-2 border rounded text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono font-bold"
               required
               disabled={modalMode === 'edit'}
             />
@@ -330,7 +337,7 @@ export function ProductWarrantiesPage() {
                 type="text"
                 value={editingItem.serialOrIMEI || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, serialOrIMEI: e.target.value })}
-                className="w-full px-3 py-2 border rounded text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full px-3 py-2 border rounded text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
               />
             </div>
             <div>
@@ -339,7 +346,7 @@ export function ProductWarrantiesPage() {
                 type="date"
                 value={editingItem.startDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, startDate: e.target.value })}
-                className="w-full px-3 py-2 border rounded text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full px-3 py-2 border rounded text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
                 required
               />
             </div>
@@ -349,7 +356,7 @@ export function ProductWarrantiesPage() {
                 type="date"
                 value={editingItem.expiryDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, expiryDate: e.target.value })}
-                className="w-full px-3 py-2 border rounded text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full px-3 py-2 border rounded text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
                 required
               />
             </div>
@@ -360,9 +367,9 @@ export function ProductWarrantiesPage() {
                 onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
                 className="w-full px-3 py-2 border rounded text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
               >
-                <option value="HOẠT_ĐỘNG">HOẠT ĐỘNG</option>
-                <option value="HẾT_HẠN">HẾT HẠN</option>
-                <option value="HỦY">HỦY</option>
+                <option value="HOẠT_ĐỘNG">Đang hoạt động</option>
+                <option value="HẾT_HẠN">Hết hạn</option>
+                <option value="HỦY">Đã hủy</option>
               </select>
             </div>
           </div>
@@ -380,7 +387,7 @@ export function ProductWarrantiesPage() {
               Hủy bỏ
             </button>
             <button type="submit" className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded text-sm font-medium">
-              {modalMode === 'create' ? 'Thêm Mới' : 'Lưu thay đổi'}
+              {modalMode === 'create' ? 'Thêm mới' : 'Lưu thông tin'}
             </button>
           </div>
         </form>

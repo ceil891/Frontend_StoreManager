@@ -32,10 +32,10 @@ const tierStyles = {
 };
 
 const serviceTierLabels: Record<ShipperPartnerRecord['serviceTier'], string> = {
-  EXPRESS_AIR: 'Giao Hỏa Tốc (Đường Hàng Không)',
-  SAME_DAY_COURIER: 'Giao Trong Ngày (Chuyển Phát Nhanh)',
-  STANDARD_GROUND: 'Giao Tiêu Chuẩn (Đường Bộ)',
-  HEAVY_FREIGHT_PALLET: 'Vận Tải Hàng Nặng (Pallet)',
+  EXPRESS_AIR: 'Giao hỏa tốc (đường hàng không)',
+  SAME_DAY_COURIER: 'Giao trong ngày (chuyển phát nhanh)',
+  STANDARD_GROUND: 'Giao tiêu chuẩn (đường bộ)',
+  HEAVY_FREIGHT_PALLET: 'Vận tải hàng nặng (pallet)',
 };
 
 const shipperStatusLabels = {
@@ -44,6 +44,25 @@ const shipperStatusLabels = {
   CONTRACT_PENDING: 'Chờ hợp đồng',
   TERMINATED: 'Đã chấm dứt',
 } as const;
+
+const STORAGE_KEY = 'shippers_list_data';
+
+const getSavedShippers = (): ShipperPartnerRecord[] => {
+  try {
+    const s = localStorage.getItem(STORAGE_KEY);
+    return s ? JSON.parse(s) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveShippersList = (list: ShipperPartnerRecord[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  } catch (e) {
+    console.error('Failed to save shippers list:', e);
+  }
+};
 
 export function ShippersPage() {
   const [data, setData] = useState<ShipperPartnerRecord[]>([]);
@@ -220,11 +239,11 @@ export function ShippersPage() {
       return false;
     }
 
-    // Phone validation (Vietnamese phone regex)
-    const phoneRegex = /^(0[3|5|7|8|9])[0-9]{8}$/;
+    // Phone validation (Vietnamese phone regex: đầu 03, 05, 07, 08, 09 với 10 số)
+    const phoneRegex = /^(0[35789])[0-9]{8}$/;
     const cleanPhone = (editingItem.contactPhone || '').replace(/\s+/g, '');
     if (!phoneRegex.test(cleanPhone)) {
-      toast.error('Số điện thoại không đúng định dạng (Ví dụ hợp lệ: 0912345678, 10 chữ số bắt đầu bằng 03,05,07,08,09)!');
+      toast.error('Số điện thoại không đúng định dạng! Vui lòng nhập số điện thoại Việt Nam đủ 10 chữ số (Đầu số 03, 05, 07, 08, 09. Ví dụ: 0912345678).');
       return false;
     }
 
@@ -273,9 +292,10 @@ export function ShippersPage() {
         note: newRecord.notes
       };
 
+      const isNumericId = newRecord.id && /^\d+$/.test(String(newRecord.id));
       if (modalMode === 'create') {
         await axiosClient.post('/logistics/shippers', payload);
-      } else {
+      } else if (isNumericId) {
         await axiosClient.put(`/logistics/shippers/${newRecord.id}`, payload);
       }
     } catch (err) {
@@ -309,10 +329,13 @@ export function ShippersPage() {
     }
 
     if (confirm('Bạn có chắc chắn muốn xóa đối tác này?')) {
-      try {
-        await axiosClient.delete(`/logistics/shippers/${id}`);
-      } catch (err) {
-        console.warn('API delete shipper failed, applying local state update:', err);
+      const isNumericId = /^\d+$/.test(String(id));
+      if (isNumericId) {
+        try {
+          await axiosClient.delete(`/logistics/shippers/${id}`);
+        } catch (err) {
+          console.warn('API delete shipper failed, applying local state update:', err);
+        }
       }
       setData(prev => {
         const next = prev.filter(item => item.id !== id);
@@ -340,7 +363,7 @@ export function ShippersPage() {
       },
       {
         accessorKey: 'companyName',
-        header: 'Công ty đối tác & Liên hệ',
+        header: 'Công ty đối tác & liên hệ',
         cell: ({ row }) => (
           <div>
             <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.companyName}</p>
@@ -354,8 +377,8 @@ export function ShippersPage() {
         cell: (info) => {
           const t = info.getValue() as keyof typeof tierStyles;
           return (
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${tierStyles[t] || tierStyles.STANDARD_GROUND}`}>
-              {serviceTierLabels[t] || 'Giao Tiêu Chuẩn (Đường Bộ)'}
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${tierStyles[t] || tierStyles.STANDARD_GROUND}`}>
+              {serviceTierLabels[t] || 'Giao tiêu chuẩn (đường bộ)'}
             </span>
           );
         },
@@ -363,7 +386,7 @@ export function ShippersPage() {
       {
         accessorKey: 'baseRatePerKg',
         header: 'Cước cơ bản',
-        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{Number(info.getValue()).toLocaleString('vi-VN')} VNĐ / kg</span>,
+        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{Number(info.getValue()).toLocaleString('vi-VN')} đ / kg</span>,
       },
       {
         accessorKey: 'slaComplianceRate',
@@ -371,7 +394,7 @@ export function ShippersPage() {
         cell: (info) => {
           const rate = info.getValue() as number;
           return (
-            <span className={`font-mono font-bold ${rate >= 98 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-amber-600 dark:text-amber-400'}`}>
+            <span className={`font-mono font-bold ${rate >= 98 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
               {rate.toFixed(1)}%
             </span>
           );
@@ -401,27 +424,27 @@ export function ShippersPage() {
       },
       {
         id: 'actions',
-        header: 'Hành động',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={(e) => { e.stopPropagation(); setSelectedShipper(row.original); }}
               className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
-              title="Xem hồ sơ đối tác"
+              title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
               className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
-              title="Chỉnh sửa thông tin"
+              title="Chỉnh sửa"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleDelete(row.original.id); }}
               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              title="Xóa đối tác"
+              title="Xóa"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -444,17 +467,17 @@ export function ShippersPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Đối tác giao hàng</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý đối tác giao hàng (3PL), đánh giá chỉ số SLA và lịch cước vận chuyển.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý đối tác giao hàng (3PL), đánh giá chỉ số SLA và lịch cước vận chuyển</p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Xuất File Excel
+              <Download className="w-4 h-4" /> Xuất Excel
             </button>
             <button
               onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
             >
-              <Plus className="w-4 h-4" /> Thêm Đối Tác Mới
+              <Plus className="w-4 h-4" /> Thêm mới đối tác
             </button>
           </div>
         </div>
@@ -469,13 +492,13 @@ export function ShippersPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm kiếm đối tác theo mã, công ty, liên hệ hoặc trụ sở..."
-              className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-all"
+              className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all"
             />
           </div>
         </div>
 
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm">
+          <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
             <span className="text-sm font-bold text-gray-500">Đang tải danh sách đối tác...</span>
           </div>
@@ -484,11 +507,11 @@ export function ShippersPage() {
         )}
       </div>
 
-      {/* Modal Xem hồ sơ đối tác căn giữa màn hình (TC-SHIP-2 & TC-ALL-1) */}
+      {/* Modal Xem hồ sơ đối tác */}
       <Modal
         isOpen={!!selectedShipper}
         onClose={() => setSelectedShipper(null)}
-        title={selectedShipper ? `Hồ sơ đối tác giao hàng: ${selectedShipper.partnerCode}` : 'Thông tin đối tác'}
+        title={selectedShipper ? `Hồ sơ đối tác: ${selectedShipper.partnerCode}` : 'Thông tin đối tác'}
         width="max-w-xl"
       >
         {selectedShipper && (
@@ -507,11 +530,11 @@ export function ShippersPage() {
                   <Truck className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Tỷ lệ tuân thủ SLA</p>
+                  <p className="text-xs font-semibold text-gray-500">Tỷ lệ tuân thủ SLA</p>
                   <p className="text-2xl font-bold font-mono text-gray-900 dark:text-white mt-0.5">{selectedShipper.slaComplianceRate.toFixed(1)}%</p>
                 </div>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                 selectedShipper.status === 'ACTIVE' ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
                 selectedShipper.status === 'ON_HOLD' ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
                 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
@@ -537,10 +560,10 @@ export function ShippersPage() {
 
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
               <div className="border-b border-gray-200 dark:border-gray-700 pb-3">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Đơn vị giao hàng</span>
+                <span className="text-xs font-medium text-gray-400 block mb-1">Đơn vị giao hàng</span>
                 <h3 className="text-base font-bold text-gray-900 dark:text-white">{selectedShipper.companyName}</h3>
-                <span className={`inline-block mt-1 text-xs px-2.5 py-0.5 rounded-full font-bold border ${tierStyles[selectedShipper.serviceTier] || tierStyles.STANDARD_GROUND}`}>
-                  Dịch vụ: {serviceTierLabels[selectedShipper.serviceTier] || 'Giao Tiêu Chuẩn'}
+                <span className={`inline-block mt-1 text-xs px-2.5 py-0.5 rounded-full font-semibold border ${tierStyles[selectedShipper.serviceTier] || tierStyles.STANDARD_GROUND}`}>
+                  Dịch vụ: {serviceTierLabels[selectedShipper.serviceTier] || 'Giao tiêu chuẩn (đường bộ)'}
                 </span>
               </div>
 
@@ -561,13 +584,13 @@ export function ShippersPage() {
 
               <div className="flex justify-between items-center pt-3 border-t border-gray-200 dark:border-gray-700 text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Cước phí giao hàng cơ bản:</span>
-                <span className="font-mono font-bold text-gray-900 dark:text-white">{Number(selectedShipper.baseRatePerKg).toLocaleString('vi-VN')} VNĐ / kg</span>
+                <span className="font-mono font-bold text-gray-900 dark:text-white">{Number(selectedShipper.baseRatePerKg).toLocaleString('vi-VN')} đ / kg</span>
               </div>
 
               {selectedShipper.notes && (
                 <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Ghi chú & Thỏa thuận</span>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedShipper.notes}</p>
+                  <span className="text-xs font-medium text-gray-400 block mb-1">Ghi chú & thỏa thuận</span>
+                  <p className="text-xs text-gray-700 dark:text-gray-300 italic">{selectedShipper.notes}</p>
                 </div>
               )}
             </div>
@@ -575,9 +598,9 @@ export function ShippersPage() {
             <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-3">
               <button
                 onClick={() => setSelectedShipper(null)}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800 font-medium"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800 font-medium text-gray-700 dark:text-gray-300"
               >
-                Đóng Hộp Thoại
+                Đóng
               </button>
             </div>
           </div>
@@ -588,77 +611,77 @@ export function ShippersPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm Đối Tác Giao Hàng Mới' : 'Cập Nhật Đối Tác Giao Hàng'}
+        title={modalMode === 'create' ? 'Thêm mới đối tác giao hàng' : 'Cập nhật đối tác giao hàng'}
         width="max-w-lg"
       >
         <form onSubmit={handleSave} className="space-y-4 text-sm">
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mã đối tác *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã đối tác *</label>
             <input
               type="text"
               value={editingItem.partnerCode || ''}
               onChange={(e) => setEditingItem({ ...editingItem, partnerCode: e.target.value })}
               required
-              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary/50"
+              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono text-gray-900 dark:text-white"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Tên đối tác / Công ty *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên đối tác / công ty *</label>
             <input
               type="text"
               value={editingItem.companyName || ''}
               onChange={(e) => setEditingItem({ ...editingItem, companyName: e.target.value })}
               required
-              placeholder="VD: Viettel Post, Giao Hàng Tiết Kiệm..."
-              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
+              placeholder="Ví dụ: Viettel Post, Giao Hàng Tiết Kiệm..."
+              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Số điện thoại *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại *</label>
               <input
                 type="text"
                 value={editingItem.contactPhone || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, contactPhone: e.target.value })}
                 required
-                placeholder="VD: 0912345678"
-                className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary/50"
+                placeholder="Ví dụ: 0912345678"
+                className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono text-gray-900 dark:text-white"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Email (Đúng định dạng)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
               <input
                 type="email"
                 value={editingItem.contactEmail || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, contactEmail: e.target.value })}
-                placeholder="VD: contact@partner.com"
-                className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
+                placeholder="Ví dụ: contact@partner.com"
+                className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Loại dịch vụ</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại dịch vụ</label>
               <select
                 value={editingItem.serviceTier || 'STANDARD_GROUND'}
                 onChange={(e) => setEditingItem({ ...editingItem, serviceTier: e.target.value as any })}
-                className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
+                className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white"
               >
-                <option value="STANDARD_GROUND">Giao Tiêu Chuẩn (Đường Bộ)</option>
-                <option value="EXPRESS_AIR">Giao Hỏa Tốc (Hàng Không)</option>
-                <option value="SAME_DAY_COURIER">Giao Trong Ngày (Nội Thành)</option>
-                <option value="HEAVY_FREIGHT_PALLET">Vận Tải Hàng Nặng (Pallet)</option>
+                <option value="STANDARD_GROUND">Giao tiêu chuẩn (đường bộ)</option>
+                <option value="EXPRESS_AIR">Giao hỏa tốc (hàng không)</option>
+                <option value="SAME_DAY_COURIER">Giao trong ngày (nội thành)</option>
+                <option value="HEAVY_FREIGHT_PALLET">Vận tải hàng nặng (pallet)</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Trạng thái hợp đồng</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái hợp đồng</label>
               <select
                 value={editingItem.status || 'ACTIVE'}
                 onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-                className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
+                className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white"
               >
                 <option value="ACTIVE">Đang hoạt động</option>
                 <option value="ON_HOLD">Tạm dừng</option>
@@ -670,72 +693,72 @@ export function ShippersPage() {
 
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Cước/Kg (VNĐ)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Cước/kg (VNĐ)</label>
               <input
                 type="number"
                 min="0"
                 value={editingItem.baseRatePerKg ?? 15000}
                 onChange={(e) => setEditingItem({ ...editingItem, baseRatePerKg: Number(e.target.value) })}
-                className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary/50"
+                className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono text-gray-900 dark:text-white"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Đội xe (phương tiện)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đội xe (phương tiện)</label>
               <input
                 type="number"
                 min="0"
                 value={editingItem.activeFleetSize ?? 50}
                 onChange={(e) => setEditingItem({ ...editingItem, activeFleetSize: Number(e.target.value) })}
-                className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary/50"
+                className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono text-gray-900 dark:text-white"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Thời gian (giờ)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thời gian (giờ)</label>
               <input
                 type="number"
                 min="0"
                 value={editingItem.averageDeliveryHours ?? 24}
                 onChange={(e) => setEditingItem({ ...editingItem, averageDeliveryHours: Number(e.target.value) })}
-                className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary/50"
+                className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono text-gray-900 dark:text-white"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Trụ sở chính / Địa chỉ (Có gợi ý)</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trụ sở chính / địa chỉ</label>
             <input
               type="text"
               list="area-suggestions"
               value={editingItem.headquarters || ''}
               onChange={(e) => setEditingItem({ ...editingItem, headquarters: e.target.value })}
               placeholder="Nhập hoặc chọn địa chỉ khu vực gợi ý..."
-              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
+              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Ghi chú đối tác</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú đối tác</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
               rows={2}
-              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/50"
+              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white"
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t mt-6">
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700 mt-6">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium"
             >
-              Hủy Bỏ
+              Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold shadow-sm"
+              className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow-sm"
             >
-              Lưu Thay Đổi
+              Lưu thông tin
             </button>
           </div>
         </form>

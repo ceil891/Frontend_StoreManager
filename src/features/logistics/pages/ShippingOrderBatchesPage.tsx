@@ -196,8 +196,8 @@ export function ShippingOrderBatchesPage() {
       },
       {
         accessorKey: 'carrierName',
-        header: 'Đơn vị / Shipper nhận bàn giao',
-        cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
+        header: 'Đơn vị / shipper nhận bàn giao',
+        cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'handoverDate',
@@ -219,41 +219,41 @@ export function ShippingOrderBatchesPage() {
         header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
-          let badgeClass = 'bg-amber-100 text-amber-800';
+          let badgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
           let label = 'Đang gom đơn';
           if (status === 'DA_BAN_GIAO') {
-            badgeClass = 'bg-emerald-100 text-emerald-800';
+            badgeClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300';
             label = 'Đã bàn giao';
           } else if (status === 'DA_HUY') {
-            badgeClass = 'bg-red-100 text-red-800';
+            badgeClass = 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300';
             label = 'Đã hủy lô';
           }
-          return <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>{label}</span>;
+          return <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
       {
         id: 'actions',
-        header: 'Hành động',
+        header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
               onClick={(e) => { e.stopPropagation(); setSelected(row.original); }}
-              className="p-1.5 text-gray-400 hover:text-emerald-600 rounded-lg"
-              title="Xem chi tiết lô"
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+              title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
-              className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg"
-              title="Sửa lô"
+              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+              title="Chỉnh sửa"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleDelete(row.original.id); }}
-              className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg"
-              title="Xóa lô"
+              className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+              title="Xóa"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -266,18 +266,18 @@ export function ShippingOrderBatchesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Lô đơn vận chuyển</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Gom các đơn vận chuyển lẻ thành lô hàng bàn giao cho đối tác logistics hoặc shipper.
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Gom các đơn vận chuyển lẻ thành lô hàng bàn giao cho đối tác logistics hoặc shipper
           </p>
         </div>
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-semibold shadow-sm transition"
+          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium shadow-sm transition-colors text-sm"
         >
-          <Plus className="w-4 h-4" /> Gom Lô Đơn Mới
+          <Plus className="w-4 h-4" /> Thêm mới lô gom
         </button>
       </div>
 
@@ -287,13 +287,13 @@ export function ShippingOrderBatchesPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm kiếm mã lô gom đơn, đơn vị nhận bàn giao..."
-          className="w-full bg-transparent outline-none text-sm"
+          placeholder="Tìm kiếm theo mã lô gom đơn, đơn vị nhận bàn giao..."
+          className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-white"
         />
       </div>
 
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-150 shadow-sm">
+        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
           <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
           <span className="text-sm font-bold text-gray-500">Đang tải danh sách lô gom đơn...</span>
         </div>
@@ -301,7 +301,7 @@ export function ShippingOrderBatchesPage() {
         <ReusableDataTable columns={columns} data={filtered} />
       )}
 
-      {/* Modal Xem chi tiết lô căn giữa (TC-ALL-1 & TC-SHIP-16) */}
+      {/* Modal Xem chi tiết */}
       <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
@@ -312,33 +312,33 @@ export function ShippingOrderBatchesPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4 bg-gray-50 dark:bg-gray-900 p-3 rounded-xl">
               <div>
-                <span className="text-xs text-gray-500">Mã lô bàn giao:</span>
-                <p className="font-mono font-bold text-emerald-600">{selected.batchCode}</p>
+                <span className="text-xs text-gray-500">Mã lô bàn giao</span>
+                <p className="font-mono font-bold text-primary">{selected.batchCode}</p>
               </div>
               <div>
-                <span className="text-xs text-gray-500">Ngày bàn giao:</span>
+                <span className="text-xs text-gray-500">Ngày bàn giao</span>
                 <p className="font-mono font-semibold">{selected.handoverDate}</p>
               </div>
             </div>
             <div>
-              <span className="text-xs text-gray-500">Đơn vị nhận bàn giao:</span>
+              <span className="text-xs text-gray-500">Đơn vị nhận bàn giao</span>
               <p className="font-semibold text-base text-gray-900 dark:text-white">{selected.carrierName}</p>
             </div>
-            <div className="grid grid-cols-2 gap-4 border-t pt-3">
+            <div className="grid grid-cols-2 gap-4 border-t border-gray-200 dark:border-gray-700 pt-3">
               <div>
-                <span className="text-xs text-gray-500">Tổng số đơn hàng:</span>
+                <span className="text-xs text-gray-500">Tổng số đơn hàng</span>
                 <p className="font-mono font-bold text-lg text-primary">{selected.totalOrders} đơn</p>
               </div>
               <div>
-                <span className="text-xs text-gray-500">Tổng trọng lượng:</span>
+                <span className="text-xs text-gray-500">Tổng trọng lượng</span>
                 <p className="font-mono font-bold text-lg text-primary">{selected.totalWeight} kg</p>
               </div>
             </div>
             <div>
-              <span className="text-xs text-gray-500">Trạng thái lô:</span>
+              <span className="text-xs text-gray-500">Trạng thái lô</span>
               <div className="mt-1">
                 <span
-                  className={`inline-flex px-3 py-1 rounded-full text-xs font-bold ${
+                  className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
                     selected.status === 'DA_BAN_GIAO'
                       ? 'bg-emerald-100 text-emerald-800'
                       : selected.status === 'DANG_GOM'
@@ -351,77 +351,77 @@ export function ShippingOrderBatchesPage() {
               </div>
             </div>
             {selected.notes && (
-              <div className="border-t pt-2">
-                <span className="text-xs text-gray-500">Ghi chú:</span>
-                <p className="bg-gray-50 dark:bg-gray-900 p-2.5 rounded-lg text-gray-700 italic">
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-2">
+                <span className="text-xs text-gray-500">Ghi chú</span>
+                <p className="bg-gray-50 dark:bg-gray-900 p-2.5 rounded-lg text-gray-700 dark:text-gray-300 text-xs">
                   {selected.notes}
                 </p>
               </div>
             )}
-            <div className="flex justify-end pt-3 border-t">
+            <div className="flex justify-end pt-3 border-t border-gray-200 dark:border-gray-700">
               <button
                 onClick={() => setSelected(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-sm"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-lg text-sm"
               >
-                Đóng Hộp Thoại
+                Đóng
               </button>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* Modal Gom Lô Đơn Mới (TC-SHIP-14 & TC-SHIP-15) */}
+      {/* Modal Gom Lô Đơn Mới */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Gom Lô Đơn Vận Chuyển Mới' : 'Cập Nhật Lô Đơn Gom'}
+        title={modalMode === 'create' ? 'Thêm mới lô đơn vận chuyển' : 'Cập nhật lô đơn gom'}
         width="max-w-md"
       >
         <form onSubmit={handleSave} className="space-y-4 text-sm">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Mã lô gom *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã lô gom *</label>
               <input
                 type="text"
                 value={editingItem.batchCode || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, batchCode: e.target.value })}
-                className="w-full p-2.5 border rounded-lg font-mono bg-gray-50"
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg font-mono bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Ngày bàn giao *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày bàn giao *</label>
               <input
                 type="date"
                 value={editingItem.handoverDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, handoverDate: e.target.value })}
-                className="w-full p-2.5 border rounded-lg font-mono"
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">Đơn vị nhận bàn giao *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn vị nhận bàn giao *</label>
             <select
               value={editingItem.carrierName || 'Viettel Post'}
               onChange={(e) => setEditingItem({ ...editingItem, carrierName: e.target.value })}
-              className="w-full p-2.5 border rounded-lg"
+              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
             >
               <option value="Viettel Post">Viettel Post</option>
               <option value="Giao Hàng Tiết Kiệm">Giao Hàng Tiết Kiệm (GHTK)</option>
               <option value="Giao Hàng Nhanh">Giao Hàng Nhanh (GHN)</option>
               <option value="Shopee Express">Shopee Express (SPX)</option>
-              <option value="Đội xe nội bộ">Đội xe nội bộ AuraMart</option>
+              <option value="Đội xe nội bộ">Đội xe nội bộ</option>
             </select>
           </div>
 
-          {/* Selection of available orders to consolidate (TC-SHIP-15) */}
+          {/* Selection of available orders to consolidate */}
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">
-              Chọn các đơn bán cần gom vào lô (Tự động tính tổng)
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              Chọn các đơn hàng cần gom vào lô (tự động tính tổng)
             </label>
-            <div className="space-y-2 border rounded-xl p-3 bg-gray-50 dark:bg-gray-900 max-h-40 overflow-y-auto">
+            <div className="space-y-2 border border-gray-200 dark:border-gray-700 rounded-xl p-3 bg-gray-50 dark:bg-gray-900 max-h-40 overflow-y-auto">
               {SAMPLE_AVAILABLE_ORDERS.map((ord) => {
                 const isChecked = selectedOrders.includes(ord.code);
                 return (
@@ -429,66 +429,66 @@ export function ShippingOrderBatchesPage() {
                     key={ord.code}
                     onClick={() => toggleOrderSelection(ord.code)}
                     className={`flex items-center justify-between p-2 rounded-lg cursor-pointer border transition-colors ${
-                      isChecked ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-medium' : 'bg-white border-gray-200 text-gray-700'
+                      isChecked ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-300 font-medium' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300'
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      {isChecked ? <CheckSquare className="w-4 h-4 text-emerald-600" /> : <Square className="w-4 h-4 text-gray-400" />}
+                      {isChecked ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4 text-gray-400" />}
                       <span className="font-mono text-xs font-bold">{ord.code}</span>
                       <span className="text-xs text-gray-500">({ord.customerName})</span>
                     </div>
-                    <span className="font-mono text-xs text-gray-600 font-bold">{ord.weightKg} kg</span>
+                    <span className="font-mono text-xs text-gray-600 dark:text-gray-400 font-bold">{ord.weightKg} kg</span>
                   </div>
                 );
               })}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-xl border border-emerald-200">
+          <div className="grid grid-cols-2 gap-3 bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-xl border border-emerald-200 dark:border-emerald-800">
             <div>
-              <span className="text-xs font-bold text-gray-500 block">Tổng số đơn đã chọn</span>
-              <span className="font-mono text-lg font-bold text-emerald-700">{editingItem.totalOrders ?? selectedOrders.length} đơn</span>
+              <span className="text-xs text-gray-500 block">Tổng số đơn đã chọn</span>
+              <span className="font-mono text-lg font-bold text-primary">{editingItem.totalOrders ?? selectedOrders.length} đơn</span>
             </div>
             <div>
-              <span className="text-xs font-bold text-gray-500 block">Tổng trọng lượng gom</span>
-              <span className="font-mono text-lg font-bold text-emerald-700">{editingItem.totalWeight ?? 0} kg</span>
+              <span className="text-xs text-gray-500 block">Tổng trọng lượng gom</span>
+              <span className="font-mono text-lg font-bold text-primary">{editingItem.totalWeight ?? 0} kg</span>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">Trạng thái lô *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái lô *</label>
             <select
               value={editingItem.status || 'DANG_GOM'}
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-              className="w-full p-2.5 border rounded-lg"
+              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
             >
-              <option value="DANG_GOM">Đang Gom Đơn</option>
-              <option value="DA_BAN_GIAO">Đã Bàn Giao Cho Shipper</option>
-              <option value="DA_HUY">Hủy Bỏ Lô Bàn Giao</option>
+              <option value="DANG_GOM">Đang gom đơn</option>
+              <option value="DA_BAN_GIAO">Đã bàn giao cho shipper</option>
+              <option value="DA_HUY">Hủy bỏ lô bàn giao</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">Ghi chú lô gom</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú lô gom</label>
             <textarea
               value={editingItem.notes || ''}
               onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2.5 border rounded-lg"
+              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               rows={2}
               placeholder="Ghi chú thêm về đợt gom đơn..."
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-3 border-t">
+          <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium"
             >
-              Hủy Bỏ
+              Hủy bỏ
             </button>
-            <button type="submit" className="px-5 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-semibold">
-              Lưu Lô Gom
+            <button type="submit" className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium text-sm shadow-sm">
+              Lưu thông tin
             </button>
           </div>
         </form>

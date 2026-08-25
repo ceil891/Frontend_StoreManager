@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Download, Wallet, CreditCard, Activity, ArrowUpRight, ArrowDownRight, FileText } from 'lucide-react';
+import { Download, Wallet, CreditCard, Activity, ArrowUpRight, ArrowDownRight, FileText, Building2 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend
 } from 'recharts';
@@ -7,6 +7,7 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { useFinanceStore } from '@/features/finance/store/financeStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 
 interface ExpenseTransaction {
   id: string;
@@ -19,10 +20,13 @@ interface ExpenseTransaction {
 
 export function FinanceReportPage() {
   const [period, setPeriod] = useState('2026');
+  const [selectedBranch, setSelectedBranch] = useState('all');
   const receipts = useFinanceStore((s) => s.receipts);
   const payments = useFinanceStore((s) => s.payments);
   const fetchReceipts = useFinanceStore((s) => s.fetchReceipts);
   const fetchPayments = useFinanceStore((s) => s.fetchPayments);
+  const branches = useBranchStore((s) => s.branches);
+  const fetchBranches = useBranchStore((s) => s.fetchBranches);
 
   const [financeData, setFinanceData] = useState([
     { month: 'T1', income: 400, expense: 240, profit: 160 },
@@ -37,6 +41,7 @@ export function FinanceReportPage() {
   useEffect(() => {
     fetchReceipts();
     fetchPayments();
+    fetchBranches();
 
     const fetchProfitLoss = async () => {
       try {
@@ -50,25 +55,36 @@ export function FinanceReportPage() {
       }
     };
     fetchProfitLoss();
-  }, [fetchReceipts, fetchPayments]);
+  }, [fetchReceipts, fetchPayments, fetchBranches]);
+
+  // Filter receipts & payments by selected branch
+  const filteredReceipts = useMemo(() => {
+    if (selectedBranch === 'all') return receipts;
+    return receipts.filter((r: any) => !r.branchId || String(r.branchId) === String(selectedBranch));
+  }, [receipts, selectedBranch]);
+
+  const filteredPayments = useMemo(() => {
+    if (selectedBranch === 'all') return payments;
+    return payments.filter((p: any) => !p.branchId || String(p.branchId) === String(selectedBranch));
+  }, [payments, selectedBranch]);
 
   const kpis = useMemo(() => {
-    const totalReceiptAmt = receipts.reduce((sum, r) => sum + (r.amount || 0), 0);
-    const totalPaymentAmt = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+    const totalReceiptAmt = filteredReceipts.reduce((sum, r) => sum + (r.amount || 0), 0);
+    const totalPaymentAmt = filteredPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
 
     const totalIncome = totalReceiptAmt > 0 ? totalReceiptAmt : financeData.reduce((acc, curr) => acc + Number(curr.income), 0) * 1000000;
     const totalExpense = totalPaymentAmt > 0 ? totalPaymentAmt : financeData.reduce((acc, curr) => acc + Number(curr.expense), 0) * 1000000;
     const totalProfit = totalIncome - totalExpense;
 
     return [
-      { title: 'Tổng thu (Phiếu thu & Bán hàng)', value: totalIncome.toLocaleString('vi-VN') + 'đ', trend: `${receipts.length} phiếu thu`, isUp: true, icon: Wallet, color: 'text-indigo-600 bg-indigo-50 border-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/30 dark:border-indigo-900/50' },
-      { title: 'Tổng chi (Phiếu chi & Giá vốn)', value: totalExpense.toLocaleString('vi-VN') + 'đ', trend: `${payments.length} phiếu chi`, isUp: false, icon: CreditCard, color: 'text-rose-600 bg-rose-50 border-rose-100 dark:text-rose-400 dark:bg-rose-900/30 dark:border-rose-900/50' },
-      { title: 'Lợi nhuận gộp', value: totalProfit.toLocaleString('vi-VN') + 'đ', trend: 'Lợi nhuận thuần', isUp: totalProfit >= 0, icon: Activity, color: 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-900/50' },
+      { title: 'Tổng thu (phiếu thu & bán hàng)', value: totalIncome.toLocaleString('vi-VN') + ' đ', trend: `${filteredReceipts.length} phiếu thu`, isUp: true, icon: Wallet, color: 'text-primary bg-primary/10 border-primary/20' },
+      { title: 'Tổng chi (phiếu chi & giá vốn)', value: totalExpense.toLocaleString('vi-VN') + ' đ', trend: `${filteredPayments.length} phiếu chi`, isUp: false, icon: CreditCard, color: 'text-rose-600 bg-rose-50 border-rose-100 dark:text-rose-400 dark:bg-rose-900/30 dark:border-rose-900/50' },
+      { title: 'Lợi nhuận gộp', value: totalProfit.toLocaleString('vi-VN') + ' đ', trend: 'Lợi nhuận thuần', isUp: totalProfit >= 0, icon: Activity, color: 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-900/50' },
     ];
-  }, [receipts, payments, financeData]);
+  }, [filteredReceipts, filteredPayments, financeData]);
 
   const recentExpenses = useMemo<ExpenseTransaction[]>(() => {
-    return payments.map((p) => ({
+    return filteredPayments.map((p) => ({
       id: p.code || `PAY-${p.id}`,
       category: p.category || 'Chi phí vận hành',
       description: p.note || p.reason || 'Phiếu chi hệ thống',
@@ -76,19 +92,19 @@ export function FinanceReportPage() {
       date: p.date ? p.date.slice(0, 10) : 'Gần đây',
       status: (p.status === 'COMPLETED' || p.status === 'PAID' ? 'PAID' : 'UNPAID') as 'PAID' | 'UNPAID',
     }));
-  }, [payments]);
+  }, [filteredPayments]);
 
   const columns = useMemo<ColumnDef<ExpenseTransaction>[]>(
     () => [
       {
         accessorKey: 'id',
         header: 'Mã phiếu',
-        cell: (info) => <span className="font-mono text-xs font-semibold text-gray-500">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-mono text-xs font-semibold text-primary">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'date',
         header: 'Ngày lập',
-        cell: (info) => <span className="text-gray-500 text-sm">{info.getValue() as string}</span>,
+        cell: (info) => <span className="text-gray-500 dark:text-gray-400 text-sm">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'category',
@@ -103,7 +119,7 @@ export function FinanceReportPage() {
       {
         accessorKey: 'amount',
         header: 'Số tiền',
-        cell: (info) => <span className="font-bold text-gray-900 dark:text-white">{(info.getValue() as number).toLocaleString('vi-VN')}đ</span>,
+        cell: (info) => <span className="font-bold text-gray-900 dark:text-white">{(info.getValue() as number).toLocaleString('vi-VN')} đ</span>,
       },
       {
         accessorKey: 'status',
@@ -112,7 +128,7 @@ export function FinanceReportPage() {
           const status = info.getValue() as string;
           return (
             <span
-              className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                 status === 'PAID' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' :
                 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
               }`}
@@ -131,21 +147,36 @@ export function FinanceReportPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Báo cáo Tài chính</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Phân tích Thu Chi và Lợi nhuận doanh nghiệp theo số liệu thực tế.</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Báo cáo tài chính</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Phân tích thu chi và lợi nhuận doanh nghiệp theo số liệu thực tế</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5 bg-white dark:bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 shadow-xs">
+            <Building2 className="w-4 h-4 text-gray-500" />
+            <select
+              value={selectedBranch}
+              onChange={(e) => setSelectedBranch(e.target.value)}
+              className="bg-transparent text-sm text-gray-700 dark:text-gray-200 focus:outline-none cursor-pointer font-medium"
+            >
+              <option value="all">Toàn hệ thống (Tất cả chi nhánh)</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <select 
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
-            className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
+            className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 focus:ring-primary focus:border-primary"
           >
             <option value="2026">Năm 2026</option>
             <option value="2025">Năm 2025</option>
           </select>
-          <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
+          <button className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
             <Download className="w-4 h-4" />
-            Xuất báo cáo
+            Xuất Excel
           </button>
         </div>
       </div>
@@ -158,7 +189,7 @@ export function FinanceReportPage() {
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${kpi.color}`}>
                 <kpi.icon className="w-6 h-6" />
               </div>
-              <div className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${
+              <div className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${
                 kpi.isUp ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-red-50 text-red-500 dark:bg-red-900/30 dark:text-red-400'
               }`}>
                 {kpi.isUp ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
@@ -166,14 +197,14 @@ export function FinanceReportPage() {
               </div>
             </div>
             <h3 className="text-gray-500 dark:text-gray-400 text-sm font-medium">{kpi.title}</h3>
-            <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">{kpi.value}</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{kpi.value}</p>
           </div>
         ))}
       </div>
 
       {/* Charts */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
-        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Biểu đồ thu chi & Lợi nhuận (triệu VNĐ)</h3>
+        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Biểu đồ thu chi & lợi nhuận (triệu VNĐ)</h3>
         <div className="h-[400px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={financeData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
@@ -185,7 +216,7 @@ export function FinanceReportPage() {
                 cursor={{fill: 'transparent'}}
               />
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
-              <Bar dataKey="income" name="Thu" fill="#6366F1" radius={[4, 4, 0, 0]} barSize={20} />
+              <Bar dataKey="income" name="Thu" fill="#0068FF" radius={[4, 4, 0, 0]} barSize={20} />
               <Bar dataKey="expense" name="Chi" fill="#F43F5E" radius={[4, 4, 0, 0]} barSize={20} />
               <Bar dataKey="profit" name="Lợi nhuận" fill="#10B981" radius={[4, 4, 0, 0]} barSize={20} />
             </BarChart>
@@ -198,7 +229,7 @@ export function FinanceReportPage() {
         <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-gray-400" />
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Chi phí & Phiếu chi ({recentExpenses.length} bản ghi)</h3>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Chi phí & phiếu chi ({recentExpenses.length} bản ghi)</h3>
           </div>
         </div>
         <ReusableDataTable columns={columns} data={recentExpenses} />
@@ -206,3 +237,4 @@ export function FinanceReportPage() {
     </div>
   );
 }
+export default FinanceReportPage;

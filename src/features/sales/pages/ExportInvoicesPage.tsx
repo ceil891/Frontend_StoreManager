@@ -308,7 +308,7 @@ export function ExportInvoicesPage() {
         isOpen={!!selectedInvoice}
         onClose={() => setSelectedInvoice(null)}
         title={selectedInvoice ? `Chi tiết hóa đơn: ${selectedInvoice.invoiceNumber}` : 'Chi tiết hóa đơn'}
-        width="max-w-lg"
+        size="erp"
       >
         {selectedInvoice && (
           <div className="space-y-6">
@@ -409,7 +409,7 @@ export function ExportInvoicesPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={modalMode === 'create' ? 'Thêm hóa đơn xuất' : 'Sửa hóa đơn'}
-        width="max-w-xl"
+        size="erp"
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -419,7 +419,7 @@ export function ExportInvoicesPage() {
                 type="text"
                 value={editing.invoiceNumber || ''}
                 onChange={(e) => setEditing({ ...editing, invoiceNumber: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm font-mono"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm font-mono font-bold text-emerald-600"
                 required
               />
             </div>
@@ -438,68 +438,82 @@ export function ExportInvoicesPage() {
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng (CRM) *</label>
             <CustomerSelect
               value={editing.customerId || ''}
-              onChange={(customerId) => setEditing({ ...editing, customerId })}
+              onChange={(customerId) => {
+                const found = customers.find(c => String(c.id) === customerId || c.customerCode === customerId);
+                setEditing(prev => ({
+                  ...prev,
+                  customerId,
+                  taxId: found?.taxCode || prev.taxId,
+                  billingAddress: found?.address || prev.billingAddress,
+                }));
+              }}
               allowWalkIn={false}
               required
             />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã số thuế</label>
-            <input
-              type="text"
-              value={editing.taxId || ''}
-              onChange={(e) => setEditing({ ...editing, taxId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm font-mono"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã số thuế (Tự động từ khách hàng)</label>
+              <input
+                type="text"
+                value={editing.taxId || ''}
+                onChange={(e) => setEditing({ ...editing, taxId: e.target.value })}
+                placeholder="MST..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm font-mono font-semibold"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ xuất hóa đơn (Tự động từ khách hàng)</label>
+              <input
+                type="text"
+                value={editing.billingAddress || ''}
+                onChange={(e) => setEditing({ ...editing, billingAddress: e.target.value })}
+                placeholder="Địa chỉ xuất hóa đơn..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
+              />
+            </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ xuất hóa đơn</label>
-            <input
-              type="text"
-              value={editing.billingAddress || ''}
-              onChange={(e) => setEditing({ ...editing, billingAddress: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Order IDs</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Order IDs tham chiếu</label>
             <input
               type="text"
               value={(editing.orderIds || []).join(', ')}
               onChange={(e) => setEditing({ ...editing, orderIds: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm font-mono"
               placeholder="SO-001, SO-002"
-            />          </div>
+            />
+          </div>
 
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tạm tính (₫)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tạm tính tiền hàng (₫)</label>
               <input
                 type="text"
                 value={(editing.subtotal ?? 0) === 0 ? '' : Math.round(editing.subtotal ?? 0).toLocaleString('vi-VN')}
                 onChange={(e) => {
                   const digits = e.target.value.replace(/\D/g, '');
                   const parsed = digits === '' ? 0 : parseInt(digits, 10);
-                  setEditing({ ...editing, subtotal: parsed });
+                  const vat = Math.round(parsed * 0.1);
+                  setEditing((prev) => ({ ...prev, subtotal: parsed, vatAmount: vat, totalAmount: parsed + vat }));
                 }}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm font-mono"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thuế VAT (₫)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thuế VAT 10% (₫)</label>
               <input
                 type="text"
                 value={(editing.vatAmount ?? 0) === 0 ? '' : Math.round(editing.vatAmount ?? 0).toLocaleString('vi-VN')}
                 onChange={(e) => {
                   const digits = e.target.value.replace(/\D/g, '');
                   const parsed = digits === '' ? 0 : parseInt(digits, 10);
-                  setEditing({ ...editing, vatAmount: parsed });
+                  setEditing((prev) => ({ ...prev, vatAmount: parsed, totalAmount: (prev.subtotal || 0) + parsed }));
                 }}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm font-mono"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng cộng (₫)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng thanh toán (₫)</label>
               <input
                 type="text"
                 value={(editing.totalAmount ?? ((editing.subtotal ?? 0) + (editing.vatAmount ?? 0))) === 0 ? '' : Math.round(editing.totalAmount ?? ((editing.subtotal ?? 0) + (editing.vatAmount ?? 0))).toLocaleString('vi-VN')}
@@ -508,7 +522,7 @@ export function ExportInvoicesPage() {
                   const parsed = digits === '' ? 0 : parseInt(digits, 10);
                   setEditing({ ...editing, totalAmount: parsed });
                 }}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm font-mono font-bold text-emerald-600"
               />
             </div>
           </div>

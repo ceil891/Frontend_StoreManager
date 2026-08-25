@@ -6,8 +6,8 @@ import DeliveryNotesPageLogistics from './DeliveryNotesPage';
 import { ShippingNotesPage } from './ShippingNotesPage';
 
 const tabs = [
-  { id: 'shipments', label: 'Danh sách Vận đơn', icon: Truck, permission: 'logistics:shipment:view' },
-  { id: 'delivery-notes', label: 'Phiếu giao hàng / POD', icon: FileCheck, permission: 'logistics:delivery-note:view' },
+  { id: 'shipments', label: 'Danh sách vận đơn', icon: Truck, permission: 'logistics:shipment:view' },
+  { id: 'delivery-notes', label: 'Phiếu giao hàng POD', icon: FileCheck, permission: 'logistics:delivery-note:view' },
   { id: 'notes', label: 'Ghi chú giao hàng', icon: FileText, permission: 'logistics:note:view' },
 ] as const;
 
@@ -30,9 +30,9 @@ export function LogisticsDeliveriesTabbedPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Vận đơn & Giao hàng</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý vận đơn & giao hàng</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Theo dõi trạng thái hành trình vận đơn, xác nhận giao hàng (POD) và xử lý sự cố ghi chú giao
+            Theo dõi trạng thái hành trình vận đơn, xác nhận giao hàng POD và xử lý sự cố ghi chú giao hàng
           </p>
         </div>
       </div>

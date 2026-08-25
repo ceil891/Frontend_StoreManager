@@ -8,6 +8,18 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 
+const formatNumberString = (value: string | number | undefined | null) => {
+  if (value === undefined || value === null || value === '' || value === 0) return '';
+  const cleanValue = String(value).replace(/\D/g, '');
+  if (!cleanValue) return '';
+  return new Intl.NumberFormat('vi-VN').format(Number(cleanValue));
+};
+
+const parseNumberString = (value: string): number => {
+  const cleanValue = value.replace(/\./g, '');
+  return cleanValue ? Number(cleanValue) : 0;
+};
+
 interface SupplierContractItem {
   id: string;
   contractNumber: string;
@@ -24,12 +36,28 @@ interface SupplierContractItem {
 
 export function SupplierContractsPage() {
   const [data, setData] = useState<SupplierContractItem[]>([]);
+  const [suppliersList, setSuppliersList] = useState<{ id: number; name: string; code: string }[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
   const [selectedItem, setSelectedItem] = useState<SupplierContractItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Partial<SupplierContractItem>>({});
   const [isLoading, setIsLoading] = useState(false);
+
+  const fetchSuppliers = async () => {
+    try {
+      const res = await axiosClient.get('/partnerarea/suppliers?size=500');
+      const list = (res as any)?.content || (res as any)?.data || (Array.isArray(res) ? res : []);
+      const mapped = (Array.isArray(list) ? list : []).map((s: any) => ({
+        id: Number(s.id),
+        name: s.supplierName || s.name || s.fullName || '',
+        code: s.supplierCode || s.code || `SUP-${s.id}`
+      })).filter((s: any) => s.name);
+      setSuppliersList(mapped);
+    } catch (err) {
+      console.error('Lỗi khi tải danh sách nhà cung cấp:', err);
+    }
+  };
 
   const fetchContracts = async () => {
     try {
@@ -65,6 +93,7 @@ export function SupplierContractsPage() {
 
   useEffect(() => {
     fetchContracts();
+    fetchSuppliers();
   }, []);
 
   const filtered = data.filter((item) => {
@@ -79,7 +108,7 @@ export function SupplierContractsPage() {
   const handleOpenCreate = () => {
     setEditingItem({
       contractNumber: `HD-NCC-2026-0${data.length + 1}`,
-      supplierName: '',
+      supplierName: suppliersList[0]?.name || '',
       signingDate: new Date().toISOString().split('T')[0],
       expirationDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
       maxDebtLimit: 100000000,
@@ -94,7 +123,22 @@ export function SupplierContractsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.supplierName || !editingItem.maxDebtLimit) return;
+    if (!editingItem.supplierName?.trim()) {
+      toast.error('Vui lòng chọn hoặc nhập tên Nhà cung cấp!');
+      return;
+    }
+
+    if (!editingItem.representative?.trim() || editingItem.representative.trim().length < 2) {
+      toast.error('Họ tên người đại diện ký hợp đồng không hợp lệ (tối thiểu 2 ký tự)!');
+      return;
+    }
+
+    if (editingItem.expirationDate && editingItem.signingDate) {
+      if (new Date(editingItem.expirationDate) < new Date(editingItem.signingDate)) {
+        toast.error('Ngày hết hạn hợp đồng không được nhỏ hơn Ngày ký kết!');
+        return;
+      }
+    }
 
     try {
       const statusMap: Record<string, string> = {
@@ -102,23 +146,47 @@ export function SupplierContractsPage() {
         'THANH_LÝ': 'TERMINATED',
         'CHỜ_KÝ': 'DRAFT',
       };
+
+      // Resolve supplier ID
+      let supplierId: number | null = null;
+      const matched = suppliersList.find(
+        (s) =>
+          s.name.toLowerCase().trim() === (editingItem.supplierName || '').trim().toLowerCase() ||
+          s.code.toLowerCase().trim() === (editingItem.supplierName || '').trim().toLowerCase()
+      );
+      if (matched?.id) {
+        supplierId = matched.id;
+      } else if (suppliersList.length > 0) {
+        supplierId = suppliersList[0].id;
+      }
+
+      if (!supplierId) {
+        toast.error(`Không tìm thấy nhà cung cấp "${editingItem.supplierName}" trên hệ thống. Vui lòng tạo nhà cung cấp trước!`);
+        return;
+      }
+
       const payload = {
         contractCode: editingItem.contractNumber || `HD-NCC-2026-0${data.length + 1}`,
         startDate: editingItem.signingDate || new Date().toISOString().split('T')[0],
         signedDate: editingItem.signingDate || new Date().toISOString().split('T')[0],
         endDate: editingItem.expirationDate || new Date().toISOString().split('T')[0],
-        maxDebtLimit: Number(editingItem.maxDebtLimit),
+        maxDebtLimit: Number(editingItem.maxDebtLimit) || 0,
         status: statusMap[editingItem.status || 'CHỜ_KÝ'] || 'DRAFT',
         signedBy: editingItem.representative || '',
         paymentTerm: editingItem.paymentTerms || '',
+        supplierId: supplierId,
+        contractName: `Hợp đồng nhà cung cấp ${editingItem.supplierName}`,
+        contractType: 'SUPPLIER_CONTRACT',
+        note: editingItem.appendixText || '',
       };
       await axiosClient.post('/purchase/contracts', payload);
       toast.success('Tạo hợp đồng nhà cung cấp thành công');
       await fetchContracts();
       setIsModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Lỗi tạo hợp đồng:', err);
-      toast.error('Không thể tạo hợp đồng nhà cung cấp');
+      const errorMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Có lỗi xảy ra khi tạo hợp đồng!';
+      toast.error(`Lỗi tạo hợp đồng: ${errorMsg}`);
     }
   };
 
@@ -365,6 +433,7 @@ export function SupplierContractsPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title="Lập hợp đồng nhà cung cấp mới"
+        size="erp"
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -391,15 +460,31 @@ export function SupplierContractsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên nhà cung cấp *</label>
-            <input
-              type="text"
-              value={editingItem.supplierName || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, supplierName: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              placeholder="Ví dụ: Công ty Unilever Việt Nam"
-              required
-            />
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhà cung cấp đối tác *</label>
+            {suppliersList.length > 0 ? (
+              <select
+                value={editingItem.supplierName || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, supplierName: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 cursor-pointer font-medium"
+                required
+              >
+                <option value="">-- Chọn Nhà Cung Cấp --</option>
+                {suppliersList.map((s) => (
+                  <option key={s.id} value={s.name}>
+                    [{s.code}] {s.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={editingItem.supplierName || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, supplierName: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                placeholder="Ví dụ: Công ty Unilever Việt Nam"
+                required
+              />
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -429,22 +514,22 @@ export function SupplierContractsPage() {
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hạn mức nợ tối đa (VND) *</label>
               <input
-                type="number"
-                value={editingItem.maxDebtLimit || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, maxDebtLimit: Number(e.target.value) })}
+                type="text"
+                value={formatNumberString(editingItem.maxDebtLimit)}
+                onChange={(e) => setEditingItem({ ...editingItem, maxDebtLimit: parseNumberString(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                placeholder="Ví dụ: 500000000"
+                placeholder="Ví dụ: 500.000.000"
                 required
               />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng giá trị hợp đồng (nếu có)</label>
               <input
-                type="number"
-                value={editingItem.contractVal || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, contractVal: Number(e.target.value) })}
+                type="text"
+                value={formatNumberString(editingItem.contractVal)}
+                onChange={(e) => setEditingItem({ ...editingItem, contractVal: parseNumberString(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                placeholder="Ví dụ: 2000000000"
+                placeholder="Ví dụ: 2.000.000.000"
               />
             </div>
           </div>

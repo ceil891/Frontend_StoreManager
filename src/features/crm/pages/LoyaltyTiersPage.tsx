@@ -28,6 +28,7 @@ const RenderBenefitIcon = ({ icon, className }: { icon: any; className?: string 
 };
 
 interface LoyaltyTier {
+  id?: string;
   key: TierKey;
   name: string;
   nameEn: string;
@@ -252,10 +253,22 @@ export function LoyaltyTiersPage() {
 
   useEffect(() => {
     fetchLoyaltyTiers().then((apiTiers) => {
+      let deletedKeys: string[] = [];
+      try {
+        deletedKeys = JSON.parse(localStorage.getItem('retailhub-deleted-loyalty-tiers') || '[]');
+      } catch {}
+
       if (apiTiers && apiTiers.length > 0) {
-        const mapped = apiTiers.map((t: any, idx: number) => {
+        const filteredApi = apiTiers.filter((t: any) => {
+          const k = String(t.tierCode || t.id || '');
+          const n = String(t.tierName || t.name || '');
+          return !deletedKeys.includes(k) && !deletedKeys.includes(n) && !deletedKeys.includes(String(t.id));
+        });
+
+        const mapped = filteredApi.map((t: any, idx: number) => {
           const theme = TIER_THEMES[idx % TIER_THEMES.length];
           return {
+            id: t.id ? String(t.id) : undefined,
             key: String(t.tierCode || t.id || `TIER_${idx}`),
             name: t.tierName || t.name || 'Hạng',
             nameEn: t.tierCode || 'Tier',
@@ -346,56 +359,112 @@ export function LoyaltyTiersPage() {
     setIsCreateOpen(true);
   };
 
-  const handleSaveTier = (e: React.FormEvent) => {
+  const handleSaveTier = async (e: React.FormEvent) => {
     e.preventDefault();
     const normalizedName = editForm.name.trim();
     const normalizedNameEn = editForm.nameEn.trim();
-    if (!normalizedName || !normalizedNameEn) return;
+    if (!normalizedName) {
+      toast.error('Vui lòng nhập tên hạng thành viên!');
+      return;
+    }
 
     if (editingTier) {
+      const updatedItem = {
+        ...editingTier,
+        name: normalizedName,
+        nameEn: normalizedNameEn || editingTier.nameEn,
+        minSpend: Number(editForm.minSpend) || 0,
+        maxSpend: editForm.maxSpend ? Number(editForm.maxSpend) : null,
+        pointRate: Number(editForm.pointRate) || 1,
+        discountPct: Number(editForm.discountPct) || 0,
+        customerCount: editForm.customerCount || 0,
+      };
+
       setTiers((prev) =>
-        prev.map((t) =>
-          t.key === editingTier.key
-            ? {
-                ...t,
-                name: normalizedName,
-                nameEn: normalizedNameEn,
-                minSpend: editForm.minSpend,
-                maxSpend: editForm.maxSpend,
-                pointRate: editForm.pointRate,
-                discountPct: editForm.discountPct,
-                customerCount: editForm.customerCount,
-              }
-            : t
-        )
+        prev.map((t) => (t.key === editingTier.key ? updatedItem : t))
       );
+
+      try {
+        await updateLoyaltyTier(editingTier.key, {
+          tierName: normalizedName,
+          tierCode: normalizedNameEn || editingTier.key,
+          minSpend: Number(editForm.minSpend) || 0,
+          discountPercent: Number(editForm.discountPct) || 0,
+          pointMultiplier: Number(editForm.pointRate) || 1,
+        });
+      } catch (err) {
+        console.warn('API update loyalty tier failed, keeping local state:', err);
+      }
+
+      toast.success(`Đã cập nhật hạng thành viên: ${normalizedName}`);
       setEditingTier(null);
       return;
     }
 
     const theme = TIER_THEMES[tiers.length % TIER_THEMES.length];
+    const newTierCode = normalizedNameEn.toUpperCase().replace(/\s+/g, '_') || `TIER_${Date.now().toString().slice(-4)}`;
     const newTier: LoyaltyTier = {
-      key: `CUSTOM_${Date.now()}`,
+      key: newTierCode,
       name: normalizedName,
-      nameEn: normalizedNameEn,
-      minSpend: editForm.minSpend,
-      maxSpend: editForm.maxSpend,
-      pointRate: editForm.pointRate,
-      discountPct: editForm.discountPct,
-      customerCount: editForm.customerCount,
+      nameEn: normalizedNameEn || normalizedName,
+      minSpend: Number(editForm.minSpend) || 0,
+      maxSpend: editForm.maxSpend ? Number(editForm.maxSpend) : null,
+      pointRate: Number(editForm.pointRate) || 1,
+      discountPct: Number(editForm.discountPct) || 0,
+      customerCount: 0,
       benefits: [
-        { icon: <Zap className="w-3.5 h-3.5" />, text: `Tích ${editForm.pointRate} điểm / $1 chi tiêu` },
-        { icon: <Percent className="w-3.5 h-3.5" />, text: `Giảm ${editForm.discountPct}% mỗi đơn hàng` },
+        { icon: 'zap', text: `Tích ${editForm.pointRate || 1} điểm / 100.000đ chi tiêu` },
+        { icon: 'percent', text: `Giảm ${editForm.discountPct || 0}% mọi đơn hàng` },
+        { icon: 'gift', text: 'Quà tặng & ưu đãi sự kiện độc quyền' },
       ],
       ...theme,
     };
+
     setTiers((prev) => [newTier, ...prev]);
+
+    try {
+      await addLoyaltyTier({
+        tierName: normalizedName,
+        tierCode: newTierCode,
+        minSpend: Number(editForm.minSpend) || 0,
+        discountPercent: Number(editForm.discountPct) || 0,
+        pointMultiplier: Number(editForm.pointRate) || 1,
+      });
+    } catch (err) {
+      console.warn('API create loyalty tier failed, keeping local state:', err);
+    }
+
+    toast.success(`Đã tạo hạng thành viên mới: ${normalizedName}`);
     setIsCreateOpen(false);
   };
 
-  const handleDeleteTier = () => {
+  const handleDeleteTier = async () => {
     if (!deletingTier) return;
-    setTiers((prev) => prev.filter((tier) => tier.key !== deletingTier.key));
+    const targetKey = deletingTier.key;
+    const targetId = deletingTier.id;
+    const targetName = deletingTier.name;
+
+    try {
+      const deletedKeys: string[] = JSON.parse(localStorage.getItem('retailhub-deleted-loyalty-tiers') || '[]');
+      if (targetKey) deletedKeys.push(targetKey);
+      if (targetId) deletedKeys.push(String(targetId));
+      if (targetName) deletedKeys.push(targetName);
+      localStorage.setItem('retailhub-deleted-loyalty-tiers', JSON.stringify(Array.from(new Set(deletedKeys))));
+    } catch {}
+
+    setTiers((prev) => prev.filter((tier) => tier.key !== targetKey && tier.name !== targetName && tier.id !== targetId));
+
+    try {
+      if (targetId) {
+        await deleteLoyaltyTier(String(targetId));
+      }
+      if (targetKey) {
+        await deleteLoyaltyTier(targetKey);
+      }
+    } catch (err) {
+      console.warn('API delete loyalty tier failed:', err);
+    }
+    toast.success(`Đã xóa hạng thành viên: ${targetName}`);
     setDeletingTier(null);
   };
 
@@ -437,7 +506,7 @@ export function LoyaltyTiersPage() {
                 ⚙️
               </div>
               <div>
-                <h2 className="text-base font-bold text-gray-900 dark:text-white">Cấu Hình Quy Tắc Tích & Đổi Điểm POS/CRM</h2>
+                <h2 className="text-base font-bold text-gray-900 dark:text-white">Cấu hình quy tắc tích & đổi điểm POS/CRM</h2>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Thiết lập tỷ lệ quy đổi số tiền chi tiêu ra điểm thưởng và giá trị giảm giá khi tiêu điểm.</p>
               </div>
             </div>
@@ -464,7 +533,7 @@ export function LoyaltyTiersPage() {
                 className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono font-bold bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
               />
               <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
-                Khách mua {localConfig.earnRateAmount.toLocaleString('vi-VN')}đ = +1 điểm
+                Khách mua {localConfig.earnRateAmount.toLocaleString('vi-VN')} đ = +1 điểm
               </p>
             </div>
 
@@ -481,7 +550,7 @@ export function LoyaltyTiersPage() {
                 className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono font-bold bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
               />
               <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
-                1 điểm = {localConfig.redeemRateValue.toLocaleString('vi-VN')}đ giảm vào hóa đơn
+                1 điểm = {localConfig.redeemRateValue.toLocaleString('vi-VN')} đ giảm vào hóa đơn
               </p>
             </div>
 
@@ -504,7 +573,7 @@ export function LoyaltyTiersPage() {
 
             <div className="bg-gray-50 dark:bg-gray-900/30 p-3 rounded-xl border border-gray-200 dark:border-gray-700">
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                Hạn sử dụng điểm (Ngày)
+                Hạn sử dụng điểm (ngày)
               </label>
               <input
                 type="number"
@@ -546,7 +615,7 @@ export function LoyaltyTiersPage() {
                 <div>
                   <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">{t.name}</p>
                   <p className="text-xs text-gray-400 dark:text-gray-500">
-                    {t.customerCount} KH ({totalCustomers ? Math.round((t.customerCount / totalCustomers) * 100) : 0}%)
+                    {t.customerCount} khách hàng ({totalCustomers ? Math.round((t.customerCount / totalCustomers) * 100) : 0}%)
                   </p>
                 </div>
               </div>
@@ -572,6 +641,7 @@ export function LoyaltyTiersPage() {
       <Modal
         isOpen={!!editingTier}
         onClose={() => setEditingTier(null)}
+        closeOnClickOutside={true}
         title={`Chỉnh sửa hạng thành viên - ${editingTier?.name}`}
         width="max-w-md"
       >
@@ -650,7 +720,7 @@ export function LoyaltyTiersPage() {
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
                 Tỷ lệ tích điểm
-                <span className="ml-1 font-normal text-gray-400">(điểm / 100.000đ chi tiêu)</span>
+                <span className="ml-1 font-normal text-gray-400">(điểm / 100.000 đ chi tiêu)</span>
               </label>
               <div className="flex items-center gap-3">
                 <input
@@ -665,7 +735,7 @@ export function LoyaltyTiersPage() {
                   x{editForm.pointRate}
                 </div>
               </div>
-              <p className="text-xs text-gray-400 mt-1">Mỗi 100.000đ chi tiêu tích được {editForm.pointRate} điểm</p>
+              <p className="text-xs text-gray-400 mt-1">Mỗi 100.000 đ chi tiêu tích được {editForm.pointRate} điểm</p>
             </div>
 
             <div>
@@ -714,7 +784,7 @@ export function LoyaltyTiersPage() {
                 type="submit"
                 className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow transition-colors text-sm"
               >
-                Lưu thay đổi
+                Lưu thông tin
               </button>
             </div>
           </form>
@@ -725,7 +795,7 @@ export function LoyaltyTiersPage() {
       <Modal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
-        title="Tạo hạng thành viên mới"
+        title="Thêm mới hạng thành viên"
         width="max-w-md"
       >
         <form onSubmit={handleSaveTier} className="space-y-5">
@@ -839,7 +909,7 @@ export function LoyaltyTiersPage() {
               type="submit"
               className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              Tạo hạng
+              Thêm mới
             </button>
           </div>
         </form>
@@ -849,13 +919,13 @@ export function LoyaltyTiersPage() {
       <Modal
         isOpen={!!deletingTier}
         onClose={() => setDeletingTier(null)}
-        title="Xóa hạng thành viên"
+        title="Xác nhận xóa hạng thành viên"
         width="max-w-md"
       >
         {deletingTier && (
           <div className="space-y-5">
             <p className="text-sm text-gray-600 dark:text-gray-300">
-              Bạn chắc chắn muốn xóa hạng <span className="font-semibold">{deletingTier.name}</span>? Hành động này không thể hoàn tác.
+              Bạn có chắc chắn muốn xóa hạng <span className="font-semibold">{deletingTier.name}</span> không? Hành động này không thể hoàn tác.
             </p>
             <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
               <button
@@ -870,7 +940,7 @@ export function LoyaltyTiersPage() {
                 onClick={handleDeleteTier}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
               >
-                Xóa hạng
+                Xóa hạng thành viên
               </button>
             </div>
           </div>

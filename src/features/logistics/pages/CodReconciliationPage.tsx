@@ -115,19 +115,19 @@ export function CodReconciliationPage() {
     () => [
       {
         accessorKey: 'reconciliationCode',
-        header: 'Mã đối soát & Kỳ',
+        header: 'Mã đối soát & kỳ',
         cell: ({ row }) => (
           <div>
             <span className="font-mono font-bold text-primary px-2 py-0.5 bg-primary/10 rounded border border-primary/20">
               {row.original.reconciliationCode}
             </span>
-            <p className="text-xs text-gray-500 font-semibold mt-1">{row.original.reconciliationPeriod}</p>
+            <p className="text-xs text-gray-500 font-medium mt-1">{row.original.reconciliationPeriod}</p>
           </div>
         ),
       },
       {
         accessorKey: 'carrierName',
-        header: 'Hãng vận chuyển (Carrier)',
+        header: 'Hãng vận chuyển',
         cell: ({ row }) => (
           <div>
             <p className="font-bold text-gray-900 dark:text-white text-sm">{row.original.carrierName}</p>
@@ -141,17 +141,17 @@ export function CodReconciliationPage() {
         cell: ({ row }) => (
           <div className="font-mono text-xs">
             <p className="font-bold text-gray-900 dark:text-white">{row.original.totalShipments} vận đơn</p>
-            <p className="text-emerald-600 dark:text-emerald-400 font-bold">COD: {row.original.totalCodCollected.toLocaleString()} VNĐ</p>
+            <p className="text-emerald-600 dark:text-emerald-400 font-bold">COD: {row.original.totalCodCollected.toLocaleString('vi-VN')} đ</p>
           </div>
         ),
       },
       {
         accessorKey: 'netPayoutAmount',
-        header: 'Thực nhận từ Carrier',
+        header: 'Thực nhận từ hãng vận chuyển',
         cell: ({ row }) => (
           <div className="font-mono text-xs">
-            <p className="font-bold text-primary text-sm">{row.original.netPayoutAmount.toLocaleString()} VNĐ</p>
-            <p className="text-gray-500">Tổng phí: {(row.original.totalShippingFee + row.original.totalCodFee).toLocaleString()} VNĐ</p>
+            <p className="font-bold text-primary text-sm">{row.original.netPayoutAmount.toLocaleString('vi-VN')} đ</p>
+            <p className="text-gray-500">Tổng phí: {(row.original.totalShippingFee + row.original.totalCodFee).toLocaleString('vi-VN')} đ</p>
           </div>
         ),
       },
@@ -174,7 +174,7 @@ export function CodReconciliationPage() {
           <button
             onClick={() => setSelectedRecord(row.original)}
             className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-600 dark:text-gray-300"
-            title="Xem bảng chi tiết"
+            title="Xem chi tiết"
           >
             <Eye className="w-4 h-4" />
           </button>
@@ -185,21 +185,21 @@ export function CodReconciliationPage() {
   );
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <DollarSign className="w-7 h-7 text-primary" /> Đối Soát COD & Cước Phí Vận Chuyển
+            <DollarSign className="w-6 h-6 text-primary" /> Đối soát COD & cước phí vận chuyển
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Quản lý kỳ đối soát COD, tổng hợp cước vận chuyển, phụ phí và xác nhận dòng tiền chuyển khoản từ Hãng vận chuyển.
+            Quản lý kỳ đối soát COD, tổng hợp cước vận chuyển, phụ phí và xác nhận dòng tiền chuyển khoản từ hãng vận chuyển
           </p>
         </div>
         <button
           onClick={() => toast.info('Chức năng tạo kỳ đối soát COD tự động được tổng hợp từ dữ liệu vận đơn thành công.')}
-          className="px-4 py-2.5 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg shadow flex items-center gap-2 text-sm"
+          className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow-sm flex items-center gap-2 text-sm transition-colors"
         >
-          <Plus className="w-4 h-4" /> Tạo Kỳ Đối Soát Mới
+          <Plus className="w-4 h-4" /> Thêm mới kỳ đối soát
         </button>
       </div>
 
@@ -208,10 +208,10 @@ export function CodReconciliationPage() {
           <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
           <input
             type="text"
-            placeholder="Tìm theo mã đối soát, tên hãng vận chuyển, kỳ đối soát..."
+            placeholder="Tìm kiếm theo mã đối soát, tên hãng vận chuyển, kỳ đối soát..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary"
+            className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary text-gray-900 dark:text-white"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -219,7 +219,7 @@ export function CodReconciliationPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm"
+            className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-white"
           >
             <option value="all">Tất cả trạng thái</option>
             <option value="PENDING">Chờ đối soát</option>
@@ -237,13 +237,13 @@ export function CodReconciliationPage() {
       <Modal
         isOpen={Boolean(selectedRecord)}
         onClose={() => setSelectedRecord(null)}
-        title={`Chi Tiết Kỳ Đối Soát COD: ${selectedRecord?.reconciliationCode}`}
+        title={`Chi tiết kỳ đối soát COD: ${selectedRecord?.reconciliationCode}`}
         width="max-w-3xl"
       >
         {selectedRecord && (
           <div className="space-y-6 text-sm">
             <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-3">
-              <div className="flex items-center justify-between border-b pb-2">
+              <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
                 <div>
                   <h3 className="font-bold text-gray-900 dark:text-white text-base">{selectedRecord.carrierName}</h3>
                   <p className="text-xs text-gray-500">Kỳ: {selectedRecord.reconciliationPeriod} ({selectedRecord.fromDate} đến {selectedRecord.toDate})</p>
@@ -259,27 +259,27 @@ export function CodReconciliationPage() {
                   <p className="font-bold text-gray-900 dark:text-white text-sm">{selectedRecord.totalShipments} vận đơn</p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Tổng COD đã thu từ khách:</p>
-                  <p className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">{selectedRecord.totalCodCollected.toLocaleString()} VNĐ</p>
+                  <p className="text-gray-500">Tổng COD đã thu từ khách hàng:</p>
+                  <p className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">{selectedRecord.totalCodCollected.toLocaleString('vi-VN')} đ</p>
                 </div>
               </div>
 
-              <div className="border-t pt-3 space-y-1 font-mono text-xs">
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-3 space-y-1 font-mono text-xs">
                 <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                  <span>Trừ Phí Vận Chuyển:</span>
-                  <span>- {selectedRecord.totalShippingFee.toLocaleString()} VNĐ</span>
+                  <span>Trừ phí vận chuyển:</span>
+                  <span>- {selectedRecord.totalShippingFee.toLocaleString('vi-VN')} đ</span>
                 </div>
                 <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                  <span>Trừ Phí Thu Hộ COD:</span>
-                  <span>- {selectedRecord.totalCodFee.toLocaleString()} VNĐ</span>
+                  <span>Trừ phí thu hộ COD:</span>
+                  <span>- {selectedRecord.totalCodFee.toLocaleString('vi-VN')} đ</span>
                 </div>
                 <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                  <span>Trừ Phụ Phí Vùng Xa / Nhiên Liệu:</span>
-                  <span>- {selectedRecord.totalSurcharges.toLocaleString()} VNĐ</span>
+                  <span>Trừ phụ phí vùng xa / nhiên liệu:</span>
+                  <span>- {selectedRecord.totalSurcharges.toLocaleString('vi-VN')} đ</span>
                 </div>
-                <div className="flex justify-between text-base font-bold text-primary pt-2 border-t">
-                  <span>SỐ TIỀN CARRIER THANH TOÁN (NET PAYOUT):</span>
-                  <span>{selectedRecord.netPayoutAmount.toLocaleString()} VNĐ</span>
+                <div className="flex justify-between text-base font-bold text-primary pt-2 border-t border-gray-200 dark:border-gray-700">
+                  <span>Số tiền hãng vận chuyển thanh toán:</span>
+                  <span>{selectedRecord.netPayoutAmount.toLocaleString('vi-VN')} đ</span>
                 </div>
               </div>
             </div>
@@ -297,9 +297,9 @@ export function CodReconciliationPage() {
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-800">
               <button
                 onClick={() => setSelectedRecord(null)}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-semibold"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
               >
-                Đóng Hộp Thoại
+                Đóng
               </button>
             </div>
           </div>

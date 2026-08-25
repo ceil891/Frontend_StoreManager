@@ -300,21 +300,21 @@ export function VehiclesPage() {
   );
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Truck className="w-7 h-7 text-primary" /> Quản Lý Phương Tiện Vận Chuyển
+            <Truck className="w-6 h-6 text-primary" /> Đội xe & phương tiện vận chuyển
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Quản lý đội xe, tải trọng, thể tích, giấy tờ đăng kiểm và bảo hiểm phương tiện giao hàng.
+            Quản lý đội xe, tải trọng, thể tích, giấy tờ đăng kiểm và bảo hiểm phương tiện giao hàng
           </p>
         </div>
         <button
           onClick={handleOpenCreate}
-          className="px-4 py-2.5 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg shadow flex items-center gap-2 text-sm"
+          className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow-sm flex items-center gap-2 text-sm transition-colors"
         >
-          <Plus className="w-4 h-4" /> Thêm Phương Tiện Mới
+          <Plus className="w-4 h-4" /> Thêm mới phương tiện
         </button>
       </div>
 
@@ -323,10 +323,10 @@ export function VehiclesPage() {
           <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
           <input
             type="text"
-            placeholder="Tìm theo biển số xe, mã phương tiện, tên xe, shipper phụ trách..."
+            placeholder="Tìm kiếm theo biển số xe, mã phương tiện, tên xe, shipper phụ trách..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary"
+            className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary text-gray-900 dark:text-white"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -334,7 +334,7 @@ export function VehiclesPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm"
+            className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-white"
           >
             <option value="all">Tất cả trạng thái</option>
             <option value="ACTIVE">Đang hoạt động</option>
@@ -352,41 +352,41 @@ export function VehiclesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Form Thêm Phương Tiện Vận Chuyển' : 'Chỉnh Sửa Thông Tin Phương Tiện'}
+        title={modalMode === 'create' ? 'Thêm mới phương tiện vận chuyển' : 'Cập nhật thông tin phương tiện'}
         width="max-w-3xl"
       >
-        <form onSubmit={handleSave} className="space-y-6 text-sm">
+        <form onSubmit={handleSave} className="space-y-6 text-sm p-2">
           {/* Section 1: Thông tin phương tiện */}
-          <div className="erp-form-section space-y-4">
-            <h3 className="text-base font-bold text-gray-900 dark:text-white border-b pb-2">1. Thông tin phương tiện</h3>
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">1. Thông tin phương tiện</h3>
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mã phương tiện *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã phương tiện *</label>
                 <input
                   type="text"
                   required
                   value={formState.vehicleCode || ''}
                   onChange={(e) => setFormState({ ...formState, vehicleCode: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Biển số xe *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Biển số xe *</label>
                 <input
                   type="text"
                   required
                   placeholder="Ví dụ: 29C-888.99"
                   value={formState.licensePlate || ''}
                   onChange={(e) => setFormState({ ...formState, licensePlate: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 font-mono font-bold text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 font-mono font-bold text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Loại phương tiện *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại phương tiện *</label>
                 <select
                   value={formState.vehicleType || 'TRUCK'}
                   onChange={(e) => setFormState({ ...formState, vehicleType: e.target.value as any })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm"
                 >
                   <option value="MOTORCYCLE">Xe máy</option>
                   <option value="VAN">Xe tải van</option>
@@ -401,108 +401,108 @@ export function VehiclesPage() {
 
             <div className="grid grid-cols-4 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tên phương tiện</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên phương tiện</label>
                 <input
                   type="text"
                   placeholder="Isuzu QKR 270"
                   value={formState.vehicleName || ''}
                   onChange={(e) => setFormState({ ...formState, vehicleName: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Hãng xe</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hãng xe</label>
                 <input
                   type="text"
                   placeholder="Isuzu / Hyundai"
                   value={formState.brand || ''}
                   onChange={(e) => setFormState({ ...formState, brand: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Model</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Dòng xe (model)</label>
                 <input
                   type="text"
                   placeholder="QKR77FE4"
                   value={formState.model || ''}
                   onChange={(e) => setFormState({ ...formState, model: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Năm sản xuất</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Năm sản xuất</label>
                 <input
                   type="number"
                   value={formState.manufacturingYear || 2024}
                   onChange={(e) => setFormState({ ...formState, manufacturingYear: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm font-mono"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm font-mono"
                 />
               </div>
             </div>
           </div>
 
           {/* Section 2: Khả năng vận chuyển */}
-          <div className="erp-form-section space-y-4">
-            <h3 className="text-base font-bold text-gray-900 dark:text-white border-b pb-2">2. Khả năng vận chuyển</h3>
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">2. Khả năng vận chuyển</h3>
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tải trọng tối đa (kg) *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tải trọng tối đa (kg) *</label>
                 <input
                   type="number"
                   required
                   value={formState.maxPayloadKg || 1000}
                   onChange={(e) => setFormState({ ...formState, maxPayloadKg: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 font-mono text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Thể tích tối đa (m³)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thể tích tối đa (m³)</label>
                 <input
                   type="number"
                   step="0.1"
                   value={formState.maxVolumeM3 || 10}
                   onChange={(e) => setFormState({ ...formState, maxVolumeM3: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 font-mono text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Số kiện tối đa</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số kiện tối đa</label>
                 <input
                   type="number"
                   value={formState.maxPackages || 50}
                   onChange={(e) => setFormState({ ...formState, maxPackages: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 font-mono text-sm"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Dài khoang (mm)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Dài khoang (mm)</label>
                 <input
                   type="number"
                   value={formState.lengthMm || 3000}
                   onChange={(e) => setFormState({ ...formState, lengthMm: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 font-mono text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Rộng khoang (mm)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Rộng khoang (mm)</label>
                 <input
                   type="number"
                   value={formState.widthMm || 1600}
                   onChange={(e) => setFormState({ ...formState, widthMm: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 font-mono text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cao khoang (mm)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Cao khoang (mm)</label>
                 <input
                   type="number"
                   value={formState.heightMm || 1600}
                   onChange={(e) => setFormState({ ...formState, heightMm: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 font-mono text-sm"
                 />
               </div>
             </div>
@@ -515,7 +515,7 @@ export function VehiclesPage() {
                   onChange={(e) => setFormState({ ...formState, supportCold: e.target.checked })}
                   className="rounded text-primary focus:ring-primary w-4 h-4"
                 />
-                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Có hỗ trợ hàng lạnh</span>
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Có hỗ trợ hàng lạnh</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -524,7 +524,7 @@ export function VehiclesPage() {
                   onChange={(e) => setFormState({ ...formState, supportFragile: e.target.checked })}
                   className="rounded text-primary focus:ring-primary w-4 h-4"
                 />
-                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Có hỗ trợ hàng dễ vỡ</span>
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Có hỗ trợ hàng dễ vỡ</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -533,74 +533,74 @@ export function VehiclesPage() {
                   onChange={(e) => setFormState({ ...formState, supportCod: e.target.checked })}
                   className="rounded text-primary focus:ring-primary w-4 h-4"
                 />
-                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Có hỗ trợ COD</span>
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Có hỗ trợ COD</span>
               </label>
             </div>
           </div>
 
           {/* Section 3: Đơn vị quản lý & Hồ sơ */}
-          <div className="erp-form-section space-y-4">
-            <h3 className="text-base font-bold text-gray-900 dark:text-white border-b pb-2">3. Đơn vị quản lý & Hồ sơ đăng kiểm</h3>
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">3. Đơn vị quản lý & hồ sơ đăng kiểm</h3>
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Carrier</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn vị vận chuyển</label>
                 <input
                   type="text"
                   value={formState.carrierName || ''}
                   onChange={(e) => setFormState({ ...formState, carrierName: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Chi nhánh</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chi nhánh</label>
                 <input
                   type="text"
                   value={formState.branchName || ''}
                   onChange={(e) => setFormState({ ...formState, branchName: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Shipper phụ trách</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tài xế / shipper phụ trách</label>
                 <input
                   type="text"
                   placeholder="Họ tên tài xế..."
                   value={formState.assignedShipper || ''}
                   onChange={(e) => setFormState({ ...formState, assignedShipper: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ngày hết hạn đăng kiểm</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày hết hạn đăng kiểm</label>
                 <input
                   type="date"
                   value={formState.inspectionExpiryDate || ''}
                   onChange={(e) => setFormState({ ...formState, inspectionExpiryDate: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm font-mono"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm font-mono"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ngày hết hạn bảo hiểm</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày hết hạn bảo hiểm</label>
                 <input
                   type="date"
                   value={formState.insuranceExpiryDate || ''}
                   onChange={(e) => setFormState({ ...formState, insuranceExpiryDate: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm font-mono"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm font-mono"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Trạng thái *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái *</label>
                 <select
                   value={formState.status || 'ACTIVE'}
                   onChange={(e) => setFormState({ ...formState, status: e.target.value as any })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm font-bold"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm font-medium"
                 >
-                  <option value="ACTIVE">🟢 Đang hoạt động</option>
-                  <option value="MAINTENANCE">🟡 Đang bảo trì</option>
-                  <option value="INACTIVE">🔴 Ngừng hoạt động</option>
+                  <option value="ACTIVE">Đang hoạt động</option>
+                  <option value="MAINTENANCE">Đang bảo trì</option>
+                  <option value="INACTIVE">Ngừng hoạt động</option>
                 </select>
               </div>
             </div>
@@ -610,15 +610,15 @@ export function VehiclesPage() {
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-semibold"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
             >
-              Hủy
+              Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold shadow"
+              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow"
             >
-              Lưu Phương Tiện
+              {modalMode === 'create' ? 'Thêm mới' : 'Lưu thông tin'}
             </button>
           </div>
         </form>
