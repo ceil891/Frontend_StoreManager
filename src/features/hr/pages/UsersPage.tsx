@@ -9,11 +9,9 @@ import { buildUserAvatarUrl } from '@/shared/utils/userAvatar';
 import { useRoleStore } from '../store/roleStore';
 import { useHrStore } from '../store/hrStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
-import { usePermission } from '@/shared/hooks/usePermission';
-import { PermissionGuard } from '@/shared/components/ui/PermissionGuard';
-import { axiosClient } from '@/shared/lib/axiosClient';
-import { compressImage } from '@/shared/utils/imageCompressor';
 import type { ColumnDef } from '@tanstack/react-table';
+import { SearchInput } from '@/shared/components/ui/SearchInput';
+import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 
 const statusBadgeStyles = {
   ACTIVE: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200',
@@ -25,7 +23,7 @@ const statusBadgeStyles = {
 type SearchField = 'all' | 'userCode' | 'fullName' | 'emailAddress' | 'assignedRole' | 'primaryDepartment' | 'branchLocation';
 
 export function UsersPage() {
-  const { users, isLoading, fetchUsers, addUser, updateUser, updateUserRoleAndBranch, deleteUser } = useUserStore();
+  const { users, fetchUsers, addUser, updateUser, updateUserRoleAndBranch, deleteUser } = useUserStore();
   const { roles, fetchRoles } = useRoleStore();
   const { branches, fetchBranches } = useBranchStore();
   const { departments, positions, fetchDepartments, fetchPositions } = useHrStore();
@@ -36,7 +34,7 @@ export function UsersPage() {
     fetchBranches();
     fetchDepartments();
     fetchPositions();
-  }, []);
+  }, [fetchUsers, fetchRoles, fetchBranches, fetchDepartments, fetchPositions]);
 
   const [search, setSearch] = useState('');
   const [searchField, setSearchField] = useState<SearchField>('all');
@@ -121,7 +119,7 @@ export function UsersPage() {
     fullName: '',
     emailAddress: '',
     contactPhone: '',
-    avatarUrl: buildUserAvatarUrl('new-user@retailhub.vn'),
+    avatarUrl: '',
     assignedRole: 'STAFF',
     departmentId: departments[0]?.id || '1',
     branchId: 'BR-001',
@@ -139,12 +137,6 @@ export function UsersPage() {
     mfaEnabled: false,
     notes: '',
   });
-
-  const availablePositions = useMemo(() => {
-    if (!formData.departmentId) return positions;
-    const filtered = positions.filter(pos => String((pos as any).departmentId) === String(formData.departmentId) || (pos as any).departmentCode === formData.departmentId);
-    return filtered.length > 0 ? filtered : positions;
-  }, [formData.departmentId, positions]);
 
   const filtered = users.filter((item) => {
     // 1. Text search filter
@@ -249,7 +241,7 @@ export function UsersPage() {
       fullName: '',
       emailAddress: '',
       contactPhone: '',
-      avatarUrl: buildUserAvatarUrl('new-user@retailhub.vn'),
+      avatarUrl: '',
       assignedRole: roles.length > 0 ? roles[0].roleCode : 'STAFF',
       departmentId: departments.length > 0 ? departments[0].id : '1',
       branchId: branches.length > 0 ? branches[0].id : '1',
@@ -268,52 +260,6 @@ export function UsersPage() {
       notes: '',
     });
     setFormOpen(true);
-  };
-
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      toast.error('Vui lòng chọn tệp hình ảnh (JPG, PNG, WebP)!');
-      return;
-    }
-
-    const toastId = toast.loading('Đang tối ưu & tải ảnh đại diện lên Cloudinary...');
-    setIsUploadingAvatar(true);
-
-    try {
-      const compressed = await compressImage(file, { maxWidth: 600, maxHeight: 600, quality: 0.85 });
-      const formDataUpload = new FormData();
-      formDataUpload.append('file', compressed);
-      formDataUpload.append('folder', 'employees');
-
-      const response: any = await axiosClient.post('/uploads/image', formDataUpload, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      const finalUrl =
-        response?.data?.imageUrl ||
-        response?.imageUrl ||
-        response?.url ||
-        response?.data?.url ||
-        (typeof response?.data === 'string' ? response.data : null);
-
-      if (finalUrl) {
-        setFormData((prev) => ({ ...prev, avatarUrl: finalUrl }));
-        toast.success('Đã tải ảnh lên Cloudinary thành công!', { id: toastId });
-      } else {
-        toast.error('Không nhận được URL ảnh từ server!', { id: toastId });
-      }
-    } catch (err: any) {
-      console.error('Avatar upload failed:', err);
-      toast.error(`Tải ảnh thất bại: ${err.message || 'Lỗi server'}`, { id: toastId });
-    } finally {
-      setIsUploadingAvatar(false);
-    }
   };
 
   const handleOpenEdit = (user: SystemUserRecord) => {
@@ -395,7 +341,7 @@ export function UsersPage() {
       }
     }
 
-    const avatarUrl = formData.avatarUrl?.trim() || buildUserAvatarUrl(formData.emailAddress || formData.fullName);
+    const avatarUrl = formData.avatarUrl?.trim() || '';
     const payload = { ...formData, fullName: nameTrimmed, contactPhone: phoneTrimmed, avatarUrl };
 
     try {
@@ -604,26 +550,21 @@ export function UsersPage() {
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Danh bạ Tài Khoản & Nhân sự doanh nghiệp</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Danh bạ tài khoản & nhân sự doanh nghiệp</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý cấp phát tài khoản, phân gán vai trò bảo mật RBAC chi tiết và theo dõi lịch sử hoạt động đăng nhập của nhân sự.</p>
           </div>
           <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-none shrink-0">
-            <PermissionGuard permission="system:user:export">
-              <button 
-                onClick={handleExportCSV}
-                className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0"
-              >
-                <Download className="w-4 h-4" /> Xuất danh sách nhân sự
-              </button>
-            </PermissionGuard>
-            <PermissionGuard permission="system:user:create">
-              <button 
-                onClick={handleOpenCreate}
-                className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0"
-              >
-                <Plus className="w-4 h-4" /> Cấp tài khoản mới
-              </button>
-            </PermissionGuard>
+            <SecondaryButton 
+              onClick={handleExportCSV}
+              leftIcon={<Download className="w-4 h-4" />}
+            >
+              Xuất danh sách nhân sự
+            </SecondaryButton>
+            <CreateButton 
+              onClick={handleOpenCreate}
+            >
+              Cấp tài khoản mới
+            </CreateButton>
           </div>
         </div>
 
@@ -647,18 +588,12 @@ export function UsersPage() {
               </select>
             </div>
 
-            <div className="flex-1 relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-gray-400" />
-              </div>
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={searchPlaceholder}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-all"
-              />
-            </div>
+            <SearchInput
+              value={search}
+              onValueChange={setSearch}
+              placeholder={searchPlaceholder}
+              containerClassName="flex-1 w-full"
+            />
           </div>
 
           {/* Quick Filters Row */}
@@ -703,7 +638,7 @@ export function UsersPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row) => setSelectedUser(row)} />
+        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedUser(row)} />
       </div>
 
       {/* Details View Modal */}
@@ -880,41 +815,6 @@ export function UsersPage() {
               <Key className="w-4 h-4 text-emerald-600" /> 1. Thông tin tài khoản &amp; Truy cập hệ thống
             </h3>
 
-            {/* Avatar Upload Block */}
-            <div className="flex items-center gap-4 p-3 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
-              <div className="relative group shrink-0">
-                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-emerald-500 bg-gray-50 dark:bg-gray-800 flex items-center justify-center shadow-sm">
-                  {formData.avatarUrl ? (
-                    <img src={formData.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-                  ) : (
-                    <UserAvatar name={formData.fullName || 'Nhân viên'} size="lg" />
-                  )}
-                </div>
-                <label className={`absolute bottom-0 right-0 p-1 bg-emerald-600 text-white rounded-full cursor-pointer shadow hover:bg-emerald-700 transition-all hover:scale-110 ${isUploadingAvatar ? 'opacity-70 pointer-events-none' : ''}`}>
-                  {isUploadingAvatar ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
-                  <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
-                </label>
-              </div>
-              <div className="flex-1">
-                <p className="text-xs font-semibold text-gray-900 dark:text-white">Ảnh đại diện nhân viên</p>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Chọn tệp ảnh từ máy tính (PNG, JPG, WebP) hoặc dán link ảnh Cloudinary.</p>
-                <div className="mt-2 flex items-center gap-2">
-                  <label className={`inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs font-semibold cursor-pointer hover:bg-emerald-100 transition-colors ${isUploadingAvatar ? 'opacity-70 pointer-events-none' : ''}`}>
-                    {isUploadingAvatar ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                    {isUploadingAvatar ? 'Đang tải lên...' : 'Tải ảnh lên'}
-                    <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.avatarUrl || ''}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, avatarUrl: e.target.value }))}
-                    placeholder="URL ảnh đại diện..."
-                    className="flex-1 px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Họ và tên nhân viên *</label>
@@ -970,11 +870,12 @@ export function UsersPage() {
                   value={formData.branchId}
                   onChange={(e) => {
                     const branchId = e.target.value;
-                    const label = branches.find((b) => String(b.id) === String(branchId))?.name ?? branchId;
+                    const label = branchId === 'ALL' ? 'Tất cả chi nhánh' : (branches.find((b) => String(b.id) === String(branchId))?.name ?? branchId);
                     setFormData((p) => ({ ...p, branchId, branchLocation: label }));
                   }}
                   className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
                 >
+                  <option value="ALL">🏢 Tất cả chi nhánh (Toàn hệ thống)</option>
                   {branches.map((b) => (
                     <option key={b.id} value={b.id}>{b.name} ({b.branchCode || `CN-${b.id}`})</option>
                   ))}
@@ -988,14 +889,17 @@ export function UsersPage() {
                   value={formData.departmentId}
                   onChange={(e) => {
                     const deptId = e.target.value;
-                    const matchedPositions = positions.filter(pos => String((pos as any).departmentId) === String(deptId));
-                    const firstPos = matchedPositions[0] || positions[0];
-                    setFormData((p) => ({ ...p, departmentId: deptId, positionId: firstPos ? String(firstPos.id) : p.positionId }));
+                    const childPos = positions.filter(p => String(p.departmentId) === String(deptId));
+                    setFormData((p) => ({
+                      ...p,
+                      departmentId: deptId,
+                      positionId: childPos[0]?.id || (positions[0]?.id ?? p.positionId),
+                    }));
                   }}
                   className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
                 >
                   {departments.map(dept => (
-                    <option key={dept.id} value={dept.id}>{dept.departmentName}</option>
+                    <option key={dept.id} value={dept.id}>{dept.departmentName} ({dept.departmentCode})</option>
                   ))}
                 </select>
               </div>
@@ -1009,22 +913,32 @@ export function UsersPage() {
                   className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-bold"
                 >
                   {roles.map(r => (
-                    <option key={r.id} value={r.roleCode}>{r.roleTitle} ({r.roleCode})</option>
+                    <option key={r.id} value={r.roleCode}>
+                      {r.roleCode === 'SUPER_ADMIN' ? '👑 ' : ''}{r.roleTitle || r.roleName} ({r.roleCode || r.roleName})
+                    </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Chức danh công việc *</label>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Chức danh công việc (Con của phòng ban) *</label>
                 <select
                   required
                   value={formData.positionId}
                   onChange={(e) => setFormData((p) => ({ ...p, positionId: e.target.value }))}
                   className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
                 >
-                  {availablePositions.map(pos => (
-                    <option key={pos.id} value={pos.id}>{pos.positionTitle}</option>
-                  ))}
+                  {(() => {
+                    const deptId = String(formData.departmentId);
+                    const childPos = positions.filter(p => String(p.departmentId) === deptId);
+                    const displayList = childPos.length > 0 ? childPos : positions;
+
+                    return displayList.map(pos => (
+                      <option key={pos.id} value={pos.id}>
+                        {pos.positionTitle || pos.positionCode} {pos.departmentName ? `— (${pos.departmentName})` : ''}
+                      </option>
+                    ));
+                  })()}
                 </select>
               </div>
 
@@ -1395,15 +1309,12 @@ export function UsersPage() {
                 onChange={(e) => setSelectedBranchId(e.target.value)}
                 className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 shadow-xs"
               >
-                {branches.length > 0 ? (
-                  branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.branchCode || `CN-${b.id}`})
-                    </option>
-                  ))
-                ) : (
-                  <option value="">-- Chưa có chi nhánh (Vui lòng tạo chi nhánh) --</option>
-                )}
+                <option value="ALL">🏢 Tất cả chi nhánh (Toàn hệ thống)</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.branchCode || `CN-${b.id}`})
+                  </option>
+                ))}
               </select>
               <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
                 Chi nhánh quyết định phạm vi truy cập dữ liệu kho, hóa đơn bán hàng và báo cáo doanh thu của nhân viên.

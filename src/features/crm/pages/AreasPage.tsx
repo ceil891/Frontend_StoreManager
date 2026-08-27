@@ -6,6 +6,8 @@ import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useAreaStore } from '../store/areaStore';
 import type { AreaItem } from '../store/areaStore';
+import { SearchInput } from '@/shared/components/ui/SearchInput';
+import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 export function AreasPage() {
   const { areas: data, isLoading, fetchAreas, createArea, updateArea, deleteArea, toggleStatus } = useAreaStore();
   
@@ -124,9 +126,9 @@ export function AreasPage() {
         cell: (info) => {
           const val = info.getValue() as string;
           const levelMap: Record<string, { label: string; color: string }> = {
-            TỈNH_THÀNH: { label: 'Tỉnh / thành phố', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
-            QUẬN_HUYỆN: { label: 'Quận / huyện', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
-            PHƯỜNG_XÃ: { label: 'Phường / xã', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' },
+            TỈNH_THÀNH: { label: 'Tỉnh/Thành phố', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
+            QUẬN_HUYỆN: { label: 'Quận/Huyện', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
+            PHƯỜNG_XÃ: { label: 'Phường/Xã', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' },
           };
           const resolved = levelMap[val] || { label: val, color: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300' };
           return (
@@ -150,7 +152,6 @@ export function AreasPage() {
         header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
-          const label = status === 'KÍCH_HOẠT' ? 'Đang hoạt động' : 'Đã khóa';
           return (
             <span
               className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
@@ -160,7 +161,7 @@ export function AreasPage() {
               }`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${status === 'KÍCH_HOẠT' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-              {label}
+              {status}
             </span>
           );
         },
@@ -209,31 +210,24 @@ export function AreasPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Xuất Excel
-            </button>
-            <button
+            <SecondaryButton leftIcon={<Download className="w-4 h-4" />}>
+              Xuất dữ liệu
+            </SecondaryButton>
+            <CreateButton
               onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
             >
-              <Plus className="w-4 h-4" /> Thêm mới khu vực
-            </button>
+              Thêm khu vực
+            </CreateButton>
           </div>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="flex-1 relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-gray-400" />
-            </div>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm theo mã, tên hoặc khu vực cha..."
-              className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
-            />
-          </div>
+          <SearchInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder="Tìm theo mã, tên hoặc khu vực cha..."
+            containerClassName="flex-1 sm:max-w-md"
+          />
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-500 font-medium whitespace-nowrap">Cấp quản lý:</span>
@@ -243,7 +237,7 @@ export function AreasPage() {
                 className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white p-2"
               >
                 <option value="Tất cả">Tất cả cấp độ</option>
-                <option value="TỈNH_THÀNH">Tỉnh / thành phố</option>
+                <option value="TỈNH_THÀNH">Tỉnh / Thành phố</option>
                 <option value="QUẬN_HUYỆN">Quận / huyện</option>
                 <option value="PHƯỜNG_XÃ">Phường / xã</option>
               </select>
@@ -256,8 +250,8 @@ export function AreasPage() {
                 className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white p-2"
               >
                 <option value="Tất cả">Tất cả trạng thái</option>
-                <option value="KÍCH_HOẠT">Đang hoạt động</option>
-                <option value="KHOÁ">Đã khóa</option>
+                <option value="KÍCH_HOẠT">KÍCH HOẠT</option>
+                <option value="KHOÁ">KHOÁ</option>
               </select>
             </div>
           </div>
@@ -266,7 +260,7 @@ export function AreasPage() {
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedItem(row)} isLoading={isLoading}/>
       </div>
 
-      {/* Modal Xem chi tiết khu vực */}
+      {/* Modal Xem chi tiết khu vực căn giữa (TC-ALL-1) */}
       <Modal
         isOpen={!!selectedItem}
         onClose={() => setSelectedItem(null)}
@@ -289,7 +283,7 @@ export function AreasPage() {
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500">Cấp phân loại:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">
-                  {selectedItem.level === 'TỈNH_THÀNH' ? 'Tỉnh / thành phố' : selectedItem.level === 'QUẬN_HUYỆN' ? 'Quận / huyện' : 'Phường / xã'}
+                  {selectedItem.level === 'TỈNH_THÀNH' ? 'Tỉnh / Thành phố' : selectedItem.level === 'QUẬN_HUYỆN' ? 'Quận / Huyện' : 'Phường / Xã'}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
@@ -309,11 +303,11 @@ export function AreasPage() {
                       : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
                   }`}
                 >
-                  {selectedItem.status === 'KÍCH_HOẠT' ? 'Đang hoạt động' : 'Đã khóa'}
+                  {selectedItem.status}
                 </span>
               </div>
               <div className="border-t border-gray-200 dark:border-gray-800 pt-2">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Mô tả / phạm vi địa lý</span>
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Mô tả / Phạm vi địa lý</span>
                 <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedItem.description || 'Chưa có mô tả chi tiết cho khu vực này.'}</p>
               </div>
             </div>
@@ -324,7 +318,7 @@ export function AreasPage() {
                 onClick={() => setSelectedItem(null)}
                 className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-sm"
               >
-                Đóng
+                Đóng Hộp Thoại
               </button>
             </div>
           </div>
@@ -335,7 +329,7 @@ export function AreasPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm mới khu vực' : 'Cập nhật khu vực'}
+        title={modalMode === 'create' ? 'Thêm Khu Vực mới' : 'Cập nhật khu vực'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div>
@@ -370,7 +364,7 @@ export function AreasPage() {
               onChange={(e) => setEditingItem({ ...editingItem, level: e.target.value as any })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
             >
-              <option value="TỈNH_THÀNH">Tỉnh / thành phố</option>
+              <option value="TỈNH_THÀNH">Tỉnh / Thành phố</option>
               <option value="QUẬN_HUYỆN">Quận / huyện</option>
               <option value="PHƯỜNG_XÃ">Phường / xã</option>
             </select>
@@ -401,13 +395,13 @@ export function AreasPage() {
               onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
             >
-              <option value="KÍCH_HOẠT">Đang hoạt động</option>
-              <option value="KHOÁ">Đã khóa</option>
+              <option value="KÍCH_HOẠT">KÍCH HOẠT (Hoạt động)</option>
+              <option value="KHOÁ">KHOÁ (Ngưng dùng)</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mô tả chi tiết / ghi chú</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mô tả chi tiết / Ghi chú</label>
             <textarea
               rows={3}
               value={editingItem.description || ''}
@@ -429,7 +423,7 @@ export function AreasPage() {
               type="submit"
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              {modalMode === 'create' ? 'Thêm mới' : 'Lưu thông tin'}
+              {modalMode === 'create' ? 'Tạo Mới' : 'Lưu cập nhật'}
             </button>
           </div>
         </form>
@@ -453,7 +447,7 @@ export function AreasPage() {
               onClick={() => setDeletingItem(null)}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors text-sm"
             >
-              Hủy bỏ
+              Quay lại
             </button>
             <button
               type="button"

@@ -189,10 +189,10 @@ export function BranchManagementPage() {
   };
 
   // --- KPI summary ---
-  const totalRevenue = branches.reduce((s, b) => s + b.currentRevenue, 0);
-  const totalTarget = branches.reduce((s, b) => s + b.revenueTarget, 0);
+  const totalRevenue = branches.reduce((s, b) => s + (b.currentRevenue || 0), 0);
+  const totalTarget = branches.reduce((s, b) => s + (b.revenueTarget || 0), 0);
   const activeCount = branches.filter(b => b.status === 'ACTIVE').length;
-  const totalEmployees = branches.reduce((s, b) => s + b.employeesCount, 0);
+  const totalEmployees = users.length;
 
   // --- Columns ---
   const columns = useMemo<ColumnDef<Branch>[]>(() => [
@@ -211,7 +211,7 @@ export function BranchManagementPage() {
           </div>
           <div>
             <p className="font-bold text-gray-900 dark:text-white text-sm">{info.getValue() as string}</p>
-            <p className="text-[11px] text-gray-400 font-mono">{info.row.original.phone}</p>
+            <p className="text-[11px] text-gray-400 font-mono">{info.row.original.phone || 'Chưa có SĐT'}</p>
           </div>
         </div>
       ),
@@ -222,32 +222,40 @@ export function BranchManagementPage() {
       cell: info => (
         <div className="flex items-start gap-1.5 text-gray-600 dark:text-gray-400 text-sm max-w-[200px]">
           <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0 text-rose-400" />
-          <span className="truncate">{info.getValue() as string}</span>
+          <span className="truncate">{info.getValue() as string || 'Chưa cập nhật'}</span>
         </div>
       ),
     },
     {
       accessorKey: 'manager',
       header: 'Cửa hàng trưởng',
-      cell: info => (
-        <div className="flex items-center gap-1.5">
-          <div className="w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900/40 flex items-center justify-center text-purple-600 dark:text-purple-400 text-xs font-bold">
-            {(info.getValue() as string).charAt(0)}
+      cell: ({ row }) => {
+        const managerUser = users.find(u => String(u.id) === String(row.original.managerId) || u.fullName === row.original.manager);
+        const managerName = managerUser ? managerUser.fullName : (row.original.manager && row.original.manager !== '—' ? row.original.manager : 'Chưa phân công');
+        return (
+          <div className="flex items-center gap-1.5">
+            <div className="w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900/40 flex items-center justify-center text-purple-600 dark:text-purple-400 text-xs font-bold shrink-0">
+              {managerName.charAt(0).toUpperCase()}
+            </div>
+            <span className="font-medium text-gray-800 dark:text-gray-200 text-sm">{managerName}</span>
           </div>
-          <span className="font-medium text-gray-800 dark:text-gray-200 text-sm">{info.getValue() as string}</span>
-        </div>
-      ),
+        );
+      },
     },
     {
       accessorKey: 'employeesCount',
       header: 'Nhân sự',
-      cell: info => (
-        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-          <Users className="w-3.5 h-3.5" />
-          <span className="font-semibold">{info.getValue() as number}</span>
-          <span className="text-xs text-gray-400">NV</span>
-        </div>
-      ),
+      cell: ({ row }) => {
+        const branchId = String(row.original.id);
+        const count = users.filter(u => String(u.branchId) === branchId).length;
+        return (
+          <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
+            <Users className="w-3.5 h-3.5" />
+            <span className="font-semibold">{count}</span>
+            <span className="text-xs text-gray-400">NV</span>
+          </div>
+        );
+      },
     },
     {
       accessorKey: 'status',
@@ -523,15 +531,13 @@ export function BranchManagementPage() {
                 <select
                   value={editingBranch.managerId || ''}
                   onChange={e => setEditingBranch({ ...editingBranch, managerId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 font-medium"
                 >
-                  <option value="">-- Chọn Cửa hàng trưởng --</option>
-                  {(users && users.length > 0 ? users : [
-                    { id: '1', fullName: 'Nguyễn Minh Quân (Admin)' },
-                    { id: '2', fullName: 'Trần Thị Lan (Store Manager)' },
-                    { id: '3', fullName: 'Lê Hoàng Nam (Staff)' },
-                  ]).map((u) => (
-                    <option key={u.id} value={u.id}>{u.fullName}</option>
+                  <option value="">-- Chọn Cửa hàng trưởng từ nhân sự hệ thống --</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.fullName} {u.userCode ? `(${u.userCode})` : ''} - {u.assignedRole || u.emailAddress}
+                    </option>
                   ))}
                 </select>
               </div>

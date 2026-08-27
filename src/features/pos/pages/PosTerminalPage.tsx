@@ -3,7 +3,7 @@ import {
   Search, ScanBarcode, UserPlus, CreditCard, Trash2, Plus, Minus, X,
   ArrowLeft, Image as ImageIcon, Gift, Smartphone, Landmark, Banknote,
   CheckCircle2, ShoppingCart as ShoppingCartIcon, Tag, ChevronDown, Clock,
-  type LucideIcon, Loader2, RefreshCw, Layers, Printer, Wifi, WifiOff
+  type LucideIcon, Loader2, RefreshCw, Layers
 } from 'lucide-react';
 import { usePosCartStore } from '../store/posCartStore';
 import type { PosProduct } from '../store/posCartStore';
@@ -12,7 +12,7 @@ import { Modal } from '@/shared/components/ui/Modal';
 import { PrintInvoiceModal, type PrintInvoiceData } from '@/shared/components/ui/PrintInvoiceModal';
 import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
 import { useSalesStore, BRANCH_NAME_BY_ID, deriveShiftId, WALK_IN_CUSTOMER_ID } from '@/features/sales/store/salesStore';
-import { usePermission } from '@/shared/hooks/usePermission';
+import { useAuthStore, useAuthPermissions } from '@/features/auth/store/authStore';
 import { Link } from 'react-router';
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 import { useCrmStore } from '@/features/crm/store/crmStore';
@@ -21,10 +21,19 @@ import { useBranchStore } from '@/features/system/store/branchStore';
 import { useDebounce } from '@/shared/hooks/useDebounce';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
-import { useAuthStore } from '@/features/auth/store/authStore';
 
 import { crmService } from '@/features/crm/services/crmService';
 import type { CustomerVoucherRecord, VoucherRecord } from '@/features/crm/store/crmStore';
+
+// ─── POS Vouchers ─────────────────────────────────────────────
+
+const VOUCHERS: Record<string, { type: 'PERCENT' | 'FLAT'; value: number; minOrderValue?: number }> = {
+  'SMART': { type: 'PERCENT', value: 10, minOrderValue: 100000 },
+  'HELLOSUMMER': { type: 'PERCENT', value: 15, minOrderValue: 200000 },
+  'RETAILHUB50K': { type: 'FLAT', value: 50000, minOrderValue: 300000 },
+  'VIP10': { type: 'PERCENT', value: 10, minOrderValue: 100000 },
+  'WELCOME': { type: 'FLAT', value: 20000, minOrderValue: 50000 },
+};
 
 type DisplayPayment = { id: string; label: string; icon: LucideIcon; isCash: boolean };
 
@@ -47,12 +56,12 @@ function iconForProvider(t: PaymentMethodRecord['providerType']): LucideIcon {
 
 const FALLBACK_PAYMENTS: DisplayPayment[] = [
   { id: 'fb-cash', label: 'Tiền mặt', icon: Banknote, isCash: true },
-  { id: 'fb-card', label: 'Thẻ tín dụng / ghi nợ', icon: CreditCard, isCash: false },
+  { id: 'fb-card', label: 'Thẻ tín dụng/ghi nợ', icon: CreditCard, isCash: false },
   { id: 'fb-transfer', label: 'Chuyển khoản', icon: Landmark, isCash: false },
-  { id: 'fb-ewallet', label: 'Ví điện tử (MoMo / ZaloPay)', icon: Smartphone, isCash: false },
+  { id: 'fb-ewallet', label: 'Ví điện tử (Momo/ZaloPay)', icon: Smartphone, isCash: false },
 ];
 
-const fmt = (n: number) => n.toLocaleString('vi-VN') + ' đ';
+const fmt = (n: number) => n.toLocaleString('vi-VN') + 'đ';
 
 function SafeProductImage({ src, alt, className, iconClassName }: { src?: string; alt?: string; className?: string; iconClassName?: string }) {
   const [failed, setFailed] = useState(false);
@@ -75,7 +84,7 @@ function SafeProductImage({ src, alt, className, iconClassName }: { src?: string
 }
 
 export function PosTerminalPage() {
-  const { user, hasPermission, canViewAllBranches, currentBranchId: userBranchId, currentBranchName } = usePermission();
+  const user = useAuthStore((s) => s.user);
   const {
     items,
     addItem,
@@ -104,22 +113,16 @@ export function PosTerminalPage() {
   const setSelectedPaymentId = usePosCartStore((s) => s.setSelectedPaymentId);
   const paymentMethodsFromConfig = usePosConfigStore((s) => s.paymentMethods);
   const fetchPaymentMethods = usePosConfigStore((s) => s.fetchPaymentMethods);
-  const enableOfflineMode = usePosConfigStore((s) => s.enableOfflineMode);
-  const setEnableOfflineMode = usePosConfigStore((s) => s.setEnableOfflineMode);
   const addSaleOrder = useSalesStore((s) => s.addSaleOrder);
-
   const { products, fetchProducts, categories, fetchCategories, combos, fetchCombos } = useInventoryStore();
   const { customers, fetchCustomers, addCustomer } = useCrmStore();
   const { branches, fetchBranches } = useBranchStore();
 
   const [isSyncing, setIsSyncing] = useState(false);
-  const [stockUpdateTick, setStockUpdateTick] = useState(0);
 
   const handleSyncPosData = async () => {
     setIsSyncing(true);
     try {
-      localStorage.removeItem('retailhub_pos_stock_deductions');
-      setStockUpdateTick((t) => t + 1);
       await Promise.all([
         fetchProducts(),
         fetchCombos(),
@@ -128,14 +131,13 @@ export function PosTerminalPage() {
         fetchBranches(),
         fetchPaymentMethods(),
       ]);
-      toast.success('Đã đồng bộ toàn bộ Danh mục, Sản phẩm & Tồn kho từ máy chủ!');
+      toast.success('Đã đồng bộ toàn bộ Danh mục, Sản phẩm & Combo từ máy chủ!');
     } catch (err) {
       toast.error('Lỗi khi đồng bộ dữ liệu POS.');
     } finally {
       setIsSyncing(false);
     }
   };
-
 
   useEffect(() => {
     fetchProducts();
@@ -148,33 +150,35 @@ export function PosTerminalPage() {
 
   const [selectedPosBranchId, setSelectedPosBranchId] = useState<string>('');
 
-  const canChangeBranch = canViewAllBranches || hasPermission('pos:branch:change');
+  const permissions = useAuthPermissions();
+  const canChangeBranch = user?.role === 'SUPER_ADMIN' || permissions.includes('pos:branch:change');
 
   const { activeBranchId, activeBranchName, isBranchUnassigned } = useMemo(() => {
-    // Ưu tiên: 1) user chọn thủ công trên POS (nếu có quyền), 2) branchId từ hồ sơ đăng nhập, 3) chi nhánh đầu tiên
+    // Ưu tiên: 1) user chọn thủ công trên POS, 2) branchId từ hồ sơ đăng nhập, 3) chi nhánh đầu tiên
+    const userBranchId = user?.branchId ? String(user.branchId) : '';
     const defaultBranchId = userBranchId || (branches.length > 0 ? String(branches[0].id) : '1');
-    const targetId = (canChangeBranch && selectedPosBranchId) ? selectedPosBranchId : defaultBranchId;
+    const targetId = selectedPosBranchId || defaultBranchId;
 
     // Match chính xác bằng id hoặc branchCode — KHÔNG match theo tên
     const matched = (branches || []).find(
       (b) => String(b.id) === targetId || b.branchCode === targetId
     );
     const resolvedId = matched ? String(matched.id) : targetId;
-    const resolvedName = matched?.name || (userBranchId === resolvedId ? currentBranchName : '') || BRANCH_NAME_BY_ID[resolvedId] || `Chi nhánh ${resolvedId}`;
+    const resolvedName = matched?.name || (userBranchId === resolvedId ? (user?.branchName || '') : '') || BRANCH_NAME_BY_ID[resolvedId] || `Chi nhánh ${resolvedId}`;
 
     return {
       activeBranchId: resolvedId,
       activeBranchName: resolvedName,
-      isBranchUnassigned: !userBranchId && !selectedPosBranchId && !canViewAllBranches,
+      isBranchUnassigned: !userBranchId && !selectedPosBranchId && user?.role !== 'SUPER_ADMIN',
     };
-  }, [branches, userBranchId, selectedPosBranchId, canChangeBranch, currentBranchName, canViewAllBranches]);
+  }, [branches, user, selectedPosBranchId]);
 
   // Branch stock mapping for POS
   const [branchStockMap, setBranchStockMap] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!activeBranchId) return;
-    axiosClient.get<any, any>(`/inventories?branchId=${activeBranchId}`)
+    axiosClient.get<any, any>(`/inventories/branches/${activeBranchId}/inventory`)
       .then((res) => {
         const list: any[] = Array.isArray(res) ? res : (res?.data || res?.content || res || []);
         const map: Record<string, number> = {};
@@ -185,15 +189,14 @@ export function PosTerminalPage() {
         } catch {}
 
         list.forEach((b: any) => {
-          const rawQty = Number(b.quantityAvailable ?? b.quantityPhysical ?? b.availableQuantity ?? b.onHandQuantity ?? 0);
-          const bId = String(activeBranchId || '1');
-          const pKey = String(b.productId || b.productVariantId || b.productCode || b.sku || '');
-          const deducted = enableOfflineMode ? (posDeductionsMap[`${pKey}_branch_${bId}`] !== undefined ? posDeductionsMap[`${pKey}_branch_${bId}`] : (posDeductionsMap[pKey] || 0)) : 0;
+          const rawQty = Number(b.availableQuantity ?? b.onHandQuantity ?? 0);
+          const pKey = String(b.productId || b.productVariantId || b.sku || '');
+          const deducted = (posDeductionsMap[pKey] !== undefined ? posDeductionsMap[pKey] : 0) ||
+                           (b.sku && posDeductionsMap[b.sku] !== undefined ? posDeductionsMap[b.sku] : 0);
           const finalQty = Math.max(0, rawQty - deducted);
 
           if (b.productId) map[String(b.productId)] = finalQty;
           if (b.productVariantId) map[String(b.productVariantId)] = finalQty;
-          if (b.productCode) map[b.productCode] = finalQty;
           if (b.sku) map[b.sku] = finalQty;
         });
         setBranchStockMap(map);
@@ -201,19 +204,17 @@ export function PosTerminalPage() {
       .catch((err) => {
         console.warn('Failed to fetch POS branch inventory:', err);
       });
-  }, [activeBranchId, stockUpdateTick, enableOfflineMode]);
+  }, [activeBranchId]);
 
   const productsList = useMemo(() => {
     let posDeductionsMap: Record<string, number> = {};
-    if (enableOfflineMode) {
-      try {
-        const saved = localStorage.getItem('retailhub_pos_stock_deductions');
-        if (saved) posDeductionsMap = JSON.parse(saved);
-      } catch {}
-    }
+    try {
+      const saved = localStorage.getItem('retailhub_pos_stock_deductions');
+      if (saved) posDeductionsMap = JSON.parse(saved);
+    } catch {}
 
     const singleList = (products || [])
-      .filter((p) => p.status === 'ACTIVE' && (p as any).isActive !== false)
+      .filter((p) => p.status !== 'INACTIVE' && (p as any).isActive !== false)
       .map((p) => {
         const cat = (categories || []).find((c) => c.categoryName === p.category);
         const tc = (cat?.taxClass || 'VAT_8') as string;
@@ -224,26 +225,21 @@ export function PosTerminalPage() {
         const barcode = p.barcodes && p.barcodes.length > 0 ? p.barcodes[0] : (p.sku || String(p.id));
 
         let branchSpecificStock = 0;
-        const bId = String(activeBranchId || '1');
-        const hasDirectBranchStock = branchStockMap[String(p.id)] !== undefined || (Boolean(p.sku) && branchStockMap[p.sku] !== undefined);
-
         if (branchStockMap[String(p.id)] !== undefined) {
           branchSpecificStock = branchStockMap[String(p.id)];
-        } else if (p.sku && branchStockMap[p.sku] !== undefined) {
+        } else if (branchStockMap[p.sku] !== undefined) {
           branchSpecificStock = branchStockMap[p.sku];
-        } else if (p.branchStocks && (p.branchStocks[bId] !== undefined || p.branchStocks[activeBranchId] !== undefined)) {
-          branchSpecificStock = Number(p.branchStocks[bId] ?? p.branchStocks[activeBranchId]);
+        } else if (p.branchStocks && p.branchStocks[activeBranchId] !== undefined) {
+          branchSpecificStock = Number(p.branchStocks[activeBranchId]);
+        } else if (p.onHand !== undefined && Number(p.onHand) > 0) {
+          branchSpecificStock = Number(p.onHand);
         } else {
           branchSpecificStock = 0;
         }
 
-        const localBranchDeduction = (posDeductionsMap[`${p.id}_branch_${bId}`] || 0) +
-                                    (p.sku ? (posDeductionsMap[`${p.sku}_branch_${bId}`] || 0) : 0);
-        const globalDeduction = (posDeductionsMap[String(p.id)] || 0) +
-                                (p.sku && p.sku !== String(p.id) ? (posDeductionsMap[p.sku] || 0) : 0);
-        const effectiveDeduction = enableOfflineMode ? (localBranchDeduction > 0 ? localBranchDeduction : globalDeduction) : 0;
-        const stock = Math.max(0, branchSpecificStock - (hasDirectBranchStock ? 0 : effectiveDeduction));
-
+        const pKey = String(p.id);
+        const deducted = posDeductionsMap[pKey] ?? posDeductionsMap[p.sku] ?? 0;
+        const stock = Math.max(0, branchSpecificStock - deducted);
 
         return {
           id: String(p.id),
@@ -296,39 +292,42 @@ export function PosTerminalPage() {
         return false;
       })
       .map((c) => {
-        // Tính toán số lượng Combo khả dụng dựa theo tồn kho thực tế của các sản phẩm thành phần
-        let comboStock = 0;
-        if (c.details && c.details.length > 0) {
-          const componentStockCounts = c.details.map((d) => {
-            const matchedProduct = singleList.find((p) => 
-              (d.sku && p.sku === d.sku) ||
-              (d.productName && p.name.toLowerCase().trim() === d.productName.toLowerCase().trim())
-            );
-            if (matchedProduct) {
-              const reqQty = Number(d.quantity) || 1;
-              return Math.floor(matchedProduct.stock / reqQty);
+        let calculatedStock = 999999;
+        const details = c.details || [];
+
+        if (details.length === 0) {
+          calculatedStock = 0;
+        } else {
+          for (const item of details) {
+            const itemStock = branchStockMap[item.sku] ?? branchStockMap[item.id] ?? 0;
+            const requiredQty = Math.max(1, Number(item.quantity) || 1);
+            const possibleUnits = Math.floor(itemStock / requiredQty);
+
+            if (possibleUnits < calculatedStock) {
+              calculatedStock = possibleUnits;
             }
-            return 0;
-          });
-          comboStock = Math.max(0, Math.min(...componentStockCounts));
+          }
         }
+
+        const finalStock = calculatedStock === 999999 ? 0 : Math.max(0, calculatedStock);
 
         return {
           id: `combo-${c.id}`,
           name: `[Combo] ${c.comboName}`,
           price: Number(c.comboPrice || 0),
-          image: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=200&q=80',
+          image: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=200&auto=format&fit=crop&q=80',
           sku: c.comboCode || `CB-${c.id}`,
           barcode: c.comboBarcode || c.comboCode || `CB-${c.id}`,
           category: 'Combo / Gói sản phẩm',
           unit: 'Combo',
-          stock: comboStock,
+          stock: finalStock,
+          isOutOfStock: finalStock === 0,
           taxRate: 0.08,
         };
       });
 
     return [...singleList, ...comboList];
-  }, [products, combos, categories, branchStockMap, activeBranchId, activeBranchName, branches, stockUpdateTick]);
+  }, [products, combos, categories, branchStockMap, activeBranchId, activeBranchName, branches]);
 
   const categoryTabs = useMemo(() => {
     const dbCats = (categories || []).map((c) => c.categoryName).filter(Boolean);
@@ -479,7 +478,6 @@ export function PosTerminalPage() {
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [paymentState, setPaymentState] = useState<'idle' | 'processing' | 'success'>('idle');
   const [currentOrderCode, setCurrentOrderCode] = useState('');
-  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
 
   // Print Invoice Modal
   const [isPrintInvoiceOpen, setIsPrintInvoiceOpen] = useState(false);
@@ -526,11 +524,11 @@ export function PosTerminalPage() {
   };
 
   useEffect(() => {
-    const ids = displayPayments.map((d) => String(d.id));
-    setSelectedPaymentId((prev) => (ids.includes(String(prev)) ? String(prev) : String(ids[0] ?? FALLBACK_PAYMENTS[0].id)));
+    const ids = displayPayments.map((d) => d.id);
+    setSelectedPaymentId((prev) => (ids.includes(prev) ? prev : ids[0] ?? FALLBACK_PAYMENTS[0].id));
   }, [displayPayments]);
 
-  const selectedPayment = displayPayments.find((d) => String(d.id) === String(selectedPaymentId)) ?? displayPayments[0];
+  const selectedPayment = displayPayments.find((d) => d.id === selectedPaymentId) ?? displayPayments[0];
   const isCashPayment = selectedPayment?.isCash ?? true;
 
   const stockById = useMemo(() => {
@@ -567,11 +565,14 @@ export function PosTerminalPage() {
   const debouncedSearchQuery = useDebounce(searchQuery, 200);
 
   const filteredProducts = useMemo(() => {
+    const q = debouncedSearchQuery.trim().toLowerCase();
     return productsList.filter(p => {
       const matchCat = activeCategory === 'Tất cả' || p.category === activeCategory;
       const matchQ =
-        p.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-        p.sku.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        (p.barcode && p.barcode.toLowerCase().includes(q));
       return matchCat && matchQ;
     });
   }, [productsList, activeCategory, debouncedSearchQuery]);
@@ -624,14 +625,6 @@ export function PosTerminalPage() {
         return;
       }
 
-      // Block Free Shipping voucher on POS
-      const isFreeShip = String(matchedCustVoucher.discountType || (matchedCustVoucher as any).type || '').toUpperCase().includes('FREE_SHIPPING');
-      if (isFreeShip) {
-        setVoucherError('Mã voucher "Miễn phí vận chuyển" chỉ áp dụng cho đơn Online có giao nhận, không áp dụng cho bán tại quầy POS!');
-        setAppliedVoucher(null);
-        return;
-      }
-
       // Customer Ownership Verification Security Check
       if (!activeCustomer || activeCustomer.name === 'Khách vãng lai') {
         setVoucherError(`Mã voucher này được cấp riêng cho Khách hàng [${matchedCustVoucher.customerName}]. Vui lòng chọn đúng khách hàng trước khi dùng!`);
@@ -654,19 +647,16 @@ export function PosTerminalPage() {
       }
 
       if (matchedCustVoucher.minOrderValue && currentSubtotal < matchedCustVoucher.minOrderValue) {
-        setVoucherError(`Đơn hàng tối thiểu ${matchedCustVoucher.minOrderValue.toLocaleString('vi-VN')} ₫ mới áp dụng được mã này!`);
+        setVoucherError(`Đơn hàng tối thiểu ${matchedCustVoucher.minOrderValue.toLocaleString('vi-VN')}đ mới áp dụng được mã này!`);
         setAppliedVoucher(null);
         return;
       }
 
-      const isPercent = String(matchedCustVoucher.discountType || (matchedCustVoucher as any).type || '').toUpperCase().includes('PERCENT');
-      const dType = isPercent ? 'PERCENT' : 'FLAT';
+      const dType = matchedCustVoucher.discountType === 'PERCENT' ? 'PERCENT' : 'FLAT';
       setAppliedVoucher({
         code,
         type: dType,
         value: matchedCustVoucher.discountValue,
-        maxDiscount: matchedCustVoucher.maxDiscount,
-        minOrderValue: matchedCustVoucher.minOrderValue,
       });
       setVoucherCode('');
       setVoucherError('');
@@ -682,29 +672,17 @@ export function PosTerminalPage() {
         setAppliedVoucher(null);
         return;
       }
-
-      // Block Free Shipping voucher on POS
-      const isFreeShip = String(matchedCampaign.discountType || (matchedCampaign as any).type || '').toUpperCase().includes('FREE_SHIPPING');
-      if (isFreeShip) {
-        setVoucherError('Mã voucher "Miễn phí vận chuyển" chỉ áp dụng cho đơn Online có giao nhận, không áp dụng cho bán tại quầy POS!');
-        setAppliedVoucher(null);
-        return;
-      }
-
       if (matchedCampaign.minOrderValue && currentSubtotal < matchedCampaign.minOrderValue) {
-        setVoucherError(`Đơn hàng tối thiểu ${matchedCampaign.minOrderValue.toLocaleString('vi-VN')} ₫ mới áp dụng được!`);
+        setVoucherError(`Đơn hàng tối thiểu ${matchedCampaign.minOrderValue.toLocaleString('vi-VN')}đ mới áp dụng được!`);
         setAppliedVoucher(null);
         return;
       }
 
-      const isPercent = String(matchedCampaign.discountType || (matchedCampaign as any).type || '').toUpperCase().includes('PERCENT');
-      const dType = isPercent ? 'PERCENT' : 'FLAT';
+      const dType = matchedCampaign.discountType === 'PERCENT' ? 'PERCENT' : 'FLAT';
       setAppliedVoucher({
         code,
         type: dType,
         value: matchedCampaign.value,
-        maxDiscount: matchedCampaign.maxDiscount,
-        minOrderValue: matchedCampaign.minOrderValue,
       });
       setVoucherCode('');
       setVoucherError('');
@@ -712,8 +690,22 @@ export function PosTerminalPage() {
       return;
     }
 
-    setVoucherError('Mã voucher không tồn tại, không áp dụng được hoặc đã hết hạn!');
-    setAppliedVoucher(null);
+    // 3. Fallback dictionary (SMART, HELLOSUMMER, RETAILHUB50K, VIP10, WELCOME)
+    if (VOUCHERS[code]) {
+      const v = VOUCHERS[code];
+      if (v.minOrderValue && currentSubtotal < v.minOrderValue) {
+        setVoucherError(`Đơn hàng tối thiểu ${v.minOrderValue.toLocaleString('vi-VN')}đ mới dùng được mã ${code}!`);
+        setAppliedVoucher(null);
+        return;
+      }
+      setAppliedVoucher({ code, ...v });
+      setVoucherCode('');
+      setVoucherError('');
+      toast.success(`Đã áp dụng mã giảm giá ${code}!`);
+    } else {
+      setVoucherError('Mã không hợp lệ hoặc đã hết hạn!');
+      setAppliedVoucher(null);
+    }
   };
 
   // ── Calculations ─────────────────────────────────────────────────────────────
@@ -722,15 +714,9 @@ export function PosTerminalPage() {
   const pointsDiscount = usedPoints * (loyaltyConfig?.redeemRateValue || 100);
   let voucherDiscount = 0;
   if (appliedVoucher) {
-    if (appliedVoucher.type === 'PERCENT') {
-      let calc = subtotal * (appliedVoucher.value / 100);
-      if (appliedVoucher.maxDiscount && appliedVoucher.maxDiscount > 0) {
-        calc = Math.min(calc, appliedVoucher.maxDiscount);
-      }
-      voucherDiscount = Math.round(calc);
-    } else {
-      voucherDiscount = Math.round(appliedVoucher.value);
-    }
+    voucherDiscount = appliedVoucher.type === 'PERCENT'
+      ? subtotal * (appliedVoucher.value / 100)
+      : appliedVoucher.value;
   }
   voucherDiscount = Math.min(voucherDiscount, subtotal);
   const taxableAmount = Math.max(0, subtotal - voucherDiscount - pointsDiscount);
@@ -767,232 +753,124 @@ export function PosTerminalPage() {
 
   const totalAmountToPay = totalAmount + paymentFee;
 
-  const cashGivenNum = parseFloat(String(cashGiven || '0').replace(/\D/g, '')) || 0;
+  const cashGivenNum = parseFloat(cashGiven.replace(/\./g, '')) || 0;
   const changeAmount = Math.max(0, cashGivenNum - totalAmountToPay);
 
   // ── Confirm payment ──────────────────────────────────────────────────────────
   const handleConfirmPayment = () => {
-    try {
-      const effectiveCashGiven = cashGivenNum > 0 ? cashGivenNum : totalAmountToPay;
-      if (isCashPayment && cashGivenNum > 0 && cashGivenNum < totalAmountToPay) {
-        toast.error(`Số tiền khách đưa (${fmt(cashGivenNum)}) chưa đủ số tiền cần thu (${fmt(totalAmountToPay)})!`);
-        return;
-      }
+    const user = useAuthStore.getState().user;
+    const pay = displayPayments.find((d) => d.id === selectedPaymentId);
+    const payLabel = pay?.label ?? 'Tiền mặt';
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
+    const orderLines = items.map((i, idx) => ({
+      id: `pos_${now.getTime()}_${idx}`,
+      productVariantId: Number(i.id),
+      sku: i.sku || String(i.id),
+      productName: i.name,
+      quantity: i.quantity,
+      unitPrice: i.price,
+      lineTotal: Math.round(i.quantity * i.price),
+    }));
+    const itemsSummary = orderLines
+      .map((l) => `${l.productName}×${l.quantity}`)
+      .join(', ')
+      .slice(0, 240);
 
-      const user = useAuthStore.getState().user;
-      const pay = displayPayments.find((d) => String(d.id) === String(selectedPaymentId));
-      const payLabel = pay?.label ?? 'Tiền mặt';
-      const now = new Date();
-      const pad = (n: number) => String(n).padStart(2, '0');
-      const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-      const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
-      const branchId = activeBranchId || 1;
-      const branchName = activeBranchName || 'Chi nhánh Trung Tâm POS';
-      const cashierName = user?.name || 'Thu ngân POS';
-      const customerDisplayName = activeCustomer ? activeCustomer.name : `${cashierName} (Khách vãng lai)`;
+    const branchId = activeBranchId;
+    const branchName = activeBranchName;
+    const cashierName = user?.name || 'Thu ngân POS';
+    const customerDisplayName = activeCustomer
+      ? activeCustomer.name
+      : `${cashierName} (Khách vãng lai)`;
 
-      const orderLines = (items || []).map((i, idx) => ({
-        id: `pos_${now.getTime()}_${idx}`,
-        productVariantId: Number(i.id) || 1,
-        sku: i.sku || String(i.id),
-        productName: i.name || 'Sản phẩm',
-        quantity: Number(i.quantity) || 1,
-        unitPrice: Number(i.price) || 0,
-        lineTotal: Math.round((Number(i.quantity) || 1) * (Number(i.price) || 0)),
-      }));
-      const itemsSummary = orderLines
-        .map((l) => `${l.productName}×${l.quantity}`)
-        .join(', ')
-        .slice(0, 240);
-
-      const finalAmountVal = Math.round(totalAmountToPay || 0);
-
-      // 1. Tạo hóa đơn in & Chuyển ngay lập tức sang màn hình Thanh toán Thành công
-      const printInvoicePayload: PrintInvoiceData = {
-        documentTitle: 'HÓA ĐƠN BÁN LẺ (VAT)',
+    const performOrderCreation = () => {
+      addSaleOrder({
         code,
+        orderCode: code,
+        orderDate: new Date().toISOString(),
+        customerId: Number(activeCustomer?.id) || 1,
+        branchId: Number(branchId) || 1,
+        customerName: customerDisplayName,
         date: dateStr,
-        customerOrSupplierName: customerDisplayName,
-        phone: activeCustomer?.phone || 'N/A',
-        branchName: branchName,
-        createdByName: cashierName,
-        subTotal: Math.round(subtotal || 0),
-        taxAmount: Math.round(vatAmount || 0),
-        discountAmount: Math.round((voucherDiscount || 0) + (pointsDiscount || 0)),
-        totalAmount: finalAmountVal,
-        items: (items || []).map((i) => ({
-          sku: i.sku || String(i.id),
-          name: i.name || 'Sản phẩm',
-          quantity: Number(i.quantity) || 1,
-          price: Number(i.price) || 0,
-          total: Math.round((Number(i.quantity) || 1) * (Number(i.price) || 0)),
+        subTotal: Math.round(subtotal),
+        taxAmount: Math.round(vatAmount),
+        discountAmount: Math.round(voucherDiscount + pointsDiscount),
+        totalAmount: Math.round(totalAmountToPay),
+        status: 'COMPLETED',
+        paymentStatus: 'PAID',
+        paymentMethod: payLabel,
+        cashier: user?.name ?? 'Thu ngân',
+        createdByName: user?.name ?? 'Thu ngân',
+        createdByEmail: user?.email,
+        branchName,
+        origin: 'POS',
+        currency: 'VND',
+        itemsSummary,
+        orderLines,
+        details: items.map(i => ({
+          productVariantId: Number(i.id) || 1,
+          quantity: i.quantity,
+          unitPriceSnapshot: i.price
         })),
-      };
+        amountTendered: isCashPayment ? Math.round(cashGivenNum) : Math.round(totalAmountToPay),
+        changeAmount: isCashPayment ? Math.round(changeAmount) : 0,
+        shiftId: deriveShiftId(now),
+        promoCodeApplied: appliedVoucher?.code,
+        paymentMethodId: selectedPaymentConfig ? Number(selectedPaymentConfig.id) : null,
+        paymentMethodCode: selectedPaymentConfig ? selectedPaymentConfig.methodCode : null,
+      } as any);
 
-      setCompletedPrintInvoice(printInvoicePayload);
-      setPaymentState('success');
-      setIsSubmittingPayment(false);
-      toast.success(`Thanh toán thành công đơn hàng ${code}!`);
-
-      // 2. Chạy ngầm việc lưu trữ CSDL Backend & Đồng bộ (Không chặn giao diện)
+      // Tự động trừ tồn kho hiển thị (onHand) trên POS ngay lập tức & đồng bộ toàn hệ thống
       try {
-        addSaleOrder({
-          code,
-          orderCode: code,
-          orderDate: new Date().toISOString(),
-          customerId: Number(activeCustomer?.id) || 1,
-          branchId: Number(branchId) || 1,
-          customerName: customerDisplayName,
-          date: dateStr,
-          subTotal: Math.round(subtotal || 0),
-          taxAmount: Math.round(vatAmount || 0),
-          discountAmount: Math.round((voucherDiscount || 0) + (pointsDiscount || 0)),
-          totalAmount: finalAmountVal,
-          status: 'COMPLETED',
-          paymentStatus: 'PAID',
-          paymentMethod: payLabel,
-          cashier: user?.name ?? 'Thu ngân',
-          createdByName: user?.name ?? 'Thu ngân',
-          createdByEmail: user?.email,
-          branchName,
-          origin: 'POS',
-          currency: 'VND',
-          itemsSummary,
-          orderLines,
-          details: (items || []).map(i => ({
-            productVariantId: Number(i.id) || 1,
-            quantity: Number(i.quantity) || 1,
-            unitPriceSnapshot: Number(i.price) || 0
-          })),
-          amountTendered: isCashPayment ? Math.round(effectiveCashGiven) : finalAmountVal,
-          changeAmount: isCashPayment ? Math.round(Math.max(0, effectiveCashGiven - finalAmountVal)) : 0,
-          shiftId: deriveShiftId(now),
-          promoCodeApplied: appliedVoucher?.code,
-          paymentMethodId: selectedPaymentConfig ? Number(selectedPaymentConfig.id) : null,
-          paymentMethodCode: selectedPaymentConfig ? selectedPaymentConfig.methodCode : null,
-        } as any).catch((e) => console.warn('addSaleOrder background sync:', e));
-      } catch (e) {
-        console.warn('POS order dispatch error:', e);
-      }
+        const savedD = localStorage.getItem('retailhub_pos_stock_deductions');
+        const posDeductionsMap: Record<string, number> = savedD ? JSON.parse(savedD) : {};
 
-      if (appliedVoucher) {
-        try {
-          useCrmStore.getState().markVoucherUsed?.(appliedVoucher.code, code);
-        } catch (vErr) {
-          console.warn('Voucher mark used error:', vErr);
-        }
-      }
-
-      // Loyalty points CRM sync
-      if (activeCustomer && activeCustomer.id) {
-        try {
-          const rankMultiplier = (activeCustomer as any).membershipRank === 'Thành viên Vàng' ? 1.5 : (activeCustomer as any).membershipRank === 'Thành viên Bạc' ? 1.2 : 1.0;
-          const earned = Math.floor((finalAmountVal / (loyaltyConfig?.earnRateAmount || 10000)) * rankMultiplier);
-          if (earned > 0) {
-            axiosClient.post(`/crm/customers/${activeCustomer.id}/points`, {
-              points: earned,
-              type: 'EARN',
-              reason: `Tích điểm đơn hàng POS ${code}`,
-            }).catch(() => {});
-          }
-        } catch {}
-      }
-
-      try {
-        const inventoryState = useInventoryStore.getState() as any;
-        const combosList: any[] = inventoryState.combos || [];
-        const deductions: { productId?: string; sku?: string; qty: number; branchId?: string }[] = [];
-
-        (items || []).forEach((it) => {
-          const itName = (it.name || '').toLowerCase().trim();
-          const rawId = String(it.id).replace(/^combo-/, '');
-          const matchedCombo = combosList.find((c: any) => 
-            String(c.id) === rawId || 
-            String(c.id) === String(it.id) || 
-            (c.comboCode && (c.comboCode === it.sku || c.comboCode === it.barcode)) || 
-            (c.comboName && (c.comboName.toLowerCase().trim() === itName || itName.includes(c.comboName.toLowerCase().trim())))
-          );
-
-          if (matchedCombo && matchedCombo.details && matchedCombo.details.length > 0) {
-            matchedCombo.details.forEach((d: any) => {
-              const comboDetailQty = (Number(d.quantity) || 1) * (Number(it.quantity) || 1);
-              const compProd = (products || []).find((p: any) =>
-                (d.sku && p.sku === d.sku) ||
-                (d.productId && String(p.id) === String(d.productId)) ||
-                (d.productName && p.name.toLowerCase().trim() === d.productName.toLowerCase().trim())
-              );
-              deductions.push({
-                productId: compProd ? String(compProd.id) : (d.productId ? String(d.productId) : undefined),
-                sku: d.sku || compProd?.sku,
-                qty: comboDetailQty,
-                branchId: String(branchId || 1),
-              });
-            });
-          } else {
-            deductions.push({
-              productId: String(it.id),
-              sku: it.sku,
-              qty: Number(it.quantity) || 1,
-              branchId: String(branchId || 1),
-            });
-          }
+        items.forEach((it) => {
+          const pId = String(it.id);
+          posDeductionsMap[pId] = (posDeductionsMap[pId] || 0) + it.quantity;
+          if (it.sku) posDeductionsMap[it.sku] = (posDeductionsMap[it.sku] || 0) + it.quantity;
         });
+        localStorage.setItem('retailhub_pos_stock_deductions', JSON.stringify(posDeductionsMap));
 
-        if (typeof inventoryState.deductProductStock === 'function') {
-          inventoryState.deductProductStock(deductions);
-        }
-
+        const deductions = items.map((it) => ({ productId: String(it.id), sku: it.sku, qty: it.quantity }));
+        (useInventoryStore.getState() as any).deductProductStock(deductions);
         setBranchStockMap((prev) => {
           const nextMap = { ...prev };
-          deductions.forEach((d) => {
-            const currentQty = (d.productId && nextMap[d.productId] !== undefined)
-              ? nextMap[d.productId]
-              : ((d.productId && products?.find(p => String(p.id) === String(d.productId))?.branchStocks?.[String(branchId)]) ?? 0);
-            if (d.productId) {
-              nextMap[d.productId] = Math.max(0, currentQty - d.qty);
-            }
-            if (d.sku) {
-              nextMap[d.sku] = Math.max(0, currentQty - d.qty);
-            }
+          items.forEach((it) => {
+            const pId = String(it.id);
+            const cur = nextMap[pId] ?? nextMap[it.sku] ?? (products.find(p => String(p.id) === pId)?.onHand ?? 10);
+            nextMap[pId] = Math.max(0, cur - it.quantity);
+            if (it.sku) nextMap[it.sku] = Math.max(0, cur - it.quantity);
           });
           return nextMap;
         });
-
-        setStockUpdateTick((prev) => prev + 1);
       } catch (err) {
-        console.warn('POS inventory deduct error:', err);
+        console.error('Failed to deduct local POS inventory state:', err);
       }
 
+      // Tự động tích điểm cho Khách hàng & Ghi nhật ký Lịch sử Loyalty CRM
       if (activeCustomer) {
         try {
-          const earnRate = loyaltyConfig?.earnRateAmount || 10000;
-          const rank = (activeCustomer as any)?.membershipRank;
-          const multiplier = rank === 'Thành viên Vàng' ? 1.5 : rank === 'Thành viên Bạc' ? 1.2 : 1.0;
-          const earnedPoints = Math.floor((finalAmountVal / earnRate) * multiplier);
+          const earnedPoints = Math.floor((totalAmount / (loyaltyConfig?.earnRateAmount || 10000)) * (activeCustomer?.membershipRank === 'Thành viên Vàng' ? 1.5 : activeCustomer?.membershipRank === 'Thành viên Bạc' ? 1.2 : 1.0));
 
           if (earnedPoints > 0) {
-            const newLoyaltyBal = ((activeCustomer as any)?.loyaltyPoints || 0) + earnedPoints;
             useCrmStore.getState().addCustomerPoints(String(activeCustomer.id), earnedPoints, {
               code: `TX-EARN-${Date.now().toString().slice(-6)}`,
               customerId: String(activeCustomer.id),
               customerName: activeCustomer.name,
-              phone: (activeCustomer as any)?.phone || '',
+              phone: activeCustomer.phone || '',
               pointsChange: earnedPoints,
               transactionType: 'TÍCH ĐIỂM BÁN HÀNG POS',
               refDocument: code,
               date: dateStr,
-              balanceAfter: newLoyaltyBal,
-              amount: finalAmountVal,
+              balanceAfter: (activeCustomer.loyaltyPoints || 0) + earnedPoints,
+              amount: Math.round(totalAmount),
               actionType: 'EARN',
               createdAt: dateStr,
             });
-
-            setCustomer({
-              ...activeCustomer,
-              loyaltyPoints: newLoyaltyBal,
-            });
-
-            toast.info(`Khách hàng ${activeCustomer.name} được tích lũy +${earnedPoints} điểm!`);
           }
 
           if (usedPoints > 0) {
@@ -1000,25 +878,64 @@ export function PosTerminalPage() {
               code: `TX-REDEEM-${Date.now().toString().slice(-6)}`,
               customerId: String(activeCustomer.id),
               customerName: activeCustomer.name,
-              phone: (activeCustomer as any)?.phone || '',
+              phone: activeCustomer.phone || '',
               pointsChange: -usedPoints,
               transactionType: 'TIÊU ĐIỂM BÁN HÀNG POS',
               refDocument: code,
               date: dateStr,
-              balanceAfter: Math.max(0, ((activeCustomer as any)?.loyaltyPoints || 0) - usedPoints),
-              amount: Math.round(pointsDiscount || 0),
+              balanceAfter: Math.max(0, (activeCustomer.loyaltyPoints || 0) - usedPoints),
+              amount: Math.round(pointsDiscount),
               actionType: 'REDEEM',
               createdAt: dateStr,
             });
           }
         } catch (err) {
-          console.warn('CRM loyalty points error:', err);
+          console.error('Failed to update CRM customer loyalty points:', err);
         }
       }
-    } catch (criticalErr) {
-      console.error('Critical error in handleConfirmPayment:', criticalErr);
+
+      const printInvoicePayload: PrintInvoiceData = {
+        documentTitle: 'HÓA ĐƠN BÁN LẺ (VAT)',
+        code,
+        date: dateStr,
+        customerOrSupplierName: customerDisplayName,
+        phone: activeCustomer?.phone || 'N/A',
+        branchName: branchName || 'Chi nhánh Trung Tâm POS',
+        createdByName: cashierName,
+        subTotal: Math.round(subtotal),
+        taxAmount: Math.round(vatAmount),
+        discountAmount: Math.round(voucherDiscount + pointsDiscount),
+        totalAmount: Math.round(totalAmountToPay),
+        items: items.map((i) => ({
+          sku: i.sku || String(i.id),
+          name: i.name,
+          quantity: i.quantity,
+          price: i.price,
+          total: Math.round(i.quantity * i.price),
+        })),
+      };
+
+      setCompletedPrintInvoice(printInvoicePayload);
       setPaymentState('success');
-      setIsSubmittingPayment(false);
+
+      setTimeout(() => {
+        if (tabs.length > 1) {
+          closeTab(activeTabId);
+        } else {
+          clearCart();
+        }
+        setVoucherError('');
+        setPaymentState('idle');
+        setIsPaymentOpen(false);
+        setCurrentOrderCode('');
+        toast.success(`Thanh toán thành công đơn hàng ${code}!`);
+      }, 1000);
+    };
+
+    onCompleteRef.current = performOrderCreation;
+    setPaymentState('processing');
+    if (isCashPayment) {
+      paymentTimerRef.current = setTimeout(performOrderCreation, 1200);
     }
   };
 
@@ -1053,7 +970,7 @@ export function PosTerminalPage() {
               <input
                 ref={searchInputRef}
                 type="text"
-                placeholder="Nhập tên sản phẩm, SKU hoặc quét mã vạch..."
+                placeholder="Nhập tên sản phẩm, SKU hoặc quét Barcode..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="block w-full pl-9 pr-16 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all shadow-sm"
@@ -1067,55 +984,17 @@ export function PosTerminalPage() {
             </div>
           </div>
 
-          {/* Online / Offline Mode Toggle */}
-          <button
-            type="button"
-            onClick={() => {
-              const nextState = !enableOfflineMode;
-              setEnableOfflineMode(nextState);
-              setStockUpdateTick((t) => t + 1);
-              if (nextState) {
-                toast.info('Đã bật Chế độ Ngoại tuyến (Offline): Cho phép lưu trừ kho tạm trên trình duyệt khi mất mạng.');
-              } else {
-                toast.success('Đã chuyển sang Chế độ Trực tuyến (Online): Tồn kho đồng bộ 100% từ Database máy chủ.');
-              }
-            }}
-            title={
-              enableOfflineMode
-                ? 'Đang ở Chế độ Ngoại tuyến: Bấm để chuyển về Chế độ Trực tuyến (Realtime Database)'
-                : 'Đang ở Chế độ Trực tuyến: Bấm để chuyển sang Chế độ Ngoại tuyến (Offline Cache)'
-            }
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border transition-all shadow-xs shrink-0 cursor-pointer ${
-              enableOfflineMode
-                ? 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/80 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700 animate-pulse'
-                : 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-            }`}
-          >
-            {enableOfflineMode ? (
-              <>
-                <WifiOff className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                <span className="hidden sm:inline">Offline (Bật)</span>
-              </>
-            ) : (
-              <>
-                <Wifi className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span className="hidden sm:inline">Online (Realtime)</span>
-              </>
-            )}
-          </button>
-
           {/* Sync Data Button */}
           <button
             type="button"
             onClick={handleSyncPosData}
             disabled={isSyncing}
-            title="Đồng bộ lại danh mục sản phẩm, tồn kho & combo từ máy chủ"
+            title="Đồng bộ lại danh mục sản phẩm & combo từ máy chủ"
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-all shadow-xs shrink-0 cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">{isSyncing ? 'Đang tải...' : 'Đồng bộ dữ liệu'}</span>
           </button>
-
 
           <div className="text-right shrink-0 hidden lg:flex flex-col items-end">
             <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-0.5">
@@ -1319,12 +1198,12 @@ export function PosTerminalPage() {
               <div className="flex gap-2">
                 <form onSubmit={handleSearchCustomer} className="flex-1 flex gap-2">
                   <input
-                    type="text" placeholder="Nhập số điện thoại hoặc mã khách..."
+                    type="text" placeholder="🔍 Nhập SĐT / Mã khách..."
                     value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
                     className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                   <button type="submit" className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors">
-                    Tìm kiếm
+                    Tìm
                   </button>
                 </form>
                 <button
@@ -1334,13 +1213,13 @@ export function PosTerminalPage() {
                     setIsQuickCustomerOpen(true);
                   }}
                   className="px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
-                  title="Thêm mới khách hàng tại POS"
+                  title="➕ Đăng ký khách hàng mới tại POS"
                 >
-                  <UserPlus className="w-3.5 h-3.5" /> Thêm mới
+                  <UserPlus className="w-3.5 h-3.5" /> + Đăng ký
                 </button>
               </div>
               <div className="flex items-center justify-between text-[11px] bg-slate-100 dark:bg-slate-900/60 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400">
-                <span className="font-semibold">👤 Đang chọn: Khách lẻ (vãng lai)</span>
+                <span className="font-semibold">👤 Đang chọn: Khách vãng lai</span>
                 <span className="text-[10px] italic text-slate-400">(Khách lẻ - Không tích điểm)</span>
               </div>
             </div>
@@ -1380,7 +1259,7 @@ export function PosTerminalPage() {
                         );
                         setUsedPoints(Math.min(num, maxAllowedPoints));
                       }}
-                      placeholder="Nhập số điểm muốn đổi..."
+                      placeholder="Gõ số điểm muốn đổi..."
                       className="flex-1 px-2.5 py-1 border border-emerald-300 dark:border-emerald-800 rounded-lg text-xs bg-emerald-50 dark:bg-emerald-900/10 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none"
                     />
                     <button
@@ -1419,16 +1298,16 @@ export function PosTerminalPage() {
                 <ShoppingCartIcon className="w-8 h-8" />
               </div>
               <h3 className="text-sm font-black text-gray-800 dark:text-gray-200 mb-1">Giỏ hàng đang trống</h3>
-              <p className="text-xs text-gray-400 mb-4">Thực hiện một trong các cách sau để lên đơn:</p>
+              <p className="text-xs text-gray-400 mb-4">Thực hiện 1 trong các cách sau để lên đơn:</p>
 
               <div className="w-full bg-gray-50 dark:bg-gray-900/60 rounded-xl p-3 border border-gray-200 dark:border-gray-700/60 text-left space-y-2 text-xs">
                 <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 font-medium">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-                  <span>Nhấp chọn sản phẩm bên trái</span>
+                  <span>Click chọn sản phẩm bên trái</span>
                 </div>
                 <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 font-medium">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-                  <span>Quét mã vạch sản phẩm</span>
+                  <span>Quét mã vạch bằng đầu đọc Barcode</span>
                 </div>
                 <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 font-medium">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
@@ -1505,9 +1384,9 @@ export function PosTerminalPage() {
             </div>
             {voucherError && <p className="text-[10px] text-red-500 mt-1 font-semibold">{voucherError}</p>}
             {appliedVoucher && (
-              <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-lg px-2.5 py-1.5 mt-1.5 text-xs">
+              <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-lg px-2 py-1 mt-1.5 text-xs">
                 <span className="font-bold text-emerald-700 dark:text-emerald-300">
-                  🏷️ {appliedVoucher.code} ({appliedVoucher.type === 'PERCENT' ? `Giảm ${appliedVoucher.value}%${appliedVoucher.maxDiscount ? ` (Tối đa ${fmt(appliedVoucher.maxDiscount)})` : ''}` : `Giảm ${fmt(appliedVoucher.value)}`})
+                  🏷️ {appliedVoucher.code} — {appliedVoucher.type === 'PERCENT' ? `-${appliedVoucher.value}%` : `-${fmt(appliedVoucher.value)}`}
                 </span>
                 <button onClick={() => { setAppliedVoucher(null); setVoucherError(''); }}
                   className="text-gray-400 hover:text-red-500 font-bold ml-2">✕</button>
@@ -1523,7 +1402,7 @@ export function PosTerminalPage() {
             </div>
             {voucherDiscount > 0 && (
               <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
-                <span>Giảm giá ({appliedVoucher?.code || 'Voucher'})</span>
+                <span>Giảm (Voucher)</span>
                 <span>-{fmt(voucherDiscount)}</span>
               </div>
             )}
@@ -1538,7 +1417,7 @@ export function PosTerminalPage() {
               <span>{fmt(vatAmount)}</span>
             </div>
             <div className="flex justify-between items-baseline pt-2.5 mt-2 border-t-2 border-dashed border-gray-200 dark:border-gray-700">
-              <span className="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">Tổng thanh toán</span>
+              <span className="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">TỔNG CỘNG</span>
               <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">{fmt(totalAmount)}</span>
             </div>
             {activeCustomer && (
@@ -1563,16 +1442,13 @@ export function PosTerminalPage() {
                 const now = new Date();
                 const code = `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
                 setCurrentOrderCode(code);
-                setCashGiven(totalAmount.toLocaleString('vi-VN'));
-                setPaymentState('idle');
-                setIsSubmittingPayment(false);
                 setIsPaymentOpen(true);
               }}
               disabled={items.length === 0}
               className="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-emerald-600/30"
             >
               <CreditCard className="w-5 h-5" />
-              Thanh toán {fmt(totalAmount)}
+              THANH TOÁN {fmt(totalAmount)}
             </button>
           </div>
         </div>
@@ -1582,7 +1458,7 @@ export function PosTerminalPage() {
       <Modal
         isOpen={isQuickCustomerOpen}
         onClose={() => setIsQuickCustomerOpen(false)}
-        title="Đăng ký nhanh khách hàng"
+        title="⚡ Đăng ký Nhanh Khách Hàng Tại Quầy POS"
         width="max-w-md"
       >
         <form onSubmit={handleQuickCreateCustomer} className="space-y-4">
@@ -1596,21 +1472,21 @@ export function PosTerminalPage() {
               autoFocus
               value={newCustomerPhoneInput}
               onChange={(e) => setNewCustomerPhoneInput(e.target.value)}
-              placeholder="Nhập số điện thoại (VD: 0912345678)"
+              placeholder="0901234567..."
               className="w-full px-3 py-2 border-2 border-emerald-300 dark:border-emerald-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-base focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
             />
           </div>
 
           <div>
             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-              Họ và tên khách hàng <span className="text-red-500">*</span>
+              Họ & Tên khách hàng <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               required
               value={newCustomerName}
               onChange={(e) => setNewCustomerName(e.target.value)}
-              placeholder="Nhập họ và tên..."
+              placeholder="Nguyễn Văn A..."
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
             />
           </div>
@@ -1621,7 +1497,7 @@ export function PosTerminalPage() {
               onClick={() => setIsQuickCustomerOpen(false)}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
-              Hủy bỏ
+              Hủy
             </button>
             <button
               type="submit"
@@ -1629,7 +1505,7 @@ export function PosTerminalPage() {
               className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-md transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmittingQuickCustomer && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              <UserPlus className="w-4 h-4" /> Đăng ký & áp dụng
+              <UserPlus className="w-4 h-4" /> ✓ Đăng ký & Chọn ngay
             </button>
           </div>
         </form>
@@ -1640,57 +1516,18 @@ export function PosTerminalPage() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl animate-scaleIn flex flex-col max-h-[90vh]">
             {paymentState === 'success' ? (
               /* SUCCESS SCREEN */
-              <div className="flex flex-col items-center justify-center p-8 gap-5 animate-scaleIn text-center">
-                <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                  <CheckCircle2 className="w-12 h-12" />
+              <div className="flex flex-col items-center justify-center p-10 gap-4">
+                <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-500" />
                 </div>
-                <div className="space-y-1">
-                  <h2 className="text-2xl font-black text-gray-900 dark:text-white">Thanh toán thành công!</h2>
-                  <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">Mã đơn: {currentOrderCode || 'ORD-POS'}</p>
-                </div>
-                {isCashPayment && (
-                  <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl p-4 text-center w-full max-w-sm">
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tiền thối lại</p>
-                    <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{fmt(changeAmount)}</p>
+                <h2 className="text-2xl font-black text-gray-900 dark:text-white">Thanh toán thành công!</h2>
+                <p className="text-gray-500 dark:text-gray-400 text-sm text-center">Đơn hàng đã được xác nhận. Cảm ơn quý khách!</p>
+                {isCashPayment && cashGivenNum > 0 && (
+                  <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-900 rounded-xl p-4 text-center w-full">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Tiền thối lại</p>
+                    <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{fmt(changeAmount)}</p>
                   </div>
                 )}
-                <div className="flex gap-3 w-full max-w-sm pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (tabs.length > 1) {
-                        closeTab(activeTabId);
-                      } else {
-                        clearCart();
-                      }
-                      setVoucherError('');
-                      setPaymentState('idle');
-                      setIsPaymentOpen(false);
-                      setIsPrintInvoiceOpen(true);
-                    }}
-                    className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-650 text-gray-800 dark:text-gray-200 font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer"
-                  >
-                    <Printer className="w-4 h-4 text-emerald-600" /> In hóa đơn
-                  </button>
-                  <button
-                    type="button"
-                    autoFocus
-                    onClick={() => {
-                      if (tabs.length > 1) {
-                        closeTab(activeTabId);
-                      } else {
-                        clearCart();
-                      }
-                      setVoucherError('');
-                      setPaymentState('idle');
-                      setIsPaymentOpen(false);
-                      setCurrentOrderCode('');
-                    }}
-                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-black rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    Tạo đơn hàng mới
-                  </button>
-                </div>
               </div>
             ) : paymentState === 'processing' ? (
               /* PROCESSING/QR WAITING SCREEN */
@@ -1758,7 +1595,7 @@ export function PosTerminalPage() {
                       onClick={handleForceCompletePayment}
                       className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow active:scale-[0.98]"
                     >
-                      Xác nhận đã nhận tiền (ghi đè thủ công)
+                      Xác nhận đã nhận tiền (Ghi đè thủ công)
                     </button>
                   </div>
                 )}
@@ -1767,7 +1604,7 @@ export function PosTerminalPage() {
               /* PAYMENT FORM */
               <>
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-                  <h2 className="text-lg font-black text-gray-900 dark:text-white">Xác nhận thanh toán</h2>
+                  <h2 className="text-lg font-black text-gray-900 dark:text-white">Xác nhận Thanh toán</h2>
                   <button onClick={() => setIsPaymentOpen(false)} className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
                     <X className="w-5 h-5" />
                   </button>
@@ -1793,10 +1630,10 @@ export function PosTerminalPage() {
                         <button
                           key={m.id}
                           type="button"
-                          onClick={() => setSelectedPaymentId(String(m.id))}
+                          onClick={() => setSelectedPaymentId(m.id)}
                           className={`flex items-center gap-2.5 p-3 rounded-xl border text-sm font-semibold transition-colors ${
-                            String(selectedPaymentId) === String(m.id)
-                              ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-bold ring-2 ring-emerald-500/20'
+                            selectedPaymentId === m.id
+                              ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
                               : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:bg-gray-650'
                           }`}
                         >
@@ -1818,12 +1655,6 @@ export function PosTerminalPage() {
                         onChange={e => {
                           const digits = e.target.value.replace(/\D/g, '');
                           setCashGiven(digits === '' ? '' : parseInt(digits, 10).toLocaleString('vi-VN'));
-                        }}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleConfirmPayment();
-                          }
                         }}
                         placeholder="Nhập số tiền..."
                         className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xl font-black focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
@@ -1857,21 +1688,14 @@ export function PosTerminalPage() {
                 <div className="px-6 pb-5 pt-2 border-t border-gray-200 dark:border-gray-700 flex gap-3">
                   <button onClick={() => setIsPaymentOpen(false)}
                     className="flex-1 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 font-semibold rounded-xl text-sm transition-colors">
-                    Hủy bỏ
+                    Quay lại
                   </button>
                   <button
-                    type="button"
                     onClick={handleConfirmPayment}
-                    disabled={isSubmittingPayment || (isCashPayment && cashGivenNum > 0 && cashGivenNum < totalAmountToPay)}
-                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-black rounded-xl text-sm transition-all shadow disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                    disabled={isCashPayment && cashGivenNum < totalAmountToPay}
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-sm transition-colors shadow disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isSubmittingPayment ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" /> Đang xử lý...
-                      </>
-                    ) : (
-                      'Xác nhận thanh toán'
-                    )}
+                    ✓ Xác nhận
                   </button>
                 </div>
               </>

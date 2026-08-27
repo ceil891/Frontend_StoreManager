@@ -23,6 +23,7 @@ export interface JobPositionRecord {
   id: string;
   positionCode: string;
   positionTitle: string;
+  departmentId?: string;
   departmentName: string;
   jobGradeTier: string;
   salaryRangeMin: number;
@@ -156,34 +157,7 @@ export const useHrStore = create<HrState>()(
       contracts: [],
       kpiRecords: [],
       leaveRequests: [],
-      shiftSwapRequests: [
-        {
-          id: 'ssr-1',
-          requestCode: 'DC-2026-001',
-          requesterName: 'Nguyễn Văn Hưng',
-          requesterShift: 'Ca sáng (08:00 - 12:00)',
-          targetUserName: 'Trần Thị Mai',
-          targetUserShift: 'Ca chiều (13:00 - 17:00)',
-          swapDate: '2026-08-10',
-          reason: 'Có việc gia đình đột xuất buổi sáng',
-          status: 'PENDING',
-          approvedBy: 'Chưa duyệt',
-          notes: 'Đã thỏa thuận 2 bên',
-        },
-        {
-          id: 'ssr-2',
-          requestCode: 'DC-2026-002',
-          requesterName: 'Lưu Hữu Phước',
-          requesterShift: 'Ca tối (17:00 - 21:00)',
-          targetUserName: 'Lê Hoàng Nam',
-          targetUserShift: 'Ca sáng (08:00 - 12:00)',
-          swapDate: '2026-08-12',
-          reason: 'Đi khám sức khỏe định kỳ',
-          status: 'APPROVED',
-          approvedBy: 'Giám đốc HR (System Admin)',
-          notes: 'Hợp lệ',
-        },
-      ],
+      shiftSwapRequests: [],
       payrolls: [],
       isLoading: false,
       error: null,
@@ -196,20 +170,7 @@ export const useHrStore = create<HrState>()(
             const res = await axiosClient.get<any, any>('/hr/departments');
             list = Array.isArray(res) ? res : (res?.data || res?.content || res || []);
           } catch {
-            // fallback
-          }
-
-          if (list.length === 0) {
-            list = [
-              { id: '1', deptCode: 'DPT-BGD', deptName: 'Ban Giám Đốc', description: 'Cơ quan điều hành cao nhất của doanh nghiệp, định hướng chiến lược phát triển' },
-              { id: '2', deptCode: 'DPT-KD', deptName: 'Phòng Kinh Doanh & Bán Hàng', description: 'Phụ trách bán hàng kênh POS, Online và phát triển mạng lưới phân phối' },
-              { id: '3', deptCode: 'DPT-KT', deptName: 'Phòng Kế Toán & Tài Chính', description: 'Quản trị dòng tiền, công nợ, chứng từ thu chi, quyết toán và báo cáo thuế' },
-              { id: '4', deptCode: 'DPT-KHO', deptName: 'Phòng Kho Vận & Chuỗi Cung Ứng', description: 'Quản lý kho hàng, nhập xuất tồn, điều chuyển nội bộ và giao vận 3PL' },
-              { id: '5', deptCode: 'DPT-IT', deptName: 'Phòng Công Nghệ & Kỹ Thuật', description: 'Vận hành hệ thống RetailHub, hạ tầng CNTT, an ninh mạng và bảo hành kỹ thuật' },
-              { id: '6', deptCode: 'DPT-CSKH', deptName: 'Phòng Chăm Sóc Khách Hàng (CRM)', description: 'Tư vấn, tiếp nhận phản hồi, giải quyết khiếu nại và vận hành chính sách Loyalty' },
-              { id: '7', deptCode: 'DPT-HR', deptName: 'Phòng Nhân Sự & Hành Chính', description: 'Quản trị nhân lực, tuyển dụng, đào tạo, văn hóa doanh nghiệp và chế độ đãi ngộ C&B' },
-              { id: '8', deptCode: 'DPT-MKT', deptName: 'Phòng Marketing & Truyền Thông', description: 'Nghiên cứu thị trường, chiến dịch quảng cáo đa kênh, khuyến mãi và thương hiệu' },
-            ];
+            // ignore network error
           }
 
           const mapped = list.map((d: any) => ({
@@ -218,11 +179,11 @@ export const useHrStore = create<HrState>()(
             departmentName: d.deptName || d.departmentName || '',
             description: d.description || '',
             status: (d.isActive !== false && !d.isDeleted ? 'ACTIVE' : 'INACTIVE') as any,
-            totalEmployees: d.totalEmployees || (d.id === '1' ? 3 : d.id === '2' ? 12 : d.id === '4' ? 10 : 6),
-            allocatedAnnualBudgetUsd: d.allocatedAnnualBudgetUsd || (d.id === '1' ? 500000 : 150000),
-            ytdSpendUsd: d.ytdSpendUsd || (d.id === '1' ? 210000 : 65000),
-            costCenterCode: d.costCenterCode || `CC-${d.deptCode?.replace('DPT-', '') || 'GEN'}`,
-            establishedDate: d.createdAt ? d.createdAt.split('T')[0] : '2024-01-15',
+            totalEmployees: Number(d.totalEmployees || 0),
+            allocatedAnnualBudgetUsd: Number(d.allocatedAnnualBudgetUsd || d.budget || 0),
+            ytdSpendUsd: Number(d.ytdSpendUsd || d.spend || 0),
+            costCenterCode: d.costCenterCode || (d.deptCode ? `CC-${d.deptCode.replace('DPT-', '')}` : ''),
+            establishedDate: d.createdAt ? d.createdAt.split('T')[0] : (d.establishedDate || new Date().toISOString().split('T')[0]),
           }));
           set({ departments: mapped, isLoading: false });
         } catch {
@@ -238,7 +199,7 @@ export const useHrStore = create<HrState>()(
           });
           await get().fetchDepartments();
         } catch {
-          set((state) => ({ departments: [{ id: `d_${Date.now()}`, ...dept, status: 'ACTIVE' }, ...state.departments] }));
+          await get().fetchDepartments();
         }
       },
       updateDepartment: async (id, data) => {
@@ -250,7 +211,7 @@ export const useHrStore = create<HrState>()(
           });
           await get().fetchDepartments();
         } catch {
-          set((state) => ({ departments: state.departments.map((d) => (d.id === id ? { ...d, ...data } : d)) }));
+          await get().fetchDepartments();
         }
       },
       deleteDepartment: async (id) => {
@@ -258,7 +219,7 @@ export const useHrStore = create<HrState>()(
           await axiosClient.delete(`/hr/departments/${id}`);
           await get().fetchDepartments();
         } catch {
-          set((state) => ({ departments: state.departments.filter((d) => d.id !== id) }));
+          await get().fetchDepartments();
         }
       },
 
@@ -271,21 +232,17 @@ export const useHrStore = create<HrState>()(
             id: String(p.id),
             positionCode: p.positionCode || `POS-${p.id}`,
             positionTitle: p.positionTitle || p.positionName || '',
+            departmentId: p.departmentId ? String(p.departmentId) : undefined,
             departmentName: p.departmentName || 'Chưa phân bổ',
-            jobGradeTier: p.jobGradeTier || (
-              p.positionCode?.includes('CEO') || p.positionCode?.includes('COO') || p.positionCode?.includes('CFO') ? 'EXECUTIVE_L6' :
-              p.positionCode?.includes('MGR') || p.positionCode?.includes('CHIEF') ? 'SENIOR_MGR_L4' :
-              p.positionCode?.includes('LEAD') ? 'TEAM_LEAD_L3' :
-              'ASSOCIATE_L2'
-            ),
+            jobGradeTier: p.jobGradeTier || 'ASSOCIATE_L2',
             salaryRangeMin: Number(p.salaryRangeMin || (p.baseSalary ? Number(p.baseSalary) * 0.85 : 10000000)),
             salaryRangeMax: Number(p.salaryRangeMax || (p.baseSalary ? Number(p.baseSalary) * 1.25 : 25000000)),
-            activeHeadcount: Number(p.activeHeadcount || (p.positionCode?.includes('CEO') ? 1 : 2)),
-            approvedHeadcountQuota: Number(p.approvedHeadcountQuota || (p.positionCode?.includes('CEO') ? 1 : 4)),
+            activeHeadcount: Number(p.activeHeadcount || 0),
+            approvedHeadcountQuota: Number(p.approvedHeadcountQuota || 1),
             isOvertimeEligible: p.isOvertimeEligible !== undefined ? Boolean(p.isOvertimeEligible) : true,
             status: p.status || 'OPEN_HIRING',
-            lastReviewedDate: p.lastReviewedDate || '2026-08-15',
-            qualificationRequirement: p.qualificationRequirement || 'Tốt nghiệp chuyên ngành phù hợp, có kinh nghiệm chuyên môn liên quan.'
+            lastReviewedDate: p.lastReviewedDate || new Date().toISOString().split('T')[0],
+            qualificationRequirement: p.qualificationRequirement || ''
           }));
           set({ positions: mapped, isLoading: false });
         } catch {
@@ -294,18 +251,30 @@ export const useHrStore = create<HrState>()(
       },
       addPosition: async (pos) => {
         try {
-          await axiosClient.post('/hr/positions', pos);
+          await axiosClient.post('/hr/positions', {
+            positionCode: pos.positionCode,
+            positionName: pos.positionTitle,
+            positionTitle: pos.positionTitle,
+            departmentId: pos.departmentId ? Number(pos.departmentId) : undefined,
+            baseSalary: pos.salaryRangeMin || 0,
+          });
           await get().fetchPositions();
         } catch {
-          set((state) => ({ positions: [{ id: `p_${Date.now()}`, ...pos }, ...state.positions] }));
+          await get().fetchPositions();
         }
       },
       updatePosition: async (id, data) => {
         try {
-          await axiosClient.put(`/hr/positions/${id}`, data);
+          await axiosClient.put(`/hr/positions/${id}`, {
+            positionCode: data.positionCode,
+            positionName: data.positionTitle,
+            positionTitle: data.positionTitle,
+            departmentId: data.departmentId ? Number(data.departmentId) : undefined,
+            baseSalary: data.salaryRangeMin || 0,
+          });
           await get().fetchPositions();
         } catch {
-          set((state) => ({ positions: state.positions.map((p) => (p.id === id ? { ...p, ...data } : p)) }));
+          await get().fetchPositions();
         }
       },
       deletePosition: async (id) => {
@@ -313,7 +282,7 @@ export const useHrStore = create<HrState>()(
           await axiosClient.delete(`/hr/positions/${id}`);
           await get().fetchPositions();
         } catch {
-          set((state) => ({ positions: state.positions.filter((p) => p.id !== id) }));
+          await get().fetchPositions();
         }
       },
 

@@ -492,28 +492,40 @@ export function SupplierRequestsPage() {
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setSelected(row.original)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelected(row.original);
+              }}
               className="p-1.5 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded transition-colors"
               title="Xem chi tiết RFQ"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleConvertToPO(row.original)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleConvertToPO(row.original);
+              }}
               className="p-1.5 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded transition-colors"
               title="Chuyển thành Đơn mua hàng (PO)"
             >
               <ArrowRight className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleOpenEdit(row.original)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenEdit(row.original);
+              }}
               className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
               title="Chỉnh sửa"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDelete(row.original.id);
+              }}
               className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
               title="Xóa"
             >
@@ -828,13 +840,21 @@ export function SupplierRequestsPage() {
                         />
                       </td>
                       <td className="p-2">
-                        <input
-                          type="text"
-                          value={line.unit}
+                        <select
+                          value={line.unit || 'Cái'}
                           onChange={(e) => handleUpdateFormLine(line.id, 'unit', e.target.value)}
-                          className="w-full p-1.5 border rounded text-center font-medium"
-                          placeholder="Cái, Chai..."
-                        />
+                          className="w-full p-1.5 border rounded bg-white dark:bg-gray-900 text-xs text-center font-medium"
+                        >
+                          <option value="Cái">Cái</option>
+                          <option value="Thùng">Thùng</option>
+                          <option value="Hộp">Hộp</option>
+                          <option value="Chai">Chai</option>
+                          <option value="Gói">Gói</option>
+                          <option value="Lon">Lon</option>
+                          <option value="Bộ">Bộ</option>
+                          <option value="Chiếc">Chiếc</option>
+                          <option value="Kg">Kg</option>
+                        </select>
                       </td>
                       <td className="p-2">
                         <input

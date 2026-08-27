@@ -8,6 +8,8 @@ import { axiosClient } from '@/shared/lib/axiosClient';
 import { extractPageContent } from '@/shared/lib/apiHelpers';
 import { toast } from 'sonner';
 import { exportToCsv } from '@/shared/utils/exportCsv';
+import { SearchInput } from '@/shared/components/ui/SearchInput';
+import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 
 const categoryMap: Record<string, string> = {
   SALES_REVENUE: 'Doanh thu bán hàng',
@@ -46,18 +48,6 @@ interface FundAccountOption {
   balance: number;
 }
 
-const formatNumberString = (value: number | string) => {
-  if (!value && value !== 0) return '';
-  const num = typeof value === 'string' ? parseFloat(value.replace(/\D/g, '')) : value;
-  if (isNaN(num)) return '';
-  return new Intl.NumberFormat('vi-VN').format(num);
-};
-
-const parseNumberString = (str: string) => {
-  const clean = str.replace(/\D/g, '');
-  return clean ? parseInt(clean, 10) : 0;
-};
-
 export function ReceiptVouchersPage() {
   const data = useFinanceStore((s) => s.receipts);
   const addReceipt = useFinanceStore((s) => s.addReceipt);
@@ -78,8 +68,7 @@ export function ReceiptVouchersPage() {
   // Master Data Lookups
   const [customersList, setCustomersList] = useState<CustomerOption[]>([]);
   const [invoicesList, setInvoicesList] = useState<SalesInvoiceOption[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<FundAccountOption[]>([]);
-  const [cashFunds, setCashFunds] = useState<FundAccountOption[]>([]);
+  const [fundsList, setFundsList] = useState<FundAccountOption[]>([]);
 
   const fetchMasterData = async () => {
     // 1. Fetch Customers from real API
@@ -95,7 +84,7 @@ export function ReceiptVouchersPage() {
       setCustomersList(mapped);
     }).catch(() => setCustomersList([]));
 
-    // 2. Fetch Sales Invoices (chỉ lấy hóa đơn bán hàng còn công nợ > 0)
+    // 2. Fetch Sales Invoices (hóa đơn bán hàng còn công nợ)
     axiosClient.get('/sales/invoices?size=500').then((res: any) => {
       const list = extractPageContent<any>(res);
       const mapped: SalesInvoiceOption[] = list.map((inv: any) => {
@@ -110,79 +99,28 @@ export function ReceiptVouchersPage() {
           paidAmount: paid,
           remainingDebt: remaining,
         };
-      }).filter((inv: SalesInvoiceOption) => inv.remainingDebt > 0);
+      });
       setInvoicesList(mapped);
     }).catch(() => setInvoicesList([]));
 
-    // 3. Fetch Real Bank Accounts from API
+    // 3. Fetch Fund/Bank accounts from real API
     axiosClient.get('/finance/bank-accounts').then((res: any) => {
-      const list = Array.isArray(res) ? res : (res?.content || res?.data || []);
+      const list = Array.isArray(res) ? res : (res?.content || []);
       const mapped: FundAccountOption[] = list.map((f: any) => ({
         id: f.id,
-        name: `[${f.bankName || 'NGÂN HÀNG'}] ${f.accountHolder || f.accountName || 'Doanh nghiệp'} - ${f.accountNumber || ''}`,
+        name: `[${f.bankName || 'NGÂN HÀNG'}] ${f.accountHolder || f.accountName || ''} - ${f.accountNumber || ''}`,
         type: 'BANK' as const,
         accountNumber: f.accountNumber || '',
         balance: Number(f.currentBalance || f.balance || 0),
       }));
-      if (mapped.length > 0) {
-        setBankAccounts(mapped);
-      } else {
-        setBankAccounts([
-          { id: 'bank-001', name: '[Techcombank] Công ty RetailHub - 1902838392 (Kho chính)', type: 'BANK', accountNumber: '1902838392', balance: 50000000 },
-          { id: 'bank-002', name: '[Vietcombank] Công ty RetailHub - 0918273645 (TK Doanh nghiệp)', type: 'BANK', accountNumber: '0918273645', balance: 120000000 },
-          { id: 'bank-003', name: '[MB Bank] Quỹ thu hồi bán lẻ - 8888999922', type: 'BANK', accountNumber: '8888999922', balance: 35000000 },
-        ]);
-      }
-    }).catch(() => {
-      setBankAccounts([
-        { id: 'bank-001', name: '[Techcombank] Công ty RetailHub - 1902838392 (Kho chính)', type: 'BANK', accountNumber: '1902838392', balance: 50000000 },
-        { id: 'bank-002', name: '[Vietcombank] Công ty RetailHub - 0918273645 (TK Doanh nghiệp)', type: 'BANK', accountNumber: '0918273645', balance: 120000000 },
-      ]);
-    });
-
-    // 4. Fetch Real Cash Funds from API
-    axiosClient.get('/finance/fund-cash').then((res: any) => {
-      const list = Array.isArray(res) ? res : (res?.content || res?.data || []);
-      const mapped: FundAccountOption[] = list.map((f: any) => ({
-        id: f.id,
-        name: f.fundName || f.name || `Quỹ tiền mặt ${f.branchName || 'Trung tâm'}`,
-        type: 'CASH' as const,
-        balance: Number(f.currentBalance || f.balance || 0),
-      }));
-      if (mapped.length > 0) {
-        setCashFunds(mapped);
-      } else {
-        setCashFunds([
-          { id: 'cash-001', name: 'Quỹ tiền mặt Trung Tâm (HQ)', type: 'CASH', balance: 25000000 },
-          { id: 'cash-002', name: 'Quỹ tiền mặt Chi nhánh chính', type: 'CASH', balance: 15000000 },
-        ]);
-      }
-    }).catch(() => {
-      setCashFunds([
-        { id: 'cash-001', name: 'Quỹ tiền mặt Trung Tâm (HQ)', type: 'CASH', balance: 25000000 },
-        { id: 'cash-002', name: 'Quỹ tiền mặt Chi nhánh chính', type: 'CASH', balance: 15000000 },
-      ]);
-    });
+      setFundsList(mapped);
+    }).catch(() => setFundsList([]));
   };
 
   useEffect(() => {
     fetchReceipts();
     fetchMasterData();
   }, [fetchReceipts]);
-
-  const allowedFunds = useMemo(() => {
-    if (editingVoucher.paymentMethod === 'CASH') {
-      return cashFunds.length > 0 ? cashFunds : [
-        { id: 'cash-001', name: 'Quỹ tiền mặt Trung Tâm (HQ)', type: 'CASH', balance: 25000000 },
-        { id: 'cash-002', name: 'Quỹ tiền mặt Chi nhánh chính', type: 'CASH', balance: 15000000 },
-      ];
-    } else {
-      return bankAccounts.length > 0 ? bankAccounts : [
-        { id: 'bank-001', name: '[Techcombank] Công ty RetailHub - 1902838392 (Kho chính)', type: 'BANK', accountNumber: '1902838392', balance: 50000000 },
-        { id: 'bank-002', name: '[Vietcombank] Công ty RetailHub - 0918273645 (TK Doanh nghiệp)', type: 'BANK', accountNumber: '0918273645', balance: 120000000 },
-      ];
-    }
-  }, [editingVoucher.paymentMethod, bankAccounts, cashFunds]);
 
   const filtered = data.filter((item) =>
     item.payerName.toLowerCase().includes(search.toLowerCase()) ||
@@ -193,7 +131,7 @@ export function ReceiptVouchersPage() {
   const handleOpenCreate = () => {
     setModalMode('create');
     setIsAutoCode(true);
-    const defaultFund = bankAccounts[0]?.name || '[Techcombank] Công ty RetailHub - 1902838392 (Kho chính)';
+    const defaultFund = fundsList[0]?.name || '';
     const firstInvoice = invoicesList[0];
 
     setEditingVoucher({
@@ -207,7 +145,6 @@ export function ReceiptVouchersPage() {
       referenceDoc: firstInvoice?.code || '',
       cashier: 'Super Admin (Hưng)',
       branchId: 'BR-001',
-      status: 'PENDING_APPROVAL',
       notes: 'Thu tiền bán hàng theo hóa đơn'
     });
     setIsModalOpen(true);
@@ -218,7 +155,7 @@ export function ReceiptVouchersPage() {
     setIsAutoCode(false);
     setEditingVoucher({
       ...voucher,
-      fundAccountName: (voucher as any).fundAccountName || allowedFunds[0]?.name || ''
+      fundAccountName: (voucher as any).fundAccountName || fundsList[0]?.name || ''
     });
     setIsModalOpen(true);
   };
@@ -242,25 +179,11 @@ export function ReceiptVouchersPage() {
   // 2. CUSTOMER SELECTION AUTO-FILL
   const handleSelectCustomer = (custName: string) => {
     const matched = customersList.find(c => c.name === custName);
-    const custInvoices = invoicesList.filter(i => i.customerName === custName);
-    const firstInv = custInvoices[0];
-
-    if (firstInv) {
-      setEditingVoucher(prev => ({
-        ...prev,
-        payerName: custName,
-        referenceDoc: firstInv.code,
-        amount: firstInv.remainingDebt,
-      }));
-      toast.info(`Đã tìm thấy hóa đơn ${firstInv.code} còn nợ của ${custName}`);
-    } else {
-      setEditingVoucher(prev => ({
-        ...prev,
-        payerName: custName,
-        referenceDoc: '',
-        amount: matched?.debt || prev.amount || 0,
-      }));
-    }
+    setEditingVoucher(prev => ({
+      ...prev,
+      payerName: custName,
+      amount: matched?.debt || prev.amount || 0,
+    }));
   };
 
   const handleSaveVoucher = (e: React.FormEvent) => {
@@ -275,24 +198,15 @@ export function ReceiptVouchersPage() {
       return;
     }
 
-    if (editingVoucher.category === 'DEBT_COLLECTION') {
-      const matchedCust = customersList.find((c) => c.name === editingVoucher.payerName);
-      if (matchedCust && matchedCust.debt <= 0 && (!editingVoucher.referenceDoc || editingVoucher.amount === 0)) {
-        toast.error(`Khách hàng ${editingVoucher.payerName} hiện có công nợ = 0 ₫. Không thể lập phiếu thu hồi công nợ!`);
-        return;
-      }
-    }
-
-    const defaultFundName = allowedFunds[0]?.name || '[Techcombank] Công ty RetailHub - 1902838392 (Kho chính)';
     const payload = {
       voucherNumber: editingVoucher.voucherNumber || `REC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
       payerName: editingVoucher.payerName || 'Khách hàng',
       category: editingVoucher.category || 'SALES_REVENUE',
       amount: recAmount,
       paymentMethod: editingVoucher.paymentMethod || 'BANK_TRANSFER',
-      fundAccountName: editingVoucher.fundAccountName || defaultFundName,
+      fundAccountName: editingVoucher.fundAccountName || fundsList[0]?.name || 'Techcombank - 1902838392',
       receivedDate: editingVoucher.receivedDate || new Date().toISOString().substring(0, 10),
-      referenceDoc: editingVoucher.referenceDoc || '',
+      referenceDoc: editingVoucher.referenceDoc || 'INV-2026-1024',
       cashier: editingVoucher.cashier || 'Super Admin (Hưng)',
       branchId: editingVoucher.branchId || 'BR-001',
       notes: editingVoucher.notes || '',
@@ -378,32 +292,6 @@ export function ReceiptVouchersPage() {
         cell: (info) => <span className="text-gray-500 text-xs font-mono">{info.getValue() as string}</span>,
       },
       {
-        accessorKey: 'status',
-        header: 'Trạng thái',
-        cell: (info) => {
-          const status = (info.getValue() as string) || 'PENDING_APPROVAL';
-          if (status === 'COMPLETED' || status === 'APPROVED') {
-            return (
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200">
-                🟢 Đã thu tiền
-              </span>
-            );
-          }
-          if (status === 'REJECTED') {
-            return (
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 border border-red-200">
-                🔴 Từ chối
-              </span>
-            );
-          }
-          return (
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 animate-pulse">
-              🟡 Chờ duyệt
-            </span>
-          );
-        },
-      },
-      {
         id: 'actions',
         header: 'Thao tác',
         cell: ({ row }) => (
@@ -441,13 +329,13 @@ export function ReceiptVouchersPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu thu & dòng tiền Vào </h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu thu & dòng tiền vào (Receipt Vouchers)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Ghi nhận dòng tiền thu bán hàng, thu hồi công nợ khách hàng và hạch toán tự động tăng số dư Quỹ tiền mặt / Ngân hàng.
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button
+            <SecondaryButton
               onClick={() => {
                 exportToCsv('danh_sach_phieu_thu', filtered, [
                   { header: 'Số phiếu thu', accessor: r => r.voucherNumber },
@@ -459,27 +347,24 @@ export function ReceiptVouchersPage() {
                   { header: 'Ngày thu', accessor: r => r.receivedDate },
                 ]);
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+              leftIcon={<Download className="w-4 h-4" />}
             >
-              <Download className="w-4 h-4" /> Xuất Excel
-            </button>
-            <button
+              Xuất Excel
+            </SecondaryButton>
+            <CreateButton
               onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
             >
-              <Plus className="w-4 h-4" /> Lập Phiếu Thu Mới
-            </button>
+              Lập phiếu thu mới
+            </CreateButton>
           </div>
         </div>
 
         <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-3">
-          <Search className="w-5 h-5 text-gray-400" />
-          <input
-            type="text"
+          <SearchInput
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onValueChange={setSearch}
             placeholder="Tìm kiếm mã phiếu thu, người nộp tiền, hóa đơn liên quan..."
-            className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-white"
+            containerClassName="w-full sm:max-w-md"
           />
         </div>
 
@@ -490,7 +375,7 @@ export function ReceiptVouchersPage() {
       <Modal
         isOpen={!!selectedVoucher}
         onClose={() => setSelectedVoucher(null)}
-        title={selectedVoucher ? ` Chi tiết Phiếu Thu: ${selectedVoucher.voucherNumber}` : 'Chi tiết Phiếu Thu'}
+        title={selectedVoucher ? `📑 Chi tiết Phiếu Thu: ${selectedVoucher.voucherNumber}` : 'Chi tiết Phiếu Thu'}
         width="max-w-2xl"
       >
         {selectedVoucher && (
@@ -540,8 +425,8 @@ export function ReceiptVouchersPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Lập Phiếu Thu' : 'Chỉnh sửa Phiếu Thu'}
-        size="erp"
+        title={modalMode === 'create' ? '📗 Lập Phiếu Thu Doanh Thu Mới' : '⚙️ Chỉnh sửa Phiếu Thu'}
+        width="max-w-3xl"
       >
         <form onSubmit={handleSaveVoucher} className="space-y-4 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -599,14 +484,12 @@ export function ReceiptVouchersPage() {
                   onChange={(e) => handleSelectInvoice(e.target.value)}
                   className="w-full p-2 border border-emerald-300 dark:border-emerald-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono font-bold"
                 >
-                  <option value="">-- Chọn Hóa đơn xuất bán còn nợ --</option>
-                  {invoicesList
-                    .filter((inv) => !editingVoucher.payerName || inv.customerName === editingVoucher.payerName || inv.code === editingVoucher.referenceDoc)
-                    .map((inv) => (
-                      <option key={inv.code} value={inv.code}>
-                        {inv.code} - {inv.customerName} (Nợ còn lại: {inv.remainingDebt.toLocaleString('vi-VN')} ₫)
-                      </option>
-                    ))}
+                  <option value="">-- Tự chọn từ danh sách Hóa đơn xuất bán --</option>
+                  {invoicesList.map((inv) => (
+                    <option key={inv.code} value={inv.code}>
+                      {inv.code} - {inv.customerName} (Nợ còn lại: {inv.remainingDebt.toLocaleString('vi-VN')} ₫)
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -646,15 +529,7 @@ export function ReceiptVouchersPage() {
                 <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Hình thức nhận tiền *</label>
                 <select
                   value={editingVoucher.paymentMethod || 'BANK_TRANSFER'}
-                  onChange={(e) => {
-                    const nextMethod = e.target.value as any;
-                    const nextFunds = nextMethod === 'CASH' ? cashFunds : bankAccounts;
-                    setEditingVoucher({
-                      ...editingVoucher,
-                      paymentMethod: nextMethod,
-                      fundAccountName: nextFunds[0]?.name || ''
-                    });
-                  }}
+                  onChange={(e) => setEditingVoucher({ ...editingVoucher, paymentMethod: e.target.value as any })}
                   className="w-full p-2 border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
                 >
                   <option value="BANK_TRANSFER">Chuyển khoản Ngân hàng (TK Doanh nghiệp)</option>
@@ -666,13 +541,13 @@ export function ReceiptVouchersPage() {
               <div>
                 <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Tài khoản Ngân hàng / Quỹ nhận tiền *</label>
                 <select
-                  value={editingVoucher.fundAccountName || (allowedFunds[0]?.name || '')}
+                  value={editingVoucher.fundAccountName || (fundsList[0]?.name || '')}
                   onChange={(e) => setEditingVoucher({ ...editingVoucher, fundAccountName: e.target.value })}
                   className="w-full p-2 border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-semibold"
                   required
                 >
-                  {allowedFunds.length > 0 ? (
-                    allowedFunds.map((fund) => (
+                  {fundsList.length > 0 ? (
+                    fundsList.map((fund) => (
                       <option key={fund.id} value={fund.name}>
                         {fund.name} (Dư: {fund.balance.toLocaleString('vi-VN')} ₫)
                       </option>
@@ -685,16 +560,15 @@ export function ReceiptVouchersPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">SỐ TIỀN THỰC THU (₫) *</label>
               <input
-                type="text"
-                value={formatNumberString(editingVoucher.amount ?? 0)}
-                onChange={(e) => setEditingVoucher({ ...editingVoucher, amount: parseNumberString(e.target.value) })}
-                className="w-full px-3 py-2 border border-emerald-300 dark:border-emerald-700 rounded-lg bg-white dark:bg-gray-900 text-emerald-600 font-mono font-bold text-sm text-right focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                placeholder="0"
-                disabled={editingVoucher.status === 'COMPLETED'}
+                type="number"
+                min={1}
+                value={editingVoucher.amount ?? 0}
+                onChange={(e) => setEditingVoucher({ ...editingVoucher, amount: parseFloat(e.target.value) || 0 })}
+                className="w-full p-2.5 border border-emerald-300 dark:border-emerald-700 rounded bg-white dark:bg-gray-900 text-emerald-600 font-mono font-black text-base text-right"
                 required
               />
             </div>
@@ -704,30 +578,9 @@ export function ReceiptVouchersPage() {
                 type="date"
                 value={editingVoucher.receivedDate || ''}
                 onChange={(e) => setEditingVoucher({ ...editingVoucher, receivedDate: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-medium text-sm"
-                disabled={editingVoucher.status === 'COMPLETED'}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-semibold"
                 required
               />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Trạng thái phê duyệt</label>
-              {modalMode === 'create' ? (
-                <div className="w-full px-3 py-2 border border-amber-300 dark:border-amber-700 rounded-lg bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 text-xs font-semibold flex items-center gap-1.5 h-[38px]">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                  Chờ duyệt (Mặc định)
-                </div>
-              ) : (
-                <select
-                  value={editingVoucher.status || 'PENDING_APPROVAL'}
-                  onChange={(e) => setEditingVoucher({ ...editingVoucher, status: e.target.value as any })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs font-semibold h-[38px]"
-                  disabled={editingVoucher.status === 'COMPLETED'}
-                >
-                  <option value="PENDING_APPROVAL">🟡 Chờ duyệt (Pending)</option>
-                  <option value="COMPLETED">🟢 Duyệt & Đã thu tiền (Completed)</option>
-                  <option value="REJECTED">🔴 Từ chối (Rejected)</option>
-                </select>
-              )}
             </div>
           </div>
 
@@ -738,27 +591,24 @@ export function ReceiptVouchersPage() {
               value={editingVoucher.notes || ''}
               onChange={(e) => setEditingVoucher({ ...editingVoucher, notes: e.target.value })}
               placeholder="Nhập nội dung diễn giải thu tiền..."
-              disabled={editingVoucher.status === 'COMPLETED'}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-800">
+          <div className="flex justify-end gap-2 pt-3 border-t border-gray-200 dark:border-gray-800">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors text-sm"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold"
             >
-              {editingVoucher.status === 'COMPLETED' ? 'Đóng' : 'Hủy bỏ'}
+              Hủy
             </button>
-            {editingVoucher.status !== 'COMPLETED' && (
-              <button
-                type="submit"
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm transition-colors text-sm flex items-center gap-1.5"
-              >
-                <CheckCircle2 className="w-4 h-4" /> {modalMode === 'create' ? 'Lập phiếu thu' : 'Lưu thay đổi'}
-              </button>
-            )}
+            <button
+              type="submit"
+              className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold shadow-sm transition"
+            >
+              <CheckCircle2 className="w-4 h-4" /> {modalMode === 'create' ? 'Lập Phiếu Thu & Ghi Sổ Quỹ' : 'Lưu Cập Nhật'}
+            </button>
           </div>
         </form>
       </Modal>

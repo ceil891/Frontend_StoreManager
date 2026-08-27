@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Briefcase, DollarSign, Award, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -6,6 +6,8 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { useHrStore, type JobPositionRecord } from '../store/hrStore';
 import { toast } from 'sonner';
 import { exportToCsv } from '@/shared/utils/exportCsv';
+import { SearchInput } from '@/shared/components/ui/SearchInput';
+import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 
 const tierStyles = {
   EXECUTIVE_L6: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200',
@@ -17,7 +19,12 @@ const tierStyles = {
 };
 
 export function PositionsPage() {
-  const { positions: data, departments, addPosition, updatePosition, deletePosition } = useHrStore();
+  const { positions: data, departments, fetchPositions, fetchDepartments, addPosition, updatePosition, deletePosition } = useHrStore();
+
+  useEffect(() => {
+    fetchPositions();
+    fetchDepartments();
+  }, [fetchPositions, fetchDepartments]);
   
   const [search, setSearch] = useState('');
   const [selectedPos, setSelectedPos] = useState<JobPositionRecord | null>(null);
@@ -25,6 +32,7 @@ export function PositionsPage() {
   // Filter states
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [gradeFilter, setGradeFilter] = useState<string>('all');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
@@ -51,18 +59,25 @@ export function PositionsPage() {
     // 3. Grade filter
     const matchesGrade = gradeFilter === 'all' || item.jobGradeTier === gradeFilter;
 
-    return matchesSearch && matchesStatus && matchesGrade;
+    // 4. Department filter
+    const matchesDept = departmentFilter === 'all' || 
+      item.departmentId === departmentFilter || 
+      item.departmentName === departmentFilter;
+
+    return matchesSearch && matchesStatus && matchesGrade && matchesDept;
   });
 
   const handleOpenCreate = () => {
     setModalMode('create');
+    const firstDept = departments[0];
     setEditingPos({
       positionCode: `POS-${Math.floor(1000 + Math.random() * 9000)}`,
       positionTitle: '',
-      departmentName: departments.length > 0 ? departments[0].departmentName : '',
+      departmentId: firstDept?.id,
+      departmentName: firstDept ? firstDept.departmentName : '',
       jobGradeTier: 'ASSOCIATE_L2',
-      salaryRangeMin: 0,
-      salaryRangeMax: 0,
+      salaryRangeMin: 10000000,
+      salaryRangeMax: 20000000,
       activeHeadcount: 0,
       approvedHeadcountQuota: 1,
       isOvertimeEligible: true,
@@ -75,35 +90,49 @@ export function PositionsPage() {
 
   const handleOpenEdit = (pos: JobPositionRecord) => {
     setModalMode('edit');
-    setEditingPos(pos);
+    const matchedDept = departments.find(d => d.id === pos.departmentId || d.departmentName === pos.departmentName);
+    setEditingPos({
+      ...pos,
+      departmentId: matchedDept?.id || pos.departmentId,
+      departmentName: matchedDept?.departmentName || pos.departmentName
+    });
     setIsModalOpen(true);
   };
 
-  const handleSavePos = (e: React.FormEvent) => {
+  const handleSavePos = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPos.positionCode || !editingPos.positionTitle) return;
+
+    const matchedDept = departments.find(d => d.id === editingPos.departmentId || d.departmentName === editingPos.departmentName);
 
     const payload: Omit<JobPositionRecord, 'id'> = {
       positionCode: editingPos.positionCode,
       positionTitle: editingPos.positionTitle,
-      departmentName: editingPos.departmentName || '',
+      departmentId: matchedDept?.id || editingPos.departmentId,
+      departmentName: matchedDept?.departmentName || editingPos.departmentName || '',
       jobGradeTier: editingPos.jobGradeTier as any || 'ASSOCIATE_L2',
       salaryRangeMin: Number(editingPos.salaryRangeMin) || 0,
       salaryRangeMax: Number(editingPos.salaryRangeMax) || 0,
       activeHeadcount: Number(editingPos.activeHeadcount) || 0,
-      approvedHeadcountQuota: Number(editingPos.approvedHeadcountQuota) || 0,
+      approvedHeadcountQuota: Number(editingPos.approvedHeadcountQuota) || 1,
       isOvertimeEligible: Boolean(editingPos.isOvertimeEligible),
       status: editingPos.status as any || 'OPEN_HIRING',
       lastReviewedDate: editingPos.lastReviewedDate || '',
       qualificationRequirement: editingPos.qualificationRequirement || ''
     };
 
-    if (modalMode === 'create') {
-      addPosition(payload);
-    } else if (editingPos.id) {
-      updatePosition(editingPos.id, payload);
+    try {
+      if (modalMode === 'create') {
+        await addPosition(payload);
+        toast.success('Thêm chức vụ thành công');
+      } else if (editingPos.id) {
+        await updatePosition(editingPos.id, payload);
+        toast.success('Cập nhật chức vụ thành công');
+      }
+      setIsModalOpen(false);
+    } catch {
+      toast.error('Lỗi khi lưu chức vụ');
     }
-    setIsModalOpen(false);
   };
 
   const handleDeleteConfirm = () => {
@@ -262,7 +291,7 @@ export function PositionsPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý vị trí việc làm, đánh giá bậc lương, xem hạn mức nhân sự và kiểm soát quy tắc làm thêm giờ.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
+            <SecondaryButton
               onClick={() => {
                 exportToCsv('danh_sach_vi_tri_cong_viec', filtered, [
                   { header: 'Mã vị trí', accessor: r => r.positionCode },
@@ -277,34 +306,42 @@ export function PositionsPage() {
                 ]);
                 toast.success('Đã xuất danh sách vị trí công việc dạng CSV!');
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+              leftIcon={<Download className="w-4 h-4" />}
             >
-              <Download className="w-4 h-4" /> Xuất bảng
-            </button>
-            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
-              <Plus className="w-4 h-4" /> Tạo Vị trí
-            </button>
+              Xuất bảng
+            </SecondaryButton>
+            <CreateButton onClick={handleOpenCreate}>
+              Tạo vị trí mới
+            </CreateButton>
           </div>
         </div>
 
         <div className="flex flex-col gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
           <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-gray-400" />
-              </div>
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Tìm kiếm vị trí theo mã, chức danh, bộ phận hoặc bậc lương..."
-                className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-all"
-              />
-            </div>
+            <SearchInput
+              value={search}
+              onValueChange={setSearch}
+              placeholder="Tìm kiếm vị trí theo mã, chức danh, bộ phận hoặc bậc lương..."
+              containerClassName="flex-1 sm:max-w-md"
+            />
           </div>
 
           {/* Quick Filters Row */}
           <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700/60">
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-gray-500 font-medium">Lọc Phòng ban:</span>
+              <select
+                value={departmentFilter}
+                onChange={(e) => setDepartmentFilter(e.target.value)}
+                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+              >
+                <option value="all">Tất cả phòng ban</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.id}>{d.departmentName}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="flex items-center gap-1.5 text-xs">
               <span className="text-gray-500 font-medium">Lọc Trạng thái:</span>
               <select
@@ -337,9 +374,9 @@ export function PositionsPage() {
               </select>
             </div>
 
-            {(statusFilter !== 'all' || gradeFilter !== 'all' || search) && (
+            {(statusFilter !== 'all' || gradeFilter !== 'all' || departmentFilter !== 'all' || search) && (
               <button
-                onClick={() => { setStatusFilter('all'); setGradeFilter('all'); setSearch(''); }}
+                onClick={() => { setStatusFilter('all'); setGradeFilter('all'); setDepartmentFilter('all'); setSearch(''); }}
                 className="text-xs text-red-500 hover:text-red-600 font-semibold flex items-center gap-1 ml-auto transition-colors"
               >
                 <X className="w-3.5 h-3.5" /> Xóa bộ lọc
@@ -482,13 +519,24 @@ export function PositionsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Thuộc Phòng ban</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Thuộc Phòng ban *</label>
               <select
-                value={editingPos.departmentName || ''}
-                onChange={(e) => setEditingPos({ ...editingPos, departmentName: e.target.value })}
+                required
+                value={editingPos.departmentId || ''}
+                onChange={(e) => {
+                  const deptId = e.target.value;
+                  const dept = departments.find(d => String(d.id) === String(deptId));
+                  setEditingPos({
+                    ...editingPos,
+                    departmentId: deptId,
+                    departmentName: dept?.departmentName || '',
+                  });
+                }}
                 className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
               >
-                {departments.map(d => <option key={d.id} value={d.departmentName}>{d.departmentName}</option>)}
+                {departments.map(d => (
+                  <option key={d.id} value={d.id}>{d.departmentName} ({d.departmentCode})</option>
+                ))}
               </select>
             </div>
           </div>

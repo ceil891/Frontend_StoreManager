@@ -25,7 +25,7 @@ function normalizeCustomer(partial: Partial<CustomerProfile> & Pick<CustomerProf
     phone: partial.phone ?? '',
     email: partial.email ?? '',
     address: partial.address ?? '',
-    avatarUrl: partial.avatarUrl?.trim() || buildUserAvatarUrl(seed),
+    avatarUrl: partial.avatarUrl?.trim() || '',
     loyaltyTier: partial.loyaltyTier ?? 'BRONZE',
     loyaltyPoints: partial.loyaltyPoints ?? 0,
     lifetimeSpent: partial.lifetimeSpent ?? 0,

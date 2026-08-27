@@ -1,63 +1,67 @@
 import axios, { AxiosError } from 'axios';
 import type { InternalAxiosRequestConfig } from 'axios';
 
-// Create Axios Instance
-export const axiosClient = axios.create({
+// ---------------------------------------------------------------------------
+// 1. UNINTERCEPTED AXIOS INSTANCE (Dành riêng cho Auth / Refresh Token)
+// ---------------------------------------------------------------------------
+export const uninterceptedAuthClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1',
-  timeout: 10000,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// For Thread-safe refresh token
+// ---------------------------------------------------------------------------
+// 2. MAIN AXIOS INSTANCE (Dành cho toàn bộ API nghiệp vụ hệ thống)
+// ---------------------------------------------------------------------------
+export const axiosClient = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1',
+  timeout: 60000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// ---------------------------------------------------------------------------
+// 3. THREAD-SAFE CONCURRENT QUEUE & REFRESH LOCK
+// ---------------------------------------------------------------------------
 let isRefreshing = false;
 let failedQueue: Array<{
-  resolve: (value?: unknown) => void;
-  reject: (reason?: any) => void;
+  resolve: (token: string) => void;
+  reject: (error: any) => void;
 }> = [];
 
-const processQueue = (error: AxiosError | null, token: string | null = null) => {
+const processQueue = (error: any = null, token: string | null = null) => {
   failedQueue.forEach((prom) => {
     if (error) {
       prom.reject(error);
-    } else {
+    } else if (token) {
       prom.resolve(token);
     }
   });
   failedQueue = [];
 };
 
-// Fast In-Memory API Cache
+// Fast In-Memory API Cache cho các query GET lặp lại
 const apiCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL_MS = 10000; // 10 seconds TTL for fast repeated GET calls
+const CACHE_TTL_MS = 10000; // 10 seconds TTL
 
-// Request Interceptor
+// ---------------------------------------------------------------------------
+// 4. REQUEST INTERCEPTOR (Tự động gắn Bearer Token & Quản lý Cache)
+// ---------------------------------------------------------------------------
 axiosClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig & { _cacheKey?: string }) => {
-    // In production, we'd get this from a secure storage or Zustand store
     const token = localStorage.getItem('access_token');
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    try {
-      const authStr = localStorage.getItem('auth-storage');
-      if (authStr && config.headers) {
-        const authData = JSON.parse(authStr);
-        const branchId = authData?.state?.user?.branchId;
-        if (branchId && !config.headers['X-Branch-Id']) {
-          config.headers['X-Branch-Id'] = String(branchId);
-        }
-      }
-    } catch (e) {}
-
-    // Invalidate cache on mutations (POST, PUT, DELETE)
+    // Invalidate cache on mutations (POST, PUT, DELETE, PATCH)
     const method = (config.method || 'get').toLowerCase();
     if (method !== 'get') {
       apiCache.clear();
     } else {
-      // Check cache for GET calls
       const cacheKey = `${config.url}?${JSON.stringify(config.params || {})}`;
       const cached = apiCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
@@ -70,7 +74,9 @@ axiosClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response Interceptor
+// ---------------------------------------------------------------------------
+// 5. RESPONSE INTERCEPTOR (Xử lý Data Wrapper, 401 Queue & Error Mapping)
+// ---------------------------------------------------------------------------
 axiosClient.interceptors.response.use(
   (response) => {
     const res = response.data;
@@ -78,7 +84,7 @@ axiosClient.interceptors.response.use(
     const cacheKey = config._cacheKey || `${config.url}?${JSON.stringify(config.params || {})}`;
 
     let resultData = res;
-    // Spring Boot wrapped response: { success: boolean, data: any } or { code: number, message: string, data: any }
+    // Chuẩn hóa phản hồi bọc từ Spring Boot: { success: boolean, data: any } hoặc { code: number, data: any }
     if (res && typeof res === 'object') {
       if ('success' in res) {
         if (res.success) {
@@ -86,7 +92,7 @@ axiosClient.interceptors.response.use(
         } else {
           const apiError = {
             code: res.errorCode || 'API_ERROR',
-            message: res.message || 'API request failed',
+            message: res.message || 'Yêu cầu API không thành công',
           };
           return Promise.reject(apiError);
         }
@@ -96,7 +102,7 @@ axiosClient.interceptors.response.use(
         } else if (res.code && res.code !== 200 && res.code !== 201) {
           const apiError = {
             code: res.code || 'API_ERROR',
-            message: res.message || 'API request failed',
+            message: res.message || 'Yêu cầu API không thành công',
           };
           return Promise.reject(apiError);
         }
@@ -111,16 +117,26 @@ axiosClient.interceptors.response.use(
   },
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const requestUrl = originalRequest?.url || '';
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Bỏ qua các endpoint xác thực (không thực hiện refresh token khi chính API auth bị 401)
+    const isAuthEndpoint =
+      requestUrl.includes('/auth/login') ||
+      requestUrl.includes('/auth/register') ||
+      requestUrl.includes('/auth/refresh') ||
+      requestUrl.includes('/auth/forgot-password') ||
+      requestUrl.includes('/auth/reset-password');
+
+    // Xử lý khi Token hết hạn (HTTP 401 Unauthorized)
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       if (isRefreshing) {
-        // If already refreshing, put this request in the queue
-        return new Promise(function (resolve, reject) {
+        // [XỬ LÝ QUEUE REQUEST]: Đẩy các request đồng thời vào hàng chờ nhận Token mới
+        return new Promise<string>((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         })
-          .then((token) => {
+          .then((newToken) => {
             if (originalRequest.headers) {
-              originalRequest.headers.Authorization = `Bearer ${token}`;
+              originalRequest.headers.Authorization = `Bearer ${newToken}`;
             }
             return axiosClient(originalRequest);
           })
@@ -138,60 +154,49 @@ axiosClient.interceptors.response.use(
           throw new Error('No refresh token available');
         }
 
-        // Make an independent request to refresh token to avoid loops
-        const response = await axios.post(`${axiosClient.defaults.baseURL}/auth/refresh`, {
+        // [DÙNG UNINTERCEPTED AXIOS INSTANCE]: Gọi trực tiếp API /auth/refresh thuần túy
+        const response = await uninterceptedAuthClient.post('/auth/refresh', {
           refreshToken,
         });
 
         const wrappedData = response.data;
-        if (!wrappedData || !wrappedData.success || !wrappedData.data) {
-          throw new Error('Failed to refresh token');
+        const authData = wrappedData?.data || wrappedData;
+        const newAccessToken = authData?.accessToken;
+        const newRefreshToken = authData?.refreshToken;
+
+        if (!newAccessToken) {
+          throw new Error('Máy chủ không trả về access token mới');
         }
 
-        const newAccessToken = wrappedData.data.accessToken;
-        const newRefreshToken = wrappedData.data.refreshToken;
-
+        // Cập nhật Storage
         localStorage.setItem('access_token', newAccessToken);
         if (newRefreshToken) {
           localStorage.setItem('refresh_token', newRefreshToken);
         }
 
         axiosClient.defaults.headers.common['Authorization'] = `Bearer ${newAccessToken}`;
-        
+
+        // Giải phóng toàn bộ hàng chờ với Token mới
         processQueue(null, newAccessToken);
 
+        // Thực thi lại request ban đầu với Token mới
         if (originalRequest.headers) {
           originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         }
         return axiosClient(originalRequest);
       } catch (refreshError) {
-        processQueue(refreshError as AxiosError, null);
-        // Dispatch logout and clean up auth state
+        // Nếu refresh token thất bại, từ chối toàn bộ hàng chờ và yêu cầu đăng nhập lại
+        processQueue(refreshError, null);
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        localStorage.removeItem('retailhub-auth');
-        try {
-          const { useAuthStore } = await import('@/features/auth/store/authStore');
-          useAuthStore.setState({
-            user: null,
-            accessToken: null,
-            refreshToken: null,
-            isAuthenticated: false,
-            isLoading: false,
-            error: null,
-          });
-        } catch (e) {
-          console.error('[AxiosClient] Failed to reset auth store on token expiration:', e);
-        }
-        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-          window.location.href = '/login';
-        }
+        window.dispatchEvent(new CustomEvent('auth:logout'));
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
       }
     }
 
+    // Trích xuất thông báo lỗi chi tiết từ Backend
     const errorBody = error.response?.data as any;
     let detailMsg = errorBody?.message || errorBody?.error || errorBody?.details;
     if (errorBody?.errors && typeof errorBody.errors === 'object') {

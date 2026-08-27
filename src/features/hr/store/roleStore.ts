@@ -368,10 +368,10 @@ export const useRoleStore = create<RoleStore>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const data = await roleService.fetchRoles();
-      set({ roles: data, isLoading: false });
+      set({ roles: Array.isArray(data) ? data : [], isLoading: false });
     } catch (err: any) {
-      console.error('Failed to fetch roles:', err);
-      set({ isLoading: false, error: err.message || 'Lỗi khi tải danh sách vai trò' });
+      console.error('Failed to fetch roles from database:', err);
+      set({ roles: [], isLoading: false, error: err?.message || 'Lỗi khi tải danh sách vai trò từ Database' });
     }
   },
 

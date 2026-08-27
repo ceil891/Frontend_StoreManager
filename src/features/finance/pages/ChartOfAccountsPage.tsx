@@ -5,6 +5,8 @@ import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
+import { SearchInput } from '@/shared/components/ui/SearchInput';
+import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 
 interface ChartOfAccountItem {
   id: string;
@@ -223,27 +225,22 @@ export default function ChartOfAccountsPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Danh mục các tài khoản kế toán dùng để ghi nhận các nghiệp vụ kinh tế tài chính phát sinh.</p>
           </div>
           <div className="flex gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium">
-              <Download className="w-4 h-4" /> Xuất Excel
-            </button>
-            <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all duration-200">
-              <Plus className="w-4 h-4" /> Thêm Tài Khoản
-            </button>
+            <SecondaryButton leftIcon={<Download className="w-4 h-4" />}>
+              Xuất Excel
+            </SecondaryButton>
+            <CreateButton onClick={openCreate}>
+              Thêm tài khoản
+            </CreateButton>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="flex-1 relative min-w-[280px] max-w-md">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-gray-400" />
-            </div>
-            <input 
-              value={search} 
-              onChange={e => setSearch(e.target.value)} 
-              placeholder="Tìm theo số hiệu hoặc tên tài khoản..." 
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
+          <SearchInput 
+            value={search} 
+            onValueChange={setSearch} 
+            placeholder="Tìm theo số hiệu hoặc tên tài khoản..." 
+            containerClassName="flex-1 min-w-[280px] max-w-md"
+          />
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-500 dark:text-gray-400">Lọc theo tính chất:</span>
             <select

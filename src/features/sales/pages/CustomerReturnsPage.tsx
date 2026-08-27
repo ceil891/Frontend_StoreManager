@@ -188,16 +188,7 @@ export function CustomerReturnsPage() {
   };
 
   const handleSelectOriginalOrder = (orderCode: string) => {
-    const selectedSO = saleOrders.find((so) => so.code === orderCode || `SO-${so.id}` === orderCode) ||
-      (orderCode === 'ONLINE-805391' ? {
-        id: '805391',
-        code: 'ONLINE-805391',
-        customerId: '1',
-        customerName: 'Nguyễn Lưu Hoàng (Khách Online)',
-        customerPhone: '0901234567',
-        totalAmount: 100000,
-        origin: 'ONLINE',
-      } as any : null);
+    const selectedSO = saleOrders.find((so) => so.code === orderCode || `SO-${so.id}` === orderCode || (so as any).orderCode === orderCode);
 
     if (!selectedSO) {
       setEditing((prev) => ({ ...prev, orderCode, returnLines: [] }));
@@ -753,7 +744,6 @@ export function CustomerReturnsPage() {
                   required
                 >
                   <option value="">-- Chọn đơn hàng gốc --</option>
-                  <option value="ONLINE-805391">ONLINE-805391 - Nguyễn Lưu Hoàng (SĐT: 0901234567) (100.000 ₫)</option>
                   {saleOrders.map((so) => {
                     const phoneStr = so.customerPhone || (so as any).recipientPhone ? ` | SĐT: ${so.customerPhone || (so as any).recipientPhone}` : '';
                     const nameStr = so.customerName || (so as any).recipientName || 'Khách mua';
@@ -814,15 +804,7 @@ export function CustomerReturnsPage() {
 
             {/* Banner hiển thị Tên Khách hàng & SĐT từ Đơn Online / POS */}
             {(() => {
-              const activeSO = saleOrders.find((so) => so.code === editing.orderCode || `SO-${so.id}` === editing.orderCode) ||
-                (editing.orderCode === 'ONLINE-805391' ? {
-                  id: '805391',
-                  code: 'ONLINE-805391',
-                  customerName: 'Nguyễn Lưu Hoàng',
-                  customerPhone: '0901234567',
-                  totalAmount: 100000,
-                  origin: 'ONLINE',
-                } as any : null);
+              const activeSO = saleOrders.find((so) => so.code === editing.orderCode || `SO-${so.id}` === editing.orderCode || (so as any).orderCode === editing.orderCode);
 
               if (!activeSO) return null;
               const name = activeSO.customerName || (activeSO as any).recipientName || 'Khách hàng';

@@ -28,7 +28,6 @@ const RenderBenefitIcon = ({ icon, className }: { icon: any; className?: string 
 };
 
 interface LoyaltyTier {
-  id?: string;
   key: TierKey;
   name: string;
   nameEn: string;
@@ -48,102 +47,7 @@ interface LoyaltyTier {
 }
 
 // ─── Mock initial data ────────────────────────────────────────────────────────
-const INITIAL_TIERS: LoyaltyTier[] = [
-  {
-    key: 'BRONZE',
-    name: 'Đồng',
-    nameEn: 'Bronze',
-    minSpend: 0,
-    maxSpend: 1999999,
-    pointRate: 1,
-    discountPct: 0,
-    customerCount: 128,
-    gradient: 'from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-950/20',
-    border: 'border-orange-200 dark:border-orange-800/50',
-    badge: 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300',
-    iconColor: 'text-orange-500',
-    textAccent: 'text-orange-600 dark:text-orange-400',
-    bgCard: 'bg-orange-500',
-    progressColor: 'bg-orange-400',
-    benefits: [
-      { icon: 'zap', text: 'Tích 1 điểm / 100.000đ chi tiêu' },
-      { icon: 'gift', text: 'Quà sinh nhật cơ bản' },
-      { icon: 'badge', text: 'Xem lịch sử đơn hàng' },
-    ],
-  },
-  {
-    key: 'SILVER',
-    name: 'Bạc',
-    nameEn: 'Silver',
-    minSpend: 2000000,
-    maxSpend: 9999999,
-    pointRate: 2,
-    discountPct: 3,
-    customerCount: 85,
-    gradient: 'from-slate-50 to-gray-100 dark:from-slate-900/40 dark:to-gray-900/30',
-    border: 'border-slate-300 dark:border-slate-600/50',
-    badge: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-    iconColor: 'text-slate-500',
-    textAccent: 'text-slate-600 dark:text-slate-300',
-    bgCard: 'bg-slate-500',
-    progressColor: 'bg-slate-400',
-    benefits: [
-      { icon: 'zap', text: 'Tích 2 điểm / 100.000đ chi tiêu' },
-      { icon: 'percent', text: 'Giảm 3% mọi đơn hàng' },
-      { icon: 'gift', text: 'Quà sinh nhật nâng cấp' },
-      { icon: 'shield', text: 'Bảo hành ưu tiên +3 tháng' },
-    ],
-  },
-  {
-    key: 'GOLD',
-    name: 'Vàng',
-    nameEn: 'Gold',
-    minSpend: 10000000,
-    maxSpend: 49999999,
-    pointRate: 3,
-    discountPct: 7,
-    customerCount: 47,
-    gradient: 'from-yellow-50 to-amber-100 dark:from-yellow-950/40 dark:to-amber-950/30',
-    border: 'border-yellow-300 dark:border-yellow-700/50',
-    badge: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
-    iconColor: 'text-yellow-500',
-    textAccent: 'text-yellow-600 dark:text-yellow-400',
-    bgCard: 'bg-yellow-500',
-    progressColor: 'bg-yellow-400',
-    benefits: [
-      { icon: 'zap', text: 'Tích 3 điểm / 100.000đ chi tiêu' },
-      { icon: 'percent', text: 'Giảm 7% mọi đơn hàng' },
-      { icon: 'headphones', text: 'Hỗ trợ ưu tiên 24/7' },
-      { icon: 'gift', text: 'Quà tặng cao cấp hàng quý' },
-      { icon: 'shield', text: 'Bảo hành ưu tiên +6 tháng' },
-    ],
-  },
-  {
-    key: 'DIAMOND',
-    name: 'Kim Cương',
-    nameEn: 'Diamond',
-    minSpend: 50000000,
-    maxSpend: null,
-    pointRate: 5,
-    discountPct: 15,
-    customerCount: 12,
-    gradient: 'from-blue-50 to-indigo-100 dark:from-blue-950/40 dark:to-indigo-950/30',
-    border: 'border-blue-300 dark:border-blue-700/50',
-    badge: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300',
-    iconColor: 'text-blue-500',
-    textAccent: 'text-blue-600 dark:text-blue-400',
-    bgCard: 'bg-blue-600',
-    progressColor: 'bg-blue-500',
-    benefits: [
-      { icon: 'zap', text: 'Tích 5 điểm / 100.000đ chi tiêu' },
-      { icon: 'percent', text: 'Giảm 15% mọi đơn hàng' },
-      { icon: 'headphones', text: 'Quản lý tài khoản riêng' },
-      { icon: 'crown', text: 'Sự kiện VIP độc quyền' },
-      { icon: 'gift', text: 'Voucher cao cấp hàng tháng' },
-      { icon: 'shield', text: 'Bảo hành trọn đời ưu tiên' },
-    ],
-  },
-];
+const INITIAL_TIERS: LoyaltyTier[] = [];
 
 // ─── Tier icon map ────────────────────────────────────────────────────────────
 const TierIcon = ({ tier, className }: { tier: TierKey; className?: string }) => {
@@ -253,22 +157,10 @@ export function LoyaltyTiersPage() {
 
   useEffect(() => {
     fetchLoyaltyTiers().then((apiTiers) => {
-      let deletedKeys: string[] = [];
-      try {
-        deletedKeys = JSON.parse(localStorage.getItem('retailhub-deleted-loyalty-tiers') || '[]');
-      } catch {}
-
       if (apiTiers && apiTiers.length > 0) {
-        const filteredApi = apiTiers.filter((t: any) => {
-          const k = String(t.tierCode || t.id || '');
-          const n = String(t.tierName || t.name || '');
-          return !deletedKeys.includes(k) && !deletedKeys.includes(n) && !deletedKeys.includes(String(t.id));
-        });
-
-        const mapped = filteredApi.map((t: any, idx: number) => {
+        const mapped = apiTiers.map((t: any, idx: number) => {
           const theme = TIER_THEMES[idx % TIER_THEMES.length];
           return {
-            id: t.id ? String(t.id) : undefined,
             key: String(t.tierCode || t.id || `TIER_${idx}`),
             name: t.tierName || t.name || 'Hạng',
             nameEn: t.tierCode || 'Tier',
@@ -363,109 +255,83 @@ export function LoyaltyTiersPage() {
     e.preventDefault();
     const normalizedName = editForm.name.trim();
     const normalizedNameEn = editForm.nameEn.trim();
-    if (!normalizedName) {
-      toast.error('Vui lòng nhập tên hạng thành viên!');
-      return;
-    }
-
-    if (editingTier) {
-      const updatedItem = {
-        ...editingTier,
-        name: normalizedName,
-        nameEn: normalizedNameEn || editingTier.nameEn,
-        minSpend: Number(editForm.minSpend) || 0,
-        maxSpend: editForm.maxSpend ? Number(editForm.maxSpend) : null,
-        pointRate: Number(editForm.pointRate) || 1,
-        discountPct: Number(editForm.discountPct) || 0,
-        customerCount: editForm.customerCount || 0,
-      };
-
-      setTiers((prev) =>
-        prev.map((t) => (t.key === editingTier.key ? updatedItem : t))
-      );
-
-      try {
-        await updateLoyaltyTier(editingTier.key, {
-          tierName: normalizedName,
-          tierCode: normalizedNameEn || editingTier.key,
-          minSpend: Number(editForm.minSpend) || 0,
-          discountPercent: Number(editForm.discountPct) || 0,
-          pointMultiplier: Number(editForm.pointRate) || 1,
-        });
-      } catch (err) {
-        console.warn('API update loyalty tier failed, keeping local state:', err);
-      }
-
-      toast.success(`Đã cập nhật hạng thành viên: ${normalizedName}`);
-      setEditingTier(null);
-      return;
-    }
-
-    const theme = TIER_THEMES[tiers.length % TIER_THEMES.length];
-    const newTierCode = normalizedNameEn.toUpperCase().replace(/\s+/g, '_') || `TIER_${Date.now().toString().slice(-4)}`;
-    const newTier: LoyaltyTier = {
-      key: newTierCode,
-      name: normalizedName,
-      nameEn: normalizedNameEn || normalizedName,
-      minSpend: Number(editForm.minSpend) || 0,
-      maxSpend: editForm.maxSpend ? Number(editForm.maxSpend) : null,
-      pointRate: Number(editForm.pointRate) || 1,
-      discountPct: Number(editForm.discountPct) || 0,
-      customerCount: 0,
-      benefits: [
-        { icon: 'zap', text: `Tích ${editForm.pointRate || 1} điểm / 100.000đ chi tiêu` },
-        { icon: 'percent', text: `Giảm ${editForm.discountPct || 0}% mọi đơn hàng` },
-        { icon: 'gift', text: 'Quà tặng & ưu đãi sự kiện độc quyền' },
-      ],
-      ...theme,
-    };
-
-    setTiers((prev) => [newTier, ...prev]);
+    if (!normalizedName || !normalizedNameEn) return;
 
     try {
-      await addLoyaltyTier({
-        tierName: normalizedName,
-        tierCode: newTierCode,
-        minSpend: Number(editForm.minSpend) || 0,
-        discountPercent: Number(editForm.discountPct) || 0,
-        pointMultiplier: Number(editForm.pointRate) || 1,
-      });
-    } catch (err) {
-      console.warn('API create loyalty tier failed, keeping local state:', err);
-    }
+      if (editingTier) {
+        await updateLoyaltyTier(editingTier.key, {
+          tierName: normalizedName,
+          tierCode: editingTier.key,
+          minPoints: editForm.minSpend,
+          pointMultiplier: editForm.pointRate,
+          discountPct: editForm.discountPct,
+        });
 
-    toast.success(`Đã tạo hạng thành viên mới: ${normalizedName}`);
-    setIsCreateOpen(false);
+        setTiers((prev) =>
+          prev.map((t) =>
+            t.key === editingTier.key
+              ? {
+                  ...t,
+                  name: normalizedName,
+                  nameEn: normalizedNameEn,
+                  minSpend: editForm.minSpend,
+                  maxSpend: editForm.maxSpend,
+                  pointRate: editForm.pointRate,
+                  discountPct: editForm.discountPct,
+                  customerCount: editForm.customerCount,
+                }
+              : t
+          )
+        );
+        setEditingTier(null);
+        toast.success(`Đã cập nhật hạng thành viên: ${normalizedName}`);
+        return;
+      }
+
+      const theme = TIER_THEMES[tiers.length % TIER_THEMES.length];
+      const tierKey = `TIER_${Date.now()}`;
+      await addLoyaltyTier({
+        tierCode: tierKey,
+        tierName: normalizedName,
+        minPoints: editForm.minSpend,
+        pointMultiplier: editForm.pointRate,
+        discountPct: editForm.discountPct,
+      });
+
+      const newTier: LoyaltyTier = {
+        key: tierKey,
+        name: normalizedName,
+        nameEn: normalizedNameEn,
+        minSpend: editForm.minSpend,
+        maxSpend: editForm.maxSpend,
+        pointRate: editForm.pointRate,
+        discountPct: editForm.discountPct,
+        customerCount: editForm.customerCount,
+        benefits: [
+          { icon: <Zap className="w-3.5 h-3.5" />, text: `Tích ${editForm.pointRate} điểm / $1 chi tiêu` },
+          { icon: <Percent className="w-3.5 h-3.5" />, text: `Giảm ${editForm.discountPct}% mỗi đơn hàng` },
+        ],
+        ...theme,
+      };
+      setTiers((prev) => [newTier, ...prev]);
+      setIsCreateOpen(false);
+      toast.success(`Đã thêm mới hạng thành viên: ${normalizedName}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi khi lưu hạng thành viên');
+    }
   };
 
   const handleDeleteTier = async () => {
     if (!deletingTier) return;
-    const targetKey = deletingTier.key;
-    const targetId = deletingTier.id;
-    const targetName = deletingTier.name;
-
     try {
-      const deletedKeys: string[] = JSON.parse(localStorage.getItem('retailhub-deleted-loyalty-tiers') || '[]');
-      if (targetKey) deletedKeys.push(targetKey);
-      if (targetId) deletedKeys.push(String(targetId));
-      if (targetName) deletedKeys.push(targetName);
-      localStorage.setItem('retailhub-deleted-loyalty-tiers', JSON.stringify(Array.from(new Set(deletedKeys))));
-    } catch {}
-
-    setTiers((prev) => prev.filter((tier) => tier.key !== targetKey && tier.name !== targetName && tier.id !== targetId));
-
-    try {
-      if (targetId) {
-        await deleteLoyaltyTier(String(targetId));
-      }
-      if (targetKey) {
-        await deleteLoyaltyTier(targetKey);
-      }
-    } catch (err) {
-      console.warn('API delete loyalty tier failed:', err);
+      await deleteLoyaltyTier(deletingTier.key);
+      setTiers((prev) => prev.filter((tier) => tier.key !== deletingTier.key));
+      toast.success(`Đã xóa hạng thành viên: ${deletingTier.name}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi khi xóa hạng thành viên');
+    } finally {
+      setDeletingTier(null);
     }
-    toast.success(`Đã xóa hạng thành viên: ${targetName}`);
-    setDeletingTier(null);
   };
 
   return (
@@ -506,7 +372,7 @@ export function LoyaltyTiersPage() {
                 ⚙️
               </div>
               <div>
-                <h2 className="text-base font-bold text-gray-900 dark:text-white">Cấu hình quy tắc tích & đổi điểm POS/CRM</h2>
+                <h2 className="text-base font-bold text-gray-900 dark:text-white">Cấu Hình Quy Tắc Tích & Đổi Điểm POS/CRM</h2>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Thiết lập tỷ lệ quy đổi số tiền chi tiêu ra điểm thưởng và giá trị giảm giá khi tiêu điểm.</p>
               </div>
             </div>
@@ -533,7 +399,7 @@ export function LoyaltyTiersPage() {
                 className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono font-bold bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
               />
               <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
-                Khách mua {localConfig.earnRateAmount.toLocaleString('vi-VN')} đ = +1 điểm
+                Khách mua {localConfig.earnRateAmount.toLocaleString('vi-VN')}đ = +1 điểm
               </p>
             </div>
 
@@ -550,7 +416,7 @@ export function LoyaltyTiersPage() {
                 className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono font-bold bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
               />
               <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
-                1 điểm = {localConfig.redeemRateValue.toLocaleString('vi-VN')} đ giảm vào hóa đơn
+                1 điểm = {localConfig.redeemRateValue.toLocaleString('vi-VN')}đ giảm vào hóa đơn
               </p>
             </div>
 
@@ -573,7 +439,7 @@ export function LoyaltyTiersPage() {
 
             <div className="bg-gray-50 dark:bg-gray-900/30 p-3 rounded-xl border border-gray-200 dark:border-gray-700">
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                Hạn sử dụng điểm (ngày)
+                Hạn sử dụng điểm (Ngày)
               </label>
               <input
                 type="number"
@@ -615,7 +481,7 @@ export function LoyaltyTiersPage() {
                 <div>
                   <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">{t.name}</p>
                   <p className="text-xs text-gray-400 dark:text-gray-500">
-                    {t.customerCount} khách hàng ({totalCustomers ? Math.round((t.customerCount / totalCustomers) * 100) : 0}%)
+                    {t.customerCount} KH ({totalCustomers ? Math.round((t.customerCount / totalCustomers) * 100) : 0}%)
                   </p>
                 </div>
               </div>
@@ -641,7 +507,6 @@ export function LoyaltyTiersPage() {
       <Modal
         isOpen={!!editingTier}
         onClose={() => setEditingTier(null)}
-        closeOnClickOutside={true}
         title={`Chỉnh sửa hạng thành viên - ${editingTier?.name}`}
         width="max-w-md"
       >
@@ -720,7 +585,7 @@ export function LoyaltyTiersPage() {
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
                 Tỷ lệ tích điểm
-                <span className="ml-1 font-normal text-gray-400">(điểm / 100.000 đ chi tiêu)</span>
+                <span className="ml-1 font-normal text-gray-400">(điểm / 100.000đ chi tiêu)</span>
               </label>
               <div className="flex items-center gap-3">
                 <input
@@ -735,7 +600,7 @@ export function LoyaltyTiersPage() {
                   x{editForm.pointRate}
                 </div>
               </div>
-              <p className="text-xs text-gray-400 mt-1">Mỗi 100.000 đ chi tiêu tích được {editForm.pointRate} điểm</p>
+              <p className="text-xs text-gray-400 mt-1">Mỗi 100.000đ chi tiêu tích được {editForm.pointRate} điểm</p>
             </div>
 
             <div>
@@ -784,7 +649,7 @@ export function LoyaltyTiersPage() {
                 type="submit"
                 className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow transition-colors text-sm"
               >
-                Lưu thông tin
+                Lưu thay đổi
               </button>
             </div>
           </form>
@@ -795,7 +660,7 @@ export function LoyaltyTiersPage() {
       <Modal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
-        title="Thêm mới hạng thành viên"
+        title="Tạo hạng thành viên mới"
         width="max-w-md"
       >
         <form onSubmit={handleSaveTier} className="space-y-5">
@@ -909,7 +774,7 @@ export function LoyaltyTiersPage() {
               type="submit"
               className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              Thêm mới
+              Tạo hạng
             </button>
           </div>
         </form>
@@ -919,13 +784,13 @@ export function LoyaltyTiersPage() {
       <Modal
         isOpen={!!deletingTier}
         onClose={() => setDeletingTier(null)}
-        title="Xác nhận xóa hạng thành viên"
+        title="Xóa hạng thành viên"
         width="max-w-md"
       >
         {deletingTier && (
           <div className="space-y-5">
             <p className="text-sm text-gray-600 dark:text-gray-300">
-              Bạn có chắc chắn muốn xóa hạng <span className="font-semibold">{deletingTier.name}</span> không? Hành động này không thể hoàn tác.
+              Bạn chắc chắn muốn xóa hạng <span className="font-semibold">{deletingTier.name}</span>? Hành động này không thể hoàn tác.
             </p>
             <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
               <button
@@ -940,7 +805,7 @@ export function LoyaltyTiersPage() {
                 onClick={handleDeleteTier}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
               >
-                Xóa hạng thành viên
+                Xóa hạng
               </button>
             </div>
           </div>

@@ -9,6 +9,8 @@ import { useCrmStore } from '@/features/crm/store/crmStore';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 import { exportToCsv } from '@/shared/utils/exportCsv';
+import { SearchInput } from '@/shared/components/ui/SearchInput';
+import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 
 const entityTypeMap: Record<string, string> = {
   CUSTOMER: 'Khách hàng',
@@ -240,7 +242,7 @@ export function DebtLedgerPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý và giám sát công nợ phải thu của khách hàng và công nợ phải trả nhà cung cấp. Số dương: Khách hàng nợ doanh nghiệp. Số âm: Doanh nghiệp nợ đối tác.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
+            <SecondaryButton
               onClick={() => {
                 exportToCsv('so_cong_no', filtered, [
                   { header: 'Mã công nợ', accessor: r => r.debtCode },
@@ -254,32 +256,25 @@ export function DebtLedgerPage() {
                 ]);
                 toast.success('Đã xuất sổ công nợ dạng CSV!');
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+              leftIcon={<Download className="w-4 h-4" />}
             >
-              <Download className="w-4 h-4" /> Xuất sổ công nợ
-            </button>
-            <button
+              Xuất sổ công nợ
+            </SecondaryButton>
+            <CreateButton
               onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
             >
-              <Plus className="w-4 h-4" /> Ghi nhận khoản nợ mới
-            </button>
+              Ghi nhận khoản nợ mới
+            </CreateButton>
           </div>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="flex-1 relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-gray-400" />
-            </div>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm kiếm theo mã số công nợ hoặc tên doanh nghiệp đối tác..."
-              className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
-            />
-          </div>
+          <SearchInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder="Tìm kiếm theo mã số công nợ hoặc tên doanh nghiệp đối tác..."
+            containerClassName="flex-1 sm:max-w-md"
+          />
           <button className="flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors text-sm">
             <Filter className="w-4 h-4" /> Bộ lọc
           </button>

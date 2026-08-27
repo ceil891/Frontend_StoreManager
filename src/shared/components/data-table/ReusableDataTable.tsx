@@ -22,7 +22,7 @@ declare module '@tanstack/react-table' {
 
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, Settings2, Inbox, Download } from 'lucide-react';
 import { exportToCsv } from '@/shared/utils/exportCsv';
-import { UnifiedSearchInput } from '@/shared/components/ui/UnifiedSearchInput';
+import { SearchInput } from '@/shared/components/ui/SearchInput';
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -134,10 +134,10 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
   return (
     <div className="space-y-4 relative w-full max-w-full min-w-0 overflow-hidden">
       {/* Toolbar: Global Search, Column Visibility & Bulk Actions */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex flex-1 items-center gap-3 w-full">
           {globalFilterPlaceholder && (
-            <UnifiedSearchInput
+            <SearchInput
               value={searchInput}
               onValueChange={setSearchInput}
               placeholder={globalFilterPlaceholder}
@@ -163,7 +163,7 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
                         exportToCsv('danh-sach-da-chon', selectedRows, exportHeaders);
                       }
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-md text-xs font-semibold transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-md text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" /> Xuất Excel ({selectedRows.length})
                   </button>
@@ -181,7 +181,7 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
 
         {/* Column Visibility Dropdown */}
         <div className="relative group shrink-0">
-          <button className="flex items-center gap-2 px-3.5 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
+          <button className="h-10 flex items-center gap-2 px-3.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm cursor-pointer">
             <Settings2 className="w-4 h-4" />
             <span className="hidden sm:inline">Cột hiển thị</span>
           </button>
@@ -304,12 +304,12 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
                 <tr>
                   <td colSpan={columns.length} className="h-64 text-center">
                     <div className="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 space-y-3">
-                      <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
-                        <Inbox className="w-8 h-8 text-gray-300 dark:text-gray-600" />
+                      <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center shadow-inner">
+                        <Inbox className="w-8 h-8 text-gray-400 dark:text-gray-500" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">Không có dữ liệu</p>
-                        <p className="text-xs mt-1">Vui lòng điều chỉnh bộ lọc hoặc thêm mới.</p>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Không tìm thấy dữ liệu phù hợp</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Vui lòng kiểm tra lại từ khóa tìm kiếm hoặc điều chỉnh bộ lọc.</p>
                       </div>
                     </div>
                   </td>
@@ -323,7 +323,7 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
       {/* Pagination Controls */}
       <div className="flex items-center justify-between px-2">
         <div className="flex-1 text-sm text-gray-500 dark:text-gray-400">
-          Đã chọn {Object.keys(rowSelection).length} / {table.getPreFilteredRowModel().rows.length} dòng.
+          Đã chọn {Object.keys(rowSelection).length} / {table.getPreFilteredRowModel().rows.length} dòng
         </div>
         <div className="flex items-center space-x-6 lg:space-x-8">
           <div className="flex items-center space-x-2">
@@ -344,8 +344,8 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
           </div>
           <div className="flex items-center justify-center text-xs font-semibold text-gray-600 dark:text-gray-400 px-2">
             {table.getFilteredRowModel().rows.length === 0 || table.getPageCount() === 0
-              ? '0 bản ghi / Không có dữ liệu'
-              : `Trang ${table.getState().pagination.pageIndex + 1} / ${table.getPageCount()} (${table.getFilteredRowModel().rows.length} bản ghi)`}
+              ? '0 kết quả'
+              : `Trang ${table.getState().pagination.pageIndex + 1} / ${table.getPageCount()} (${table.getFilteredRowModel().rows.length} kết quả)`}
           </div>
           <div className="flex items-center space-x-1 sm:space-x-2">
             <button
