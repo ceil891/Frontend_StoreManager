@@ -10,6 +10,8 @@ import { PrimaryButton, SecondaryButton } from '@/shared/components/ui/Button';
 import { toast } from 'sonner';
 import { UserPlus, Loader2 } from 'lucide-react';
 
+import { useAutoFocusFirstError } from '@/shared/hooks/useAutoFocusFirstError';
+
 interface CustomerFormModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -41,6 +43,9 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
       ...defaultValues,
     },
   });
+
+  // Tự động cuộn & focus vào trường bị lỗi đầu tiên khi validate thất bại
+  useAutoFocusFirstError(errors, isSubmitting);
 
   const onFormSubmit = async (data: CustomerFormValues) => {
     try {
