@@ -15,6 +15,8 @@ const queryClient = new QueryClient({
   },
 });
 
+import { useAuthStore } from './features/auth/store/authStore';
+
 // Apply persisted theme on mount before any paint
 function ThemeInitializer() {
   const theme = useThemeStore((s) => s.theme);
@@ -27,11 +29,26 @@ function ThemeInitializer() {
   return null;
 }
 
+function AuthEventListener() {
+  const logout = useAuthStore((s) => s.logout);
+  useEffect(() => {
+    const handleLogoutEvent = () => {
+      logout();
+    };
+    window.addEventListener('auth:logout', handleLogoutEvent);
+    return () => {
+      window.removeEventListener('auth:logout', handleLogoutEvent);
+    };
+  }, [logout]);
+  return null;
+}
+
 function App() {
   return (
     <GlobalErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <ThemeInitializer />
+        <AuthEventListener />
         <Toaster position="top-right" richColors />
         <AppRouter />
       </QueryClientProvider>

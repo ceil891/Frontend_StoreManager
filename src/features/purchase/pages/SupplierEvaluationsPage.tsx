@@ -7,6 +7,8 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
+import { SearchInput } from '@/shared/components/ui/SearchInput';
+import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 
 interface SupplierEvaluationItem {
   id: string;
@@ -230,31 +232,27 @@ export function SupplierEvaluationsPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Xuất Excel
-            </button>
-            <button
-              onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
+            <SecondaryButton
+              onClick={() => toast.success('Xuất file Excel thành công!')}
+              leftIcon={<Download className="w-4 h-4" />}
             >
-              <Plus className="w-4 h-4" /> Lập phiếu đánh giá mới
-            </button>
+              Xuất Excel
+            </SecondaryButton>
+            <CreateButton
+              onClick={handleOpenCreate}
+            >
+              Lập phiếu đánh giá mới
+            </CreateButton>
           </div>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="flex-1 relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-gray-400" />
-            </div>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm kiếm theo nhà cung cấp, người chấm hoặc nhận xét..."
-              className="block w-full sm:max-w-md pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
-            />
-          </div>
+          <SearchInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder="Tìm kiếm theo nhà cung cấp, người chấm hoặc nhận xét..."
+            containerClassName="flex-1 sm:max-w-md"
+          />
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500 font-medium whitespace-nowrap">Phân loại điểm:</span>
             <select

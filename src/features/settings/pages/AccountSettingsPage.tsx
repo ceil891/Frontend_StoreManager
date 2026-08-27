@@ -1,23 +1,41 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuthUser, useAuthStore } from '@/features/auth/store/authStore';
-import { Camera, Mail, Phone, Lock, Save, User as UserIcon, Shield, Activity, Bell } from 'lucide-react';
+import { Camera, Mail, Phone, Lock, Save, User as UserIcon, Shield, Activity, Bell, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { axiosClient } from '@/shared/lib/axiosClient';
+import { compressImage } from '@/shared/utils/imageCompressor';
+import { uploadImageToCloudinary } from '@/shared/services/uploadService';
 
 export function AccountSettingsPage() {
   const user = useAuthUser();
   const updateUser = useAuthStore((s) => s.updateUser);
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications'>('profile');
-  
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   // Profile state
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState((user as any)?.phone || '0987654321');
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar || null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar || (user as any)?.avatarUrl || null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingImg, setIsUploadingImg] = useState(false);
 
-  // Password state
+  // Security state
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  useEffect(() => {
+    if (user) {
+      setName(user.name || '');
+      setPhone((user as any)?.phone || '0987654321');
+      const av = user.avatar || (user as any)?.avatarUrl || null;
+      if (typeof av === 'string' && av.trim() && !av.includes('[object')) {
+        setAvatarPreview(av);
+      } else {
+        setAvatarPreview(null);
+      }
+    }
+  }, [user]);
 
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,22 +44,30 @@ export function AccountSettingsPage() {
       return;
     }
     try {
-      updateUser({
-        name: name.trim(),
-        avatar: avatarPreview || undefined,
+      setIsSaving(true);
+      const cleanAvatar = typeof avatarPreview === 'string' && !avatarPreview.includes('[object') ? avatarPreview : undefined;
+
+      // 1. Cập nhật qua API /auth/profile chuyên biệt
+      const res = await axiosClient.put<any, any>('/auth/profile', {
+        fullName: name.trim(),
+        phone: phone || '',
+        avatar: cleanAvatar || '',
       });
 
-      if (user?.id) {
-        await axiosClient.put(`/users/${user.id}`, {
-          fullName: name.trim(),
-          phone: phone,
-          avatar: avatarPreview,
-        }).catch(() => {});
-      }
+      const updatedUser = res?.data || res;
+
+      // 2. Cập nhật Zustand authStore và localStorage
+      updateUser({
+        name: updatedUser?.name || name.trim(),
+        avatar: updatedUser?.avatar || cleanAvatar,
+        ...(phone ? { phone } : {}),
+      });
 
       toast.success('Hồ sơ và ảnh đại diện đã được cập nhật thành công!');
     } catch (err: any) {
-      toast.error(err?.message || 'Có lỗi xảy ra khi cập nhật hồ sơ');
+      toast.error(err?.response?.data?.message || err?.message || 'Có lỗi xảy ra khi cập nhật hồ sơ');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -72,27 +98,56 @@ export function AccountSettingsPage() {
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64 = reader.result as string;
-        setAvatarPreview(base64);
-        updateUser({ avatar: base64 });
+    if (!file) return;
 
-        if (user?.id) {
-          try {
-            await axiosClient.put(`/users/${user.id}`, {
-              fullName: name || user.name,
-              phone: phone,
-              avatar: base64,
-            });
-          } catch (err) {
-            console.warn('Sync avatar to backend error:', err);
-          }
-        }
-        toast.success('Ảnh đại diện đã được cập nhật.');
-      };
-      reader.readAsDataURL(file);
+    try {
+      setIsUploadingImg(true);
+      toast.loading('Đang tải ảnh đại diện lên...', { id: 'upload_avatar' });
+
+      // 1. Nén ảnh qua canvas trước khi gửi
+      const compressedFile = await compressImage(file, { maxWidth: 500, maxHeight: 500, quality: 0.85 });
+      
+      // 2. Upload lên Cloudinary qua Server API (hoặc Base64 fallback)
+      const imageUrl = await uploadImageToCloudinary(compressedFile, 'avatars');
+
+      setAvatarPreview(imageUrl);
+
+      // 3. Lưu trực tiếp vào Database thông qua /auth/profile
+      const res = await axiosClient.put<any, any>('/auth/profile', {
+        fullName: name.trim() || user?.name || '',
+        phone: phone || '',
+        avatar: imageUrl,
+      });
+
+      const updatedUser = res?.data || res;
+
+      // 4. Cập nhật Zustand authStore ngay lập tức để Sidebar & toàn bộ app nhận diện
+      updateUser({
+        name: updatedUser?.name || name.trim() || user?.name,
+        avatar: updatedUser?.avatar || imageUrl,
+      });
+
+      toast.success('Đã cập nhật ảnh đại diện thành công!', { id: 'upload_avatar' });
+    } catch (err: any) {
+      console.error('Lỗi khi tải ảnh đại diện:', err);
+      toast.error('Không thể cập nhật ảnh đại diện: ' + (err?.message || ''), { id: 'upload_avatar' });
+    } finally {
+      setIsUploadingImg(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setAvatarPreview(null);
+    try {
+      await axiosClient.put('/auth/profile', {
+        fullName: name.trim() || user?.name || '',
+        phone: phone || '',
+        avatar: '',
+      });
+      updateUser({ avatar: '' });
+      toast.info('Đã xóa ảnh đại diện');
+    } catch (err) {
+      updateUser({ avatar: '' });
     }
   };
 
@@ -137,22 +192,56 @@ export function AccountSettingsPage() {
             <form onSubmit={handleProfileSave} className="space-y-8 max-w-2xl">
               {/* Avatar Section */}
               <div className="flex items-center gap-6">
-                <div className="relative group">
-                  <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                    {avatarPreview ? (
-                      <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
+                <div
+                  className="relative group cursor-pointer"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Bấm để chọn ảnh đại diện mới"
+                >
+                  <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex items-center justify-center transition-all group-hover:ring-4 group-hover:ring-emerald-500/30">
+                    {avatarPreview && typeof avatarPreview === 'string' && !avatarPreview.includes('[object') ? (
+                      <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" onError={() => setAvatarPreview(null)} />
                     ) : (
-                      <span className="text-3xl font-bold text-gray-400">{user?.name?.charAt(0) || 'U'}</span>
+                      <span className="text-3xl font-bold text-gray-400">{((name || user?.name || 'U').charAt(0)).toUpperCase()}</span>
                     )}
                   </div>
-                  <label className="absolute bottom-0 right-0 p-1.5 bg-emerald-600 text-white rounded-full cursor-pointer shadow-lg hover:bg-emerald-700 transition-transform hover:scale-110">
+                  <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                    <Camera className="w-6 h-6" />
+                  </div>
+                  <label
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute bottom-0 right-0 p-1.5 bg-emerald-600 text-white rounded-full cursor-pointer shadow-lg hover:bg-emerald-700 transition-transform hover:scale-110"
+                  >
                     <Camera className="w-4 h-4" />
-                    <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                    />
                   </label>
                 </div>
-                <div>
-                  <h3 className="text-sm font-medium text-gray-900 dark:text-white">Ảnh đại diện</h3>
-                  <p className="text-xs text-gray-500 mt-1">Nên dùng ảnh vuông, kích thước tối thiểu 200x200px.</p>
+                <div className="space-y-1.5">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Ảnh đại diện</h3>
+                  <p className="text-xs text-gray-500">Nên dùng ảnh vuông, kích thước tối thiểu 200x200px.</p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-2.5 py-1 text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-100 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Tải ảnh mới
+                    </button>
+                    {avatarPreview && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveAvatar}
+                        className="px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg flex items-center gap-1 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Xóa ảnh
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 

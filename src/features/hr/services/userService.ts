@@ -3,8 +3,9 @@ import { buildUserAvatarUrl } from '@/shared/utils/userAvatar';
 import { useBranchStore } from '@/features/system/store/branchStore';
 import type { SystemUserRecord, SystemUserInput } from '../store/userStore';
 
-export function branchLabel(branchId: string): string {
-  if (!branchId || branchId === 'HQ') return 'Trụ sở chính';
+export function branchLabel(branchId?: string): string {
+  if (!branchId || branchId === 'ALL' || branchId === '0') return 'Toàn hệ thống (Tất cả chi nhánh)';
+  if (branchId === 'HQ') return 'Trụ sở chính';
   const branches = useBranchStore.getState().branches;
   const match = branches.find(b => b.id === String(branchId) || b.branchCode === branchId);
   if (match) return match.name;
@@ -15,7 +16,11 @@ export function normalizeSystemUser(
   partial: Partial<SystemUserRecord> & Pick<SystemUserRecord, 'id' | 'emailAddress' | 'fullName'>
 ): SystemUserRecord {
   const email = partial.emailAddress;
-  const branchId = partial.branchId ?? '1';
+  const rawBranchId = partial.branchId;
+  const isAllBranches = !rawBranchId || rawBranchId === 'ALL' || rawBranchId === '0';
+  const branchId = isAllBranches ? 'ALL' : rawBranchId;
+  const branchLocation = isAllBranches ? 'Toàn hệ thống (Tất cả chi nhánh)' : (partial.branchLocation ?? branchLabel(branchId));
+
   return {
     id: partial.id,
     authUserId: partial.authUserId ?? partial.id,
@@ -23,11 +28,11 @@ export function normalizeSystemUser(
     fullName: partial.fullName,
     emailAddress: email,
     contactPhone: partial.contactPhone ?? '',
-    avatarUrl: partial.avatarUrl?.trim() || buildUserAvatarUrl(email),
+    avatarUrl: partial.avatarUrl?.trim() || '',
     assignedRole: partial.assignedRole ?? 'STAFF',
     departmentId: partial.departmentId ?? '1',
     branchId,
-    branchLocation: partial.branchLocation ?? branchLabel(branchId),
+    branchLocation,
     positionId: partial.positionId ?? '1',
     managerId: partial.managerId,
     timezone: partial.timezone ?? 'Asia/Ho_Chi_Minh',
@@ -92,7 +97,7 @@ export const userService = {
         fullName: u.fullName || '',
         emailAddress: u.email || '',
         contactPhone: u.phone || '',
-        avatarUrl: u.avatar || u.avatarUrl || buildUserAvatarUrl(u.email || ''),
+        avatarUrl: u.avatar || u.avatarUrl || '',
         assignedRole: roleCode,
         departmentId,
         branchId: rawBranchId,
@@ -122,10 +127,11 @@ export const userService = {
     );
     if (roleObj) roleId = Number(roleObj.id);
 
-    const parsedBranchId = Number(String(newUser.branchId || '1').replace(/[^0-9]/g, '')) || 1;
+    const isAllBranch = !newUser.branchId || newUser.branchId === 'ALL' || newUser.branchId === '0';
+    const parsedBranchId = isAllBranch ? null : (Number(String(newUser.branchId).replace(/[^0-9]/g, '')) || null);
 
     const payload = {
-      username: newUser.emailAddress.split('@')[0] || `user_${Date.now()}`,
+      username: newUser.emailAddress.split('@')[0],
       fullName: newUser.fullName,
       email: newUser.emailAddress,
       phone: newUser.contactPhone,
@@ -137,7 +143,6 @@ export const userService = {
       dateOfBirth: newUser.dateOfBirth || '',
       departmentId: newUser.departmentId || '',
       positionId: newUser.positionId || '',
-      avatar: newUser.avatarUrl || '',
     };
     const res = await axiosClient.post<any, any>('/users', payload);
     const item = res?.data || res;
@@ -159,7 +164,8 @@ export const userService = {
     );
     if (roleObj) roleId = Number(roleObj.id);
 
-    const parsedBranchId = Number(String(updatedUser.branchId || '1').replace(/[^0-9]/g, '')) || 1;
+    const isAllBranch = !updatedUser.branchId || updatedUser.branchId === 'ALL' || updatedUser.branchId === '0';
+    const parsedBranchId = isAllBranch ? null : (Number(String(updatedUser.branchId).replace(/[^0-9]/g, '')) || null);
 
     // 1. Dedicated status API if changed/specified
     if (updatedUser.status) {
@@ -171,15 +177,13 @@ export const userService = {
     }
 
     // 2. Dedicated role-branch API
-    if (roleId || updatedUser.branchId) {
-      try {
-        const body: any = {};
-        if (roleId) body.roleId = roleId;
-        if (updatedUser.branchId) body.branchId = parsedBranchId;
-        await axiosClient.put(`/users/${userId}/role-branch`, body);
-      } catch (err) {
-        console.warn('Dedicated role-branch API call failed, falling back to full update:', err);
-      }
+    try {
+      const body: any = {};
+      if (roleId) body.roleId = roleId;
+      body.branchId = parsedBranchId;
+      await axiosClient.put(`/users/${userId}/role-branch`, body);
+    } catch (err) {
+      console.warn('Dedicated role-branch API call failed, falling back to full update:', err);
     }
 
     // 3. Cập nhật thông tin chung
@@ -194,7 +198,6 @@ export const userService = {
       dateOfBirth: updatedUser.dateOfBirth || '',
       departmentId: updatedUser.departmentId || '',
       positionId: updatedUser.positionId || '',
-      avatar: updatedUser.avatarUrl || '',
     };
     if (roleId) {
       payload.roleId = roleId;
@@ -229,12 +232,8 @@ export const userService = {
 
     const body: any = {};
     if (roleId) body.roleId = Number(roleId);
-    if (branchId) {
-      const parsedBranch = Number(String(branchId).replace(/[^0-9]/g, ''));
-      if (!isNaN(parsedBranch) && parsedBranch > 0) {
-        body.branchId = parsedBranch;
-      }
-    }
+    const isAll = !branchId || branchId === 'ALL' || branchId === '0';
+    body.branchId = isAll ? null : (Number(String(branchId).replace(/[^0-9]/g, '')) || null);
 
     await axiosClient.put(`/users/${userId}/role-branch`, body);
   },

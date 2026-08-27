@@ -44,87 +44,6 @@ export function ReturnsListsPage() {
 
   // Master list of all available sale orders (Backend API + Local Storage + Standard System Orders)
   const masterSaleOrders = useMemo(() => {
-    const defaultOrders = [
-      {
-        id: 'default-1',
-        code: 'ONLINE-805391',
-        customerId: '1',
-        customerName: 'Nguyễn Lưu Hoàng',
-        customerPhone: '0901234567',
-        date: new Date().toISOString().split('T')[0],
-        subTotal: 1500000,
-        taxAmount: 150000,
-        discountAmount: 0,
-        totalAmount: 1650000,
-        status: 'COMPLETED',
-        paymentStatus: 'PAID',
-        paymentMethod: 'BANK_TRANSFER',
-        branchId: 'BR-001',
-        branchName: 'Chi nhánh Chính',
-        origin: 'ONLINE',
-        items: [
-          { id: '1', productId: '1', productName: 'Pepsi 330ml - Lon', sku: 'SKU-PEPSI-330', quantity: 10, price: 15000, subTotal: 150000 },
-          { id: '2', productId: '2', productName: 'Bánh Gạo OneOne 150g', sku: 'SKU-ONEONE-150', quantity: 5, price: 30000, subTotal: 150000 },
-        ],
-        orderLines: [
-          { id: '1', sku: 'SKU-PEPSI-330', productName: 'Pepsi 330ml - Lon', quantity: 10, unitPrice: 15000, lineTotal: 150000 },
-          { id: '2', sku: 'SKU-ONEONE-150', productName: 'Bánh Gạo OneOne 150g', quantity: 5, unitPrice: 30000, lineTotal: 150000 },
-        ],
-      },
-      {
-        id: 'default-2',
-        code: 'ORD-POS-2026-818712',
-        customerId: '2',
-        customerName: 'Trần Văn Nam',
-        customerPhone: '0988776655',
-        date: new Date().toISOString().split('T')[0],
-        subTotal: 850000,
-        taxAmount: 85000,
-        discountAmount: 50000,
-        totalAmount: 885000,
-        status: 'COMPLETED',
-        paymentStatus: 'PAID',
-        paymentMethod: 'CASH',
-        branchId: 'BR-001',
-        branchName: 'Chi nhánh Chính',
-        origin: 'POS',
-        items: [
-          { id: '3', productId: '3', productName: 'Sữa Tươi Vinamilk 1L', sku: 'SKU-VNM-1L', quantity: 5, price: 38000, subTotal: 190000 },
-          { id: '4', productId: '4', productName: 'Mì Hảo Hảo Tôm Chua Cay', sku: 'SKU-HAOHAO-TCC', quantity: 20, price: 4500, subTotal: 90000 },
-        ],
-        orderLines: [
-          { id: '3', sku: 'SKU-VNM-1L', productName: 'Sữa Tươi Vinamilk 1L', quantity: 5, unitPrice: 38000, lineTotal: 190000 },
-          { id: '4', sku: 'SKU-HAOHAO-TCC', productName: 'Mì Hảo Hảo Tôm Chua Cay', quantity: 20, unitPrice: 4500, lineTotal: 90000 },
-        ],
-      },
-      {
-        id: 'default-3',
-        code: 'SO-2026-0001',
-        customerId: '3',
-        customerName: 'Công Ty TNHH Minh Phát',
-        customerPhone: '0912345678',
-        date: new Date().toISOString().split('T')[0],
-        subTotal: 5000000,
-        taxAmount: 500000,
-        discountAmount: 200000,
-        totalAmount: 5300000,
-        status: 'COMPLETED',
-        paymentStatus: 'PAID',
-        paymentMethod: 'BANK_TRANSFER',
-        branchId: 'BR-002',
-        branchName: 'Chi nhánh Hà Nội',
-        origin: 'MANUAL',
-        items: [
-          { id: '5', productId: '5', productName: 'Bộ Nồi Inox Sunhouse 3 Đáy', sku: 'SKU-SUN-3D', quantity: 2, price: 1250000, subTotal: 2500000 },
-          { id: '6', productId: '6', productName: 'Chảo Chống Dính Tefal 28cm', sku: 'SKU-TEF-28', quantity: 3, price: 850000, subTotal: 2550000 },
-        ],
-        orderLines: [
-          { id: '5', sku: 'SKU-SUN-3D', productName: 'Bộ Nồi Inox Sunhouse 3 Đáy', quantity: 2, unitPrice: 1250000, lineTotal: 2500000 },
-          { id: '6', sku: 'SKU-TEF-28', productName: 'Chảo Chống Dính Tefal 28cm', quantity: 3, unitPrice: 850000, lineTotal: 2550000 },
-        ],
-      },
-    ];
-
     let localOrders: any[] = [];
     try {
       const stored = localStorage.getItem('user_local_orders');
@@ -165,7 +84,7 @@ export function ReturnsListsPage() {
     }
 
     const map = new Map<string, any>();
-    [...defaultOrders, ...localOrders, ...saleOrders].forEach((so) => {
+    [...localOrders, ...saleOrders].forEach((so) => {
       if (so && (so.code || (so as any).orderCode)) {
         const c = so.code || (so as any).orderCode;
         map.set(c, { ...so, code: c });

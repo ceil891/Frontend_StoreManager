@@ -405,22 +405,22 @@ export function PurchaseRequestsPage() {
         <form onSubmit={handleSave} className="space-y-4 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày lập đề xuất (Mặc định hôm nay) *</label>
+              <input
+                type="date"
+                value={editingItem.requestDate || new Date().toISOString().split('T')[0]}
+                readOnly
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white cursor-not-allowed font-medium"
+                required
+              />
+            </div>
+            <div>
               <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã yêu cầu (RF/PR) *</label>
               <input
                 type="text"
                 value={editingItem.requestCode || ''}
                 readOnly
                 className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày lập đề xuất *</label>
-              <input
-                type="date"
-                value={editingItem.requestDate || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, requestDate: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                required
               />
             </div>
           </div>
@@ -446,12 +446,22 @@ export function PurchaseRequestsPage() {
                 type="text"
                 value={editingItem.proposedBy || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, proposedBy: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                placeholder="Nhập tên người đề xuất..."
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 placeholder:italic"
+                placeholder="Nhập tên người đề xuất (VD: Nguyễn Văn A)..."
                 required
               />
             </div>
           </div>
+
+          {/* Datalist for autocomplete product name */}
+          <datalist id="suggested-products">
+            <option value="Máy in hóa đơn nhiệt Xprinter Q200" />
+            <option value="Máy quét mã vạch 2D Zebra DS2208" />
+            <option value="Giấy in nhiệt K80 bọc bạc phi 45" />
+            <option value="Ngăn kéo đựng tiền thu ngân M410" />
+            <option value="Màn hình cảm ứng POS 15 inch" />
+            <option value="Bàn phím cơ không dây văn phòng" />
+          </datalist>
 
           {/* Section Bảng Vật tư / Sản phẩm đề xuất RFQ */}
           <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
@@ -474,8 +484,8 @@ export function PurchaseRequestsPage() {
                   <tr>
                     <th className="p-2">Tên sản phẩm / Thiết bị</th>
                     <th className="p-2 w-24 text-center">Số lượng</th>
-                    <th className="p-2 w-24">Đơn vị</th>
-                    <th className="p-2 w-32 text-right">Đơn giá dự kiến</th>
+                    <th className="p-2 w-28 text-center">ĐVT</th>
+                    <th className="p-2 w-36 text-right">Đơn giá dự kiến</th>
                     <th className="p-2 w-32 text-right">Thành tiền</th>
                     <th className="p-2 w-10 text-center">Xóa</th>
                   </tr>
@@ -486,10 +496,11 @@ export function PurchaseRequestsPage() {
                       <td className="p-2">
                         <input
                           type="text"
+                          list="suggested-products"
                           value={item.itemName}
                           onChange={(e) => handleUpdateRfqItem(item.id, 'itemName', e.target.value)}
-                          className="w-full p-1 border rounded bg-white dark:bg-gray-900 text-xs"
-                          placeholder="Tên mặt hàng..."
+                          className="w-full p-1.5 border rounded bg-white dark:bg-gray-900 text-xs placeholder:text-gray-400 placeholder:italic"
+                          placeholder="Gõ hoặc chọn thiết bị..."
                         />
                       </td>
                       <td className="p-2">
@@ -498,23 +509,34 @@ export function PurchaseRequestsPage() {
                           min={1}
                           value={item.qty}
                           onChange={(e) => handleUpdateRfqItem(item.id, 'qty', parseInt(e.target.value) || 0)}
-                          className="w-full p-1 border rounded text-center font-bold"
+                          className="w-full p-1.5 border rounded text-center font-bold"
                         />
                       </td>
                       <td className="p-2">
-                        <input
-                          type="text"
+                        <select
                           value={item.unit}
                           onChange={(e) => handleUpdateRfqItem(item.id, 'unit', e.target.value)}
-                          className="w-full p-1 border rounded text-center"
-                        />
+                          className="w-full p-1.5 border rounded bg-white dark:bg-gray-900 text-xs"
+                        >
+                          <option value="Cái">Cái</option>
+                          <option value="Bộ">Bộ</option>
+                          <option value="Hộp">Hộp</option>
+                          <option value="Thùng">Thùng</option>
+                          <option value="Cuộn">Cuộn</option>
+                          <option value="Chiếc">Chiếc</option>
+                          <option value="Gói">Gói</option>
+                        </select>
                       </td>
                       <td className="p-2 text-right font-mono">
                         <input
-                          type="number"
-                          value={item.estimatedPrice}
-                          onChange={(e) => handleUpdateRfqItem(item.id, 'estimatedPrice', parseInt(e.target.value) || 0)}
-                          className="w-full p-1 border rounded text-right font-mono"
+                          type="text"
+                          value={(item.estimatedPrice || 0).toLocaleString('vi-VN')}
+                          onChange={(e) => {
+                            const raw = parseInt(e.target.value.replace(/\D/g, ''), 10) || 0;
+                            handleUpdateRfqItem(item.id, 'estimatedPrice', raw);
+                          }}
+                          className="w-full p-1.5 border rounded text-right font-mono text-xs"
+                          placeholder="100.000"
                         />
                       </td>
                       <td className="p-2 text-right font-bold text-emerald-600 font-mono">

@@ -21,7 +21,7 @@ const statusBadgeStyles = {
 
 export function RolesPage() {
   const { roles, systemPermissions, fetchRoles, fetchSystemPermissions, addRole, updateRole, deleteRole } = useRoleStore();
-  const { fetchUsers } = useUserStore(); // pre-fetch users for assignment
+  const { users, fetchUsers } = useUserStore(); // pre-fetch users for assignment
   const [search, setSearch] = useState('');
   
   useEffect(() => {
@@ -182,11 +182,16 @@ export function RolesPage() {
         header: 'Người dùng',
         accessorKey: 'assignedUsersCount',
         cell: (info) => {
-          const count = info.getValue<number>();
+          const role = info.row.original;
+          const userCount = users.filter(u => 
+            u.assignedRole === role.roleCode || 
+            u.assignedRole === role.roleTitle || 
+            String(u.assignedRole) === String(role.id)
+          ).length;
           return (
             <div className="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800 w-fit px-2.5 py-1 rounded-md">
               <Users className="w-3.5 h-3.5 text-gray-500" />
-              <span className="text-sm font-bold text-gray-700 dark:text-gray-300">{count}</span>
+              <span className="text-sm font-bold text-gray-700 dark:text-gray-300">{userCount}</span>
             </div>
           );
         },
@@ -253,7 +258,7 @@ export function RolesPage() {
         },
       },
     ],
-    []
+    [users, systemPermissions]
   );
 
   return (

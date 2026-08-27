@@ -1,6 +1,6 @@
 import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Filter, Eye, Building2, CreditCard, Building, ShieldCheck, Lock, Edit, Trash2 } from 'lucide-react';
+import { Plus, Download, Search, Filter, Eye, Building2, CreditCard, Building, ShieldCheck, DollarSign, Lock, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 
 
@@ -10,7 +10,8 @@ import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import { useFinanceStore, type CorporateBankAccount } from '../store/financeStore';
 import { toast } from 'sonner';
 import { exportToCsv } from '@/shared/utils/exportCsv';
-import { UnifiedSearchInput } from '@/shared/components/ui/UnifiedSearchInput';
+import { SearchInput } from '@/shared/components/ui/SearchInput';
+import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 
 const formatBalance = (amount: number, currency: string) => {
   if (currency === 'VND') {
@@ -22,7 +23,7 @@ const formatBalance = (amount: number, currency: string) => {
   if (currency === 'GBP') {
     return `£${amount.toLocaleString('en-GB')}`;
   }
-  return `${amount.toLocaleString('vi-VN')} ₫`;
+  return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 };
 
 const typeBadgeStyles = {
@@ -46,22 +47,6 @@ const statusMapFull: Record<string, string> = {
   AUDIT_HOLD: 'Tạm khóa kiểm toán',
 };
 
-const VIETNAM_BANKS = [
-  'Vietcombank (VCB)', 'BIDV', 'VietinBank', 'Agribank', 'Techcombank',
-  'MB Bank', 'VPBank', 'ACB', 'Sacombank', 'TPBank',
-  'SHB', 'HDBank', 'VIB', 'SeABank', 'LienVietPostBank',
-  'OCB', 'MSB', 'Eximbank', 'ABBank', 'BacABank',
-  'BaoVietBank', 'KienLongBank', 'NamABank', 'NCB', 'PGBank',
-  'PVcomBank', 'Saigonbank', 'VietABank', 'VietBank', 'CBBank',
-];
-
-const COMMON_BRANCHES = [
-  'Hội sở chính', 'Chi nhánh TP.HCM', 'Chi nhánh Hà Nội',
-  'Chi nhánh Đà Nẵng', 'Chi nhánh Hải Phòng', 'Chi nhánh Cần Thơ',
-  'Chi nhánh Bình Dương', 'Chi nhánh Đồng Nai', 'Chi nhánh Khánh Hòa',
-  'Chi nhánh Quảng Ninh', 'Chi nhánh Nghệ An', 'Chi nhánh Thanh Hóa',
-];
-
 export function BankAccountsPage() {
   const data = useFinanceStore((s) => s.bankAccounts);
   const addBankAccount = useFinanceStore((s) => s.addBankAccount);
@@ -84,16 +69,15 @@ export function BankAccountsPage() {
 
   const filtered = data.filter((item) =>
     item.bankName.toLowerCase().includes(search.toLowerCase()) ||
-    (item.accountNumberMasked || '').includes(search) ||
-    (item.swiftBic || '').toLowerCase().includes(search.toLowerCase()) ||
-    (item.accountType || '').toLowerCase().includes(search.toLowerCase())
+    item.accountNumberMasked.includes(search) ||
+    item.swiftBic.toLowerCase().includes(search.toLowerCase()) ||
+    item.accountType.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingAccount({
-      accountNumber: '',
-      accountNumberMasked: '',
+      accountNumberMasked: '•••• •••• ' + Math.floor(1000 + Math.random() * 9000),
       bankName: '',
       branchName: '',
       swiftBic: 'BANKVN' + Math.floor(100 + Math.random() * 900) + 'XXX',
@@ -115,39 +99,48 @@ export function BankAccountsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveAccount = (e: React.FormEvent) => {
+  const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-    const rawAccNum = (editingAccount.accountNumber || '').replace(/\D/g, '');
-    if (!editingAccount.bankName || !rawAccNum) return;
-    if (rawAccNum.length < 8 || rawAccNum.length > 19) {
-      toast.error('Số tài khoản phải từ 8 đến 19 chữ số');
+    const rawAccNum = (editingAccount.accountNumber || editingAccount.accountNumberMasked || '').trim();
+    if (!editingAccount.bankName || !rawAccNum) {
+      toast.error('Vui lòng nhập đầy đủ Tên ngân hàng và Số tài khoản!');
       return;
     }
-    const maskedNum = rawAccNum.length >= 4 ? `•••• •••• ${rawAccNum.slice(-4)}` : rawAccNum;
 
-    if (modalMode === 'create') {
-      addBankAccount({
-        accountNumber: rawAccNum,
-        accountNumberMasked: maskedNum,
-        bankName: editingAccount.bankName || 'Ngân hàng',
-        branchName: editingAccount.branchName || 'Chi nhánh Hội sở chính',
-        swiftBic: editingAccount.swiftBic || 'SWIFTVNXXX',
-        currency: editingAccount.currency || 'VND',
-        currentBalance: Number(editingAccount.currentBalance) || 0,
-        availableWorkingCapital: Number(editingAccount.availableWorkingCapital) || 0,
-        accountType: editingAccount.accountType || 'PRIMARY_OPERATING',
-        status: editingAccount.status || 'ACTIVE',
-        openedDate: editingAccount.openedDate || new Date().toISOString().substring(0, 10),
-        authorizedSignatories:
-          editingAccount.authorizedSignatories && editingAccount.authorizedSignatories.length > 0
-            ? editingAccount.authorizedSignatories
-            : ['Giám đốc'],
-        notes: editingAccount.notes,
-      });
-    } else if (editingAccount.id) {
-      updateBankAccount(editingAccount.id, { ...editingAccount, accountNumber: rawAccNum, accountNumberMasked: maskedNum });
+    try {
+      if (modalMode === 'create') {
+        await addBankAccount({
+          accountNumber: rawAccNum,
+          accountNumberMasked: rawAccNum,
+          accountName: editingAccount.accountName || 'CÔNG TY RETAILHUB',
+          bankName: editingAccount.bankName || 'Ngân hàng',
+          branchName: editingAccount.branchName || 'Chi nhánh Hội sở chính',
+          swiftBic: editingAccount.swiftBic || 'SWIFTVNXXX',
+          currency: editingAccount.currency || 'VND',
+          currentBalance: Number(editingAccount.currentBalance) || 0,
+          availableWorkingCapital: Number(editingAccount.availableWorkingCapital) || Number(editingAccount.currentBalance) || 0,
+          accountType: editingAccount.accountType || 'PRIMARY_OPERATING',
+          status: editingAccount.status || 'ACTIVE',
+          openedDate: editingAccount.openedDate || new Date().toISOString().substring(0, 10),
+          authorizedSignatories:
+            editingAccount.authorizedSignatories && editingAccount.authorizedSignatories.length > 0
+              ? editingAccount.authorizedSignatories
+              : ['CFO Sarah Jenkins'],
+          notes: editingAccount.notes,
+        });
+        toast.success('Thêm tài khoản ngân hàng thành công!');
+      } else if (editingAccount.id) {
+        await updateBankAccount(editingAccount.id, {
+          ...editingAccount,
+          accountNumber: rawAccNum,
+          accountNumberMasked: rawAccNum,
+        });
+        toast.success('Cập nhật tài khoản ngân hàng thành công!');
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi khi lưu tài khoản ngân hàng');
     }
-    setIsModalOpen(false);
   };
 
   const handleDeleteConfirm = () => {
@@ -258,7 +251,7 @@ export function BankAccountsPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý các tài khoản liên kết với các định chế tài chính, giám sát số dư vốn lưu động khả dụng, lịch trình giải ngân và người được ủy quyền ký quỹ. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
+            <SecondaryButton
               onClick={() => {
                 exportToCsv('tai_khoan_ngan_hang', filtered, [
                   { header: 'Tên tài khoản', accessor: r => r.accountName || '' },
@@ -271,21 +264,20 @@ export function BankAccountsPage() {
                 ]);
                 toast.success('Đã xuất danh sách tài khoản ngân hàng dạng CSV!');
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+              leftIcon={<Download className="w-4 h-4" />}
             >
-              <Download className="w-4 h-4" /> Xuất Dữ Liệu số dư
-            </button>
-            <button
+              Xuất dữ liệu số dư
+            </SecondaryButton>
+            <CreateButton
               onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
             >
-              <Plus className="w-4 h-4" /> Liên kết tài khoản mới
-            </button>
+              Liên kết tài khoản mới
+            </CreateButton>
           </div>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <UnifiedSearchInput
+          <SearchInput
             value={search}
             onValueChange={setSearch}
             placeholder="Tìm kiếm tài khoản theo tên ngân hàng, số tài khoản hoặc mã SWIFT/BIC..."
@@ -423,7 +415,7 @@ export function BankAccountsPage() {
                   onClick={() => toast.success('Đã gửi yêu cầu chuyển khoản thanh khoản nội bộ!')}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg shadow transition-colors text-sm"
                 >
-                  <span className="w-4 h-4 text-sm font-bold">₫</span> Chuyển khoản thanh khoản nội bộ
+                  <DollarSign className="w-4 h-4" /> Chuyển khoản thanh khoản nội bộ
                 </button>
               )}
               <button
@@ -453,53 +445,34 @@ export function BankAccountsPage() {
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên ngân hàng *</label>
                 <input
                   type="text"
-                  list="bankNameList"
                   value={editingAccount.bankName || ''}
                   onChange={(e) => setEditingAccount({ ...editingAccount, bankName: e.target.value })}
-                  placeholder="Gõ để tìm kiếm ngân hàng..."
+                  placeholder="Vietcombank, BIDV, Techcombank..."
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
                   required
                 />
-                <datalist id="bankNameList">
-                  {VIETNAM_BANKS.map((bank) => (
-                    <option key={bank} value={bank} />
-                  ))}
-                </datalist>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên chi nhánh *</label>
                 <input
                   type="text"
-                  list="branchNameList"
                   value={editingAccount.branchName || ''}
                   onChange={(e) => setEditingAccount({ ...editingAccount, branchName: e.target.value })}
-                  placeholder="Gõ để tìm hoặc chọn chi nhánh..."
+                  placeholder="Chi nhánh TP.HCM, Hội sở chính..."
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
                   required
                 />
-                <datalist id="branchNameList">
-                  {COMMON_BRANCHES.map((branch) => (
-                    <option key={branch} value={branch} />
-                  ))}
-                </datalist>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tài khoản * <span className="text-gray-400 font-normal">(chỉ nhập chữ số)</span></label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tài khoản *</label>
                 <input
                   type="text"
-                  inputMode="numeric"
-                  value={editingAccount.accountNumber || ''}
-                  onChange={(e) => {
-                    const digitsOnly = e.target.value.replace(/\D/g, '');
-                    setEditingAccount({ ...editingAccount, accountNumber: digitsOnly });
-                  }}
-                  placeholder="Nhập số tài khoản (VD: 1234567890)"
+                  value={editingAccount.accountNumberMasked || ''}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, accountNumberMasked: e.target.value })}
+                  placeholder="•••• •••• 8810 2450"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
                   required
-                  minLength={8}
-                  maxLength={19}
                 />
-                <p className="text-xs text-gray-400 mt-1">Tối thiểu 8 chữ số, tối đa 19 chữ số</p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã SWIFT / BIC *</label>

@@ -9,6 +9,8 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
+import { SearchInput } from '@/shared/components/ui/SearchInput';
+import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 
 interface PurchaseInvoiceRecord {
   id: string;
@@ -331,29 +333,24 @@ export function PurchaseInvoicesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Hóa đơn mua hàng (nguồn vào)</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hóa đơn mua hàng (nguồn vào)</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Quản lý hóa đơn VAT đầu vào từ các nhà cung cấp nhằm đối chiếu công nợ và kế toán tài chính.
           </p>
         </div>
-        <button
-          onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition"
-        >
-          <Plus className="w-4 h-4" /> Nhận Hóa Đơn Mới
-        </button>
+        <CreateButton onClick={handleOpenCreate}>
+          Nhận hóa đơn mới
+        </CreateButton>
       </div>
 
-      <div className="p-4 bg-white dark:bg-gray-800 rounded shadow flex items-center gap-4">
-        <Search className="w-5 h-5 text-gray-400" />
-        <input
-          type="text"
+      <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+        <SearchInput
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onValueChange={setSearch}
           placeholder="Tìm kiếm mã hóa đơn, mã PO, nhà cung cấp..."
-          className="w-full bg-transparent outline-none text-sm"
+          containerClassName="w-full sm:max-w-md"
         />
       </div>
 

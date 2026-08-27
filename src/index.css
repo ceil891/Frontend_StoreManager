@@ -170,3 +170,68 @@
   padding-right: 20px;
   font-size: 15px;
 }
+
+/* ============================================================
+   GLOBAL UI STANDARDIZATION & DESIGN TOKENS
+   - SearchInput: 40px height, rounded-lg (8px), #D9D9D9 border
+   - Buttons: 40px height, rounded-lg (8px), primary brand bg
+   - Sentence Case utility
+   ============================================================ */
+
+@layer utilities {
+  /* Sentence case helper */
+  .sentence-case {
+    text-transform: lowercase;
+    display: inline-block;
+  }
+  .sentence-case::first-letter {
+    text-transform: uppercase;
+  }
+
+  /* Global Search Bar Token */
+  .global-search-input {
+    height: 2.5rem /* 40px */;
+    border-radius: 0.5rem /* 8px */;
+    border: 1px solid #d9d9d9;
+    padding-left: 2.5rem /* 40px */;
+    padding-right: 2.25rem /* 36px */;
+    font-size: 0.875rem /* 14px */;
+    background-color: #ffffff;
+    transition: all 150ms ease;
+  }
+  .global-search-input:focus {
+    outline: none;
+    border-color: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+  }
+  .dark .global-search-input {
+    border-color: #374151;
+    background-color: #111827;
+    color: #f9fafb;
+  }
+
+  /* Global Primary Button Token */
+  .btn-primary-global {
+    height: 2.5rem /* 40px */;
+    padding: 0 1rem /* 16px */;
+    border-radius: 0.5rem /* 8px */;
+    background-color: #059669;
+    color: #ffffff;
+    font-size: 0.875rem /* 14px */;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem /* 8px */;
+    transition: all 150ms ease;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  }
+  .btn-primary-global:hover {
+    background-color: #047857;
+    filter: brightness(0.95);
+  }
+  .btn-primary-global:active {
+    transform: scale(0.98);
+  }
+}
+

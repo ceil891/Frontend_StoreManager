@@ -8,6 +8,7 @@ import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Download, Eye, ShoppingBag, CreditCard, Clock, CheckCircle2, FileText, User, Plus, Edit, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 import { useSalesStore, type SaleOrder, BRANCH_NAME_BY_ID, calcTotalAmount, formatMoney } from '../store/salesStore';
 import { resolveCustomerName, WALK_IN_CUSTOMER_ID } from '../store/salesHelpers';
 import { useCrmStore } from '@/features/crm/store/crmStore';
@@ -440,18 +441,16 @@ export function SaleOrdersPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button 
+            <SecondaryButton 
               onClick={handleExportCsv}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0"
+              leftIcon={<Download className="w-4 h-4" />}
             >
-              <Download className="w-4 h-4" />
-              Xuất Dữ Liệu
-            </button>
+              Xuất dữ liệu
+            </SecondaryButton>
             {canManage && (
-              <button onClick={handleOpenCreate} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0">
-                <Plus className="w-4 h-4" />
-                Tạo Đơn Hàng Mới
-              </button>
+              <CreateButton onClick={handleOpenCreate}>
+                Tạo đơn hàng mới
+              </CreateButton>
             )}
           </div>
         </div>

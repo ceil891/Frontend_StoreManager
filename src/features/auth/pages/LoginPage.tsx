@@ -14,12 +14,12 @@ import type { RoleType } from '../types';
 const loginSchema = z.object({
   email: z
     .string()
-    .min(1, 'Email is required')
-    .email('Please enter a valid email address'),
+    .min(1, 'Vui lòng nhập tên đăng nhập hoặc email')
+    .transform((val) => val.trim()),
   password: z
     .string()
-    .min(1, 'Password is required')
-    .min(6, 'Password must be at least 6 characters'),
+    .min(1, 'Vui lòng nhập mật khẩu')
+    .min(6, 'Mật khẩu phải có ít nhất 6 ký tự'),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -199,10 +199,10 @@ export function LoginPage() {
               )}
             </AnimatePresence>
 
-            {/* Email Field */}
+            {/* Username / Email Field */}
             <div>
               <label htmlFor={emailId} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Địa chỉ Email
+                Tên đăng nhập hoặc Email
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -210,9 +210,9 @@ export function LoginPage() {
                 </div>
                 <input
                   id={emailId}
-                  type="email"
-                  autoComplete="email"
-                  placeholder="you@company.com"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="admin hoặc email@domain.com"
                   ref={(e) => {
                     emailRegRef(e);
                     (emailRef as React.MutableRefObject<HTMLInputElement | null>).current = e;

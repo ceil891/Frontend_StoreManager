@@ -12,6 +12,8 @@ import { useUserStore } from '../store/userStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
 import { toast } from 'sonner';
 import { exportToCsv } from '@/shared/utils/exportCsv';
+import { SearchInput } from '@/shared/components/ui/SearchInput';
+import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 
 const statusStyles = {
   ACTIVE: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200',
@@ -159,24 +161,27 @@ export function DepartmentsPage() {
       {
         accessorKey: 'totalEmployees',
         header: 'Nhân sự',
-        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{info.getValue() as number} FTE</span>,
+        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{(info.getValue() as number) || 0} người</span>,
       },
       {
         accessorKey: 'allocatedAnnualBudgetUsd',
         header: 'Ngân sách phân bổ',
-        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">${(info.getValue() as number).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>,
+        cell: (info) => {
+          const val = Number(info.getValue() || 0);
+          return <span className="font-mono font-bold text-gray-900 dark:text-white">{val > 0 ? `${val.toLocaleString('vi-VN')} ₫` : '0 ₫'}</span>;
+        },
       },
       {
         accessorKey: 'ytdSpendUsd',
         header: 'Chi tiêu lũy kế',
         cell: ({ row }) => {
-          const budget = row.original.allocatedAnnualBudgetUsd ?? 0;
-          const spend = row.original.ytdSpendUsd ?? 0;
+          const budget = Number(row.original.allocatedAnnualBudgetUsd || 0);
+          const spend = Number(row.original.ytdSpendUsd || 0);
           const pct = budget > 0 ? ((spend / budget) * 100).toFixed(1) : '0.0';
           return (
             <div>
-              <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">${spend.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-              <span className="text-xs text-gray-500 block font-mono">{pct}% đã dùng</span>
+              <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{spend > 0 ? `${spend.toLocaleString('vi-VN')} ₫` : '0 ₫'}</span>
+              {budget > 0 && <span className="text-xs text-gray-500 block font-mono">{pct}% đã dùng</span>}
             </div>
           );
         },
@@ -237,7 +242,7 @@ export function DepartmentsPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý cơ cấu phòng ban, theo dõi phân bổ nhân sự, kiểm toán ngân sách bộ phận và theo dõi chi phí trung tâm.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
+            <SecondaryButton
               onClick={() => {
                 exportToCsv('danh_sach_phong_ban', filtered, [
                   { header: 'Mã phòng ban', accessor: r => r.departmentCode },
@@ -250,30 +255,24 @@ export function DepartmentsPage() {
                 ]);
                 toast.success('Đã xuất danh sách phòng ban dạng CSV!');
               }}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap"
+              leftIcon={<Download className="w-4 h-4" />}
             >
-              <Download className="w-4 h-4" /> Xuất sơ đồ tổ chức
-            </button>
-            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap">
-              <Plus className="w-4 h-4" /> Tạo Phòng Ban Mới
-            </button>
+              Xuất sơ đồ tổ chức
+            </SecondaryButton>
+            <CreateButton onClick={handleOpenCreate}>
+              Tạo phòng ban mới
+            </CreateButton>
           </div>
         </div>
 
         <div className="flex flex-col gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
           <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-gray-400" />
-              </div>
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Tìm kiếm phòng ban theo mã, tên, trưởng bộ phận hoặc phân khu..."
-                className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-all"
-              />
-            </div>
+            <SearchInput
+              value={search}
+              onValueChange={setSearch}
+              placeholder="Tìm kiếm phòng ban theo mã, tên, trưởng bộ phận hoặc phân khu..."
+              containerClassName="flex-1 sm:max-w-md"
+            />
           </div>
 
           {/* Quick Filters Row */}

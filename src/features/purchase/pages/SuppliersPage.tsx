@@ -10,6 +10,8 @@ import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
+import { SearchInput } from '@/shared/components/ui/SearchInput';
+import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 
 export function SuppliersPage() {
   const { suppliers: data, addSupplier, updateSupplier, deleteSupplier, fetchSuppliers, isLoadingSuppliers } = usePurchaseStore();
@@ -312,31 +314,25 @@ export function SuppliersPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý đối tác nhà cung cấp, chỉ số hiệu suất và điều khoản hợp tác. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
+            <SecondaryButton
               onClick={() => toast.success('Xuất danh sách nhà cung cấp thành công!')}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0"
+              leftIcon={<Download className="w-4 h-4" />}
             >
-              <Download className="w-4 h-4" /> Xuất Dữ Liệu
-            </button>
-            <button onClick={handleOpenCreate} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0">
-              <Plus className="w-4 h-4" /> Thêm Nhà Cung Cấp Mới
-            </button>
+              Xuất dữ liệu
+            </SecondaryButton>
+            <CreateButton onClick={handleOpenCreate}>
+              Thêm nhà cung cấp mới
+            </CreateButton>
           </div>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="flex-1 relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-gray-400" />
-            </div>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm kiếm theo tên nhà cung cấp, mã hoặc danh mục..."
-              className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
-            />
-          </div>
+          <SearchInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder="Tìm kiếm theo tên nhà cung cấp, mã hoặc danh mục..."
+            containerClassName="flex-1 sm:max-w-md"
+          />
           <button title="Bộ lọc" className="flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors text-sm whitespace-nowrap shrink-0">
             <Filter className="w-4 h-4" /> Bộ lọc
           </button>
