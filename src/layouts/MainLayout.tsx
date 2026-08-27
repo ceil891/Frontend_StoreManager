@@ -45,7 +45,7 @@ function isItemActive(item: NavItem, pathname: string, allHrefs: string[]): bool
 import { checkPermission } from '@/shared/hooks/usePermission';
 
 function filterNavItem(item: NavItem, permissions: string[], role?: string | null): NavItem | null {
-  if (role === 'SUPER_ADMIN') return item;
+  if (permissions.includes('*') || permissions.includes('ALL')) return item;
   if (item.children && item.children.length > 0) {
     const validChildren = item.children
       .map((child) => filterNavItem(child, permissions, role))
@@ -385,7 +385,7 @@ export function MainLayout() {
               </Link>
               <button
                 onClick={handleLogout}
-                title="Sign out"
+                title="Đăng xuất"
                 className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
               >
                 <LogOut className="w-3.5 h-3.5" />
@@ -423,7 +423,7 @@ export function MainLayout() {
               {/* Quick POS Terminal Button */}
               <Link
                 to="/pos"
-                title="Mở máy bán hàng POS"
+                title="Mở màn hình bán hàng POS"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all active:scale-95 mr-1"
               >
                 <ShoppingCart className="w-3.5 h-3.5" />
@@ -433,7 +433,7 @@ export function MainLayout() {
               {/* Dark Mode Toggle */}
               <button
                 onClick={toggleTheme}
-                title={theme === 'dark' ? 'Chuyển sang Chế độ Sáng' : 'Chuyển sang Chế độ Tối'}
+                title={theme === 'dark' ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
                 className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}

@@ -23,6 +23,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { extractPageContent } from '@/shared/lib/apiHelpers';
 import { toast } from 'sonner';
+import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 
 export interface DeliveryLineItem {
   id: string;
@@ -90,16 +91,67 @@ export function SupplierDeliveriesPage() {
   const [deliveryLines, setDeliveryLines] = useState<DeliveryLineItem[]>([]);
 
   const [apiBranches, setApiBranches] = useState<{ id: number; name: string }[]>([]);
+  const [apiUsers, setApiUsers] = useState<{ id: string; fullName: string; role?: string; email?: string }[]>([]);
 
   useEffect(() => {
-    axiosClient.get('/branches').then((res: any) => {
-      const list = extractPageContent<any>(res);
-      const mapped = list.map((b: any) => ({
-        id: Number(b.id),
-        name: b.branchName || b.name || ''
-      })).filter((b: any) => b.name);
-      if (mapped.length > 0) setApiBranches(mapped);
-    }).catch(() => {});
+    const loadBranches = async () => {
+      try {
+        let bRes: any = await axiosClient.get('/branches');
+        let list = Array.isArray(bRes) ? bRes : (bRes?.data || bRes?.content || []);
+        if (!list || list.length === 0) {
+          bRes = await axiosClient.get('/purchase/dropdowns/branches');
+          list = Array.isArray(bRes) ? bRes : (bRes?.data || []);
+        }
+        const mapped = list.map((b: any) => ({
+          id: Number(b.id),
+          name: b.branchName || b.name || ''
+        })).filter((b: any) => b.name);
+        if (mapped.length > 0) {
+          setApiBranches(mapped);
+        } else {
+          setApiBranches([
+            { id: 1, name: 'Hội Sở Chính Hà Nội' },
+            { id: 2, name: 'Chi nhánh Quận 1 TP.HCM' },
+            { id: 3, name: 'Chi nhánh Đà Nẵng' },
+            { id: 4, name: 'Chi nhánh Cần Thơ (Ninh Kiều)' },
+            { id: 5, name: 'Chi nhánh Hải Phòng' },
+            { id: 6, name: 'Chi nhánh Cầu Giấy, Hà Nội' },
+          ]);
+        }
+      } catch {
+        setApiBranches([
+          { id: 1, name: 'Hội Sở Chính Hà Nội' },
+          { id: 2, name: 'Chi nhánh Quận 1 TP.HCM' },
+          { id: 3, name: 'Chi nhánh Đà Nẵng' },
+          { id: 4, name: 'Chi nhánh Cần Thơ (Ninh Kiều)' },
+          { id: 5, name: 'Chi nhánh Hải Phòng' },
+          { id: 6, name: 'Chi nhánh Cầu Giấy, Hà Nội' },
+        ]);
+      }
+    };
+
+    const loadUsers = async () => {
+      try {
+        let uRes: any = await axiosClient.get('/users');
+        let list = Array.isArray(uRes) ? uRes : (uRes?.data || uRes?.content || []);
+        if (!list || list.length === 0) {
+          uRes = await axiosClient.get('/purchase/dropdowns/employees');
+          list = Array.isArray(uRes) ? uRes : (uRes?.data || []);
+        }
+        const mapped = list.map((u: any) => ({
+          id: String(u.id),
+          fullName: u.fullName || u.name || u.username || 'Thủ kho',
+          role: u.role?.roleName || u.roleName || u.role || 'Thủ kho',
+          email: u.email || '',
+        })).filter((u: any) => u.fullName);
+        if (mapped.length > 0) setApiUsers(mapped);
+      } catch (err) {
+        console.warn('Failed to load users:', err);
+      }
+    };
+
+    loadBranches();
+    loadUsers();
   }, []);
 
   // Fetch Supplier Deliveries / Import Receipts & Purchase Orders
@@ -214,7 +266,17 @@ export function SupplierDeliveriesPage() {
         };
       });
 
-      setData(mappedDeliveries);
+      let createdDeliveries: SupplierDeliveryRecord[] = [];
+      try {
+        createdDeliveries = JSON.parse(localStorage.getItem('retailhub_created_deliveries') || '[]');
+      } catch {}
+
+      const combined = [
+        ...createdDeliveries,
+        ...mappedDeliveries.filter((m) => !createdDeliveries.some((c) => c.deliveryCode === m.deliveryCode || c.id === m.id)),
+      ];
+
+      setData(combined);
     } catch (err) {
       console.error('Lỗi khi tải lịch sử nhận hàng:', err);
       setHasError(true);
@@ -247,7 +309,7 @@ export function SupplierDeliveriesPage() {
   // Handle PO Selection in Form
   const handleSelectPo = (poIdStr: string) => {
     setSelectedPoId(poIdStr);
-    const matchedPo = purchaseOrders.find((p) => String(p.id) === poIdStr);
+    const matchedPo = purchaseOrders.find((p) => String(p.id) === poIdStr || p.poCode === poIdStr);
     if (matchedPo) {
       setEditingItem((prev) => ({
         ...prev,
@@ -255,8 +317,8 @@ export function SupplierDeliveriesPage() {
         purchaseOrderId: matchedPo.id,
         supplierName: matchedPo.supplierName,
         supplierCode: matchedPo.supplierCode,
-        branchId: prev.branchId || matchedPo.branchId,
-        branchName: prev.branchName || matchedPo.branchName,
+        branchId: matchedPo.branchId || prev.branchId,
+        branchName: matchedPo.branchName || prev.branchName,
       }));
       setDeliveryLines(matchedPo.lines.map(l => ({ ...l })));
     } else {
@@ -272,19 +334,32 @@ export function SupplierDeliveriesPage() {
 
   // Handle Changing Received Quantity for a Line Item
   const handleLineQtyChange = (id: string, qtyStr: string) => {
-    const qty = Math.max(0, Number(qtyStr) || 0);
-    setDeliveryLines((prev) =>
-      prev.map((line) => {
+    setDeliveryLines((prev) => {
+      const updated = prev.map((line) => {
         if (line.id === id) {
+          const rawNum = Math.max(0, Number(qtyStr) || 0);
+          const cappedQty = Math.min(line.orderedQty, rawNum);
           return {
             ...line,
-            currentReceiveQty: qty,
-            subTotal: qty * line.unitPrice,
+            currentReceiveQty: cappedQty,
+            subTotal: cappedQty * line.unitPrice,
           };
         }
         return line;
-      })
-    );
+      });
+
+      const totalOrdered = updated.reduce((sum, l) => sum + (Number(l.orderedQty) || 0), 0);
+      const totalRecv = updated.reduce((sum, l) => sum + (Number(l.currentReceiveQty) || 0), 0);
+      let autoStatus: SupplierDeliveryRecord['status'] = 'CHO_NHAN';
+      if (totalRecv >= totalOrdered && totalOrdered > 0) {
+        autoStatus = 'DA_NHAN';
+      } else if (totalRecv > 0) {
+        autoStatus = 'DANG_NHAN'; // Nhận 1 phần
+      }
+      setEditingItem((cur) => ({ ...cur, status: autoStatus }));
+
+      return updated;
+    });
   };
 
   // Summary Metrics of Current Delivery Form
@@ -310,7 +385,7 @@ export function SupplierDeliveriesPage() {
       branchId: defaultBranch.id,
       branchName: defaultBranch.name,
       expectedDate: new Date().toISOString().split('T')[0],
-      receiver: 'Nguyễn Văn Hùng (Thủ kho)',
+      receiver: 'Nguyễn Văn Hùng (Thủ kho - Chi nhánh chính)',
       status: 'CHO_NHAN',
       notes: '',
     });
@@ -320,13 +395,26 @@ export function SupplierDeliveriesPage() {
   // Open Edit Modal
   const handleOpenEdit = (item: SupplierDeliveryRecord) => {
     setModalMode('edit');
-    setSelectedPoId(String(item.purchaseOrderId || ''));
-    setEditingItem(item);
+    const matchedPo = purchaseOrders.find(
+      (p) =>
+        (item.purchaseOrderId && String(p.id) === String(item.purchaseOrderId)) ||
+        (item.poCode && p.poCode.toLowerCase() === item.poCode.toLowerCase())
+    );
+    const targetPoId = matchedPo ? String(matchedPo.id) : (item.purchaseOrderId ? String(item.purchaseOrderId) : item.poCode || '');
+    setSelectedPoId(targetPoId);
+    setEditingItem({
+      ...item,
+      purchaseOrderId: matchedPo ? matchedPo.id : item.purchaseOrderId,
+      poCode: matchedPo ? matchedPo.poCode : item.poCode,
+      supplierName: matchedPo ? matchedPo.supplierName : item.supplierName,
+      supplierCode: matchedPo ? matchedPo.supplierCode : item.supplierCode,
+    });
     if (item.lines && item.lines.length > 0) {
       setDeliveryLines(item.lines);
+    } else if (matchedPo && matchedPo.lines && matchedPo.lines.length > 0) {
+      setDeliveryLines(matchedPo.lines.map((l) => ({ ...l })));
     } else {
-      const matchedPo = purchaseOrders.find((p) => p.poCode === item.poCode);
-      setDeliveryLines(matchedPo ? matchedPo.lines : []);
+      setDeliveryLines([]);
     }
     setIsModalOpen(true);
   };
@@ -422,49 +510,77 @@ export function SupplierDeliveriesPage() {
       localStorage.setItem('retailhub_supplier_deliveries_overrides', JSON.stringify(overrides));
     } catch {}
 
+    let apiSuccess = false;
     try {
       if (modalMode === 'create') {
-        await axiosClient.post('/inventory/imports', payload);
+        console.log('[SupplierDeliveries] CREATE payload:', JSON.stringify(payload, null, 2));
+        const createRes = await axiosClient.post('/inventory/imports', payload);
+        console.log('[SupplierDeliveries] CREATE response:', createRes);
+        const createdId = (createRes as any)?.data?.id || (createRes as any)?.id;
+        apiSuccess = true;
         toast.success(`Tạo đợt nhận hàng ${editingItem.deliveryCode} thành công!`);
+        // If status is "Đã nhận đủ", call /complete to trigger stock addition to branch
+        if (isCompleted && createdId) {
+          try {
+            await axiosClient.post(`/inventory/imports/${createdId}/complete`);
+            toast.success(`Đã cộng tồn kho cho chi nhánh "${finalBranchName}"!`);
+          } catch (completeErr) {
+            console.warn('Auto-complete after create (backend may have auto-completed):', completeErr);
+          }
+        }
+        if (createdId) newRecord.id = String(createdId);
       } else {
         if (editingItem.id && /^\d+$/.test(String(editingItem.id))) {
+          console.log('[SupplierDeliveries] UPDATE payload:', JSON.stringify(payload, null, 2));
           await axiosClient.put(`/inventory/imports/${editingItem.id}`, payload);
+          apiSuccess = true;
           if (isCompleted) {
             try {
               await axiosClient.post(`/inventory/imports/${editingItem.id}/complete`);
+              toast.success(`Đã cộng tồn kho cho chi nhánh "${finalBranchName}"!`);
             } catch {}
           }
         }
         toast.success(`Cập nhật đợt nhận hàng ${editingItem.deliveryCode} thành công!`);
       }
     } catch (err: any) {
-      console.warn('API import response notice:', err);
-      toast.success(`Đã lưu đợt nhận hàng ${editingItem.deliveryCode} thành công!`);
+      const errMsg = err?.response?.data?.message || err?.message || 'Lỗi không xác định';
+      console.error('[SupplierDeliveries] API ERROR:', err?.response?.status, errMsg, err);
+      toast.error(`Lỗi khi lưu đợt nhận hàng: ${errMsg}`);
     } finally {
       setIsSubmitting(false);
     }
 
     if (modalMode === 'create') {
-      setData((prev) => [newRecord, ...prev]);
+      try {
+        const stored = JSON.parse(localStorage.getItem('retailhub_created_deliveries') || '[]');
+        localStorage.setItem('retailhub_created_deliveries', JSON.stringify([newRecord, ...stored.filter((s: any) => s.deliveryCode !== newRecord.deliveryCode && s.id !== newRecord.id)]));
+      } catch {}
+      setData((prev) => [newRecord, ...prev.filter((p) => p.deliveryCode !== newRecord.deliveryCode && p.id !== newRecord.id)]);
     } else {
+      try {
+        const stored = JSON.parse(localStorage.getItem('retailhub_created_deliveries') || '[]');
+        localStorage.setItem('retailhub_created_deliveries', JSON.stringify(stored.map((s: any) => (s.id === newRecord.id || s.deliveryCode === newRecord.deliveryCode ? newRecord : s))));
+      } catch {}
       setData((prev) => prev.map((item) => (item.id === newRecord.id || item.deliveryCode === newRecord.deliveryCode ? newRecord : item)));
     }
 
+    useInventoryStore.getState().fetchProducts();
     setIsModalOpen(false);
-    fetchDeliveries();
   };
 
   // Delete Delivery Record
   const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa đợt giao nhận hàng này?')) {
       try {
+        const stored = JSON.parse(localStorage.getItem('retailhub_created_deliveries') || '[]');
+        localStorage.setItem('retailhub_created_deliveries', JSON.stringify(stored.filter((s: any) => s.id !== id && s.deliveryCode !== id)));
+      } catch {}
+      setData((prev) => prev.filter((i) => i.id !== id && i.deliveryCode !== id));
+      try {
         await axiosClient.delete(`/inventory/imports/${id}`);
-        toast.success('Đã xóa đợt nhận hàng');
-      } catch (err) {
-        setData((prev) => prev.filter((i) => i.id !== id));
-        toast.success('Đã xóa đợt nhận hàng');
-      }
-      fetchDeliveries();
+      } catch {}
+      toast.success('Đã xóa đợt nhận hàng');
     }
   };
 
@@ -564,6 +680,51 @@ export function SupplierDeliveriesPage() {
         header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
+            {(row.original.status === 'CHO_NHAN' || row.original.status === 'DANG_NHAN') && (
+              <button
+                onClick={async () => {
+                  const rec = row.original;
+                  const recId = rec.id;
+                  if (!confirm(`Xác nhận nhận hàng cho đợt ${rec.deliveryCode}? Tồn kho sẽ được cộng vào chi nhánh "${rec.branchName}".`)) return;
+                  try {
+                    if (/^\d+$/.test(String(recId))) {
+                      await axiosClient.post(`/inventory/imports/${recId}/complete`);
+                    }
+                    // Update local state
+                    setData((prev) => prev.map((item) =>
+                      item.id === recId || item.deliveryCode === rec.deliveryCode
+                        ? { ...item, status: 'DA_NHAN' as const, actualDate: new Date().toISOString().split('T')[0] }
+                        : item
+                    ));
+                    // Update overrides
+                    try {
+                      const overrides = JSON.parse(localStorage.getItem('retailhub_supplier_deliveries_overrides') || '{}');
+                      const ov = { ...overrides[recId], status: 'DA_NHAN', actualDate: new Date().toISOString().split('T')[0] };
+                      overrides[recId] = ov;
+                      if (rec.deliveryCode) overrides[rec.deliveryCode] = ov;
+                      localStorage.setItem('retailhub_supplier_deliveries_overrides', JSON.stringify(overrides));
+                    } catch {}
+                    try {
+                      const stored: any[] = JSON.parse(localStorage.getItem('retailhub_created_deliveries') || '[]');
+                      localStorage.setItem('retailhub_created_deliveries', JSON.stringify(stored.map((s) =>
+                        s.id === recId || s.deliveryCode === rec.deliveryCode
+                          ? { ...s, status: 'DA_NHAN', actualDate: new Date().toISOString().split('T')[0] }
+                          : s
+                      )));
+                    } catch {}
+                    useInventoryStore.getState().fetchProducts();
+                    toast.success(`Đã nhận hàng & cộng tồn kho cho chi nhánh "${rec.branchName}"!`);
+                  } catch (err: any) {
+                    const errMsg = err?.response?.data?.message || err?.message || '';
+                    toast.error(`Lỗi khi nhận hàng: ${errMsg}`);
+                  }
+                }}
+                className="p-1.5 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+                title="Nhận hàng & cộng tồn kho"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={() => setSelected(row.original)}
               className="p-1.5 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
@@ -751,13 +912,12 @@ export function SupplierDeliveriesPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={modalMode === 'create' ? 'Tạo đợt nhận hàng nhà cung cấp mới' : 'Sửa đợt nhận hàng'}
-        width="max-w-4xl"
+        size="erp"
       >
         <form onSubmit={handleSave} className="space-y-6">
           {/* PHẦN 1 — THÔNG TIN NHẬN HÀNG */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
-              <Building2 className="w-4 h-4 text-emerald-600" />
+            <div className="border-b border-gray-200 dark:border-gray-700 pb-2">
               <h3 className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
                 Phần 1 — Thông tin giao nhận hàng
               </h3>
@@ -785,6 +945,11 @@ export function SupplierDeliveriesPage() {
                   required
                 >
                   <option value="">-- 🔍 Chọn đơn mua PO... --</option>
+                  {editingItem.poCode && !purchaseOrders.some((p) => String(p.id) === String(selectedPoId) || p.poCode.toLowerCase() === editingItem.poCode?.toLowerCase()) && (
+                    <option value={selectedPoId || editingItem.poCode}>
+                      {editingItem.poCode} - {editingItem.supplierName} ({editingItem.status === 'DA_NHAN' ? 'Đã nhận đủ' : 'Đang xử lý'})
+                    </option>
+                  )}
                   {purchaseOrders.map((po) => (
                     <option key={po.id} value={String(po.id)}>
                       {po.poCode} - {po.supplierName} ({po.status})
@@ -812,36 +977,24 @@ export function SupplierDeliveriesPage() {
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Kho nhận hàng *</label>
                 <select
-                  value={editingItem.branchName || (apiBranches[0]?.name || 'Chi nhánh chính')}
+                  value={editingItem.branchName || (apiBranches[0]?.name || 'Hội Sở Chính Hà Nội')}
                   onChange={(e) => {
                     const selectedName = e.target.value;
-                    const branchList = apiBranches.length > 0
-                      ? apiBranches
-                      : [
-                          { id: 1, name: 'Chi nhánh chính' },
-                          { id: 2, name: 'Đà Nẵng' },
-                          { id: 3, name: 'Hà Nội' },
-                          { id: 4, name: 'TP. Hồ Chí Minh' }
-                        ];
-                    const matched = branchList.find(b => b.name === selectedName);
+                    const matched = apiBranches.find(b => b.name === selectedName);
                     setEditingItem((prev) => ({
                       ...prev,
                       branchName: selectedName,
-                      branchId: matched?.id || prev.branchId,
+                      branchId: matched?.id || prev.branchId || 1,
                     }));
                   }}
-                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold bg-white dark:bg-gray-800 text-gray-900 dark:text-white cursor-pointer"
+                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold bg-white dark:bg-gray-800 text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-emerald-500"
                   required
                 >
-                  {(apiBranches.length > 0
-                    ? apiBranches
-                    : [
-                        { id: 1, name: 'Chi nhánh chính' },
-                        { id: 2, name: 'Đà Nẵng' },
-                        { id: 3, name: 'Hà Nội' },
-                        { id: 4, name: 'TP. Hồ Chí Minh' }
-                      ]
-                  ).map((b) => (
+                  {/* Fallback option if editing branchName is not in apiBranches list */}
+                  {editingItem.branchName && !apiBranches.some(b => b.name.toLowerCase() === editingItem.branchName?.toLowerCase()) && (
+                    <option value={editingItem.branchName}>{editingItem.branchName}</option>
+                  )}
+                  {apiBranches.map((b) => (
                     <option key={b.id || b.name} value={b.name}>
                       {b.name}
                     </option>
@@ -853,22 +1006,39 @@ export function SupplierDeliveriesPage() {
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Ngày dự kiến nhận *</label>
                 <input
                   type="date"
+                  min={new Date().toISOString().split('T')[0]}
                   value={editingItem.expectedDate || ''}
                   onChange={(e) => setEditingItem({ ...editingItem, expectedDate: e.target.value })}
-                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono"
+                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-mono focus:ring-2 focus:ring-emerald-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Người nhận hàng</label>
-                <input
-                  type="text"
-                  value={editingItem.receiver || ''}
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Người nhận hàng (Thủ kho) *</label>
+                <select
+                  value={editingItem.receiver || (apiUsers[0]?.fullName ? `${apiUsers[0].fullName} (${apiUsers[0].role || 'Thủ kho'})` : 'Nguyễn Văn Hùng (Thủ kho)')}
                   onChange={(e) => setEditingItem({ ...editingItem, receiver: e.target.value })}
-                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
-                  placeholder="Thủ kho nhận"
-                />
+                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold bg-white dark:bg-gray-800 text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-emerald-500"
+                  required
+                >
+                  {editingItem.receiver && !apiUsers.some(u => `${u.fullName} (${u.role || 'Thủ kho'})` === editingItem.receiver || u.fullName === editingItem.receiver) && (
+                    <option value={editingItem.receiver}>{editingItem.receiver}</option>
+                  )}
+                  {apiUsers.length > 0 ? (
+                    apiUsers.map((u) => (
+                      <option key={u.id} value={`${u.fullName} (${u.role || 'Thủ kho'})`}>
+                        {u.fullName} ({u.role || 'Thủ kho'}) {u.email ? `- ${u.email}` : ''}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Nguyễn Văn Hùng (Thủ kho)">Nguyễn Văn Hùng (Thủ kho)</option>
+                      <option value="Trần Đình Trọng (Thủ kho chi nhánh)">Trần Đình Trọng (Thủ kho chi nhánh)</option>
+                      <option value="Lê Văn Hưng (Quản lý kho tổng)">Lê Văn Hưng (Quản lý kho tổng)</option>
+                    </>
+                  )}
+                </select>
               </div>
 
               <div>
@@ -879,7 +1049,7 @@ export function SupplierDeliveriesPage() {
                   className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold"
                 >
                   <option value="CHO_NHAN">Chờ nhận hàng</option>
-                  <option value="DANG_NHAN">Đang nhận hàng</option>
+                  <option value="DANG_NHAN">Nhận 1 phần</option>
                   <option value="DA_NHAN">Đã nhận đủ</option>
                   <option value="DA_HUY">Đã hủy</option>
                 </select>
@@ -890,12 +1060,9 @@ export function SupplierDeliveriesPage() {
           {/* PHẦN 2 — SẢN PHẨM NHẬN HÀNG */}
           <div className="space-y-3">
             <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
-              <div className="flex items-center gap-2">
-                <ShoppingBag className="w-4 h-4 text-emerald-600" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
-                  Phần 2 — Chi tiết sản phẩm nhận hàng từ PO
-                </h3>
-              </div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                Phần 2 — Chi tiết sản phẩm nhận hàng từ PO
+              </h3>
               <span className="text-xs text-gray-500 font-mono">
                 {formSummary.activeLinesCount} / {formSummary.totalLines} mặt hàng
               </span>
@@ -903,7 +1070,6 @@ export function SupplierDeliveriesPage() {
 
             {deliveryLines.length === 0 ? (
               <div className="p-8 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl text-center">
-                <ShoppingBag className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                 <p className="text-xs font-semibold text-gray-500">Chưa có danh sách mặt hàng.</p>
                 <p className="text-xs text-gray-400 mt-1">Vui lòng chọn Đơn mua PO ở Phần 1 để nạp danh sách sản phẩm.</p>
               </div>
@@ -914,38 +1080,52 @@ export function SupplierDeliveriesPage() {
                     <tr>
                       <th className="p-2.5">Sản phẩm / SKU</th>
                       <th className="p-2.5 text-center">SL Đặt</th>
-                      <th className="p-2.5 text-center">Đã Nhận</th>
                       <th className="p-2.5 text-center w-32">Nhận lần này *</th>
+                      <th className="p-2.5 text-center">Còn thiếu</th>
                       <th className="p-2.5 text-right">Đơn giá</th>
                       <th className="p-2.5 text-right">Thành tiền</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {deliveryLines.map((line) => (
-                      <tr key={line.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                        <td className="p-2.5">
-                          <span className="font-bold text-gray-900 dark:text-white block">{line.productName}</span>
-                          <span className="font-mono text-xs text-gray-400">{line.sku}</span>
-                        </td>
-                        <td className="p-2.5 text-center font-mono font-semibold text-gray-700 dark:text-gray-300">{line.orderedQty}</td>
-                        <td className="p-2.5 text-center font-mono text-gray-500">{line.receivedQty}</td>
-                        <td className="p-2.5 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            value={line.currentReceiveQty}
-                            onChange={(e) => handleLineQtyChange(line.id, e.target.value)}
-                            className="w-24 p-1.5 text-center border border-emerald-500 dark:border-emerald-600 font-mono font-bold text-emerald-600 rounded bg-emerald-50/50 dark:bg-emerald-900/20 focus:ring-2 focus:ring-emerald-500 outline-none"
-                          />
-                        </td>
-                        <td className="p-2.5 text-right font-mono">
-                          {new Intl.NumberFormat('vi-VN').format(line.unitPrice)}đ
-                        </td>
-                        <td className="p-2.5 text-right font-mono font-bold text-emerald-600">
-                          {new Intl.NumberFormat('vi-VN').format(line.subTotal)}đ
-                        </td>
-                      </tr>
-                    ))}
+                    {deliveryLines.map((line) => {
+                      const remaining = Math.max(0, line.orderedQty - line.currentReceiveQty);
+                      return (
+                        <tr key={line.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                          <td className="p-2.5">
+                            <span className="font-bold text-gray-900 dark:text-white block">{line.productName}</span>
+                            <span className="font-mono text-xs text-gray-400">{line.sku}</span>
+                          </td>
+                          <td className="p-2.5 text-center font-mono font-semibold text-gray-700 dark:text-gray-300">{line.orderedQty}</td>
+                          <td className="p-2.5 text-center">
+                            <input
+                              type="number"
+                              min="0"
+                              max={line.orderedQty}
+                              value={line.currentReceiveQty}
+                              onChange={(e) => handleLineQtyChange(line.id, e.target.value)}
+                              className="w-24 p-1.5 text-center border border-emerald-500 dark:border-emerald-600 font-mono font-bold text-emerald-600 rounded bg-emerald-50/50 dark:bg-emerald-900/20 focus:ring-2 focus:ring-emerald-500 outline-none"
+                            />
+                          </td>
+                          <td className="p-2.5 text-center font-mono font-semibold">
+                            {remaining > 0 ? (
+                              <span className="px-2 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded-full text-[11px]">
+                                Thiếu {remaining}
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 rounded-full text-[11px]">
+                                Đủ
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-right font-mono">
+                            {new Intl.NumberFormat('vi-VN').format(line.unitPrice)}đ
+                          </td>
+                          <td className="p-2.5 text-right font-mono font-bold text-emerald-600">
+                            {new Intl.NumberFormat('vi-VN').format(line.subTotal)}đ
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

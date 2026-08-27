@@ -2,8 +2,6 @@ import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, AlertCircle, Building2, Calendar, FileText, CheckCircle2, Edit, Trash2, X, User, ImageIcon, RefreshCw } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-
-
 import type { ColumnDef } from '@tanstack/react-table';
 import { exportToCsv } from '@/shared/utils/exportCsv';
 import { useInventoryStore, type CancelIssueRecord } from '../store/inventoryStore';
@@ -65,7 +63,7 @@ export function CancelIssuePage() {
       quantity: 1,
       totalValuation: firstProduct?.price || 0,
       reason: 'DAMAGED',
-      locationHub: 'Chi nhánh Quận 1',
+      locationHub: 'Chi nhánh chính',
       loggedDate: new Date().toISOString().split('T')[0],
       reportedBy: '',
       authorizedBy: '',
@@ -98,7 +96,7 @@ export function CancelIssuePage() {
         quantity: Number(editingIssue.quantity),
         totalValuation: (selectedProduct?.price || 0) * Number(editingIssue.quantity),
         reason: editingIssue.reason as any,
-        locationHub: editingIssue.locationHub || 'Chi nhánh',
+        locationHub: editingIssue.locationHub || 'Chi nhánh chính',
         loggedDate: editingIssue.loggedDate || new Date().toISOString().split('T')[0],
         reportedBy: editingIssue.reportedBy || '',
         authorizedBy: editingIssue.authorizedBy || '',
@@ -120,24 +118,10 @@ export function CancelIssuePage() {
     }
   };
 
-  const handleApprove = async (issue: CancelIssueRecord) => {
-    try {
-      await updateCancelIssue(issue.id, { status: 'APPROVED' });
-      setSelectedIssue(null);
-    } catch (err: any) {
-      alert(err?.response?.data?.message || 'Không thể phê duyệt phiếu hủy hàng.');
-    }
-  };
-
   const handleDeleteConfirm = async () => {
     if (!deletingIssue) return;
-    try {
-      await deleteCancelIssue(deletingIssue.id);
-      setDeletingIssue(null);
-      if (selectedIssue?.id === deletingIssue.id) setSelectedIssue(null);
-    } catch (err: any) {
-      alert(err?.response?.data?.message || 'Không thể xóa phiếu hủy hàng.');
-    }
+    await deleteCancelIssue(deletingIssue.id);
+    setDeletingIssue(null);
   };
 
   const columns = useMemo<ColumnDef<CancelIssueRecord>[]>(
@@ -145,7 +129,7 @@ export function CancelIssuePage() {
       {
         accessorKey: 'issueCode',
         header: 'Mã phiếu',
-        cell: (info) => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 hover:underline">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-mono font-bold text-red-600 dark:text-red-400">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'productName',
@@ -158,68 +142,52 @@ export function CancelIssuePage() {
         ),
       },
       {
+        accessorKey: 'quantity',
+        header: 'Số lượng hủy',
+        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{((info.getValue() as number) || 0).toLocaleString('vi-VN')}</span>,
+      },
+      {
+        accessorKey: 'totalValuation',
+        header: 'Tổng tổn thất',
+        cell: (info) => (
+          <span className="font-mono text-red-600 font-semibold">
+            {((info.getValue() as number) || 0).toLocaleString('vi-VN')} đ
+          </span>
+        ),
+      },
+      {
         accessorKey: 'reason',
         header: 'Lý do hủy',
         cell: (info) => {
           const reason = info.getValue() as string;
           const reasonMap: Record<string, string> = {
-            DAMAGED: 'Hư hỏng',
-            EXPIRED: 'Hết hạn',
-            LOST: 'Thất lạc',
-            THEFT: 'Mất cắp',
-            QUALITY_DEFECT: 'Lỗi chất lượng',
+            DAMAGED: 'Hư hỏng vật lý',
+            EXPIRED: 'Hết hạn sử dụng',
+            QUALITY_DEFECT: 'Lỗi nhà sản xuất',
+            LOST: 'Thất lạc kho',
+            THEFT: 'Thất thoát / Mất cắp',
           };
-          return (
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
-              {reasonMap[reason] || reason}
-            </span>
-          );
+          return <span className="text-gray-700 dark:text-gray-300 text-xs">{reasonMap[reason] || reason}</span>;
         },
-      },
-      {
-        accessorKey: 'quantity',
-        header: 'Số lượng',
-        cell: (info) => <span className="font-bold text-gray-900 dark:text-white">{info.getValue() as number}</span>,
-      },
-      {
-        accessorKey: 'totalValuation',
-        header: 'Giá trị tổn thất',
-        cell: (info) => <span className="font-bold text-red-600 dark:text-red-400">-{((info.getValue() as number) || 0).toLocaleString('vi-VN')} ₫</span>,
       },
       {
         accessorKey: 'locationHub',
         header: 'Vị trí kho',
-      },
-      {
-        accessorKey: 'reportedBy',
-        header: 'Người báo cáo',
-        cell: (info) => <span className="text-sm text-gray-700 dark:text-gray-300">{info.getValue() as string}</span>,
-      },
-      {
-        accessorKey: 'loggedDate',
-        header: 'Ngày ghi nhận',
-        cell: (info) => <span className="text-gray-500 text-sm">{info.getValue() as string}</span>,
+        cell: (info) => <span className="text-gray-700 dark:text-gray-300 text-xs">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'status',
         header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
-          const statusMap: Record<string, string> = {
-            PENDING_APPROVAL: 'Chờ duyệt',
-            APPROVED: 'Đã duyệt',
-            REJECTED: 'Từ chối',
-            PROCESSED: 'Đã hạch toán',
+          const statusMap: Record<string, { label: string; class: string }> = {
+            PENDING_APPROVAL: { label: 'Chờ duyệt', class: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
+            APPROVED: { label: 'Đã duyệt', class: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
+            REJECTED: { label: 'Từ chối', class: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400' },
+            PROCESSED: { label: 'Đã hạch toán', class: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
           };
-          return (
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-              status === 'APPROVED' || status === 'PROCESSED' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
-              status === 'PENDING_APPROVAL' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' :
-              'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
-            }`}>
-              {statusMap[status] || status}
-            </span>
-          );
+          const item = statusMap[status] || { label: status, class: 'bg-gray-100 text-gray-800' };
+          return <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${item.class}`}>{item.label}</span>;
         },
       },
       {
@@ -230,21 +198,21 @@ export function CancelIssuePage() {
             <button
               onClick={(e) => { e.stopPropagation(); setSelectedIssue(row.original); }}
               title="Xem chi tiết"
-              className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
               title="Chỉnh sửa"
-              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); setDeletingIssue(row.original); }}
               title="Xóa"
-              className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -260,8 +228,8 @@ export function CancelIssuePage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ghi nhận Hủy hàng & Thất thoát (Write-off)</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Lập biên bản hàng hư hỏng, hết hạn, thất thoát và hạch toán giảm trừ tồn kho. Nhấp vào dòng để xem chi tiết.</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ghi nhận hủy hàng & thất thoát</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Lập biên bản hàng hư hỏng, hết hạn, thất thoát và hạch toán giảm trừ tồn kho</p>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -282,11 +250,11 @@ export function CancelIssuePage() {
               }}
               className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
             >
-              <Download className="w-4 h-4" /> Xuất Dữ Liệu
+              <Download className="w-4 h-4" /> Xuất Excel
             </button>
             <button
               onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-medium shadow-sm"
             >
               <Plus className="w-4 h-4" /> Tạo phiếu hủy hàng
             </button>
@@ -304,18 +272,18 @@ export function CancelIssuePage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Tìm kiếm theo mã phiếu, tên sản phẩm, SKU hoặc kho..."
-                className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
+                className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-all"
               />
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700/60">
             <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-gray-500 font-medium">Trạng thái:</span>
+              <span className="text-gray-500 dark:text-gray-400 font-medium">Trạng thái:</span>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs cursor-pointer"
+                className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
               >
                 <option value="all">Tất cả trạng thái</option>
                 <option value="PENDING_APPROVAL">Chờ duyệt</option>
@@ -339,18 +307,18 @@ export function CancelIssuePage() {
         {isLoading ? (
           <div className="flex items-center justify-center py-20 text-gray-400">
             <RefreshCw className="w-6 h-6 animate-spin mr-2" />
-            <span>Đang tải dữ liệu...</span>
+            <span>Đang tải dữ liệu từ hệ thống...</span>
           </div>
         ) : (
           <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedIssue(row)} />
         )}
       </div>
 
-      {/* Drawer chi tiết */}
+      {/* Detail Modal */}
       <Modal
         isOpen={!!selectedIssue}
         onClose={() => setSelectedIssue(null)}
-        title={selectedIssue ? `Chi tiết Hủy hàng: ${selectedIssue.issueCode}` : 'Chi tiết phiếu'}
+        title={selectedIssue ? `Chi tiết hủy hàng: ${selectedIssue.issueCode}` : 'Chi tiết phiếu'}
         width="max-w-lg"
       >
         {selectedIssue && (
@@ -362,7 +330,7 @@ export function CancelIssuePage() {
                 </div>
                 <div>
                   <p className="text-xs text-red-800 dark:text-red-400 font-semibold uppercase tracking-wider">Tổn thất ước tính</p>
-                  <p className="text-xl font-bold text-red-700 dark:text-red-300">{(selectedIssue.totalValuation || 0).toLocaleString('vi-VN')} ₫</p>
+                  <p className="text-xl font-bold text-red-700 dark:text-red-300">{(selectedIssue.totalValuation || 0).toLocaleString('vi-VN')} đ</p>
                 </div>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
@@ -370,135 +338,104 @@ export function CancelIssuePage() {
                 selectedIssue.status === 'PENDING_APPROVAL' ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
                 'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100'
               }`}>
-                {selectedIssue.status}
+                {selectedIssue.status === 'APPROVED' ? 'Đã duyệt' :
+                 selectedIssue.status === 'PROCESSED' ? 'Đã hạch toán' :
+                 selectedIssue.status === 'PENDING_APPROVAL' ? 'Chờ duyệt' : 'Từ chối'}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Vị trí lưu kho
+                  <Calendar className="w-4 h-4 text-primary" />
+                  Ngày báo cáo
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedIssue.locationHub}</p>
+                <p className="text-lg font-bold font-mono text-gray-900 dark:text-white">
+                  {selectedIssue.loggedDate}
+                </p>
               </div>
+
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Calendar className="w-4 h-4 text-blue-500" /> Ngày lập phiếu
+                  <Building2 className="w-4 h-4 text-primary" />
+                  Số lượng hủy
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedIssue.loggedDate}</p>
+                <p className="text-lg font-bold text-red-600">
+                  {selectedIssue.quantity.toLocaleString('vi-VN')} đơn vị
+                </p>
               </div>
             </div>
 
-            <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Sản phẩm:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedIssue.productName}</span>
+            <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 text-sm">
+              <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-700">
+                <span className="text-gray-500 dark:text-gray-400">Sản phẩm</span>
+                <span className="font-medium text-gray-900 dark:text-white">{selectedIssue.productName} ({selectedIssue.sku})</span>
               </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Mã SKU:</span>
-                <span className="font-mono font-semibold text-gray-900 dark:text-white">{selectedIssue.sku}</span>
+              <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-700">
+                <span className="text-gray-500 dark:text-gray-400">Vị trí kho</span>
+                <span className="font-medium text-gray-900 dark:text-white">{selectedIssue.locationHub}</span>
               </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Lý do thất thoát:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedIssue.reason}</span>
+              <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-700">
+                <span className="text-gray-500 dark:text-gray-400">Người báo cáo</span>
+                <span className="font-medium text-gray-900 dark:text-white">{selectedIssue.reportedBy}</span>
               </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Số lượng hủy:</span>
-                <span className="font-bold text-gray-900 dark:text-white">{selectedIssue.quantity} đơn vị</span>
+              <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-700">
+                <span className="text-gray-500 dark:text-gray-400">Người phê duyệt</span>
+                <span className="font-medium text-gray-900 dark:text-white">{selectedIssue.authorizedBy || 'Chưa duyệt'}</span>
               </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Người báo cáo:</span>
-                <span className="font-semibold text-gray-900 dark:text-white flex items-center gap-1">
-                  <User className="w-3.5 h-3.5 text-gray-400" />
-                  {selectedIssue.reportedBy}
-                </span>
+              <div className="flex justify-between py-1">
+                <span className="text-gray-500 dark:text-gray-400">Lý do hủy</span>
+                <span className="font-medium text-red-600">{selectedIssue.reason}</span>
               </div>
-              <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
-                <span className="text-gray-500 dark:text-gray-400">Người phê duyệt:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedIssue.authorizedBy || '—'}</span>
-              </div>
-
-              {(selectedIssue.batchLotNumber || selectedIssue.expiryDate) && (
-                <div className="pt-2 border-t border-gray-200 dark:border-gray-700 space-y-2">
-                  {selectedIssue.batchLotNumber && (
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500 dark:text-gray-400">Lô hàng (Batch):</span>
-                      <span className="font-mono font-semibold text-gray-900 dark:text-white">{selectedIssue.batchLotNumber}</span>
-                    </div>
-                  )}
-                  {selectedIssue.expiryDate && (
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500 dark:text-gray-400">Hạn sử dụng:</span>
-                      <span className="font-semibold text-amber-700 dark:text-amber-400">{selectedIssue.expiryDate}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {selectedIssue.proofImages.length > 0 && (
-                <div className="pt-3 border-t border-gray-200 dark:border-gray-800">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1 mb-2">
-                    <ImageIcon className="w-3.5 h-3.5" /> Bằng chứng / Hình ảnh ({selectedIssue.proofImages.length})
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {selectedIssue.proofImages.map((url, i) => (
-                      <img key={i} src={url} alt={`Proof ${i + 1}`} className="rounded-lg border border-gray-200 dark:border-gray-700 object-cover h-24 w-full" />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {selectedIssue.notes && (
-                <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Ghi chú & Biên bản</span>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedIssue.notes}</p>
-                </div>
-              )}
             </div>
 
-            <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
-              {selectedIssue.status === 'PENDING_APPROVAL' && (
-                <button
-                  onClick={() => handleApprove(selectedIssue)}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
-                >
-                  <CheckCircle2 className="w-4 h-4" /> Phê duyệt & Hạch toán giảm
-                </button>
-              )}
+            {selectedIssue.notes && (
+              <div>
+                <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">Ghi chú chi tiết</h4>
+                <p className="text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border border-gray-200 dark:border-gray-800">
+                  {selectedIssue.notes}
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
-                onClick={() => { setSelectedIssue(null); handleOpenEdit(selectedIssue); }}
-                className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
+                type="button"
+                onClick={() => setSelectedIssue(null)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
-                <FileText className="w-4 h-4 inline mr-1" /> Chỉnh sửa phiếu
+                Đóng
               </button>
             </div>
           </div>
         )}
       </Modal>
 
+      {/* Form Modal */}
       <Modal
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
-        title={formMode === 'create' ? '🗑️ Tạo phiếu hủy hàng mới' : '⚙️ Chỉnh sửa phiếu hủy hàng'}
-        width="max-w-2xl"
+        title={formMode === 'create' ? 'Tạo phiếu hủy hàng & thất thoát mới' : 'Cập nhật phiếu hủy hàng'}
+        width="max-w-xl"
       >
-        <form onSubmit={handleSaveForm} className="space-y-4 text-xs">
+        <form onSubmit={handleSaveForm} className="space-y-4">
           {saveError && (
             <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
               {saveError}
             </div>
           )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã phiếu hủy *</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã phiếu *</label>
                 {formMode === 'create' && (
                   <button
                     type="button"
-                    onClick={() => setEditingIssue({ ...editingIssue, issueCode: `CI-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}` })}
-                    className="text-[10px] text-emerald-600 hover:underline font-bold"
+                    onClick={() => setEditingIssue(prev => ({ ...prev, issueCode: `CI-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}` }))}
+                    className="text-[10px] text-primary hover:underline font-semibold"
                   >
-                    ⚡ Sinh mã
+                    Tự sinh mã
                   </button>
                 )}
               </div>
@@ -506,17 +443,17 @@ export function CancelIssuePage() {
                 type="text"
                 value={editingIssue.issueCode || ''}
                 onChange={(e) => setEditingIssue({ ...editingIssue, issueCode: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
                 readOnly={formMode === 'edit'}
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày ghi nhận *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày ghi nhận *</label>
               <input
                 type="date"
                 value={editingIssue.loggedDate || ''}
                 onChange={(e) => setEditingIssue({ ...editingIssue, loggedDate: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
                 required
               />
             </div>
@@ -524,8 +461,7 @@ export function CancelIssuePage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chọn sản phẩm *</label>
-
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chọn sản phẩm *</label>
               <select
                 value={editingIssue.sku || ''}
                 onChange={(e) => {
@@ -539,17 +475,17 @@ export function CancelIssuePage() {
                     totalValuation: price * qty
                   });
                 }}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
                 required
               >
                 <option value="">-- Chọn sản phẩm hủy --</option>
                 {products.map((p) => (
-                  <option key={p.id} value={p.sku}>{p.sku} – {p.name}</option>
+                  <option key={p.id} value={p.sku}>{p.sku} — {p.name}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Số lượng hủy *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số lượng hủy *</label>
               <input
                 type="number"
                 min={1}
@@ -564,7 +500,7 @@ export function CancelIssuePage() {
                     totalValuation: price * qty
                   });
                 }}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold text-sm focus:ring-2 focus:ring-primary"
                 required
               />
             </div>
@@ -572,146 +508,129 @@ export function CancelIssuePage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tổng tổn thất dự tính (VND)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng tổn thất dự tính (đ)</label>
               <input
                 type="number"
                 value={editingIssue.totalValuation || 0}
                 onChange={(e) => setEditingIssue({ ...editingIssue, totalValuation: Number(e.target.value) })}
-                className="w-full p-2 border border-red-300 dark:border-red-700 rounded font-mono bg-red-50 dark:bg-red-950/30 text-red-600 font-bold"
+                className="w-full p-2.5 border border-red-300 dark:border-red-700 rounded-lg font-mono bg-red-50 dark:bg-red-950/30 text-red-600 font-bold text-sm focus:ring-2 focus:ring-red-500"
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Lý do hủy hàng *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lý do hủy hàng *</label>
               <select
-                value={editingIssue.reason || ''}
+                value={editingIssue.reason || 'DAMAGED'}
                 onChange={(e) => setEditingIssue({ ...editingIssue, reason: e.target.value as any })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
                 required
               >
                 <option value="DAMAGED">Hư hỏng vật lý / vỡ nát</option>
-                <option value="EXPIRED">Hết hạn sử dụng (Expired)</option>
-                <option value="QUALITY_DEFECT">Lỗi nhà sản xuất / Biến chất</option>
+                <option value="EXPIRED">Hết hạn sử dụng (expired)</option>
+                <option value="QUALITY_DEFECT">Lỗi nhà sản xuất / biến chất</option>
                 <option value="LOST">Thất lạc trong kho</option>
-                <option value="THEFT">Mất cắp / Thất thoát</option>
+                <option value="THEFT">Mất cắp / thất thoát</option>
               </select>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Vị trí kho xuất hủy</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Vị trí kho xuất hủy</label>
               <input
                 type="text"
                 value={editingIssue.locationHub || ''}
                 onChange={(e) => setEditingIssue({ ...editingIssue, locationHub: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                placeholder="Chi nhánh Q1..."
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                placeholder="Ví dụ: Kho tổng..."
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Người báo cáo *</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người báo cáo *</label>
               <input
                 type="text"
                 value={editingIssue.reportedBy || ''}
                 onChange={(e) => setEditingIssue({ ...editingIssue, reportedBy: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
                 placeholder="Tên thủ kho báo cáo..."
                 required
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Người duyệt (Quản lý)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người duyệt</label>
               <input
                 type="text"
                 value={editingIssue.authorizedBy || ''}
                 onChange={(e) => setEditingIssue({ ...editingIssue, authorizedBy: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
                 placeholder="Tên quản lý duyệt..."
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
-                <select
-                  value={editingIssue.status || 'PENDING_APPROVAL'}
-                  onChange={(e) => setEditingIssue({ ...editingIssue, status: e.target.value as any })}
-                  className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="PENDING_APPROVAL">Chờ duyệt</option>
-                  <option value="APPROVED">Đã duyệt</option>
-                  <option value="REJECTED">Từ chối</option>
-                  <option value="PROCESSED">Đã hạch toán</option>
-                </select>
-              </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hình ảnh đính kèm (URL ảnh minh chứng, phân cách bởi dấu phẩy)</label>
-            <input
-              type="text"
-              value={(editingIssue.proofImages || []).join(', ')}
-              onChange={(e) => setEditingIssue({ ...editingIssue, proofImages: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono"
-              placeholder="https://images.unsplash.com/... , https://..."
-            />
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái</label>
+            <select
+              value={editingIssue.status || 'PENDING_APPROVAL'}
+              onChange={(e) => setEditingIssue({ ...editingIssue, status: e.target.value as any })}
+              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+            >
+              <option value="PENDING_APPROVAL">Chờ duyệt</option>
+              <option value="APPROVED">Đã duyệt</option>
+              <option value="REJECTED">Từ chối</option>
+              <option value="PROCESSED">Đã hạch toán</option>
+            </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú / Biên bản</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú biên bản</label>
             <textarea
-              rows={3}
+              rows={2}
               value={editingIssue.notes || ''}
               onChange={(e) => setEditingIssue({ ...editingIssue, notes: e.target.value })}
-              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm resize-none"
-              placeholder="Mô tả chi tiết nguyên nhân hủy hàng, biên bản xử lý..."
+              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary resize-none"
+              placeholder="Nhập ghi chú chi tiết về tình trạng hàng hóa..."
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
               onClick={() => setIsFormOpen(false)}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
-              Hủy
+              Hủy bỏ
             </button>
             <button
               type="submit"
               disabled={isSaving}
-              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
             >
               {isSaving && <RefreshCw className="w-4 h-4 animate-spin" />}
-              {isSaving ? 'Đang lưu...' : formMode === 'create' ? 'Tạo phiếu' : 'Lưu thay đổi'}
+              {isSaving ? 'Đang lưu...' : (formMode === 'create' ? 'Tạo phiếu hủy' : 'Lưu cập nhật')}
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* Modal xác nhận xóa */}
-      {deletingIssue && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-6 max-w-sm w-full mx-4">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Xác nhận xóa phiếu</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">
-              Bạn có chắc muốn xóa phiếu hủy hàng <span className="font-mono font-bold text-red-600">{deletingIssue.issueCode}</span>? Hành động này không thể hoàn tác.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setDeletingIssue(null)}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-              >
-                Hủy
-              </button>
-              <button
-                onClick={handleDeleteConfirm}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors"
-              >
-                Xóa phiếu
-              </button>
-            </div>
+      {/* Delete confirmation modal */}
+      <Modal
+        isOpen={!!deletingIssue}
+        onClose={() => setDeletingIssue(null)}
+        title="Xác nhận xóa phiếu hủy hàng"
+        isDestructive
+        width="max-w-md"
+      >
+        <div className="space-y-4 text-sm">
+          <p className="text-gray-600 dark:text-gray-400">
+            Bạn có chắc chắn muốn xóa phiếu hủy hàng <strong>{deletingIssue?.issueCode}</strong>? Thao tác này không thể hoàn tác.
+          </p>
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <button type="button" onClick={() => setDeletingIssue(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 font-medium">Hủy bỏ</button>
+            <button type="button" onClick={handleDeleteConfirm} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium">Đồng ý xóa</button>
           </div>
         </div>
-      )}
+      </Modal>
     </>
   );
 }
+export default CancelIssuePage;

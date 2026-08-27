@@ -23,7 +23,7 @@ export function CustomerSelect({ value, onChange, allowWalkIn = true, className 
       }
     >
       <option value="">— Chọn khách hàng (CRM) —</option>
-      {allowWalkIn && <option value={WALK_IN_CUSTOMER_ID}>Khách lẻ (Walk-in)</option>}
+      {allowWalkIn && <option value={WALK_IN_CUSTOMER_ID}>Khách lẻ (vãng lai)</option>}
       {customers.map((c) => (
         <option key={c.id} value={c.id}>
           {c.name} ({c.customerCode})

@@ -134,7 +134,7 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
   return (
     <div className="space-y-4 relative w-full max-w-full min-w-0 overflow-hidden">
       {/* Toolbar: Global Search, Column Visibility & Bulk Actions */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="flex flex-1 items-center gap-3 w-full">
           {globalFilterPlaceholder && (
             <UnifiedSearchInput
@@ -181,7 +181,7 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
 
         {/* Column Visibility Dropdown */}
         <div className="relative group shrink-0">
-          <button className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
+          <button className="flex items-center gap-2 px-3.5 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
             <Settings2 className="w-4 h-4" />
             <span className="hidden sm:inline">Cột hiển thị</span>
           </button>

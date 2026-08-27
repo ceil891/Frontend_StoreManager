@@ -15,9 +15,9 @@ export function SupplierLocationsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Kho bãi Nhà cung cấp</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Kho bãi nhà cung cấp</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Quản lý thông tin điểm kho và tổng kho của các đối tác Nhà cung cấp
+            Quản lý thông tin điểm kho và tổng kho của các đối tác nhà cung cấp
           </p>
         </div>
       </div>

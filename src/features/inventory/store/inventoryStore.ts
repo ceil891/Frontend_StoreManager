@@ -15,6 +15,9 @@ const mapImportReceiptStatus = (status?: string): ImportReceiptItem['status'] =>
     case 'COMPLETE':
     case 'COMPLETED':
       return 'INSPECTED_ACCEPTED';
+    case 'PARTIAL':
+    case 'PARTIAL_ACCEPTANCE':
+      return 'PARTIAL_ACCEPTANCE';
     case 'CANCELLED':
       return 'REJECTED';
     default:
@@ -37,12 +40,16 @@ const getLocalPosStockDeductions = (): Record<string, number> => {
   return {};
 };
 
-const saveLocalPosStockDeduction = (deductions: { productId: string; qty: number }[]) => {
+const saveLocalPosStockDeduction = (deductions: { productId?: string; sku?: string; qty: number; branchId?: string }[]) => {
   try {
     const currentMap = getLocalPosStockDeductions();
     deductions.forEach((d) => {
-      const pid = String(d.productId);
-      currentMap[pid] = (currentMap[pid] || 0) + Number(d.qty || 0);
+      const key = d.productId ? String(d.productId) : (d.sku || '');
+      const bId = String(d.branchId || '1');
+      if (key) {
+        currentMap[key] = (currentMap[key] || 0) + Number(d.qty || 0);
+        currentMap[`${key}_branch_${bId}`] = (currentMap[`${key}_branch_${bId}`] || 0) + Number(d.qty || 0);
+      }
     });
     localStorage.setItem('retailhub_pos_stock_deductions', JSON.stringify(currentMap));
   } catch (err) {
@@ -55,23 +62,96 @@ const applyPosStockDeductionsToProducts = (products: ProductInventory[]): Produc
   if (Object.keys(deductionsMap).length === 0) return products;
 
   return products.map((p) => {
-    const deductedQty = (deductionsMap[p.id] !== undefined ? deductionsMap[p.id] : 0) ||
-                         (deductionsMap[p.sku] !== undefined ? deductionsMap[p.sku] : 0);
-    if (deductedQty > 0) {
-      const updatedBranchStocks: Record<string, number> = {};
-      if (p.branchStocks) {
-        Object.keys(p.branchStocks).forEach((bId) => {
-          updatedBranchStocks[bId] = Math.max(0, p.branchStocks![bId] - deductedQty);
-        });
+    const totalDeducted = (deductionsMap[p.id] !== undefined ? deductionsMap[p.id] : 0) ||
+                          (p.sku && deductionsMap[p.sku] !== undefined ? deductionsMap[p.sku] : 0);
+
+    const updatedBranchStocks: Record<string, number> = { ...(p.branchStocks || {}) };
+
+    // Check all branch-specific deduction keys for this product
+    Object.keys(deductionsMap).forEach((key) => {
+      const matchById = key.startsWith(`${p.id}_branch_`);
+      const matchBySku = p.sku && key.startsWith(`${p.sku}_branch_`);
+      if (matchById || matchBySku) {
+        const bId = key.split('_branch_')[1];
+        if (bId) {
+          const bDeducted = deductionsMap[key] || 0;
+          if (bDeducted > 0) {
+            // Initialize branch stock if it doesn't exist yet
+            if (updatedBranchStocks[bId] === undefined) {
+              updatedBranchStocks[bId] = p.onHand || 0;
+            }
+            updatedBranchStocks[bId] = Math.max(0, updatedBranchStocks[bId] - bDeducted);
+          }
+        }
       }
+    });
+
+    if (totalDeducted > 0) {
       return {
         ...p,
-        onHand: Math.max(0, p.onHand - deductedQty),
-        branchStocks: Object.keys(updatedBranchStocks).length > 0 ? updatedBranchStocks : p.branchStocks,
+        onHand: Math.max(0, p.onHand - totalDeducted),
+        branchStocks: updatedBranchStocks,
       };
     }
-    return p;
+    return { ...p, branchStocks: updatedBranchStocks };
   });
+};
+
+const applyGoodsReceiptsAdditionsToProducts = (products: ProductInventory[]): ProductInventory[] => {
+  try {
+    const createdDeliveries: any[] = JSON.parse(localStorage.getItem('retailhub_created_deliveries') || '[]');
+    const overrides: Record<string, any> = JSON.parse(localStorage.getItem('retailhub_supplier_deliveries_overrides') || '{}');
+
+    if (createdDeliveries.length === 0 && Object.keys(overrides).length === 0) return products;
+
+    const updatedProducts = products.map((p) => ({
+      ...p,
+      branchStocks: { ...(p.branchStocks || {}) },
+      branchStockDetails: [...(p.branchStockDetails || [])],
+    }));
+
+    createdDeliveries.forEach((del) => {
+      const isDelivered = del.status === 'DA_NHAN' || overrides[del.id]?.status === 'DA_NHAN' || overrides[del.deliveryCode]?.status === 'DA_NHAN';
+      if (!isDelivered || !Array.isArray(del.lines)) return;
+
+      const branchId = String(del.branchId || (del.branchName?.toLowerCase().includes('đà nẵng') ? '2' : del.branchName?.toLowerCase().includes('hà nội') ? '3' : del.branchName?.toLowerCase().includes('cần thơ') ? '4' : '1'));
+      const branchName = del.branchName || `Chi nhánh ${branchId}`;
+
+      del.lines.forEach((line: any) => {
+        const qty = Number(line.receivedQty ?? line.currentReceiveQty ?? line.orderedQty ?? line.quantity ?? 0);
+        if (qty <= 0) return;
+
+        const target = updatedProducts.find((p) =>
+          (line.sku && p.sku === line.sku) ||
+          (line.productVariantId && (String(p.id) === String(line.productVariantId) || p.variants?.some((v: any) => String(v.id) === String(line.productVariantId)))) ||
+          (line.productName && p.name && p.name.toLowerCase() === line.productName.toLowerCase())
+        );
+
+        if (target) {
+          target.onHand = (target.onHand || 0) + qty;
+          target.branchStocks[branchId] = (target.branchStocks[branchId] || 0) + qty;
+
+          const existingDetail = target.branchStockDetails.find((b) => String(b.branchId) === branchId);
+          if (existingDetail) {
+            existingDetail.quantity += qty;
+            existingDetail.available += qty;
+          } else {
+            target.branchStockDetails.push({
+              branchId,
+              branchName,
+              quantity: qty,
+              available: qty,
+            });
+          }
+        }
+      });
+    });
+
+    return updatedProducts;
+  } catch (err) {
+    console.warn('Failed to apply goods receipts stock additions:', err);
+    return products;
+  }
 };
 
 // ---------------------------
@@ -1058,11 +1138,13 @@ export const useInventoryStore = create<InventoryState>()(
             id: String(item.id),
             sku: item.productCode || '',
             name: item.name || '',
-            category: item.categoryName || 'Chung',
+            category: item.categoryName || (item.category ? item.category.categoryName : 'Chung'),
+            categoryId: item.categoryId || (item.category ? item.category.id : undefined),
             price: Number(item.basePrice || 0),
             costPrice: Number(item.costPrice || 0),
             brand: item.brand || 'N/A',
-            unit: item.baseUnitName || item.baseUnitCode || 'Cái',
+            unit: item.baseUnitName || item.baseUnitCode || (item.baseUnit ? (item.baseUnit.unitName || item.baseUnit.unitCode) : 'Cái'),
+            baseUnitId: item.baseUnitId || (item.baseUnit ? item.baseUnit.id : undefined),
             weight: '0 kg',
             location: 'Kệ chính',
             onHand: Number(item.onHand || 0),
@@ -1164,7 +1246,9 @@ export const useInventoryStore = create<InventoryState>()(
 
           // 4. Áp dụng các khoản khấu trừ tồn kho POS từ localStorage để bảo toàn số lượng khi F5 / load lại trang
           const finalWithDeductions = applyPosStockDeductionsToProducts(withStock);
-          const sorted = [...finalWithDeductions].sort((a, b) => Number(b.id) - Number(a.id));
+          // 5. Áp dụng các khoản cộng tồn kho từ các đợt nhận hàng đã hoàn thành (DA_NHAN)
+          const finalWithAdditions = applyGoodsReceiptsAdditionsToProducts(finalWithDeductions);
+          const sorted = [...finalWithAdditions].sort((a, b) => Number(b.id) - Number(a.id));
 
           set({ products: sorted });
         } catch (error) {
@@ -1172,25 +1256,36 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
 
-      deductProductStock: (deductions: { productId: string; qty: number }[]) => {
+      deductProductStock: (deductions: { productId?: string; sku?: string; qty: number; branchId?: string }[]) => {
         saveLocalPosStockDeduction(deductions);
         set((state) => {
           const updatedProducts = state.products.map((p) => {
-            const found = deductions.find((d) => String(d.productId) === String(p.id) || d.productId === p.sku);
-            if (found) {
-              const updatedBranchStocks: Record<string, number> = {};
-              if (p.branchStocks) {
-                Object.keys(p.branchStocks).forEach((bId) => {
-                  updatedBranchStocks[bId] = Math.max(0, p.branchStocks![bId] - found.qty);
-                });
+            // Find ALL matching deductions for this product (may have multiple items)
+            const matchingDeductions = deductions.filter((d) =>
+              (d.productId && String(d.productId) === String(p.id)) || (d.sku && d.sku === p.sku)
+            );
+            if (matchingDeductions.length === 0) return p;
+
+            const updatedBranchStocks: Record<string, number> = { ...(p.branchStocks || {}) };
+            let totalDeducted = 0;
+
+            matchingDeductions.forEach((found) => {
+              const targetBranch = String(found.branchId || '1');
+              const qty = Number(found.qty) || 0;
+              totalDeducted += qty;
+
+              // Initialize branch stock if it doesn't exist yet (use onHand as fallback)
+              if (updatedBranchStocks[targetBranch] === undefined) {
+                updatedBranchStocks[targetBranch] = p.onHand || 0;
               }
-              return {
-                ...p,
-                onHand: Math.max(0, (p.onHand || 0) - found.qty),
-                branchStocks: Object.keys(updatedBranchStocks).length > 0 ? updatedBranchStocks : p.branchStocks,
-              };
-            }
-            return p;
+              updatedBranchStocks[targetBranch] = Math.max(0, updatedBranchStocks[targetBranch] - qty);
+            });
+
+            return {
+              ...p,
+              onHand: Math.max(0, (p.onHand || 0) - totalDeducted),
+              branchStocks: updatedBranchStocks,
+            };
           });
           return { products: updatedProducts };
         });
@@ -1724,10 +1819,10 @@ export const useInventoryStore = create<InventoryState>()(
           const currentProd = get().products.find(p => String(p.id) === String(id) || p.sku === data.sku);
 
           const categoryObj = data.category ? get().categories.find(c => c.categoryName === data.category) : undefined;
-          const categoryId = categoryObj ? Number(categoryObj.id) : (currentProd as any)?.categoryId;
+          const categoryId = categoryObj ? Number(categoryObj.id) : ((data as any)?.categoryId || (currentProd as any)?.categoryId || (get().categories[0]?.id ? Number(get().categories[0].id) : 1));
 
-          const unitObj = data.unit ? get().unitsList.find(u => u.unitName === data.unit) : undefined;
-          const baseUnitId = unitObj ? Number(unitObj.id) : (currentProd as any)?.baseUnitId;
+          const unitObj = data.unit ? get().unitsList.find(u => u.unitName === data.unit || u.code === data.unit) : undefined;
+          const baseUnitId = unitObj ? Number(unitObj.id) : ((data as any)?.baseUnitId || (currentProd as any)?.baseUnitId || (get().unitsList[0]?.id ? Number(get().unitsList[0].id) : 1));
 
           const payload = {
             productCode: data.sku ?? currentProd?.sku,
@@ -2395,31 +2490,82 @@ export const useInventoryStore = create<InventoryState>()(
           set({ unitsIncludeDeleted: finalIncludeDeleted });
           // includeDeleted=true → lấy tất cả kể cả đã xóa mềm
           const params = finalIncludeDeleted ? '?includeDeleted=true' : '?includeDeleted=false';
-          const res = await axiosClient.get<any, any[]>(`/units${params}`);
-          const units = res.map((u: any) => ({
-            id: String(u.id),
-            code: u.abbreviation || u.unitCode || '',
-            unitName: u.unitName || '',
-            type: (u.unitType || 'QUANTITY') as 'WEIGHT' | 'DIMENSION' | 'QUANTITY' | 'VOLUME' | 'PACKAGING',
-            conversionFactor: u.conversionFactor ?? 1.0,
-            baseUnitCode: u.baseUnitCode || u.abbreviation || '',
-            assignedSkusCount: 0,
-            // Nếu isDeleted=true → hiển thị trạng thái đặc biệt 'DELETED'
-            status: u.isDeleted
-              ? 'DELETED'
-              : (u.isActive ? 'ACTIVE' : 'DEPRECATED') as 'ACTIVE' | 'DEPRECATED' | 'DELETED',
-            precisionDecimals: u.precisionDecimals ?? 0,
-            notes: u.description || '',
-            isDeleted: u.isDeleted || false,
-            deletedAt: u.deletedAt || null,
-            deletedBy: u.deletedBy || null,
-          }));
-          set({ unitsList: units });
+          const res = await axiosClient.get<any, any>(`/units${params}`);
+          const list: any[] = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : (res?.content || []));
+
+          const prods = get().products || [];
+          const units = list.map((u: any) => {
+            const uName = (u.unitName || '').toLowerCase().trim();
+            const uCode = (u.abbreviation || u.unitCode || '').toLowerCase().trim();
+            const uId = String(u.id);
+
+            const assignedSkus = prods.filter((p) => {
+              const pUnit = (p.unit || '').toLowerCase().trim();
+              const pBaseId = String(p.baseUnitId || '');
+              const matchesBase = (pUnit && (pUnit === uName || pUnit === uCode)) || (pBaseId && pBaseId === uId);
+              const matchesSecondary = (p.units || []).some((pu) => {
+                const puName = (pu.unitName || '').toLowerCase().trim();
+                const puCode = (pu.unitCode || '').toLowerCase().trim();
+                const puId = String(pu.unitId || '');
+                return puName === uName || puCode === uCode || puId === uId;
+              });
+              return matchesBase || matchesSecondary;
+            }).length;
+
+            return {
+              id: String(u.id),
+              code: u.abbreviation || u.unitCode || '',
+              unitName: u.unitName || '',
+              type: (u.unitType || 'QUANTITY') as 'WEIGHT' | 'DIMENSION' | 'QUANTITY' | 'VOLUME' | 'PACKAGING',
+              conversionFactor: u.conversionFactor ?? 1.0,
+              baseUnitCode: u.baseUnitCode || u.abbreviation || '',
+              assignedSkusCount: assignedSkus,
+              // Nếu isDeleted=true → hiển thị trạng thái đặc biệt 'DELETED'
+              status: u.isDeleted
+                ? 'DELETED'
+                : (u.isActive ? 'ACTIVE' : 'DEPRECATED') as 'ACTIVE' | 'DEPRECATED' | 'DELETED',
+              precisionDecimals: u.precisionDecimals ?? 0,
+              notes: u.description || '',
+              isDeleted: u.isDeleted || false,
+              deletedAt: u.deletedAt || null,
+              deletedBy: u.deletedBy || null,
+            };
+          });
+
+          let finalUnits = units;
+          try {
+            const editedMap: Record<string, UnitOfMeasure> = JSON.parse(localStorage.getItem('retailhub_edited_units') || '{}');
+            Object.keys(editedMap).forEach((key) => {
+              if (key.startsWith('unit_') && !finalUnits.some((u: any) => u.id === key || u.code === editedMap[key].code)) {
+                finalUnits.unshift(editedMap[key]);
+              }
+            });
+          } catch (e) {}
+
+          set({ unitsList: finalUnits });
         } catch (error) {
           console.error('Failed to fetch units:', error);
         }
       },
+
       addUnit: async (unit) => {
+        const tempId = `unit_${Date.now()}`;
+        const newRecord: UnitOfMeasure = {
+          id: tempId,
+          ...unit,
+        };
+        set((state) => ({ unitsList: [newRecord, ...state.unitsList] }));
+
+        try {
+          const editedMap = JSON.parse(localStorage.getItem('retailhub_edited_units') || '{}');
+          editedMap[tempId] = newRecord;
+          localStorage.setItem('retailhub_edited_units', JSON.stringify(editedMap));
+
+          const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_units') || '[]');
+          const filtered = deletedIds.filter(id => id !== tempId && id !== unit.code);
+          localStorage.setItem('retailhub_deleted_units', JSON.stringify(filtered));
+        } catch (e) {}
+
         try {
           const payload = {
             unitName: unit.unitName,
@@ -2434,24 +2580,32 @@ export const useInventoryStore = create<InventoryState>()(
           await axiosClient.post('/units', payload);
           await get().fetchUnits();
         } catch (error) {
-          console.error('Failed to add unit:', error);
-          throw error;
+          console.error('Failed to add unit on API, kept local:', error);
         }
       },
       updateUnit: async (id, data) => {
+        const original = get().unitsList.find((u) => u.id === id);
+        const updated = original ? { ...original, ...data } : (data as UnitOfMeasure);
         set((state) => ({
           unitsList: state.unitsList.map((u) => (u.id === id ? { ...u, ...data } : u)),
         }));
+
+        try {
+          const editedMap = JSON.parse(localStorage.getItem('retailhub_edited_units') || '{}');
+          editedMap[id] = updated;
+          localStorage.setItem('retailhub_edited_units', JSON.stringify(editedMap));
+        } catch (e) {}
+
         try {
           const payload = {
-            unitName: data.unitName,
-            unitCode: data.code,
-            description: data.notes,
-            isActive: data.status === undefined ? undefined : data.status === 'ACTIVE',
-            unitType: data.type,
-            conversionFactor: data.conversionFactor,
-            baseUnitCode: data.baseUnitCode,
-            precisionDecimals: data.precisionDecimals,
+            unitName: data.unitName || original?.unitName,
+            unitCode: data.code || original?.code,
+            description: data.notes !== undefined ? data.notes : original?.notes,
+            isActive: data.status !== undefined ? (data.status === 'ACTIVE') : (original?.status === 'ACTIVE'),
+            unitType: data.type || original?.type,
+            conversionFactor: data.conversionFactor !== undefined ? data.conversionFactor : original?.conversionFactor,
+            baseUnitCode: data.baseUnitCode || original?.baseUnitCode,
+            precisionDecimals: data.precisionDecimals !== undefined ? data.precisionDecimals : original?.precisionDecimals,
           };
           await axiosClient.put(`/units/${id}`, payload);
         } catch (error) {
@@ -2459,9 +2613,23 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
       deleteUnit: async (id) => {
+        const target = get().unitsList.find((u) => u.id === id);
         set((state) => ({
           unitsList: state.unitsList.filter((u) => u.id !== id),
         }));
+
+        try {
+          const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_units') || '[]');
+          if (!deletedIds.includes(String(id))) deletedIds.push(String(id));
+          if (target?.code && !deletedIds.includes(target.code)) deletedIds.push(target.code);
+          localStorage.setItem('retailhub_deleted_units', JSON.stringify(deletedIds));
+
+          const editedMap = JSON.parse(localStorage.getItem('retailhub_edited_units') || '{}');
+          delete editedMap[id];
+          if (target?.code) delete editedMap[target.code];
+          localStorage.setItem('retailhub_edited_units', JSON.stringify(editedMap));
+        } catch (e) {}
+
         try {
           await axiosClient.delete(`/units/${id}`);
         } catch (error: any) {
@@ -2972,9 +3140,9 @@ export const useInventoryStore = create<InventoryState>()(
           };
           await axiosClient.post('/inventories/imports', payload);
           await get().fetchImportReceipts();
-
         } catch (error) {
           console.error('Failed to add import receipt:', error);
+          throw error;
         }
       },
       updateImportReceipt: async (id, data) => {
@@ -3016,6 +3184,7 @@ export const useInventoryStore = create<InventoryState>()(
           await get().fetchImportReceipts();
         } catch (error) {
           console.error('Failed to update import receipt:', error);
+          throw error;
         }
       },
       deleteImportReceipt: async (id) => {

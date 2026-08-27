@@ -11,9 +11,9 @@ import { DollarSign, Settings, Activity, Layers, CreditCard, Percent } from 'luc
 const tabs = [
   { id: 'lists', label: 'Bảng giá cước', icon: DollarSign, permission: 'logistics:price:view' },
   { id: 'promotions', label: 'Khuyến mãi phí', icon: Percent, permission: 'logistics:promotion:view' },
-  { id: 'fees', label: 'Cấu hình Phí giao', icon: Settings, permission: 'logistics:fee:view' },
+  { id: 'fees', label: 'Cấu hình phí giao hàng', icon: Settings, permission: 'logistics:fee:view' },
   { id: 'fee-rates', label: 'Tỷ lệ cước', icon: Activity, permission: 'logistics:fee-rate:view' },
-  { id: 'fee-groups', label: 'Nhóm phí giao', icon: Layers, permission: 'logistics:fee-group:view' },
+  { id: 'fee-groups', label: 'Nhóm phí giao hàng', icon: Layers, permission: 'logistics:fee-group:view' },
   { id: 'charges', label: 'Phụ phí giao hàng', icon: CreditCard, permission: 'logistics:charge:view' },
 ] as const;
 
@@ -36,7 +36,7 @@ export function PricingPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Giá cước & Phụ phí Vận chuyển</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Giá cước & phụ phí vận chuyển</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Quản lý tập trung bảng giá, các loại phí, tỷ lệ cước và chương trình khuyến mãi giao hàng
           </p>
@@ -53,7 +53,7 @@ export function PricingPage() {
               onClick={() => handleTabChange(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors cursor-pointer ${
                 isActive
-                  ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400 dark:border-emerald-400'
+                  ? 'border-primary text-primary'
                   : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
               }`}
             >

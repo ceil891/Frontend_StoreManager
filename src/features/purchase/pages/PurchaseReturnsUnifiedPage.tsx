@@ -180,6 +180,33 @@ export function PurchaseReturnsUnifiedPage() {
   };
 
   const handleAddProductLine = () => {
+    if (editingRTV.grnRefNumber) {
+      const foundReceipt = (importReceipts || []).find((rec: any) =>
+        rec.grnNumber === editingRTV.grnRefNumber ||
+        rec.code === editingRTV.grnRefNumber ||
+        rec.receiptNumber === editingRTV.grnRefNumber ||
+        rec.receiptCode === editingRTV.grnRefNumber ||
+        `GRN-${rec.id}` === editingRTV.grnRefNumber
+      );
+      if (foundReceipt) {
+        const lines = foundReceipt.lines || foundReceipt.receiptLines || foundReceipt.items || [];
+        const unusedLine = lines.find((line: any) => !returnItems.some(item => item.sku === line.sku));
+        const lineToUse = unusedLine || lines[0];
+        if (lineToUse) {
+          const newItem = {
+            id: Date.now().toString(),
+            productName: lineToUse.productName || lineToUse.productNameSnapshot || 'Sản phẩm xuất trả',
+            sku: lineToUse.sku || 'SKU-RTV',
+            productId: lineToUse.productId || '1',
+            quantity: 1,
+            unitPrice: Number(lineToUse.unitPrice || lineToUse.unitCostSnapshot || lineToUse.unitCost || 50000),
+            reason: editingRTV.reason || 'Hàng lỗi hỏng do vận chuyển'
+          };
+          updateReturnItemsAndRecalculate([...returnItems, newItem]);
+          return;
+        }
+      }
+    }
     const firstP = products[0];
     const newItem = {
       id: Date.now().toString(),
@@ -188,7 +215,7 @@ export function PurchaseReturnsUnifiedPage() {
       productId: firstP?.id || '1',
       quantity: 1,
       unitPrice: firstP?.price || 100000,
-      reason: 'Lỗi kỹ thuật nhà sản xuất'
+      reason: editingRTV.reason || 'Hàng lỗi hỏng do vận chuyển'
     };
     updateReturnItemsAndRecalculate([...returnItems, newItem]);
   };
@@ -325,6 +352,50 @@ export function PurchaseReturnsUnifiedPage() {
       return;
     }
 
+    if (returnItems.length === 0 || !returnItems.some(i => Number(i.quantity) > 0)) {
+      toast.error('Bắt buộc phải có ít nhất 1 sản phẩm xuất trả với số lượng lớn hơn 0!');
+      return;
+    }
+
+    if (!editingRTV.grnRefNumber || !editingRTV.grnRefNumber.startsWith('GRN-')) {
+      toast.error('Bắt buộc phải chọn một Phiếu nhập kho gốc tham chiếu (mã bắt đầu bằng GRN-)!');
+      return;
+    }
+
+    const foundReceipt = (importReceipts || []).find((rec: any) =>
+      rec.grnNumber === editingRTV.grnRefNumber ||
+      rec.code === editingRTV.grnRefNumber ||
+      rec.receiptNumber === editingRTV.grnRefNumber ||
+      rec.receiptCode === editingRTV.grnRefNumber ||
+      `GRN-${rec.id}` === editingRTV.grnRefNumber
+    );
+
+    if (foundReceipt) {
+      const lines = foundReceipt.lines || foundReceipt.receiptLines || foundReceipt.items || [];
+      const receivedQtys: Record<string, number> = {};
+      lines.forEach((item: any) => {
+        const sku = (item.sku || item.skuSnapshot || '').toUpperCase();
+        receivedQtys[sku] = (receivedQtys[sku] || 0) + Number(item.quantity || 0);
+      });
+
+      for (const line of returnItems) {
+        const lineSku = (line.sku || '').toUpperCase();
+        if (receivedQtys[lineSku] === undefined) {
+          toast.error(`Sản phẩm ${line.productName} (SKU: ${line.sku}) không nằm trong Phiếu nhập gốc ${editingRTV.grnRefNumber}!`);
+          return;
+        }
+        const maxAllowed = receivedQtys[lineSku];
+        if (Number(line.quantity) <= 0) {
+          toast.error(`Số lượng xuất trả cho sản phẩm ${line.productName} phải lớn hơn 0!`);
+          return;
+        }
+        if (Number(line.quantity) > maxAllowed) {
+          toast.error(`Số lượng xuất trả cho sản phẩm ${line.productName} (${line.quantity}) không được vượt quá số lượng đã nhận (${maxAllowed}) trong phiếu nhập kho gốc!`);
+          return;
+        }
+      }
+    }
+
     const payload = {
       rtvNumber: editingRTV.rtvNumber,
       grnRefNumber: editingRTV.grnRefNumber || '',
@@ -335,7 +406,7 @@ export function PurchaseReturnsUnifiedPage() {
       totalItems: returnItems.reduce((acc, cur) => acc + (cur.quantity || 0), 0),
       refundValue: returnItems.reduce((acc, cur) => acc + (cur.quantity * cur.unitPrice), 0),
       status: editingRTV.status || 'PENDING_VENDOR',
-      reason: editingRTV.reason || 'DEFECTIVE_BATCH',
+      reason: editingRTV.reason || 'Hàng lỗi hỏng do vận chuyển',
       logisticsCarrier: editingRTV.logisticsCarrier || 'Viettel Post',
       trackingNumber: editingRTV.trackingNumber || '',
       notes: editingRTV.notes || '',
@@ -353,9 +424,10 @@ export function PurchaseReturnsUnifiedPage() {
       }
       setIsFormOpen(false);
       fetchReturnToSuppliers();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lỗi khi lưu đơn trả hàng NCC.');
+      const msg = err.response?.data?.message || err.message || 'Lỗi khi lưu đơn trả hàng NCC.';
+      toast.error(msg);
     }
   };
 
@@ -807,7 +879,7 @@ export function PurchaseReturnsUnifiedPage() {
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
         title={formMode === 'create' ? '🏬 Tạo đơn trả hàng Nhà Cung Cấp mới (RTV)' : '⚙️ Chỉnh sửa đơn trả hàng NCC'}
-        width="max-w-3xl"
+        size="erp"
       >
         <form onSubmit={handleSaveRTV} className="space-y-4 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -816,25 +888,26 @@ export function PurchaseReturnsUnifiedPage() {
               <input
                 type="text"
                 value={editingRTV.rtvNumber || ''}
-                onChange={(e) => setEditingRTV({ ...editingRTV, rtvNumber: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono font-bold bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                readOnly
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono font-bold bg-gray-100 dark:bg-gray-800 text-emerald-600"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chọn từ phiếu nhập gốc (GRN)</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chọn từ phiếu nhập gốc (GRN) *</label>
               <select
                 value={editingRTV.grnRefNumber || ''}
                 onChange={(e) => handleSelectGRN(e.target.value)}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white cursor-pointer"
+                required
               >
-                <option value="">-- Nhập mã hoặc chọn GRN --</option>
+                <option value="">-- Chọn Phiếu Nhập Hàng Gốc --</option>
                 {(importReceipts || []).map((rec: any) => {
-                  const grn = rec.grnNumber || rec.code || rec.receiptNumber || `GRN-${rec.id}`;
+                  const grn = rec.grnNumber || rec.code || rec.receiptNumber || rec.receiptCode || `GRN-${rec.id}`;
                   return (
                     <option key={rec.id} value={grn}>
-                      {grn} - {rec.supplierName || 'NCC'}
+                      {grn} - {rec.supplierName || 'NCC'} ({rec.receiptDate ? String(rec.receiptDate).substring(0, 10) : 'Gần đây'})
                     </option>
                   );
                 })}
@@ -842,33 +915,52 @@ export function PurchaseReturnsUnifiedPage() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Nhà cung cấp *</label>
-              <input
-                type="text"
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Nhà cung cấp đối tác *</label>
+              <select
                 value={editingRTV.supplierName || ''}
-                onChange={(e) => setEditingRTV({ ...editingRTV, supplierName: e.target.value })}
-                placeholder="Tên nhà cung cấp"
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-medium"
+                onChange={(e) => {
+                  const sName = e.target.value;
+                  const sObj = suppliers.find(s => (s.supplierName || (s as any).name) === sName);
+                  setEditingRTV(prev => ({
+                    ...prev,
+                    supplierName: sName,
+                    supplierId: sObj?.id || prev.supplierId
+                  }));
+                }}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-medium cursor-pointer"
                 required
-              />
+              >
+                <option value="">-- Chọn Nhà Cung Cấp --</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.supplierName || (s as any).name}>
+                    {s.supplierName || (s as any).name} ({s.code || (s as any).supplierCode})
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <div>
               <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Kho xuất trả *</label>
-              <input
-                type="text"
+              <select
                 value={editingRTV.dispatchingStore || 'Kho phân phối Trung tâm'}
                 onChange={(e) => setEditingRTV({ ...editingRTV, dispatchingStore: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white cursor-pointer"
                 required
-              />
+              >
+                <option value="Kho phân phối Trung tâm">Kho phân phối Trung tâm</option>
+                <option value="Kho Chi nhánh chính">Kho Chi nhánh chính</option>
+                <option value="Kho Chi nhánh Đà Nẵng">Kho Chi nhánh Đà Nẵng</option>
+                <option value="Kho Chi nhánh Hà Nội">Kho Chi nhánh Hà Nội</option>
+                <option value="Kho Chi nhánh TP.HCM">Kho Chi nhánh TP.HCM</option>
+              </select>
             </div>
             <div>
               <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày xuất phiếu *</label>
               <input
                 type="date"
+                min={new Date().toISOString().split('T')[0]}
                 value={editingRTV.returnDate || ''}
                 onChange={(e) => setEditingRTV({ ...editingRTV, returnDate: e.target.value })}
                 className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
@@ -876,11 +968,25 @@ export function PurchaseReturnsUnifiedPage() {
               />
             </div>
             <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Lý do xuất trả chính *</label>
+              <select
+                value={editingRTV.reason || 'Hàng lỗi hỏng do vận chuyển'}
+                onChange={(e) => setEditingRTV({ ...editingRTV, reason: e.target.value })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-semibold cursor-pointer"
+                required
+              >
+                <option value="Hàng lỗi hỏng do vận chuyển">Hàng lỗi hỏng do vận chuyển</option>
+                <option value="Hàng sai quy cách/mẫu mã">Hàng sai quy cách/mẫu mã</option>
+                <option value="Hàng cận/hết hạn sử dụng">Hàng cận/hết hạn sử dụng</option>
+                <option value="Khác">Khác (Nhập lý do chi tiết)</option>
+              </select>
+            </div>
+            <div>
               <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Trạng thái luồng</label>
               <select
                 value={editingRTV.status || 'PENDING_VENDOR'}
                 onChange={(e) => setEditingRTV({ ...editingRTV, status: e.target.value as any })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold cursor-pointer"
               >
                 <option value="PENDING_VENDOR">🟡 Chờ NCC phản hồi (PENDING_VENDOR)</option>
                 <option value="PACKING">🟠 Chờ kho đóng gói (PACKING)</option>
@@ -958,13 +1064,16 @@ export function PurchaseReturnsUnifiedPage() {
                         {((line.quantity || 0) * (line.unitPrice || 0)).toLocaleString('vi-VN')} ₫
                       </td>
                       <td className="p-1.5">
-                        <input
-                          type="text"
-                          value={line.reason}
+                        <select
+                          value={line.reason || 'Hàng lỗi hỏng do vận chuyển'}
                           onChange={(e) => handleUpdateProductLine(line.id, 'reason', e.target.value)}
-                          placeholder="Lý do..."
-                          className="w-full p-1 border rounded text-[11px] bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-                        />
+                          className="w-full p-1 border rounded text-[11px] bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold"
+                        >
+                          <option value="Hàng lỗi hỏng do vận chuyển">Hàng lỗi hỏng do vận chuyển</option>
+                          <option value="Hàng sai quy cách/mẫu mã">Hàng sai quy cách/mẫu mã</option>
+                          <option value="Hàng cận/hết hạn sử dụng">Hàng cận/hết hạn sử dụng</option>
+                          <option value="Khác">Khác</option>
+                        </select>
                       </td>
                       <td className="p-1.5 text-center">
                         <button

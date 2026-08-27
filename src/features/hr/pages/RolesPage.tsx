@@ -159,18 +159,20 @@ export function RolesPage() {
         header: 'Số quyền',
         accessorKey: 'grantedPermissions',
         cell: (info) => {
+          const role = info.row.original;
           const perms = info.getValue<string[]>() || [];
-          const isSuper = perms.includes('*');
+          const totalPerms = Math.max(systemPermissions.length, perms.length, 245);
+          const isSuper = perms.includes('*') || role.roleCode === 'SUPER_ADMIN' || role.roleTitle.toUpperCase().includes('SUPER_ADMIN') || perms.length >= totalPerms;
           return (
             <div className="flex items-center gap-2">
               <div className="h-2 w-16 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                 <div 
-                  className={`h-full ${isSuper ? 'bg-red-500 w-full' : 'bg-primary'}`} 
-                  style={{ width: isSuper ? '100%' : `${Math.min(100, (perms.length / (systemPermissions.length || 1)) * 100)}%` }} 
+                  className={`h-full ${isSuper ? 'bg-primary w-full' : 'bg-primary'}`} 
+                  style={{ width: isSuper ? '100%' : `${Math.min(100, (perms.length / totalPerms) * 100)}%` }} 
                 />
               </div>
               <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
-                {isSuper ? 'Tất cả' : `${perms.length}/${systemPermissions.length}`}
+                {isSuper ? `Tất cả (${perms.length > 0 ? perms.length : totalPerms}/${totalPerms})` : `${perms.length}/${totalPerms}`}
               </span>
             </div>
           );

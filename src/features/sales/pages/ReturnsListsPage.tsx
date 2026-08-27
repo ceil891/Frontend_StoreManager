@@ -40,6 +40,7 @@ export function ReturnsListsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState<Partial<ReturnRequestItem>>({});
   const [isCustomOrderCode, setIsCustomOrderCode] = useState(false);
+  const [proofFileName, setProofFileName] = useState<string>('');
 
   // Master list of all available sale orders (Backend API + Local Storage + Standard System Orders)
   const masterSaleOrders = useMemo(() => {
@@ -266,6 +267,7 @@ export function ReturnsListsPage() {
 
   const handleRejectRequest = (req: ReturnRequestItem) => {
     updateReturnRequestStatus(req.id, 'REJECTED');
+    setSelectedRequest(null);
     toast.info(`Đã từ chối Yêu cầu trả hàng ${req.requestCode}`);
   };
 
@@ -273,6 +275,11 @@ export function ReturnsListsPage() {
     e.preventDefault();
     if (!editingRequest.orderCode) {
       toast.error('Vui lòng chọn Mã đơn gốc');
+      return;
+    }
+
+    if (!proofFileName && !editingRequest.proofImages?.length) {
+      toast.error('Bắt buộc phải tải lên tệp hình ảnh / video minh chứng sản phẩm lỗi!');
       return;
     }
 
@@ -292,7 +299,7 @@ export function ReturnsListsPage() {
       customerId: editingRequest.customerId || foundSO?.customerId || '1',
       customerName: editingRequest.customerName || foundSO?.customerName || 'Khách mua',
       customerPhone: editingRequest.customerPhone || foundSO?.customerPhone || '',
-      requestDate: editingRequest.requestDate || new Date().toISOString().split('T')[0],
+      requestDate: new Date().toISOString().split('T')[0],
       reason: editingRequest.reason || 'Yêu cầu trả hàng',
       requestedRefundMethod: editingRequest.requestedRefundMethod || 'CASH',
       status: (editingRequest.status as any) || 'PENDING',
@@ -301,6 +308,7 @@ export function ReturnsListsPage() {
       requestedQty: qty,
       returnedQty: 0,
       remainingQty: qty,
+      proofImages: proofFileName ? [proofFileName] : (editingRequest.proofImages || []),
       items: [
         {
           productId: String(matchedItem?.productId || matchedItem?.id || '1'),
@@ -490,7 +498,7 @@ export function ReturnsListsPage() {
         isOpen={!!selectedRequest}
         onClose={() => setSelectedRequest(null)}
         title={`📋 Chi Tiết Yêu Cầu Trả Hàng ${selectedRequest?.requestCode}`}
-        width="max-w-2xl"
+        size="erp"
       >
         {selectedRequest && (
           <div className="space-y-4 text-sm">
@@ -588,7 +596,7 @@ export function ReturnsListsPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title="Tạo yêu cầu trả hàng từ khách hàng"
-        width="max-w-3xl"
+        size="erp"
       >
         <form onSubmit={handleSaveNewRequest} className="space-y-5 text-xs max-h-[75vh] overflow-y-auto pr-2">
           {/* 1. THÔNG TIN YÊU CẦU */}
@@ -887,16 +895,27 @@ export function ReturnsListsPage() {
           {/* 4. MINH CHỨNG & GHI CHÚ KHÁCH */}
           <div className="p-4 bg-purple-50/30 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-900 space-y-3">
             <h3 className="font-bold text-purple-900 dark:text-purple-300 text-xs uppercase tracking-wider flex items-center gap-1.5 border-b pb-2 dark:border-purple-900">
-              <Upload className="w-4 h-4 text-purple-600" /> 4. Minh chứng & Ghi chú khách
+              <Upload className="w-4 h-4 text-purple-600" /> 4. Minh chứng hình ảnh sản phẩm lỗi <span className="text-red-500">*</span>
             </h3>
 
             <div>
-              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Hình ảnh / Video sản phẩm</label>
-              <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-4 text-center bg-white dark:bg-gray-900 space-y-1">
+              <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Hình ảnh / Video minh chứng lỗi *</label>
+              <label className="border-2 border-dashed border-purple-300 dark:border-purple-700 rounded-xl p-4 text-center bg-white dark:bg-gray-900 space-y-1 block cursor-pointer hover:bg-purple-50/50 transition">
                 <Upload className="w-6 h-6 mx-auto text-purple-500" />
-                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 block">Kéo thả hoặc tải tệp lên</span>
+                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 block">
+                  {proofFileName ? `✓ Đã chọn: ${proofFileName}` : 'Bấm để tải tệp minh chứng lên *'}
+                </span>
                 <span className="text-[11px] text-gray-400 block font-mono">JPG, JPEG, PNG, WEBP, MP4 - Tối đa 10MB/tệp</span>
-              </div>
+                <input
+                  type="file"
+                  accept="image/*,video/*"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) setProofFileName(f.name);
+                  }}
+                  className="hidden"
+                />
+              </label>
             </div>
 
             <div>

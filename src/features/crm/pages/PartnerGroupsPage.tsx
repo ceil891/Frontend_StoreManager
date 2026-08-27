@@ -154,6 +154,7 @@ export function PartnerGroupsPage() {
         header: 'Phân loại',
         cell: (info) => {
           const type = String(info.getValue() || '');
+          const label = type === 'NHÀ_CUNG_CẤP' ? 'Nhà cung cấp' : 'Khách hàng';
           return (
             <span
               className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-semibold ${
@@ -162,7 +163,7 @@ export function PartnerGroupsPage() {
                   : 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300'
               }`}
             >
-              {type}
+              {label}
             </span>
           );
         },
@@ -195,6 +196,7 @@ export function PartnerGroupsPage() {
         header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
+          const label = status === 'KÍCH_HOẠT' ? 'Đang hoạt động' : 'Đã khóa';
           return (
             <span
               className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
@@ -204,7 +206,7 @@ export function PartnerGroupsPage() {
               }`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${status === 'KÍCH_HOẠT' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-              {status}
+              {label}
             </span>
           );
         },
@@ -247,14 +249,14 @@ export function PartnerGroupsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Nhóm Đối Tác (Khách hàng / Nhà cung cấp)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Nhóm đối tác (khách hàng / nhà cung cấp)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Quản lý phân loại nhóm đối tác để tối ưu chính sách chiết khấu, công nợ và chăm sóc khách hàng.
             </p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Xuất Dữ Liệu
+              <Download className="w-4 h-4" /> Xuất Excel
             </button>
             <button
               onClick={handleOpenCreate}
@@ -287,8 +289,8 @@ export function PartnerGroupsPage() {
                 className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white p-2"
               >
                 <option value="Tất cả">Tất cả phân loại</option>
-                <option value="KHÁCH_HÀNG">KHÁCH HÀNG</option>
-                <option value="NHÀ_CUNG_CẤP">NHÀ CUNG CẤP</option>
+                <option value="KHÁCH_HÀNG">Khách hàng</option>
+                <option value="NHÀ_CUNG_CẤP">Nhà cung cấp</option>
               </select>
             </div>
             <div className="flex items-center gap-2">
@@ -299,8 +301,8 @@ export function PartnerGroupsPage() {
                 className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white p-2"
               >
                 <option value="Tất cả">Tất cả trạng thái</option>
-                <option value="KÍCH_HOẠT">KÍCH HOẠT</option>
-                <option value="KHOÁ">KHOÁ</option>
+                <option value="KÍCH_HOẠT">Đang hoạt động</option>
+                <option value="KHOÁ">Đã khóa</option>
               </select>
             </div>
           </div>
@@ -322,7 +324,9 @@ export function PartnerGroupsPage() {
               <Users className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
               <div>
                 <p className="text-xs text-gray-500">Phân loại đối tác</p>
-                <p className="text-base font-bold text-emerald-800 dark:text-emerald-400">{selectedItem.type}</p>
+                <p className="text-base font-bold text-emerald-800 dark:text-emerald-400">
+                  {selectedItem.type === 'NHÀ_CUNG_CẤP' ? 'Nhà cung cấp' : 'Khách hàng'}
+                </p>
               </div>
             </div>
 
@@ -352,11 +356,11 @@ export function PartnerGroupsPage() {
                       : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
                   }`}
                 >
-                  {selectedItem.status}
+                  {selectedItem.status === 'KÍCH_HOẠT' ? 'Đang hoạt động' : 'Đã khóa'}
                 </span>
               </div>
               <div className="border-t border-gray-200 dark:border-gray-800 pt-2">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Mô tả & Định hướng chính sách</span>
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Mô tả & chính sách</span>
                 <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedItem.description || 'Chưa cập nhật mô tả.'}</p>
               </div>
             </div>
@@ -368,7 +372,7 @@ export function PartnerGroupsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm nhóm đối tác mới' : 'Cập nhật nhóm đối tác'}
+        title={modalMode === 'create' ? 'Thêm mới nhóm đối tác' : 'Cập nhật nhóm đối tác'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div>
@@ -403,8 +407,8 @@ export function PartnerGroupsPage() {
               onChange={(e) => setEditingItem({ ...editingItem, type: e.target.value as any })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
             >
-              <option value="KHÁCH_HÀNG">KHÁCH HÀNG</option>
-              <option value="NHÀ_CUNG_CẤP">NHÀ CUNG CẤP</option>
+              <option value="KHÁCH_HÀNG">Khách hàng</option>
+              <option value="NHÀ_CUNG_CẤP">Nhà cung cấp</option>
             </select>
           </div>
 
@@ -426,14 +430,14 @@ export function PartnerGroupsPage() {
                 onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
               >
-                <option value="KÍCH_HOẠT">KÍCH HOẠT</option>
-                <option value="KHOÁ">KHOÁ (Tạm ngưng)</option>
+                <option value="KÍCH_HOẠT">Đang hoạt động</option>
+                <option value="KHOÁ">Đã khóa</option>
               </select>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mô tả / Chính sách áp dụng</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mô tả / chính sách áp dụng</label>
             <textarea
               rows={3}
               value={editingItem.description || ''}
@@ -455,7 +459,7 @@ export function PartnerGroupsPage() {
               type="submit"
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              {modalMode === 'create' ? 'Tạo Mới' : 'Lưu cập nhật'}
+              {modalMode === 'create' ? 'Thêm mới' : 'Lưu thông tin'}
             </button>
           </div>
         </form>
@@ -479,7 +483,7 @@ export function PartnerGroupsPage() {
               onClick={() => setDeletingItem(null)}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors text-sm"
             >
-              Quay lại
+              Hủy bỏ
             </button>
             <button
               type="button"

@@ -4,7 +4,7 @@ import type { InternalAxiosRequestConfig } from 'axios';
 // Create Axios Instance
 export const axiosClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1',
-  timeout: 60000,
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -40,6 +40,17 @@ axiosClient.interceptors.request.use(
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    try {
+      const authStr = localStorage.getItem('auth-storage');
+      if (authStr && config.headers) {
+        const authData = JSON.parse(authStr);
+        const branchId = authData?.state?.user?.branchId;
+        if (branchId && !config.headers['X-Branch-Id']) {
+          config.headers['X-Branch-Id'] = String(branchId);
+        }
+      }
+    } catch (e) {}
 
     // Invalidate cache on mutations (POST, PUT, DELETE)
     const method = (config.method || 'get').toLowerCase();
@@ -155,10 +166,26 @@ axiosClient.interceptors.response.use(
         return axiosClient(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError as AxiosError, null);
-        // Dispatch logout event or handle in Auth Store
+        // Dispatch logout and clean up auth state
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
+        localStorage.removeItem('retailhub-auth');
+        try {
+          const { useAuthStore } = await import('@/features/auth/store/authStore');
+          useAuthStore.setState({
+            user: null,
+            accessToken: null,
+            refreshToken: null,
+            isAuthenticated: false,
+            isLoading: false,
+            error: null,
+          });
+        } catch (e) {
+          console.error('[AxiosClient] Failed to reset auth store on token expiration:', e);
+        }
+        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

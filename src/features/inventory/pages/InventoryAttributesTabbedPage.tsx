@@ -30,9 +30,9 @@ export function InventoryAttributesTabbedPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Thuộc tính Sản phẩm</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Thuộc tính sản phẩm</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Quản lý danh mục Đơn vị tính, bảng Màu sắc và Kích thước sản phẩm
+            Quản lý danh mục đơn vị tính, bảng màu sắc và kích thước sản phẩm
           </p>
         </div>
       </div>
@@ -47,7 +47,7 @@ export function InventoryAttributesTabbedPage() {
               onClick={() => handleTabChange(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
                 isActive
-                  ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400 dark:border-emerald-400'
+                  ? 'border-primary text-primary'
                   : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
               }`}
             >

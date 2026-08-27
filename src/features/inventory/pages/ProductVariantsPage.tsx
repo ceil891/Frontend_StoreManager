@@ -7,6 +7,8 @@ import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 
 import { useInventoryStore } from '../store/inventoryStore';
+import { useSizeStore } from '../store/sizeStore';
+import { useColorStore } from '../store/colorStore';
 
 interface VariantItem {
   id: number;
@@ -48,11 +50,11 @@ export function ProductVariantsPage() {
   }, [fetchStoreProducts]);
 
   const defaultParentProducts = [
-    { id: '1', name: 'Áo Thun Polo Men Basic', productCode: 'POLO-MEN-01' },
-    { id: '2', name: 'Quần Jean Slimfit Nam', productCode: 'JEAN-MEN-02' },
+    { id: '1', name: 'Áo thun polo nam basic', productCode: 'POLO-MEN-01' },
+    { id: '2', name: 'Quần jean slimfit nam', productCode: 'JEAN-MEN-02' },
     { id: '3', name: 'Điện thoại iPhone 15 Pro Max', productCode: 'IP15PM' },
     { id: '4', name: 'Smart TV Samsung QLED 4K 65 inch', productCode: 'SS-TV-65QLED' },
-    { id: '5', name: 'Giày Sneaker Running Pro', productCode: 'RUN-PRO-01' },
+    { id: '5', name: 'Giày sneaker running pro', productCode: 'RUN-PRO-01' },
   ];
 
   const allParentProducts = useMemo(() => {
@@ -86,7 +88,7 @@ export function ProductVariantsPage() {
   const defaultAttributes = [
     { id: '1', name: 'Kích thước (Size)', code: 'SIZE' },
     { id: '2', name: 'Màu sắc (Color)', code: 'COLOR' },
-    { id: '3', name: 'Dung lượng (Storage)', code: 'STORAGE' },
+    { id: '3', name: 'Đơn vị tính (Unit)', code: 'UNIT' },
     { id: '4', name: 'Chất liệu (Material)', code: 'MATERIAL' },
   ];
 
@@ -98,25 +100,35 @@ export function ProductVariantsPage() {
       { id: '104', value: 'Size XL' },
     ],
     '2': [
-      { id: '201', value: 'Đỏ (Red)' },
-      { id: '202', value: 'Xanh Đen (Navy)' },
-      { id: '203', value: 'Đen (Black)' },
-      { id: '204', value: 'Trắng (White)' },
+      { id: '201', value: 'Đỏ' },
+      { id: '202', value: 'Xanh navy' },
+      { id: '203', value: 'Đen' },
+      { id: '204', value: 'Trắng' },
     ],
     '3': [
-      { id: '301', value: '128GB' },
-      { id: '302', value: '256GB' },
-      { id: '303', value: '512GB' },
+      { id: '301', value: 'Cái' },
+      { id: '302', value: 'Hộp' },
+      { id: '303', value: 'Thùng' },
     ],
     '4': [
       { id: '401', value: '100% Cotton' },
       { id: '402', value: 'Polyester' },
-      { id: '403', value: 'Vải Khaki' },
+      { id: '403', value: 'Vải khaki' },
     ],
   };
 
   const loadCreationData = async () => {
     try {
+      await Promise.allSettled([
+        useSizeStore.getState().fetchSizes(),
+        useColorStore.getState().fetchColors(),
+        useInventoryStore.getState().fetchUnits(),
+      ]);
+
+      const latestSizes = useSizeStore.getState().sizes;
+      const latestColors = useColorStore.getState().colors;
+      const latestUnits = useInventoryStore.getState().unitsList;
+
       const [prodsRes, attrsRes] = await Promise.allSettled([
         axiosClient.get('/catalog/products?size=200'),
         axiosClient.get('/attributes?size=200')
@@ -146,22 +158,45 @@ export function ProductVariantsPage() {
         setSelectedProductId(String(finalProds[0].id));
       }
 
-      // Preload values for all fetched attributes
+      // Preload values for all fetched attributes + DB sync
       const valMap: Record<string, any[]> = {};
       await Promise.all(
         finalAttrs.map(async (attr: any) => {
+          const attrIdStr = String(attr.id);
+          const attrCode = (attr.code || attr.name || '').toUpperCase();
+
+          if (attrIdStr === '1' || attrCode.includes('SIZE') || attrCode.includes('KÍCH THƯỚC')) {
+            if (latestSizes && latestSizes.length > 0) {
+              valMap[attrIdStr] = latestSizes.map(s => ({ id: String(s.id), value: s.sizeName }));
+              return;
+            }
+          }
+
+          if (attrIdStr === '2' || attrCode.includes('COLOR') || attrCode.includes('MÀU')) {
+            if (latestColors && latestColors.length > 0) {
+              valMap[attrIdStr] = latestColors.map(c => ({ id: String(c.id), value: c.colorName }));
+              return;
+            }
+          }
+
+          if (attrIdStr === '3' || attrCode.includes('UNIT') || attrCode.includes('ĐƠN VỊ')) {
+            if (latestUnits && latestUnits.length > 0) {
+              valMap[attrIdStr] = latestUnits.map(u => ({ id: String(u.id), value: `${u.unitName} (${u.code})` }));
+              return;
+            }
+          }
+
           try {
             const valRes: any = await axiosClient.get(`/attributes/${attr.id}/values`);
             const vList = Array.isArray(valRes?.data) ? valRes.data : (Array.isArray(valRes) ? valRes : valRes?.content || []);
-            valMap[String(attr.id)] = vList.length > 0 ? vList : (defaultAttributeValues[String(attr.id)] || []);
+            valMap[attrIdStr] = vList.length > 0 ? vList : (defaultAttributeValues[attrIdStr] || []);
           } catch {
-            valMap[String(attr.id)] = defaultAttributeValues[String(attr.id)] || [];
+            valMap[attrIdStr] = defaultAttributeValues[attrIdStr] || [];
           }
         })
       );
       setAttributeValuesMap(valMap);
 
-      // Set initial selected attributes with distinct attributes
       if (finalAttrs.length > 0) {
         const firstAttr = finalAttrs[0];
         const firstVals = valMap[String(firstAttr.id)] || [];
@@ -227,7 +262,6 @@ export function ProductVariantsPage() {
   };
 
   const addAttributeRow = () => {
-    // Find next available unused attribute
     const usedAttrIds = new Set(selectedAttributes.map(a => a.attributeId));
     const nextAttr = attributesList.find(a => !usedAttrIds.has(String(a.id)));
     if (nextAttr) {
@@ -263,23 +297,28 @@ export function ProductVariantsPage() {
   const fetchVariants = async () => {
     setIsLoading(true);
     try {
-      const res = await axiosClient.get<any, any[]>('/catalog/variants');
-      const list: any[] = Array.isArray(res) ? res : (res?.content || res?.data || []);
+      let res: any;
+      try {
+        res = await axiosClient.get('/catalog/variants?size=200');
+      } catch {
+        res = await axiosClient.get('/variants?size=200');
+      }
+
+      const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : res?.content || []);
       const mapped: VariantItem[] = list.map((item: any) => ({
-        id: Number(item.id),
-        variantCode: item.variantCode || item.sku || `VAR-${item.id}`,
-        sku: item.sku || item.variantCode || '',
+        id: item.id,
+        variantCode: item.sku || item.variantCode || `VAR-${item.id}`,
+        sku: item.sku || item.variantCode || `VAR-${item.id}`,
         barcode: item.barcode || '',
         imageUrl: item.imageUrl || '',
         price: Number(item.price || 0),
-        status: item.isActive !== false ? 'ACTIVE' : 'INACTIVE',
-        productId: Number(item.productId || 1),
-        productCode: item.productCode || item.product?.sku || '',
-        productName: item.productName || item.product?.name || 'Sản phẩm',
-        variantDescription: item.description || item.variantDescription || 'Mặc định',
+        status: item.status || 'ACTIVE',
+        productId: item.productId || item.product?.id || 0,
+        productCode: item.product?.sku || item.productCode || 'PRD-01',
+        productName: item.product?.name || item.productName || 'Sản phẩm',
+        variantDescription: item.attributesSummary || item.variantDescription || 'Mặc định',
       }));
 
-      // Merge with variants created in products store
       const localVariants: VariantItem[] = [];
       storeProducts.forEach(p => {
         (p.variants || []).forEach((v, idx) => {
@@ -351,21 +390,19 @@ export function ProductVariantsPage() {
       setIsModalOpen(false);
       fetchVariants();
     } catch {
-      // Local optimistic update
-      setData(prev => prev.map(v => v.id === editingItem.id ? { ...v, ...editingItem } as VariantItem : v));
-      toast.success('Đã cập nhật biến thể thành công!');
+      toast.success('Đã lưu thay đổi biến thể!');
       setIsModalOpen(false);
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('Bạn có chắc chắn muốn xóa biến thể này?')) {
+    if (confirm('Bạn có chắc chắn muốn xóa biến thể này khỏi hệ thống?')) {
       try {
         await axiosClient.delete(`/catalog/variants/${id}`);
         toast.success('Đã xóa biến thể thành công!');
         fetchVariants();
       } catch {
-        setData(prev => prev.filter(v => v.id !== id));
+        setData(prev => prev.filter(item => item.id !== id));
         toast.success('Đã xóa biến thể thành công!');
       }
     }
@@ -382,7 +419,7 @@ export function ProductVariantsPage() {
     const attrIds = validAttrs.map(a => a.attributeId);
     const uniqueAttrIds = new Set(attrIds);
     if (uniqueAttrIds.size < attrIds.length) {
-      toast.error('Một biến thể không thể có nhiều hơn 1 giá trị cho cùng nhóm thuộc tính (Ví dụ: không thể vừa là màu Đỏ vừa là màu Xanh Đen trên cùng 1 biến thể). Bạn hãy lưu từng biến thể riêng biệt nhé!');
+      toast.error('Một biến thể không thể có nhiều hơn 1 giá trị cho cùng nhóm thuộc tính.');
       return;
     }
 
@@ -413,7 +450,7 @@ export function ProductVariantsPage() {
       {
         accessorKey: 'variantCode',
         header: 'Mã biến thể',
-        cell: (info) => <span className="font-mono font-bold text-indigo-600">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-mono font-bold text-primary">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'productName',
@@ -429,7 +466,7 @@ export function ProductVariantsPage() {
         accessorKey: 'variantDescription',
         header: 'Phân loại thuộc tính',
         cell: (info) => (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs font-bold rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
             <Tag className="w-3.5 h-3.5 text-gray-400" />
             {info.getValue() as string || 'Mặc định'}
           </span>
@@ -437,7 +474,7 @@ export function ProductVariantsPage() {
       },
       {
         accessorKey: 'barcode',
-        header: 'Mã vạch (Barcode)',
+        header: 'Mã vạch (barcode)',
         cell: (info) => <span className="font-mono text-gray-500">{info.getValue() as string || 'Chưa cấu hình'}</span>,
       },
       {
@@ -446,8 +483,8 @@ export function ProductVariantsPage() {
         cell: (info) => {
           const val = info.getValue() as number;
           return (
-            <span className="font-mono font-black text-emerald-600 dark:text-emerald-400">
-              {val ? `${val.toLocaleString('vi-VN')} ₫` : 'Dùng giá cha'}
+            <span className="font-mono font-bold text-primary">
+              {val ? `${val.toLocaleString('vi-VN')} đ` : 'Dùng giá gốc'}
             </span>
           );
         },
@@ -460,21 +497,21 @@ export function ProductVariantsPage() {
           const isAct = val === 'ACTIVE';
           return (
             <span
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-sm ${
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
                 isAct
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/50'
-                  : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-900/50'
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                  : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
               }`}
             >
               {isAct ? (
                 <>
                   <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                  Kinh doanh
+                  Đang kinh doanh
                 </>
               ) : (
                 <>
-                  <XCircle className="w-3 h-3 text-red-500" />
-                  Tạm ngưng
+                  <XCircle className="w-3 h-3 text-gray-400" />
+                  Tạm ngừng
                 </>
               )}
             </span>
@@ -485,17 +522,17 @@ export function ProductVariantsPage() {
         id: 'actions',
         header: 'Thao tác',
         cell: (info) => (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => handleOpenEdit(info.row.original)}
-              className="p-1 text-gray-500 hover:text-blue-600 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
               title="Chỉnh sửa biến thể"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleDelete(info.row.original.id)}
-              className="p-1 text-gray-500 hover:text-red-600 rounded hover:bg-gray-100 dark:hover:bg-gray-805 transition-colors"
+              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               title="Xóa biến thể"
             >
               <Trash2 className="w-4 h-4" />
@@ -511,125 +548,124 @@ export function ProductVariantsPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
-            <Layers className="w-6 h-6 text-indigo-500" />
-            Danh sách Biến thể Sản phẩm
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
+            <Layers className="w-6 h-6 text-primary" />
+            Danh sách biến thể sản phẩm
           </h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-            Quản lý chi tiết từng mẫu biến thể (Màu sắc, kích cỡ, mã vạch, giá bán lẻ riêng).
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Quản lý chi tiết từng mẫu biến thể (màu sắc, kích cỡ, mã vạch, giá bán lẻ riêng)
           </p>
         </div>
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-all"
+          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow-sm transition-colors"
         >
           <Plus className="w-4 h-4" />
           Tạo biến thể mới
         </button>
       </div>
 
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row items-center gap-4">
-          <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Tìm kiếm theo mã biến thể, mã vạch, tên sản phẩm..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-medium"
-            />
-          </div>
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Tìm kiếm theo mã biến thể, mã vạch, tên sản phẩm..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary text-gray-900 dark:text-white placeholder-gray-400"
+          />
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-            <span className="text-sm font-bold text-gray-500">Đang tải danh sách biến thể...</span>
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-sm font-medium text-gray-500">Đang tải danh sách biến thể...</span>
           </div>
         ) : (
           <ReusableDataTable data={filtered} columns={columns} onRowClick={(row) => handleOpenEdit(row)} />
         )}
       </div>
 
+      {/* Edit Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Chỉnh sửa Biến thể"
-        width="max-w-lg"
+        title="Chỉnh sửa biến thể"
+        size="erp"
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Sản phẩm cha</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Sản phẩm cha</label>
             <input
               type="text"
               value={editingItem.productName || ''}
-              className="w-full p-2 bg-gray-150 dark:bg-gray-800 border rounded text-xs font-medium cursor-not-allowed"
+              className="w-full p-2 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white cursor-not-allowed"
               disabled
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mã biến thể / SKU</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã biến thể / SKU</label>
             <input
               type="text"
               value={editingItem.variantCode || ''}
-              className="w-full p-2 bg-gray-150 dark:bg-gray-800 border rounded text-xs font-mono cursor-not-allowed"
+              className="w-full p-2 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-mono text-gray-900 dark:text-white cursor-not-allowed"
               disabled
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Phân loại thuộc tính</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phân loại thuộc tính</label>
             <input
               type="text"
               value={editingItem.variantDescription || ''}
-              className="w-full p-2 bg-gray-150 dark:bg-gray-800 border rounded text-xs font-medium cursor-not-allowed"
+              className="w-full p-2 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white cursor-not-allowed"
               disabled
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mã vạch</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã vạch</label>
             <input
               type="text"
               value={editingItem.barcode || ''}
               onChange={(e) => setEditingItem({ ...editingItem, barcode: e.target.value })}
               placeholder="Nhập mã vạch cho biến thể..."
-              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500/50"
+              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary text-gray-900 dark:text-white"
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Giá bán riêng (₫)</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá bán riêng (đ)</label>
             <input
               type="number"
               value={editingItem.price || ''}
               onChange={(e) => setEditingItem({ ...editingItem, price: e.target.value ? Number(e.target.value) : undefined })}
               placeholder="Để trống nếu muốn dùng giá sản phẩm cha..."
-              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500/50"
+              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary text-gray-900 dark:text-white"
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Đường dẫn ảnh (URL)</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đường dẫn ảnh (URL)</label>
             <input
               type="text"
               value={editingItem.imageUrl || ''}
               onChange={(e) => setEditingItem({ ...editingItem, imageUrl: e.target.value })}
               placeholder="https://example.com/image.jpg"
-              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/50"
+              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-primary text-gray-900 dark:text-white"
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t mt-6">
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700 mt-6">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
-              Hủy
+              Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm"
+              className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow-sm transition-colors"
             >
               Lưu thay đổi
             </button>
@@ -637,20 +673,21 @@ export function ProductVariantsPage() {
         </form>
       </Modal>
 
+      {/* Create Modal */}
       <Modal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
-        title="Tạo Biến thể mới"
-        width="max-w-xl"
+        title="Tạo biến thể mới"
+        size="erp"
       >
         <form onSubmit={handleCreateVariant} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Sản phẩm cha *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Sản phẩm cha *</label>
             <select
               value={selectedProductId}
               onChange={(e) => setSelectedProductId(e.target.value)}
               required
-              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/50"
+              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-primary text-gray-900 dark:text-white"
             >
               <option value="">-- Chọn sản phẩm cha --</option>
               {allParentProducts.map(p => (
@@ -661,46 +698,45 @@ export function ProductVariantsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mã SKU biến thể (Tự động sinh nếu trống)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã SKU biến thể (Tự động sinh nếu để trống)</label>
               <input
                 type="text"
                 value={newSku}
                 onChange={(e) => setNewSku(e.target.value)}
                 placeholder="Để trống hệ thống sẽ tự sinh..."
-                className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500/50"
+                className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary text-gray-900 dark:text-white"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mã vạch (Tự động sinh nếu trống)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã vạch (Tự động sinh nếu để trống)</label>
               <input
                 type="text"
                 value={newBarcode}
                 onChange={(e) => setNewBarcode(e.target.value)}
                 placeholder="Để trống hệ thống sẽ tự sinh..."
-                className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500/50"
+                className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary text-gray-900 dark:text-white"
               />
             </div>
           </div>
 
-
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Giá bán riêng (₫)</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giá bán riêng (đ)</label>
             <input
               type="number"
               value={newPrice}
               onChange={(e) => setNewPrice(e.target.value ? Number(e.target.value) : '')}
               placeholder="Để trống nếu muốn dùng giá sản phẩm cha..."
-              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500/50"
+              className="w-full p-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary text-gray-900 dark:text-white"
             />
           </div>
 
-          <div className="space-y-3 border-t pt-4 mt-4">
+          <div className="space-y-3 border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-600 uppercase">Thuộc tính biến thể</span>
+              <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Thuộc tính biến thể</span>
               <button
                 type="button"
                 onClick={addAttributeRow}
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1"
+                className="text-xs text-primary hover:text-primary-hover font-semibold flex items-center gap-1"
               >
                 <Plus className="w-3 h-3" />
                 Thêm thuộc tính
@@ -708,13 +744,13 @@ export function ProductVariantsPage() {
             </div>
 
             {selectedAttributes.map((sel, idx) => (
-              <div key={idx} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800 p-3 rounded-lg border border-gray-150 dark:border-gray-700">
+              <div key={idx} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
                 <div className="flex-1 grid grid-cols-2 gap-3">
                   <div>
                     <select
                       value={sel.attributeId}
                       onChange={(e) => handleAttributeChange(idx, e.target.value)}
-                      className="w-full p-2 bg-white dark:bg-gray-900 border rounded text-xs"
+                      className="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs text-gray-900 dark:text-white"
                     >
                       <option value="">-- Chọn thuộc tính --</option>
                       {attributesList.map(a => (
@@ -727,7 +763,7 @@ export function ProductVariantsPage() {
                       value={sel.valueId}
                       onChange={(e) => handleValueChange(idx, e.target.value)}
                       disabled={!sel.attributeId}
-                      className="w-full p-2 bg-white dark:bg-gray-900 border rounded text-xs disabled:opacity-50 font-medium"
+                      className="w-full p-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs disabled:opacity-50 font-medium text-gray-900 dark:text-white"
                     >
                       <option value="">-- Chọn giá trị --</option>
                       {(attributeValuesMap[sel.attributeId] || []).map(v => (
@@ -739,7 +775,7 @@ export function ProductVariantsPage() {
                 <button
                   type="button"
                   onClick={() => removeAttributeRow(idx)}
-                  className="p-1.5 text-gray-400 hover:text-red-500 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                  className="p-1.5 text-gray-400 hover:text-red-500 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -747,17 +783,17 @@ export function ProductVariantsPage() {
             ))}
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t mt-6">
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700 mt-6">
             <button
               type="button"
               onClick={() => setIsCreateOpen(false)}
-              className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
-              Hủy
+              Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm"
+              className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow-sm transition-colors"
             >
               Tạo biến thể
             </button>

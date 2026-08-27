@@ -42,8 +42,8 @@ const generateVoucherCode = () => {
 };
 
 const formatCurrency = (val?: number) => {
-  if (val === undefined || val === null) return '0đ';
-  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
+  if (val === undefined || val === null) return '0 đ';
+  return `${Math.round(val).toLocaleString('vi-VN')} đ`;
 };
 
 export function CustomerVouchersPage() {
@@ -158,58 +158,45 @@ export function CustomerVouchersPage() {
   // Filtered dataset for main table
   const filteredData = useMemo(() => {
     return storeVouchers.filter((item) => {
-      // 1. Search text
+      let matchSearch = true;
       if (search) {
         const q = search.toLowerCase();
-        const matchesCode = item.voucherCode?.toLowerCase().includes(q);
-        const matchesCust =
-          item.customerName?.toLowerCase().includes(q) ||
-          item.customerPhone?.includes(q) ||
-          item.customerCode?.toLowerCase().includes(q);
-        const matchesProg =
-          item.programName?.toLowerCase().includes(q) ||
-          item.voucherName?.toLowerCase().includes(q);
-        if (!matchesCode && !matchesCust && !matchesProg) return false;
+        matchSearch =
+          (item.voucherCode || '').toLowerCase().includes(q) ||
+          (item.customerName || '').toLowerCase().includes(q) ||
+          (item.customerPhone || '').includes(q) ||
+          (item.programName || '').toLowerCase().includes(q);
       }
 
-      // 2. Status filter
-      if (statusFilter !== 'ALL' && item.status !== statusFilter) {
-        return false;
-      }
+      const matchStatus = statusFilter === 'ALL' || item.status === statusFilter;
+      const matchProgram = programFilter === 'ALL' || item.programId === programFilter;
+      const matchDiscountType = discountTypeFilter === 'ALL' || item.discountType === discountTypeFilter;
 
-      // 3. Program filter
-      if (programFilter !== 'ALL') {
-        if (item.programId !== programFilter && item.programName !== programFilter) {
-          return false;
-        }
-      }
+      let matchIssueDate = true;
+      if (issueDateFrom && item.issueDate) matchIssueDate = matchIssueDate && item.issueDate >= issueDateFrom;
+      if (issueDateTo && item.issueDate) matchIssueDate = matchIssueDate && item.issueDate <= issueDateTo;
 
-      // 4. Discount type filter
-      if (discountTypeFilter !== 'ALL' && item.discountType !== discountTypeFilter) {
-        return false;
-      }
+      let matchExpiryDate = true;
+      if (expiryDateFrom && item.expiryDate) matchExpiryDate = matchExpiryDate && item.expiryDate >= expiryDateFrom;
+      if (expiryDateTo && item.expiryDate) matchExpiryDate = matchExpiryDate && item.expiryDate <= expiryDateTo;
 
-      // 5. Customer text filter
+      let matchCustomer = true;
       if (customerFilter) {
         const cq = customerFilter.toLowerCase();
-        if (
-          !item.customerName?.toLowerCase().includes(cq) &&
-          !item.customerPhone?.includes(cq) &&
-          !item.customerCode?.toLowerCase().includes(cq)
-        ) {
-          return false;
-        }
+        matchCustomer =
+          (item.customerName || '').toLowerCase().includes(cq) ||
+          (item.customerPhone || '').includes(cq);
       }
 
-      // 6. Issue date range
-      if (issueDateFrom && item.issueDate && item.issueDate < issueDateFrom) return false;
-      if (issueDateTo && item.issueDate && item.issueDate > issueDateTo) return false;
-
-      // 7. Expiry date range
-      if (expiryDateFrom && item.expiryDate && item.expiryDate < expiryDateFrom) return false;
-      if (expiryDateTo && item.expiryDate && item.expiryDate > expiryDateTo) return false;
-
-      return true;
+      return (
+        matchSearch &&
+        matchStatus &&
+        matchProgram &&
+        matchDiscountType &&
+        matchIssueDate &&
+        matchExpiryDate &&
+        matchCustomer
+      );
     });
   }, [
     storeVouchers,
@@ -217,14 +204,24 @@ export function CustomerVouchersPage() {
     statusFilter,
     programFilter,
     discountTypeFilter,
-    customerFilter,
     issueDateFrom,
     issueDateTo,
     expiryDateFrom,
     expiryDateTo,
+    customerFilter,
   ]);
 
-  // Vouchers owned by the selected customer in Drawer
+  // Selected Program Policy for Single Issue
+  const selectedProgramPolicy = useMemo(() => {
+    return voucherPrograms.find((p) => p.id === issueForm.programId) || voucherPrograms[0];
+  }, [voucherPrograms, issueForm.programId]);
+
+  // Selected Program Policy for Batch Issue
+  const selectedBatchProgramPolicy = useMemo(() => {
+    return voucherPrograms.find((p) => p.id === batchForm.programId) || voucherPrograms[0];
+  }, [voucherPrograms, batchForm.programId]);
+
+  // Vouchers of currently selected customer (for Customer Portfolio Drawer)
   const selectedCustomerVouchers = useMemo(() => {
     if (!selectedCustomer) return [];
     return storeVouchers.filter(
@@ -234,64 +231,54 @@ export function CustomerVouchersPage() {
     );
   }, [storeVouchers, selectedCustomer]);
 
-  // Customer Drawer Voucher Stats
-  const selectedCustomerStats = useMemo(() => {
-    const list = selectedCustomerVouchers;
-    const total = list.length;
-    const active = list.filter((v) => v.status === 'ACTIVE').length;
-    const used = list.filter((v) => v.status === 'USED').length;
-    const expired = list.filter((v) => v.status === 'EXPIRED').length;
-    const cancelled = list.filter((v) => v.status === 'CANCELLED').length;
-    return { total, active, used, expired, cancelled };
-  }, [selectedCustomerVouchers]);
-
-  // Found matching customer profile object
+  // Selected Customer Profile & Stats
   const selectedCustomerProfile = useMemo(() => {
     if (!selectedCustomer) return null;
-    return (customers || []).find(
-      (c) =>
-        c.name === selectedCustomer.customerName ||
-        (selectedCustomer.customerPhone && c.phone === selectedCustomer.customerPhone)
+    return (
+      (customers || []).find(
+        (c) =>
+          c.name === selectedCustomer.customerName ||
+          (selectedCustomer.customerPhone && c.phone === selectedCustomer.customerPhone)
+      ) || null
     );
   }, [customers, selectedCustomer]);
 
-  // Selected Voucher Program details preview in Issue Modal
-  const selectedProgramPolicy = useMemo(() => {
-    if (!issueForm.programId) return voucherPrograms[0] || null;
-    return voucherPrograms.find((p) => p.id === issueForm.programId) || voucherPrograms[0] || null;
-  }, [voucherPrograms, issueForm.programId]);
-
-  // Selected Voucher Program details for Batch Issue Modal
-  const selectedBatchProgramPolicy = useMemo(() => {
-    if (!batchForm.programId) return voucherPrograms[0] || null;
-    return voucherPrograms.find((p) => p.id === batchForm.programId) || voucherPrograms[0] || null;
-  }, [voucherPrograms, batchForm.programId]);
+  const selectedCustomerStats = useMemo(() => {
+    const total = selectedCustomerVouchers.length;
+    const active = selectedCustomerVouchers.filter((v) => v.status === 'ACTIVE').length;
+    const used = selectedCustomerVouchers.filter((v) => v.status === 'USED').length;
+    const expired = selectedCustomerVouchers.filter((v) => v.status === 'EXPIRED').length;
+    const cancelled = selectedCustomerVouchers.filter((v) => v.status === 'CANCELLED').length;
+    return { total, active, used, expired, cancelled };
+  }, [selectedCustomerVouchers]);
 
   // Open Customer Drawer
   const handleOpenCustomerDrawer = (customerName: string, customerPhone: string, customerCode?: string) => {
-    setSelectedCustomer({
-      customerName,
-      customerPhone,
-      customerCode,
-    });
+    setSelectedCustomer({ customerName, customerPhone, customerCode });
   };
 
-  // Handle Revoke / Cancel Voucher
+  // Revoke/Cancel Voucher Action
   const handleRevoke = async (item: CustomerVoucherRecord) => {
-    if (!confirm(`Bạn có chắc muốn thu hồi/hủy voucher ${item.voucherCode} của khách ${item.customerName}?`)) {
+    if (!confirm(`Bạn có chắc chắn muốn hủy / thu hồi voucher ${item.voucherCode} của khách hàng ${item.customerName}?`)) {
       return;
     }
     try {
-      await updateCustomerVoucher(item.id, { status: 'CANCELLED' });
-      toast.success(`Đã thu hồi voucher ${item.voucherCode}`);
+      await updateCustomerVoucher(item.id, {
+        ...item,
+        status: 'CANCELLED',
+        notes: (item.notes ? item.notes + ' | ' : '') + 'Đã thu hồi bởi nhân viên vào ' + new Date().toLocaleDateString('vi-VN'),
+      });
+      toast.success(`Đã hủy voucher ${item.voucherCode}`);
     } catch (err) {
-      toast.error('Lỗi khi thu hồi voucher');
+      toast.error('Lỗi khi hủy voucher');
     }
   };
 
-  // Handle Delete Voucher
+  // Delete Customer Voucher Action
   const handleDelete = async (item: CustomerVoucherRecord) => {
-    if (!confirm(`Xóa vĩnh viễn voucher ${item.voucherCode} khỏi hệ thống?`)) return;
+    if (!confirm(`Xóa vĩnh viễn bản ghi voucher ${item.voucherCode}? Hành động này không thể hoàn tác.`)) {
+      return;
+    }
     try {
       await deleteCustomerVoucher(item.id);
       toast.success(`Đã xóa voucher ${item.voucherCode}`);
@@ -487,7 +474,7 @@ export function CustomerVouchersPage() {
     () => [
       {
         accessorKey: 'voucherCode',
-        header: 'Mã Voucher',
+        header: 'Mã voucher',
         cell: (info) => (
           <button
             onClick={() => setSelectedVoucherDetail(info.row.original)}
@@ -542,7 +529,7 @@ export function CustomerVouchersPage() {
           if (row.discountType === 'PERCENT') {
             return (
               <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
-                Giảm {row.discountValue}% {row.maxDiscount ? `(Tối đa ${formatCurrency(row.maxDiscount)})` : ''}
+                Giảm {row.discountValue}% {row.maxDiscount ? `(tối đa ${formatCurrency(row.maxDiscount)})` : ''}
               </span>
             );
           }
@@ -567,7 +554,7 @@ export function CustomerVouchersPage() {
           const val = info.getValue() as number;
           return (
             <span className="text-sm text-gray-600 dark:text-gray-400 font-mono">
-              {val ? formatCurrency(val) : '0đ'}
+              {val ? formatCurrency(val) : '0 đ'}
             </span>
           );
         },
@@ -628,7 +615,7 @@ export function CustomerVouchersPage() {
               bg: 'bg-rose-100 dark:bg-rose-900/40',
               text: 'text-rose-800 dark:text-rose-300',
               icon: Ban,
-              label: 'Đã hủy / Thu hồi',
+              label: 'Đã hủy / thu hồi',
             },
           };
 
@@ -664,7 +651,7 @@ export function CustomerVouchersPage() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => handleOpenCustomerDrawer(row.original.customerName, row.original.customerPhone, row.original.customerCode)}
-              title="Xem Chi tiết Ví Voucher Khách hàng"
+              title="Xem chi tiết ví voucher khách hàng"
               className="p-1.5 text-gray-500 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors flex items-center gap-1"
             >
               <Eye className="w-4 h-4" />
@@ -672,7 +659,7 @@ export function CustomerVouchersPage() {
             {row.original.status === 'ACTIVE' && (
               <button
                 onClick={() => handleRevoke(row.original)}
-                title="Hủy / Thu hồi voucher"
+                title="Hủy / thu hồi voucher"
                 className="p-1.5 text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
               >
                 <Ban className="w-4 h-4" />
@@ -699,7 +686,7 @@ export function CustomerVouchersPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Ticket className="w-7 h-7 text-primary" />Sổ Cái Voucher Khách Hàng (Customer Voucher Ledger)
+              <Ticket className="w-7 h-7 text-primary" />Sổ cái voucher khách hàng
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Quản lý toàn bộ voucher đã phát hành cho khách hàng. Bấm "Chi tiết" để xem toàn bộ ví voucher sở hữu của khách hàng.
@@ -725,7 +712,7 @@ export function CustomerVouchersPage() {
                 : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300'
             }`}
           >
-            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Tất cả Voucher</span>
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Tất cả voucher</span>
             <div className="flex items-baseline justify-between mt-2">
               <span className="text-2xl font-black text-gray-900 dark:text-white">{statusCounts.total}</span>
               <span className="text-[11px] font-medium text-gray-500">100%</span>
@@ -794,7 +781,7 @@ export function CustomerVouchersPage() {
             }`}
           >
             <span className="text-xs font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1">
-              <Ban className="w-3.5 h-3.5" /> Đã hủy / Thu hồi
+              <Ban className="w-3.5 h-3.5" /> Đã hủy / thu hồi
             </span>
             <div className="flex items-baseline justify-between mt-2">
               <span className="text-2xl font-black text-rose-700 dark:text-rose-300">{statusCounts.cancelled}</span>
@@ -815,7 +802,7 @@ export function CustomerVouchersPage() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Tìm kiếm theo Mã Voucher (VC-2026-...), Tên/SĐT Khách hàng, Tên chương trình..."
+                placeholder="Tìm kiếm theo mã voucher, tên hoặc SĐT khách hàng, chương trình..."
                 className="block w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm transition-all"
               />
             </div>
@@ -843,17 +830,17 @@ export function CustomerVouchersPage() {
                 className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-xs font-medium focus:ring-1 focus:ring-primary"
               >
                 <option value="ALL">Tất cả trạng thái</option>
-                <option value="ACTIVE">Chưa sử dụng (Active)</option>
-                <option value="USED">Đã sử dụng (Used)</option>
-                <option value="EXPIRED">Hết hạn (Expired)</option>
-                <option value="CANCELLED">Đã hủy / Thu hồi</option>
+                <option value="ACTIVE">Chưa sử dụng</option>
+                <option value="USED">Đã sử dụng</option>
+                <option value="EXPIRED">Hết hạn</option>
+                <option value="CANCELLED">Đã hủy / thu hồi</option>
               </select>
             </div>
 
             {/* Filter 2: Program */}
             <div>
               <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                Chương trình Voucher
+                Chương trình voucher
               </label>
               <select
                 value={programFilter}
@@ -921,7 +908,7 @@ export function CustomerVouchersPage() {
                 type="text"
                 value={customerFilter}
                 onChange={(e) => setCustomerFilter(e.target.value)}
-                placeholder="Lọc Tên/SĐT..."
+                placeholder="Lọc tên / SĐT..."
                 className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-xs"
               />
             </div>
@@ -937,11 +924,11 @@ export function CustomerVouchersPage() {
         />
       </div>
 
-      {/* Drawer: Customer Voucher Portfolio Drawer (Tài khoản Khách hàng → Tất cả Voucher sở hữu) */}
+      {/* Drawer: Customer Voucher Portfolio Drawer */}
       <Drawer
         isOpen={!!selectedCustomer}
         onClose={() => setSelectedCustomer(null)}
-        title="Thông tin Tài khoản & Ví Voucher Khách Hàng"
+        title="Thông tin tài khoản & ví voucher khách hàng"
         size="xl"
       >
         {selectedCustomer && (
@@ -959,11 +946,11 @@ export function CustomerVouchersPage() {
                     </h3>
                     <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 flex items-center gap-1 border border-amber-300">
                       <Award className="w-3.5 h-3.5" />
-                      {selectedCustomerProfile?.loyaltyTier || 'GOLD Member'}
+                      {selectedCustomerProfile?.loyaltyTier || 'Thành viên'}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 font-mono mt-0.5">
-                    Mã KH: <span className="font-semibold text-gray-800 dark:text-gray-200">{selectedCustomer.customerCode || 'KH-000125'}</span> • SĐT: <span className="font-semibold text-gray-800 dark:text-gray-200">{selectedCustomer.customerPhone || '0901234567'}</span>
+                    Mã KH: <span className="font-semibold text-gray-800 dark:text-gray-200">{selectedCustomer.customerCode || 'KH-000125'}</span> • SĐT: <span className="font-semibold text-gray-800 dark:text-gray-200">{selectedCustomer.customerPhone || 'Chưa cập nhật'}</span>
                   </p>
                 </div>
               </div>
@@ -987,13 +974,13 @@ export function CustomerVouchersPage() {
             <div className="p-4 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-200 dark:border-gray-700 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <Ticket className="w-4 h-4 text-primary" /> Tổng số Voucher của khách:
+                  <Ticket className="w-4 h-4 text-primary" /> Tổng số voucher của khách:
                   <span className="text-primary font-black text-sm pl-1">{selectedCustomerStats.total} voucher</span>
                 </span>
               </div>
               <div className="flex flex-wrap gap-2 text-xs pt-1">
                 <span className="px-3 py-1 bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold rounded-lg border border-emerald-300/40 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> {selectedCustomerStats.active} Chưa sử dụng (Đang dùng được)
+                  <CheckCircle2 className="w-3.5 h-3.5" /> {selectedCustomerStats.active} Chưa sử dụng (khả dụng)
                 </span>
                 <span className="px-3 py-1 bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 font-bold rounded-lg border border-blue-300/40 flex items-center gap-1">
                   <Clock className="w-3.5 h-3.5" /> {selectedCustomerStats.used} Đã sử dụng
@@ -1010,17 +997,17 @@ export function CustomerVouchersPage() {
             {/* Customer Vouchers Portfolio Table */}
             <div className="space-y-2">
               <h4 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
-                <Layers className="w-4 h-4 text-primary" /> Danh sách Voucher khách hàng đang sở hữu
+                <Layers className="w-4 h-4 text-primary" /> Danh sách voucher khách hàng đang sở hữu
               </h4>
               <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-gray-100 dark:bg-gray-700/60 text-gray-600 dark:text-gray-300 font-semibold uppercase border-b border-gray-200 dark:border-gray-700">
                     <tr>
-                      <th className="p-3">Mã Voucher</th>
+                      <th className="p-3">Mã voucher</th>
                       <th className="p-3">Chương trình</th>
                       <th className="p-3">Giá trị</th>
                       <th className="p-3">Đơn tối thiểu</th>
-                      <th className="p-3">HSD</th>
+                      <th className="p-3">Hạn sử dụng</th>
                       <th className="p-3">Trạng thái</th>
                       <th className="p-3 text-right">Chi tiết</th>
                     </tr>
@@ -1035,11 +1022,11 @@ export function CustomerVouchersPage() {
                             {v.discountType === 'PERCENT'
                               ? `Giảm ${v.discountValue}%`
                               : v.discountType === 'FREE_SHIPPING'
-                              ? 'Freeship'
+                              ? 'Miễn phí vận chuyển'
                               : formatCurrency(v.discountValue)}
                           </td>
                           <td className="p-3 text-gray-600 dark:text-gray-400 font-mono">
-                            {v.minOrderValue ? formatCurrency(v.minOrderValue) : '0đ'}
+                            {v.minOrderValue ? formatCurrency(v.minOrderValue) : '0 đ'}
                           </td>
                           <td className="p-3 font-mono text-gray-600 dark:text-gray-400">{v.expiryDate || '-'}</td>
                           <td className="p-3">
@@ -1103,13 +1090,13 @@ export function CustomerVouchersPage() {
       <Drawer
         isOpen={!!selectedVoucherDetail}
         onClose={() => setSelectedVoucherDetail(null)}
-        title="Thông tin chi tiết Voucher"
+        title="Thông tin chi tiết voucher"
         size="md"
       >
         {selectedVoucherDetail && (
           <div className="space-y-4">
             <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-              <span className="text-xs text-gray-500 font-medium">Mã Voucher</span>
+              <span className="text-xs text-gray-500 font-medium">Mã voucher</span>
               <p className="text-xl font-mono font-bold text-primary">{selectedVoucherDetail.voucherCode}</p>
             </div>
             <div className="grid grid-cols-2 gap-3 text-xs">
@@ -1131,14 +1118,14 @@ export function CustomerVouchersPage() {
                   {selectedVoucherDetail.discountType === 'PERCENT'
                     ? `Giảm ${selectedVoucherDetail.discountValue}%`
                     : selectedVoucherDetail.discountType === 'FREE_SHIPPING'
-                    ? 'Freeship'
+                    ? 'Miễn phí vận chuyển'
                     : formatCurrency(selectedVoucherDetail.discountValue)}
                 </p>
               </div>
               <div>
                 <span className="text-gray-500 font-medium">Đơn tối thiểu:</span>
                 <p className="font-semibold text-gray-800 dark:text-gray-200 mt-0.5">
-                  {selectedVoucherDetail.minOrderValue ? formatCurrency(selectedVoucherDetail.minOrderValue) : '0đ'}
+                  {selectedVoucherDetail.minOrderValue ? formatCurrency(selectedVoucherDetail.minOrderValue) : '0 đ'}
                 </p>
               </div>
               <div>
@@ -1154,7 +1141,7 @@ export function CustomerVouchersPage() {
             {selectedVoucherDetail.status === 'USED' && (
               <div className="p-3 bg-blue-50 dark:bg-blue-950/40 rounded-xl border border-blue-200 dark:border-blue-800 text-xs space-y-1">
                 <span className="font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" /> Truy vết Đơn hàng đã dùng
+                  <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" /> Truy vết đơn hàng đã dùng
                 </span>
                 <p className="text-gray-600 dark:text-gray-300">
                   Ngày dùng: <span className="font-mono font-bold">{selectedVoucherDetail.usedDate || '17/08/2026 14:32'}</span>
@@ -1194,18 +1181,18 @@ export function CustomerVouchersPage() {
         )}
       </Drawer>
 
-      {/* Modal Cấp Voucher cho Khách Hàng (Nhân viên chọn Chương trình + Lý do cấp) */}
+      {/* Modal Cấp Voucher cho Khách Hàng */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={
           issueForm.lockedCustomerName
             ? `Cấp voucher riêng cho: ${issueForm.lockedCustomerName}`
-            : 'Cấp voucher cho Khách hàng'
+            : 'Cấp voucher cho khách hàng'
         }
-        width={issueMode === 'BATCH' ? 'max-w-3xl' : 'max-w-xl'}
+        size="erp"
       >
-        {/* Mode Tabs (nếu cấp từ danh sách tổng) */}
+        {/* Mode Tabs */}
         {!issueForm.lockedCustomerName && (
           <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex gap-2">
             <button
@@ -1217,7 +1204,7 @@ export function CustomerVouchersPage() {
                   : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
               }`}
             >
-              <User className="w-3.5 h-3.5" /> Cấp cho 1 Khách hàng
+              <User className="w-3.5 h-3.5" /> Cấp cho 1 khách hàng
             </button>
             <button
               type="button"
@@ -1228,13 +1215,12 @@ export function CustomerVouchersPage() {
                   : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
               }`}
             >
-              <Users className="w-3.5 h-3.5" /> Phát Voucher hàng loạt
+              <Users className="w-3.5 h-3.5" /> Phát voucher hàng loạt
             </button>
           </div>
         )}
 
         {issueMode === 'SINGLE' ? (
-          /* Form Cấp Voucher Cá Nhân (Chuẩn Nghiệp Vụ - Chọn từ VoucherProgram) */
           <form onSubmit={handleSaveSingleIssue} className="p-4 space-y-4">
             {/* 1. Khách hàng nhận */}
             <div>
@@ -1252,7 +1238,7 @@ export function CustomerVouchersPage() {
                     </p>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                    ĐÃ CHỌN TRƯỚC
+                    Đã chọn trước
                   </span>
                 </div>
               ) : (
@@ -1261,7 +1247,7 @@ export function CustomerVouchersPage() {
                     type="text"
                     required
                     list="customer-modal-suggestions"
-                    placeholder="Nhập hoặc chọn khách hàng (Tên hoặc SĐT)..."
+                    placeholder="Nhập hoặc chọn khách hàng (tên hoặc SĐT)..."
                     value={issueForm.customerInput}
                     onChange={(e) => setIssueForm({ ...issueForm, customerInput: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
@@ -1275,10 +1261,10 @@ export function CustomerVouchersPage() {
               )}
             </div>
 
-            {/* 2. Chọn Chương trình Voucher (VoucherProgram) */}
+            {/* 2. Chọn Chương trình Voucher */}
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                Chương trình Voucher phát hành *
+                Chương trình voucher phát hành *
               </label>
               <select
                 required
@@ -1294,15 +1280,15 @@ export function CustomerVouchersPage() {
               </select>
             </div>
 
-            {/* 3. Thẻ Thông tin Quy định Voucher (Read-Only Policy Preview) */}
+            {/* 3. Thẻ Thông tin Quy định Voucher */}
             {selectedProgramPolicy && (
               <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800 space-y-2 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600" /> Thông tin Chính sách Voucher
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" /> Thông tin chính sách voucher
                   </span>
                   <span className="text-[10px] font-semibold bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 px-2 py-0.5 rounded">
-                    LẤY TỪ CHƯƠNG TRÌNH
+                    Từ chương trình
                   </span>
                 </div>
 
@@ -1311,7 +1297,7 @@ export function CustomerVouchersPage() {
                     <span className="text-gray-500">Mức giảm ưu đãi:</span>
                     <p className="font-bold text-emerald-700 dark:text-emerald-300 text-sm">
                       {selectedProgramPolicy.discountType === 'PERCENT'
-                        ? `Giảm ${selectedProgramPolicy.value}% ${selectedProgramPolicy.maxDiscount ? `(Tối đa ${formatCurrency(selectedProgramPolicy.maxDiscount)})` : ''}`
+                        ? `Giảm ${selectedProgramPolicy.value}% ${selectedProgramPolicy.maxDiscount ? `(tối đa ${formatCurrency(selectedProgramPolicy.maxDiscount)})` : ''}`
                         : selectedProgramPolicy.discountType === 'FREE_SHIPPING'
                         ? 'Miễn phí vận chuyển'
                         : `Giảm ${formatCurrency(selectedProgramPolicy.value)}`}
@@ -1328,7 +1314,7 @@ export function CustomerVouchersPage() {
                     <p className="font-mono font-bold text-primary">VC-2026-XXXXXX</p>
                   </div>
                   <div>
-                    <span className="text-gray-500">Thời hạn sử dụng (HSD):</span>
+                    <span className="text-gray-500">Thời hạn sử dụng:</span>
                     <p className="font-mono font-semibold text-gray-800 dark:text-gray-200">
                       {selectedProgramPolicy.endDate || '31/12/2026'}
                     </p>
@@ -1340,14 +1326,14 @@ export function CustomerVouchersPage() {
             {/* 4. Ghi chú & Lý do cấp */}
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                Lý do cấp / Ghi chú hỗ trợ khách hàng *
+                Lý do cấp / ghi chú hỗ trợ khách hàng *
               </label>
               <textarea
                 rows={2}
                 required
                 value={issueForm.notes}
                 onChange={(e) => setIssueForm({ ...issueForm, notes: e.target.value })}
-                placeholder="VD: Hỗ trợ khách hàng do khiếu nại đơn trễ, Tặng quà sinh nhật VIP..."
+                placeholder="VD: Hỗ trợ khách hàng do khiếu nại đơn trễ, tặng quà sinh nhật VIP..."
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               />
             </div>
@@ -1358,7 +1344,7 @@ export function CustomerVouchersPage() {
                 onClick={() => setIsModalOpen(false)}
                 className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-semibold hover:bg-gray-200 cursor-pointer"
               >
-                Hủy
+                Hủy bỏ
               </button>
               <button
                 type="submit"
@@ -1369,12 +1355,11 @@ export function CustomerVouchersPage() {
             </div>
           </form>
         ) : (
-          /* Form Phát Voucher Hàng Loạt */
           <form onSubmit={handleSaveBatchIssue} className="p-4 space-y-4">
             {/* 1. Chọn chương trình voucher */}
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                Chương trình Voucher phát hành *
+                Chương trình voucher phát hành *
               </label>
               <select
                 required
@@ -1390,11 +1375,11 @@ export function CustomerVouchersPage() {
               </select>
             </div>
 
-            {/* 2. Bộ lọc & Danh sách khách hàng nhận (Tích chọn) */}
+            {/* 2. Bộ lọc & Danh sách Khách hàng nhận */}
             <div className="space-y-2">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
-                  Danh sách Khách hàng nhận Voucher ({selectedBatchCustomerIds.size}/{filteredBatchCustomers.length} đã chọn) *
+                  Danh sách khách hàng nhận voucher ({selectedBatchCustomerIds.size}/{filteredBatchCustomers.length} đã chọn) *
                 </label>
                 <div className="flex items-center gap-2 w-full sm:w-auto">
                   {/* Tier filter */}
@@ -1404,10 +1389,10 @@ export function CustomerVouchersPage() {
                     className="px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300"
                   >
                     <option value="ALL">Tất cả hạng</option>
-                    <option value="GOLD">Hạng Vàng</option>
-                    <option value="SILVER">Hạng Bạc</option>
-                    <option value="DIAMOND">Hạng Kim Cương</option>
-                    <option value="BRONZE">Hạng Đồng</option>
+                    <option value="GOLD">Hạng vàng</option>
+                    <option value="SILVER">Hạng bạc</option>
+                    <option value="DIAMOND">Hạng kim cương</option>
+                    <option value="BRONZE">Hạng đồng</option>
                   </select>
                   {/* Search input */}
                   <div className="relative flex-1 sm:w-48">
@@ -1440,7 +1425,7 @@ export function CustomerVouchersPage() {
                         <th className="p-2.5 font-semibold">Khách hàng</th>
                         <th className="p-2.5 font-semibold">Mã KH</th>
                         <th className="p-2.5 font-semibold">Hạng thẻ</th>
-                        <th className="p-2.5 font-semibold text-right">Điểm / Chi tiêu</th>
+                        <th className="p-2.5 font-semibold text-right">Điểm / chi tiêu</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -1489,7 +1474,7 @@ export function CustomerVouchersPage() {
                                     ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
                                     : 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300'
                                 }`}>
-                                  {tier.includes('DIAMOND') ? 'Kim Cương' : tier.includes('GOLD') ? 'Hạng Vàng' : tier.includes('SILVER') ? 'Hạng Bạc' : 'Hạng Đồng'}
+                                  {tier.includes('DIAMOND') ? 'Hạng kim cương' : tier.includes('GOLD') ? 'Hạng vàng' : tier.includes('SILVER') ? 'Hạng bạc' : 'Hạng đồng'}
                                 </span>
                               </td>
                               <td className="p-2.5 text-right font-medium text-gray-700 dark:text-gray-300">
@@ -1526,7 +1511,7 @@ export function CustomerVouchersPage() {
                 rows={2}
                 value={batchForm.notes}
                 onChange={(e) => setBatchForm({ ...batchForm, notes: e.target.value })}
-                placeholder="VD: Đợt phát voucher sinh nhật tháng 8 cho hạng Gold..."
+                placeholder="VD: Đợt phát voucher sinh nhật tháng 8 cho hạng vàng..."
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               />
             </div>
@@ -1537,14 +1522,14 @@ export function CustomerVouchersPage() {
                 onClick={() => setIsModalOpen(false)}
                 className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-semibold hover:bg-gray-200 cursor-pointer"
               >
-                Hủy
+                Hủy bỏ
               </button>
               <button
                 type="submit"
                 disabled={selectedBatchCustomerIds.size === 0}
                 className="px-5 py-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center gap-1.5 cursor-pointer"
               >
-                <Users className="w-4 h-4" /> Phát Voucher Hàng Loạt ({selectedBatchCustomerIds.size} khách)
+                <Users className="w-4 h-4" /> Phát voucher hàng loạt ({selectedBatchCustomerIds.size} khách)
               </button>
             </div>
           </form>

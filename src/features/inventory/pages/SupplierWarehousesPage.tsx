@@ -528,25 +528,66 @@ export function SupplierWarehousesPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Giờ mở / đóng cửa</label>
-                <input
-                  type="text"
-                  value={editingItem.operatingHours || ''}
-                  onChange={(e) => setEditingItem({ ...editingItem, operatingHours: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                  placeholder="VD: 08:00 - 17:30"
-                />
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khung giờ mở / đóng cửa</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={(editingItem.operatingHours || '08:00 - 17:30').split(' - ')[0] || '08:00'}
+                    onChange={(e) => {
+                      const close = (editingItem.operatingHours || '08:00 - 17:30').split(' - ')[1] || '17:30';
+                      setEditingItem({ ...editingItem, operatingHours: `${e.target.value} - ${close}` });
+                    }}
+                    className="w-full px-2.5 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs font-mono focus:ring-2 focus:ring-emerald-500"
+                  >
+                    {['06:00', '06:30', '07:00', '07:30', '08:00', '08:30', '09:00'].map(t => (
+                      <option key={t} value={t}>Mở: {t}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={(editingItem.operatingHours || '08:00 - 17:30').split(' - ')[1] || '17:30'}
+                    onChange={(e) => {
+                      const open = (editingItem.operatingHours || '08:00 - 17:30').split(' - ')[0] || '08:00';
+                      setEditingItem({ ...editingItem, operatingHours: `${open} - ${e.target.value}` });
+                    }}
+                    className="w-full px-2.5 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs font-mono focus:ring-2 focus:ring-emerald-500"
+                  >
+                    {['16:30', '17:00', '17:30', '18:00', '19:00', '20:00', '21:00', '22:00', '24/24'].map(t => (
+                      <option key={t} value={t}>Đóng: {t}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày hoạt động trong tuần</label>
-                <input
-                  type="text"
-                  value={editingItem.operatingDays || ''}
-                  onChange={(e) => setEditingItem({ ...editingItem, operatingDays: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                  placeholder="VD: T2 - T7 (Chủ nhật nghỉ)"
-                />
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((day) => {
+                    const daysStr = editingItem.operatingDays || 'T2 - T7';
+                    const isSelected = daysStr.includes(day) || (daysStr.includes('T2 - T7') && day !== 'CN') || (daysStr.includes('Cả tuần'));
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => {
+                          let current = (editingItem.operatingDays || 'T2, T3, T4, T5, T6, T7').split(', ').map(s => s.trim());
+                          if (daysStr === 'T2 - T7') current = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+                          if (current.includes(day)) {
+                            current = current.filter(d => d !== day);
+                          } else {
+                            current.push(day);
+                          }
+                          setEditingItem({ ...editingItem, operatingDays: current.join(', ') || 'N/A' });
+                        }}
+                        className={`px-2 py-1 rounded text-xs font-bold transition-all ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200'
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
@@ -564,12 +605,28 @@ export function SupplierWarehousesPage() {
                   <label className="block text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-1">Người phụ trách kho *</label>
                   <input
                     type="text"
+                    list="supplier-warehouse-managers"
                     value={editingItem.managerName || ''}
-                    onChange={(e) => setEditingItem({ ...editingItem, managerName: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEditingItem({ ...editingItem, managerName: val });
+                      if (val.includes('090') || val.includes('098')) {
+                        const parts = val.split(' - ');
+                        if (parts.length >= 2) {
+                          setEditingItem(prev => ({ ...prev, managerName: parts[0], managerPhone: parts[1] }));
+                        }
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                    placeholder="Họ tên quản lý kho..."
+                    placeholder="Chọn hoặc nhập quản lý..."
                     required
                   />
+                  <datalist id="supplier-warehouse-managers">
+                    <option value="Trần Văn An - 0903123456" />
+                    <option value="Lê Thị Bình (Giám sát kho) - 0918765432" />
+                    <option value="Phạm Quốc Cường (QL WMS) - 0988665544" />
+                    <option value="Hoàng Minh Đức (Điều phối) - 0977223344" />
+                  </datalist>
                 </div>
 
                 <div>
@@ -602,11 +659,17 @@ export function SupplierWarehousesPage() {
                   <label className="block text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-1">Người liên hệ bốc xếp</label>
                   <input
                     type="text"
+                    list="supplier-loading-contacts"
                     value={editingItem.contactPerson || ''}
                     onChange={(e) => setEditingItem({ ...editingItem, contactPerson: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                    placeholder="Họ tên đại diện bốc xếp..."
+                    placeholder="Chọn hoặc nhập đại diện..."
                   />
+                  <datalist id="supplier-loading-contacts">
+                    <option value="Đội Bốc Xếp Tân Phú Trung - 0938112233" />
+                    <option value="Tổ Bốc Xếp Việt Hương 1 - 0944556677" />
+                    <option value="Tổ Bốc Dỡ Yên Phong Logistics - 0912334455" />
+                  </datalist>
                 </div>
 
                 <div>

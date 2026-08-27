@@ -45,10 +45,10 @@ export function PaymentMethodsPage() {
   const [deletingMethod, setDeletingMethod] = useState<PaymentMethodRecord | null>(null);
 
   const filtered = data.filter((item) =>
-    item.methodCode.toLowerCase().includes(search.toLowerCase()) ||
-    item.methodName.toLowerCase().includes(search.toLowerCase()) ||
-    item.providerType.toLowerCase().includes(search.toLowerCase()) ||
-    item.configuredGateways.toLowerCase().includes(search.toLowerCase())
+    (item.methodCode || '').toLowerCase().includes(search.toLowerCase()) ||
+    (item.methodName || '').toLowerCase().includes(search.toLowerCase()) ||
+    (item.providerType || '').toLowerCase().includes(search.toLowerCase()) ||
+    (item.configuredGateways || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const handleOpenCreate = () => {
@@ -144,7 +144,7 @@ export function PaymentMethodsPage() {
       },
       {
         accessorKey: 'methodName',
-        header: 'Cổng thanh toán / Kênh',
+        header: 'Cổng thanh toán / kênh',
         cell: ({ row }) => (
           <div>
             <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.original.methodName}</p>
@@ -169,7 +169,7 @@ export function PaymentMethodsPage() {
         header: 'Biểu phí',
         cell: ({ row }) => (
           <span className="font-mono font-semibold text-gray-800 dark:text-gray-200 text-xs">
-            {row.original.processingFeePct}% + ${row.original.fixedFeeUsd.toFixed(2)}
+            {row.original.processingFeePct}%{row.original.fixedFeeUsd ? ` + ${row.original.fixedFeeUsd.toLocaleString('vi-VN')} đ` : ''}
           </span>
         ),
       },
@@ -183,7 +183,7 @@ export function PaymentMethodsPage() {
       },
       {
         accessorKey: 'ytdTotal',
-        header: 'Tổng GD (YTD)',
+        header: 'Tổng giao dịch',
         cell: (info) => {
           const val = (info.getValue() as number) || 0;
           return <span className="font-mono font-bold text-gray-900 dark:text-white">{val.toLocaleString('vi-VN')} đ</span>;
@@ -249,12 +249,12 @@ export function PaymentMethodsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phương thức thanh toán POS & Cổng kết nối</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phương thức thanh toán POS & cổng kết nối</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Cấu hình các kênh thanh toán đa phương thức, kiểm tra biểu phí giao dịch và quản lý thiết bị đầu cuối. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm whitespace-nowrap shrink-0">
-              <Download className="w-4 h-4" /> Xuất Dữ Liệu
+              <Download className="w-4 h-4" /> Xuất Excel
             </button>
             <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm whitespace-nowrap shrink-0">
               <Plus className="w-4 h-4" /> Thêm phương thức thanh toán
@@ -276,7 +276,7 @@ export function PaymentMethodsPage() {
             />
           </div>
           <button title="Bộ lọc" className="flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors text-sm whitespace-nowrap shrink-0">
-            <Filter className="w-4 h-4" /> Bộ lọc
+            <Filter className="w-4 h-4" /> Lọc dữ liệu
           </button>
         </div>
 
@@ -287,7 +287,7 @@ export function PaymentMethodsPage() {
         isOpen={!!selectedMethod}
         onClose={() => setSelectedMethod(null)}
         title={selectedMethod ? `Chi tiết cổng thanh toán: ${selectedMethod.methodCode}` : 'Chi tiết phương thức'}
-        width="max-w-lg"
+        size="erp"
       >
         {selectedMethod && (
           <div className="space-y-6">
@@ -305,9 +305,9 @@ export function PaymentMethodsPage() {
                   <CreditCard className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Doanh số tích lũy (YTD)</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Doanh số tích lũy</p>
                   <p className="text-xl font-bold font-mono text-gray-900 dark:text-white mt-0.5">
-                    ${selectedMethod.totalVolumeUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    {selectedMethod.totalVolumeUsd.toLocaleString('vi-VN')} đ
                   </p>
                 </div>
               </div>
@@ -328,7 +328,7 @@ export function PaymentMethodsPage() {
                   <Percent className="w-4 h-4 text-emerald-600" /> Biểu phí cổng thanh toán
                 </div>
                 <p className="text-base font-mono font-bold text-gray-900 dark:text-white truncate">
-                  {selectedMethod.processingFeePct}% + ${selectedMethod.fixedFeeUsd.toFixed(2)}
+                  {selectedMethod.processingFeePct}%{selectedMethod.fixedFeeUsd ? ` + ${selectedMethod.fixedFeeUsd.toLocaleString('vi-VN')} đ` : ''}
                 </p>
               </div>
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
@@ -341,7 +341,7 @@ export function PaymentMethodsPage() {
 
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 text-sm">
               <div className="border-b border-gray-200 dark:border-gray-700 pb-3">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Kênh & Động cơ thanh toán</span>
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Kênh & động cơ thanh toán</span>
                 <h3 className="text-base font-bold text-gray-900 dark:text-white">{selectedMethod.methodName}</h3>
                 <span className="inline-block mt-1 text-xs bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-300 px-2 py-0.5 rounded font-mono font-bold">
                   Động cơ: {selectedMethod.configuredGateways}
@@ -369,10 +369,10 @@ export function PaymentMethodsPage() {
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
               <button type="button" className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                <Globe className="w-4 h-4" /> Sửa khóa API Webhook
+                <Globe className="w-4 h-4" /> Cập nhật khóa API webhook
               </button>
               <button type="button" className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
-                <Smartphone className="w-4 h-4 inline mr-1" /> Thử kết nối đầu cuối (Ping)
+                <Smartphone className="w-4 h-4 inline mr-1" /> Kiểm tra kết nối đầu cuối
               </button>
             </div>
           </div>
@@ -384,12 +384,12 @@ export function PaymentMethodsPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={modalMode === 'create' ? 'Thêm phương thức thanh toán' : 'Cập nhật phương thức'}
-        width="max-w-xl"
+        size="erp"
       >
         <form onSubmit={handleSaveMethod} className="space-y-4 text-left">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Mã PT (Mã cổng) *</label>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Mã phương thức (mã cổng) *</label>
               <input
                 type="text"
                 value={editingMethod.methodCode || ''}
@@ -414,14 +414,16 @@ export function PaymentMethodsPage() {
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Loại hình *</label>
               <select
-                value={editingMethod.providerType || 'CASH'}
+                value={editingMethod.providerType || (data.some(d => d.providerType === 'CASH' || d.methodCode === 'CASH') ? 'BANK_TRANSFER' : 'CASH')}
                 onChange={(e) => setEditingMethod({ ...editingMethod, providerType: e.target.value as any })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
                 required
               >
-                <option value="CASH">Tiền mặt (CASH)</option>
-                <option value="BANK_TRANSFER">Chuyển khoản ngân hàng / VietQR (BANK_TRANSFER)</option>
-                <option value="GATEWAY">Cổng thanh toán tự động (GATEWAY)</option>
+                {(!data.some(d => (d.providerType === 'CASH' || d.methodCode === 'CASH') && d.id !== editingMethod.id) || modalMode === 'edit') && (
+                  <option value="CASH">Tiền mặt</option>
+                )}
+                <option value="BANK_TRANSFER">Chuyển khoản ngân hàng / VietQR</option>
+                <option value="GATEWAY">Cổng thanh toán tự động</option>
               </select>
             </div>
             <div>
@@ -431,8 +433,8 @@ export function PaymentMethodsPage() {
                 onChange={(e) => setEditingMethod({ ...editingMethod, status: e.target.value as any })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
               >
-                <option value="ACTIVE">Hoạt động</option>
-                <option value="TESTING_MODE">Môi trường Test</option>
+                <option value="ACTIVE">Đang hoạt động</option>
+                <option value="TESTING_MODE">Môi trường thử nghiệm</option>
                 <option value="MAINTENANCE">Bảo trì hệ thống</option>
                 <option value="DISABLED">Đã vô hiệu hóa</option>
               </select>
@@ -465,7 +467,7 @@ export function PaymentMethodsPage() {
                   onChange={(e) => setEditingMethod({ ...editingMethod, currency: e.target.value })}
                   className="w-24 px-2 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
                 >
-                  <option value="VND">VND</option>
+                  <option value="VND">VNĐ</option>
                   <option value="USD">USD</option>
                 </select>
               </div>
@@ -480,7 +482,7 @@ export function PaymentMethodsPage() {
                 onChange={(e) => setEditingMethod({ ...editingMethod, settlementTime: e.target.value as any })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
               >
-                <option value="INSTANT">Tức thời (Cash/POS)</option>
+                <option value="INSTANT">Tức thời (tiền mặt / POS)</option>
                 <option value="SAME_DAY_BATCH">Cùng ngày (T+0)</option>
                 <option value="T_PLUS_1_BUSINESS_DAY">Ngày làm việc tiếp theo (T+1)</option>
                 <option value="T_PLUS_3_BUSINESS_DAYS">Sau 3 ngày làm việc (T+3)</option>
@@ -488,7 +490,7 @@ export function PaymentMethodsPage() {
               <p className="text-[10px] text-gray-400 mt-1 italic">Thời gian tiền thực về tài khoản doanh nghiệp (phục vụ kế toán đối soát)</p>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Thứ tự hiển thị (Sort Order)</label>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Thứ tự hiển thị</label>
               <input
                 type="number"
                 value={editingMethod.sortOrder || 0}
@@ -499,7 +501,7 @@ export function PaymentMethodsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Đường dẫn Logo / Icon phương thức</label>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Đường dẫn logo / biểu tượng phương thức</label>
             <input
               type="text"
               value={editingMethod.logoUrl || ''}
@@ -515,7 +517,7 @@ export function PaymentMethodsPage() {
               <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">Thông tin nhận tiền VietQR</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Mã ngân hàng (VietQR Bank Code) *</label>
+                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Mã ngân hàng *</label>
                   <select
                     value={editingMethod.bankName || 'VCB'}
                     onChange={(e) => setEditingMethod({ ...editingMethod, bankName: e.target.value })}
@@ -569,16 +571,13 @@ export function PaymentMethodsPage() {
                   />
                 </div>
               </div>
-              <p className="text-[10px] text-gray-400 dark:text-gray-500 italic mt-1">
-                VietQR URL: https://img.vietqr.io/image/{"{"}bankCode{"}"}-{"{"}accountNumber{"}"}-compact2.png?amount={"{"}amount{"}"}&addInfo={"{"}transferSyntax{"}"}
-              </p>
             </div>
           )}
 
           {/* Conditional Section: GATEWAY (Momo, VNPay, Stripe...) */}
           {editingMethod.providerType === 'GATEWAY' && (
             <div className="p-4 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-800/30 rounded-xl space-y-3">
-              <p className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider">Cấu hình kết nối API Cổng thanh toán</p>
+              <p className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider">Cấu hình kết nối API cổng thanh toán</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-semibold text-gray-500 mb-1">Merchant ID *</label>
@@ -602,7 +601,7 @@ export function PaymentMethodsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Secret Key / Private Key *</label>
+                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Khóa bí mật (Secret Key) *</label>
                   <input
                     type="password"
                     value={editingMethod.secretKey || ''}
@@ -612,7 +611,7 @@ export function PaymentMethodsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Checksum Key / Passcode</label>
+                  <label className="block text-[10px] font-semibold text-gray-500 mb-1">Khóa xác thực (Checksum Key)</label>
                   <input
                     type="password"
                     value={editingMethod.checksumKey || ''}
@@ -622,7 +621,7 @@ export function PaymentMethodsPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">API Endpoint / Config URL *</label>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Đường dẫn cấu hình API (URL) *</label>
                 <input
                   type="text"
                   value={editingMethod.configuredGateways || ''}
@@ -636,7 +635,7 @@ export function PaymentMethodsPage() {
           )}
 
           <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Kênh áp dụng (Scope / Channel)</label>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Kênh áp dụng</label>
             <div className="flex flex-col gap-3">
               {/* Online Web toggle */}
               <label className="inline-flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
@@ -646,7 +645,7 @@ export function PaymentMethodsPage() {
                   onChange={(e) => setEditingMethod({ ...editingMethod, allowOnline: e.target.checked })}
                   className="rounded border-gray-350 text-emerald-600 focus:ring-emerald-500 h-4 w-4 mr-2"
                 />
-                Web Online Store
+                Cửa hàng trực tuyến (Web/Online)
               </label>
               {/* POS per-branch multi-select */}
               <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-3 bg-gray-50 dark:bg-gray-900/30">
@@ -704,7 +703,7 @@ export function PaymentMethodsPage() {
               type="submit"
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              {modalMode === 'create' ? 'Thêm Mới' : 'Lưu cập nhật'}
+              {modalMode === 'create' ? 'Thêm mới' : 'Lưu thông tin'}
             </button>
           </div>
         </form>

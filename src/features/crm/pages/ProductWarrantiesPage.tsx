@@ -237,12 +237,17 @@ export function ProductWarrantiesPage() {
         header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
+          const labelMap: Record<string, string> = {
+            HOẠT_ĐỘNG: 'Đang hoạt động',
+            HẾT_HẠN: 'Hết hạn',
+            HỦY: 'Đã hủy',
+          };
           const badge = {
             HOẠT_ĐỘNG: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
             HẾT_HẠN: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
             HỦY: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300',
           }[status] || 'bg-gray-100 text-gray-800';
-          return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${badge}`}>{status}</span>;
+          return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${badge}`}>{labelMap[status] || status}</span>;
         },
       },
       {
@@ -337,9 +342,9 @@ export function ProductWarrantiesPage() {
             className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
           >
             <option value="Tất cả">Tất cả trạng thái</option>
-            <option value="HOẠT_ĐỘNG">HOẠT ĐỘNG</option>
-            <option value="HẾT_HẠN">HẾT HẠN</option>
-            <option value="HỦY">HỦY</option>
+            <option value="HOẠT_ĐỘNG">Đang hoạt động</option>
+            <option value="HẾT_HẠN">Hết hạn</option>
+            <option value="HỦY">Đã hủy</option>
           </select>
         </div>
 
@@ -365,15 +370,17 @@ export function ProductWarrantiesPage() {
               </div>
               <div>
                 <span className="text-xs text-gray-500">Ngày bắt đầu</span>
-                <p className="font-medium text-gray-900 dark:text-white">{selectedItem.startDate}</p>
+                <p className="font-medium text-gray-900 dark:text-white font-mono">{selectedItem.startDate}</p>
               </div>
               <div>
                 <span className="text-xs text-gray-500">Ngày hết hạn</span>
-                <p className="font-medium text-gray-900 dark:text-white">{selectedItem.expiryDate}</p>
+                <p className="font-medium text-gray-900 dark:text-white font-mono">{selectedItem.expiryDate}</p>
               </div>
               <div>
                 <span className="text-xs text-gray-500">Trạng thái</span>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${selectedItem.status === 'HOẠT_ĐỘNG' ? 'bg-emerald-100 text-emerald-800' : selectedItem.status === 'HẾT_HẠN' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>{selectedItem.status}</span>
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${selectedItem.status === 'HOẠT_ĐỘNG' ? 'bg-emerald-100 text-emerald-800' : selectedItem.status === 'HẾT_HẠN' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>
+                  {selectedItem.status === 'HOẠT_ĐỘNG' ? 'Đang hoạt động' : selectedItem.status === 'HẾT_HẠN' ? 'Hết hạn' : 'Đã hủy'}
+                </span>
               </div>
             </div>
             <div className="border-t pt-4">
@@ -385,7 +392,7 @@ export function ProductWarrantiesPage() {
       </Modal>
 
       {/* Modal tạo / sửa */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalMode === 'create' ? 'Thêm sổ bảo hành mới' : 'Cập nhật sổ bảo hành'}>
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalMode === 'create' ? 'Thêm mới sổ bảo hành' : 'Cập nhật sổ bảo hành'}>
         <form onSubmit={handleSave} className="space-y-4 p-4">
           <div>
             <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">Mã bảo hành *</label>
@@ -438,7 +445,7 @@ export function ProductWarrantiesPage() {
                 type="date"
                 value={editingItem.startDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, startDate: e.target.value })}
-                className="w-full px-3 py-2 border rounded text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full px-3 py-2 border rounded text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
                 required
               />
             </div>
@@ -448,7 +455,7 @@ export function ProductWarrantiesPage() {
                 type="date"
                 value={editingItem.expiryDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, expiryDate: e.target.value })}
-                className="w-full px-3 py-2 border rounded text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="w-full px-3 py-2 border rounded text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
                 required
               />
             </div>
@@ -459,9 +466,9 @@ export function ProductWarrantiesPage() {
                 onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
                 className="w-full px-3 py-2 border rounded text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
               >
-                <option value="HOẠT_ĐỘNG">HOẠT ĐỘNG</option>
-                <option value="HẾT_HẠN">HẾT HẠN</option>
-                <option value="HỦY">HỦY</option>
+                <option value="HOẠT_ĐỘNG">Đang hoạt động</option>
+                <option value="HẾT_HẠN">Hết hạn</option>
+                <option value="HỦY">Đã hủy</option>
               </select>
             </div>
           </div>
@@ -479,7 +486,7 @@ export function ProductWarrantiesPage() {
               Hủy bỏ
             </button>
             <button type="submit" className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded text-sm font-medium">
-              {modalMode === 'create' ? 'Thêm Mới' : 'Lưu thay đổi'}
+              {modalMode === 'create' ? 'Thêm mới' : 'Lưu thông tin'}
             </button>
           </div>
         </form>

@@ -12,8 +12,7 @@ import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ArrowRight, Keyboard } from 'lucide-react';
 import { NAV_GROUPS } from '@/shared/config/navigation';
-import { useAuthRole } from '@/features/auth/store/authStore';
-import type { RoleType } from '@/features/auth/types';
+import { usePermission, checkPermission } from '@/shared/hooks/usePermission';
 
 interface CommandItem {
   id: string;
@@ -23,12 +22,12 @@ interface CommandItem {
   icon: React.ElementType;
 }
 
-function collectNavItems(itemList: any[], groupName: string, role: RoleType | null, result: CommandItem[]) {
+function collectNavItems(itemList: any[], groupName: string, permissions: string[], result: CommandItem[]) {
   for (const item of itemList) {
     if (item.children && item.children.length > 0) {
-      collectNavItems(item.children, `${groupName} › ${item.name}`, role, result);
+      collectNavItems(item.children, `${groupName} › ${item.name}`, permissions, result);
     } else if (item.href) {
-      if (!item.roles || (role && item.roles.includes(role))) {
+      if (!item.permission || checkPermission(permissions, item.permission)) {
         result.push({
           id: item.href,
           name: item.name,
@@ -41,14 +40,14 @@ function collectNavItems(itemList: any[], groupName: string, role: RoleType | nu
   }
 }
 
-function useCommandItems(role: RoleType | null): CommandItem[] {
+function useCommandItems(permissions: string[]): CommandItem[] {
   return useMemo(() => {
     const items: CommandItem[] = [];
     for (const group of NAV_GROUPS) {
-      collectNavItems(group.items, group.group, role, items);
+      collectNavItems(group.items, group.group, permissions, items);
     }
     return items;
-  }, [role]);
+  }, [permissions]);
 }
 
 function fuzzyMatch(text: string, query: string): boolean {
@@ -68,8 +67,8 @@ interface CommandPaletteProps {
 
 export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const navigate = useNavigate();
-  const role = useAuthRole();
-  const allItems = useCommandItems(role);
+  const { permissions } = usePermission();
+  const allItems = useCommandItems(permissions);
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -159,7 +158,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                   value={query}
                   onChange={(e) => { setQuery(e.target.value); setActiveIdx(0); }}
                   onKeyDown={handleKeyDown}
-                  placeholder="Search pages, actions..."
+                  placeholder="Tìm kiếm trang, chức năng..."
                   className="flex-1 bg-transparent text-base text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none"
                 />
                 <kbd className="hidden sm:flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -172,7 +171,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                 {filtered.length === 0 ? (
                   <div className="px-4 py-10 text-center text-gray-400">
                     <Search className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">No results for "{query}"</p>
+                    <p className="text-sm">Không tìm thấy kết quả cho "{query}"</p>
                   </div>
                 ) : (
                   (() => {
@@ -230,11 +229,11 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
               {/* Footer hint */}
               <div className="flex items-center gap-4 px-4 py-2.5 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-400">
                 <span className="flex items-center gap-1">
-                  <Keyboard className="w-3 h-3" /> Navigate
+                  <Keyboard className="w-3 h-3" /> Điều hướng
                 </span>
-                <span>↑↓ to move</span>
-                <span>↵ to open</span>
-                <span>esc to close</span>
+                <span>↑↓ di chuyển</span>
+                <span>↵ mở trang</span>
+                <span>esc đóng</span>
               </div>
             </div>
           </motion.div>

@@ -6,7 +6,7 @@ import { PartnerGroupsPage } from './PartnerGroupsPage';
 import { AreasPage } from './AreasPage';
 
 const tabs = [
-  { id: 'customers', label: 'Danh sách Khách hàng', icon: Users, permission: 'crm:customer:view' },
+  { id: 'customers', label: 'Danh sách khách hàng', icon: Users, permission: 'crm:customer:view' },
   { id: 'groups', label: 'Nhóm đối tác', icon: Users2, permission: 'crm:partner-group:view' },
   { id: 'areas', label: 'Khu vực địa lý', icon: MapPin, permission: 'crm:area:view' },
 ] as const;
@@ -30,7 +30,7 @@ export function CrmCustomersTabbedPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Khách hàng & Phân vùng</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý khách hàng & phân vùng</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Quản lý cơ sở dữ liệu khách hàng, phân nhóm đối tác và phân vùng khu vực địa lý
           </p>

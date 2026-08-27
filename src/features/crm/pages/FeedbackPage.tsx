@@ -82,16 +82,16 @@ export function FeedbackPage() {
     return storeFeedbacks.map((f) => ({
       id: f.id,
       feedbackRef: `FB-${f.id}`,
-      customerName: f.customerName,
-      customerEmail: `${f.customerPhone}@email.com`,
-      storeLocation: 'Chi nhánh chính',
+      customerName: f.customerName || 'Nguyễn Văn An (Web Online)',
+      customerEmail: f.customerPhone ? `${f.customerPhone}@email.com` : 'khachhang.online@gmail.com',
+      storeLocation: 'Website Online (FE_webOnline)',
       rating: f.rating || 5,
-      category: f.category || 'GENERAL',
-      title: `Đánh giá ${f.category}`,
+      category: (f.category as any) || 'GENERAL',
+      title: f.category ? `Đánh giá ${f.category}` : 'Đánh giá dịch vụ Web Online',
       comments: f.content,
       sentiment: f.rating >= 4 ? 'POSITIVE' : f.rating <= 2 ? 'NEGATIVE' : 'NEUTRAL',
       status: (f.status === 'RESOLVED' ? 'CLOSED' : f.status === 'REJECTED' ? 'CLOSED' : 'NEW') as any,
-      submittedAt: f.createdAt,
+      submittedAt: f.createdAt || new Date().toISOString().split('T')[0],
       resolutionNotes: f.resolutionNote || '',
     }));
   }, [storeFeedbacks]);
@@ -326,18 +326,18 @@ export function FeedbackPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ý kiến phản hồi & khảo sát NPS (customer feedback)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ý kiến phản hồi & khảo sát NPS</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Theo dõi đánh giá chất lượng dịch vụ, giám sát mức độ hài lòng và xử lý khiếu nại khách hàng. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
-              <Download className="w-4 h-4" /> Xuất nhật ký khảo sát
+              <Download className="w-4 h-4" /> Xuất Excel
             </button>
             <button
               onClick={handleOpenCreate}
               className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
             >
-              <Plus className="w-4 h-4" /> Ghi nhận phản hồi mới
+              <Plus className="w-4 h-4" /> Thêm mới phản hồi
             </button>
           </div>
         </div>
@@ -360,7 +360,7 @@ export function FeedbackPage() {
             <div>
               <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-100 uppercase tracking-wide">Tích cực</p>
               <p className="text-lg font-bold text-emerald-900 dark:text-emerald-100">{positiveCount}</p>
-              <p className="text-[11px] text-emerald-700/80 dark:text-emerald-200/70">Feedback khen ngợi / đề xuất tích cực</p>
+              <p className="text-[11px] text-emerald-700/80 dark:text-emerald-200/70">Phản hồi khen ngợi / đề xuất tích cực</p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 shadow-sm">
@@ -378,9 +378,9 @@ export function FeedbackPage() {
               <AlertTriangle className="w-5 h-5 text-white" />
             </div>
             <div>
-              <p className="text-xs font-semibold text-amber-900 dark:text-amber-100 uppercase tracking-wide">Case rủi ro cao</p>
+              <p className="text-xs font-semibold text-amber-900 dark:text-amber-100 uppercase tracking-wide">Trường hợp rủi ro cao</p>
               <p className="text-lg font-bold text-amber-900 dark:text-amber-100">{newNegativeCount}</p>
-              <p className="text-[11px] text-amber-700/80 dark:text-amber-200/70">Feedback tiêu cực mới / đã escalated</p>
+              <p className="text-[11px] text-amber-700/80 dark:text-amber-200/70">Phản hồi tiêu cực mới / đã chuyển cấp cao</p>
             </div>
           </div>
         </div>
@@ -534,7 +534,7 @@ export function FeedbackPage() {
                       : 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-200'
                   }`}
                 >
-                  Escalated
+                  Chuyển cấp cao
                 </button>
                 <button
                   type="button"
@@ -563,7 +563,7 @@ export function FeedbackPage() {
       <Modal
         isOpen={!!selectedFeedback}
         onClose={() => setSelectedFeedback(null)}
-        title={selectedFeedback ? `Hồ Sơ Phản Hồi: ${selectedFeedback.feedbackRef}` : 'Chi tiết phản hồi'}
+        title={selectedFeedback ? `Hồ sơ phản hồi: ${selectedFeedback.feedbackRef}` : 'Chi tiết phản hồi'}
         width="max-w-lg"
       >
         {selectedFeedback && (
@@ -611,7 +611,7 @@ export function FeedbackPage() {
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   <Calendar className="w-4 h-4 text-blue-500" /> Thời gian gửi
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedFeedback.submittedAt}</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white truncate font-mono">{selectedFeedback.submittedAt}</p>
               </div>
             </div>
 
@@ -675,7 +675,7 @@ export function FeedbackPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Ghi nhận Ý kiến phản hồi' : 'Chỉnh sửa phản hồi'}
+        title={modalMode === 'create' ? 'Thêm mới phản hồi' : 'Cập nhật phản hồi'}
         width="max-w-xl"
       >
         <form onSubmit={handleSaveFeedback} className="space-y-4">
@@ -719,7 +719,7 @@ export function FeedbackPage() {
                 value={editingFeedback.customerPhone || ''}
                 onChange={(e) => setEditingFeedback({ ...editingFeedback, customerPhone: e.target.value, customerEmail: e.target.value })}
                 placeholder="0912 345 678"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary font-mono"
                 required
               />
             </div>
@@ -827,7 +827,7 @@ export function FeedbackPage() {
                 value={editingFeedback.orderRef || ''}
                 onChange={(e) => setEditingFeedback({ ...editingFeedback, orderRef: e.target.value })}
                 placeholder="#DH-xxxxx"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary font-mono"
               />
             </div>
             <div>
@@ -837,10 +837,10 @@ export function FeedbackPage() {
                 onChange={(e) => setEditingFeedback({ ...editingFeedback, channel: e.target.value as any })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
               >
-                <option value="STORE">Tại cửa hàng (STORE)</option>
+                <option value="STORE">Tại cửa hàng</option>
                 <option value="HOTLINE">Hotline</option>
                 <option value="WEBSITE">Website</option>
-                <option value="SOCIAL_MEDIA">Mạng xã hội (SOCIAL_MEDIA)</option>
+                <option value="SOCIAL_MEDIA">Mạng xã hội</option>
               </select>
             </div>
           </div>
@@ -860,19 +860,19 @@ export function FeedbackPage() {
                 }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
               >
-                <option value="LOW">Thấp (LOW)</option>
-                <option value="MEDIUM">Trung bình (MEDIUM)</option>
-                <option value="HIGH">Cao (HIGH)</option>
-                <option value="URGENT">Khẩn cấp (URGENT - SLA 2h)</option>
+                <option value="LOW">Thấp</option>
+                <option value="MEDIUM">Trung bình</option>
+                <option value="HIGH">Cao</option>
+                <option value="URGENT">Khẩn cấp (SLA 2 giờ)</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hạn xử lý (SLA Due Date)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Hạn xử lý (SLA)</label>
               <input
                 type="text"
                 value={editingFeedback.dueDate || ''}
                 readOnly
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none cursor-default"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none cursor-default font-mono"
               />
             </div>
           </div>
@@ -889,7 +889,7 @@ export function FeedbackPage() {
               type="submit"
               className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              {modalMode === 'create' ? 'Tạo Mới' : 'Lưu thay đổi'}
+              {modalMode === 'create' ? 'Thêm mới' : 'Lưu thông tin'}
             </button>
           </div>
         </form>

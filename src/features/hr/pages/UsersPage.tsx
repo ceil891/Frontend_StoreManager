@@ -9,6 +9,10 @@ import { buildUserAvatarUrl } from '@/shared/utils/userAvatar';
 import { useRoleStore } from '../store/roleStore';
 import { useHrStore } from '../store/hrStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
+import { usePermission } from '@/shared/hooks/usePermission';
+import { PermissionGuard } from '@/shared/components/ui/PermissionGuard';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { compressImage } from '@/shared/utils/imageCompressor';
 import type { ColumnDef } from '@tanstack/react-table';
 
 const statusBadgeStyles = {
@@ -21,7 +25,7 @@ const statusBadgeStyles = {
 type SearchField = 'all' | 'userCode' | 'fullName' | 'emailAddress' | 'assignedRole' | 'primaryDepartment' | 'branchLocation';
 
 export function UsersPage() {
-  const { users, fetchUsers, addUser, updateUser, updateUserRoleAndBranch, deleteUser } = useUserStore();
+  const { users, isLoading, fetchUsers, addUser, updateUser, updateUserRoleAndBranch, deleteUser } = useUserStore();
   const { roles, fetchRoles } = useRoleStore();
   const { branches, fetchBranches } = useBranchStore();
   const { departments, positions, fetchDepartments, fetchPositions } = useHrStore();
@@ -32,7 +36,7 @@ export function UsersPage() {
     fetchBranches();
     fetchDepartments();
     fetchPositions();
-  }, [fetchUsers, fetchRoles, fetchBranches, fetchDepartments, fetchPositions]);
+  }, []);
 
   const [search, setSearch] = useState('');
   const [searchField, setSearchField] = useState<SearchField>('all');
@@ -135,6 +139,12 @@ export function UsersPage() {
     mfaEnabled: false,
     notes: '',
   });
+
+  const availablePositions = useMemo(() => {
+    if (!formData.departmentId) return positions;
+    const filtered = positions.filter(pos => String((pos as any).departmentId) === String(formData.departmentId) || (pos as any).departmentCode === formData.departmentId);
+    return filtered.length > 0 ? filtered : positions;
+  }, [formData.departmentId, positions]);
 
   const filtered = users.filter((item) => {
     // 1. Text search filter
@@ -258,6 +268,52 @@ export function UsersPage() {
       notes: '',
     });
     setFormOpen(true);
+  };
+
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Vui lòng chọn tệp hình ảnh (JPG, PNG, WebP)!');
+      return;
+    }
+
+    const toastId = toast.loading('Đang tối ưu & tải ảnh đại diện lên Cloudinary...');
+    setIsUploadingAvatar(true);
+
+    try {
+      const compressed = await compressImage(file, { maxWidth: 600, maxHeight: 600, quality: 0.85 });
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', compressed);
+      formDataUpload.append('folder', 'employees');
+
+      const response: any = await axiosClient.post('/uploads/image', formDataUpload, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const finalUrl =
+        response?.data?.imageUrl ||
+        response?.imageUrl ||
+        response?.url ||
+        response?.data?.url ||
+        (typeof response?.data === 'string' ? response.data : null);
+
+      if (finalUrl) {
+        setFormData((prev) => ({ ...prev, avatarUrl: finalUrl }));
+        toast.success('Đã tải ảnh lên Cloudinary thành công!', { id: toastId });
+      } else {
+        toast.error('Không nhận được URL ảnh từ server!', { id: toastId });
+      }
+    } catch (err: any) {
+      console.error('Avatar upload failed:', err);
+      toast.error(`Tải ảnh thất bại: ${err.message || 'Lỗi server'}`, { id: toastId });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
   };
 
   const handleOpenEdit = (user: SystemUserRecord) => {
@@ -552,18 +608,22 @@ export function UsersPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý cấp phát tài khoản, phân gán vai trò bảo mật RBAC chi tiết và theo dõi lịch sử hoạt động đăng nhập của nhân sự.</p>
           </div>
           <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-none shrink-0">
-            <button 
-              onClick={handleExportCSV}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0"
-            >
-              <Download className="w-4 h-4" /> Xuất danh sách nhân sự
-            </button>
-            <button 
-              onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0"
-            >
-              <Plus className="w-4 h-4" /> Cấp tài khoản mới
-            </button>
+            <PermissionGuard permission="system:user:export">
+              <button 
+                onClick={handleExportCSV}
+                className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0"
+              >
+                <Download className="w-4 h-4" /> Xuất danh sách nhân sự
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="system:user:create">
+              <button 
+                onClick={handleOpenCreate}
+                className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0"
+              >
+                <Plus className="w-4 h-4" /> Cấp tài khoản mới
+              </button>
+            </PermissionGuard>
           </div>
         </div>
 
@@ -643,7 +703,7 @@ export function UsersPage() {
           </div>
         </div>
 
-        <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedUser(row)} />
+        <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row) => setSelectedUser(row)} />
       </div>
 
       {/* Details View Modal */}
@@ -820,6 +880,41 @@ export function UsersPage() {
               <Key className="w-4 h-4 text-emerald-600" /> 1. Thông tin tài khoản &amp; Truy cập hệ thống
             </h3>
 
+            {/* Avatar Upload Block */}
+            <div className="flex items-center gap-4 p-3 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+              <div className="relative group shrink-0">
+                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-emerald-500 bg-gray-50 dark:bg-gray-800 flex items-center justify-center shadow-sm">
+                  {formData.avatarUrl ? (
+                    <img src={formData.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <UserAvatar name={formData.fullName || 'Nhân viên'} size="lg" />
+                  )}
+                </div>
+                <label className={`absolute bottom-0 right-0 p-1 bg-emerald-600 text-white rounded-full cursor-pointer shadow hover:bg-emerald-700 transition-all hover:scale-110 ${isUploadingAvatar ? 'opacity-70 pointer-events-none' : ''}`}>
+                  {isUploadingAvatar ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+                  <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
+                </label>
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-gray-900 dark:text-white">Ảnh đại diện nhân viên</p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Chọn tệp ảnh từ máy tính (PNG, JPG, WebP) hoặc dán link ảnh Cloudinary.</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <label className={`inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs font-semibold cursor-pointer hover:bg-emerald-100 transition-colors ${isUploadingAvatar ? 'opacity-70 pointer-events-none' : ''}`}>
+                    {isUploadingAvatar ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                    {isUploadingAvatar ? 'Đang tải lên...' : 'Tải ảnh lên'}
+                    <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.avatarUrl || ''}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, avatarUrl: e.target.value }))}
+                    placeholder="URL ảnh đại diện..."
+                    className="flex-1 px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Họ và tên nhân viên *</label>
@@ -891,7 +986,12 @@ export function UsersPage() {
                 <select
                   required
                   value={formData.departmentId}
-                  onChange={(e) => setFormData((p) => ({ ...p, departmentId: e.target.value }))}
+                  onChange={(e) => {
+                    const deptId = e.target.value;
+                    const matchedPositions = positions.filter(pos => String((pos as any).departmentId) === String(deptId));
+                    const firstPos = matchedPositions[0] || positions[0];
+                    setFormData((p) => ({ ...p, departmentId: deptId, positionId: firstPos ? String(firstPos.id) : p.positionId }));
+                  }}
                   className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
                 >
                   {departments.map(dept => (
@@ -922,7 +1022,7 @@ export function UsersPage() {
                   onChange={(e) => setFormData((p) => ({ ...p, positionId: e.target.value }))}
                   className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
                 >
-                  {positions.map(pos => (
+                  {availablePositions.map(pos => (
                     <option key={pos.id} value={pos.id}>{pos.positionTitle}</option>
                   ))}
                 </select>

@@ -4,6 +4,9 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type DebtRecord } from '../store/financeStore';
+import { usePurchaseStore } from '@/features/purchase/store/purchaseStore';
+import { useCrmStore } from '@/features/crm/store/crmStore';
+import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 import { exportToCsv } from '@/shared/utils/exportCsv';
 
@@ -27,9 +30,22 @@ export function DebtLedgerPage() {
   const deleteDebt = useFinanceStore((s) => s.deleteDebt);
   const fetchDebts = useFinanceStore((s) => s.fetchDebts);
 
+  // Lấy danh sách NCC, KH, NV cho dropdown
+  const { suppliers, fetchSuppliers } = usePurchaseStore();
+  const { customers, fetchCustomers } = useCrmStore();
+  const [employeeList, setEmployeeList] = useState<{id: number; name: string}[]>([]);
+
   useEffect(() => {
     fetchDebts();
-  }, [fetchDebts]);
+    fetchSuppliers();
+    fetchCustomers();
+    axiosClient.get<any, any>('/purchase/dropdowns/employees')
+      .then((res: any) => {
+        const list = Array.isArray(res) ? res : (res?.content || []);
+        setEmployeeList(list);
+      })
+      .catch(() => {});
+  }, [fetchDebts, fetchSuppliers, fetchCustomers]);
 
   const [search, setSearch] = useState('');
   const [selectedDebt, setSelectedDebt] = useState<DebtRecord | null>(null);
@@ -39,6 +55,14 @@ export function DebtLedgerPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingDebt, setEditingDebt] = useState<Partial<DebtRecord>>({});
   const [deletingDebt, setDeletingDebt] = useState<DebtRecord | null>(null);
+
+  // Danh sách đối tác tùy theo loại hình
+  const partnerOptions = useMemo(() => {
+    const type = editingDebt.entityType;
+    if (type === 'SUPPLIER') return suppliers.map(s => s.supplierName);
+    if (type === 'CUSTOMER') return customers.map(c => c.name);
+    return [...suppliers.map(s => s.supplierName), ...customers.map(c => c.name)];
+  }, [editingDebt.entityType, suppliers, customers]);
 
   const filtered = data.filter((item) =>
     item.entityName.toLowerCase().includes(search.toLowerCase()) ||
@@ -53,10 +77,10 @@ export function DebtLedgerPage() {
       entityType: 'CUSTOMER',
       totalDebt: 0,
       dueAmount: 0,
-      dueDate: new Date().toISOString().substring(0, 10),
+      dueDate: '',
       status: 'NORMAL',
-      lastPaymentDate: new Date().toISOString().substring(0, 10),
-      accountManager: 'Sarah Jenkins',
+      lastPaymentDate: '',
+      accountManager: '',
       branchId: 'BR-001',
       notes: ''
     });
@@ -72,6 +96,18 @@ export function DebtLedgerPage() {
   const handleSaveDebt = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingDebt.debtCode || !editingDebt.entityName) return;
+
+    const today = new Date().toISOString().substring(0, 10);
+    // Validate: Ngày đến hạn >= hôm nay
+    if (editingDebt.dueDate && editingDebt.dueDate < today) {
+      toast.error('Ngày đến hạn thanh toán phải từ hôm nay trở đi');
+      return;
+    }
+    // Validate: Ngày giao dịch gần nhất <= hôm nay
+    if (editingDebt.lastPaymentDate && editingDebt.lastPaymentDate > today) {
+      toast.error('Ngày giao dịch gần nhất không được là ngày tương lai');
+      return;
+    }
 
     if (modalMode === 'create') {
       addDebt({
@@ -256,7 +292,7 @@ export function DebtLedgerPage() {
         isOpen={!!selectedDebt}
         onClose={() => setSelectedDebt(null)}
         title={selectedDebt ? `Hồ Sơ Công Nợ: ${selectedDebt.debtCode}` : 'Chi tiết công nợ'}
-        width="max-w-lg"
+        size="erp"
       >
         {selectedDebt && (
           <div className="space-y-6">
@@ -364,7 +400,7 @@ export function DebtLedgerPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={modalMode === 'create' ? 'Ghi nhận công nợ mới' : 'Chỉnh sửa thông tin công nợ'}
-        width="max-w-xl"
+        size="erp"
       >
         <form onSubmit={handleSaveDebt} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -382,7 +418,7 @@ export function DebtLedgerPage() {
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại hình đối tác</label>
               <select
                 value={editingDebt.entityType || 'CUSTOMER'}
-                onChange={(e) => setEditingDebt({ ...editingDebt, entityType: e.target.value as any })}
+                onChange={(e) => setEditingDebt({ ...editingDebt, entityType: e.target.value as any, entityName: '' })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
               >
                 <option value="CUSTOMER">Khách hàng (Khoản phải thu)</option>
@@ -396,30 +432,62 @@ export function DebtLedgerPage() {
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên đối tác / Doanh nghiệp *</label>
             <input
               type="text"
+              list="partnerNameList"
               value={editingDebt.entityName || ''}
               onChange={(e) => setEditingDebt({ ...editingDebt, entityName: e.target.value })}
-              placeholder="Apex Hypermarkets, Global Tech Suppliers..."
+              placeholder="Gõ để tìm kiếm đối tác từ danh sách hệ thống..."
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
               required
             />
+            <datalist id="partnerNameList">
+              {partnerOptions.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng dư nợ (Dương: Phải thu, Âm: Phải trả)</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Tổng dư nợ (₫) (Dương: Phải thu, Âm: Phải trả)
+              </label>
               <input
-                type="number"
-                value={editingDebt.totalDebt ?? 0}
-                onChange={(e) => setEditingDebt({ ...editingDebt, totalDebt: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                type="text"
+                value={editingDebt.totalDebt === undefined || editingDebt.totalDebt === null ? '' : String(editingDebt.totalDebt)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || val === '-') {
+                    setEditingDebt({ ...editingDebt, totalDebt: val as any });
+                  } else {
+                    const clean = val.replace(/[^0-9.-]/g, '');
+                    const parsed = parseFloat(clean);
+                    if (!isNaN(parsed)) {
+                      setEditingDebt({ ...editingDebt, totalDebt: parsed });
+                    }
+                  }
+                }}
+                placeholder="VD: 5000000 hoặc -2000000"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-bold"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tiền thanh toán đợt này</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tiền thanh toán đợt này (₫)</label>
               <input
-                type="number"
-                value={editingDebt.dueAmount ?? 0}
-                onChange={(e) => setEditingDebt({ ...editingDebt, dueAmount: parseFloat(e.target.value) || 0 })}
+                type="text"
+                value={editingDebt.dueAmount === undefined || editingDebt.dueAmount === null ? '' : String(editingDebt.dueAmount)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || val === '-') {
+                    setEditingDebt({ ...editingDebt, dueAmount: val as any });
+                  } else {
+                    const clean = val.replace(/[^0-9.-]/g, '');
+                    const parsed = parseFloat(clean);
+                    if (!isNaN(parsed)) {
+                      setEditingDebt({ ...editingDebt, dueAmount: parsed });
+                    }
+                  }
+                }}
+                placeholder="0"
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
               />
             </div>
@@ -430,6 +498,7 @@ export function DebtLedgerPage() {
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày đến hạn thanh toán</label>
               <input
                 type="date"
+                min={new Date().toISOString().substring(0, 10)}
                 value={editingDebt.dueDate || ''}
                 onChange={(e) => setEditingDebt({ ...editingDebt, dueDate: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-mono"
@@ -452,6 +521,7 @@ export function DebtLedgerPage() {
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày giao dịch gần nhất</label>
               <input
                 type="date"
+                max={new Date().toISOString().substring(0, 10)}
                 value={editingDebt.lastPaymentDate || ''}
                 onChange={(e) => setEditingDebt({ ...editingDebt, lastPaymentDate: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-mono"
@@ -463,11 +533,17 @@ export function DebtLedgerPage() {
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhân viên phụ trách đối tác</label>
             <input
               type="text"
+              list="employeeList"
               value={editingDebt.accountManager || ''}
               onChange={(e) => setEditingDebt({ ...editingDebt, accountManager: e.target.value })}
-              placeholder="Họ tên quản lý viên..."
+              placeholder="Gõ để tìm nhân viên phụ trách..."
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             />
+            <datalist id="employeeList">
+              {employeeList.map((emp) => (
+                <option key={emp.id} value={emp.name} />
+              ))}
+            </datalist>
           </div>
 
           <div>

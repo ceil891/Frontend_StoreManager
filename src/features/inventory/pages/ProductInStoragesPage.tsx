@@ -2,8 +2,6 @@ import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, MapPin, Grid, RefreshCw, Package } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-
-
 import type { ColumnDef } from '@tanstack/react-table';
 import {
   useInventoryStore,
@@ -95,22 +93,26 @@ export function ProductInStoragesPage() {
       {
         accessorKey: 'productCode',
         header: 'Mã SKU',
-        cell: (info) => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-mono font-bold text-primary">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'productName',
         header: 'Tên sản phẩm',
-        cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-medium text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'zoneCode',
         header: 'Phân khu kho',
-        cell: (info) => <span className="text-gray-700 dark:text-gray-300">{(info.getValue() as string) || '—'}</span>,
+        cell: (info) => <span className="text-gray-700 dark:text-gray-300">{info.getValue() as string || 'Chưa phân khu'}</span>,
       },
       {
         accessorKey: 'binCode',
-        header: 'Kệ / Ô kệ',
-        cell: (info) => <span className="font-semibold text-blue-600 dark:text-blue-400">{info.getValue() as string}</span>,
+        header: 'Ô kệ (bin)',
+        cell: (info) => (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+            <MapPin className="w-3 h-3" /> {info.getValue() as string}
+          </span>
+        ),
       },
       {
         accessorKey: 'quantity',
@@ -118,19 +120,10 @@ export function ProductInStoragesPage() {
         cell: (info) => {
           const qty = info.getValue() as number;
           return (
-            <span className={`font-mono font-bold ${qty === 0 ? 'text-red-500' : qty < 10 ? 'text-amber-500' : 'text-gray-900 dark:text-white'}`}>
-              {qty}
+            <span className={`font-mono font-bold text-sm ${qty === 0 ? 'text-red-500' : 'text-primary'}`}>
+              {qty.toLocaleString('vi-VN')}
             </span>
           );
-        },
-      },
-      {
-        id: 'binStatus',
-        header: 'Tình trạng kệ',
-        cell: ({ row }) => {
-          const qty = row.original.quantity;
-          if (qty === 0) return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">Trống kệ</span>;
-          return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">Có hàng</span>;
         },
       },
       {
@@ -139,16 +132,16 @@ export function ProductInStoragesPage() {
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <button
-              onClick={(e) => { e.stopPropagation(); setSelected(row.original); }}
-              className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+              onClick={() => setSelected(row.original)}
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
               title="Xem chi tiết vị trí"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
-              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-              title="Cập nhật vị trí / số lượng"
+              onClick={() => handleOpenEdit(row.original)}
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+              title="Cập nhật số lượng ô kệ"
             >
               <Edit className="w-4 h-4" />
             </button>
@@ -164,22 +157,15 @@ export function ProductInStoragesPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Vị trí lưu kho hàng hóa chi tiết</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Vị trí lưu kho sản phẩm (ô kệ / bin)</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Xem vị trí phân khu kho, số ô kệ (bin) chi tiết của từng SKU. Dữ liệu đồng bộ trực tiếp từ backend.
+              Quản lý vị trí lưu trữ thực tế của từng sản phẩm theo phân khu và ô kệ trong kho
             </p>
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => { setIsLoading(true); fetchProductLocations().finally(() => setIsLoading(false)); }}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
-            >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-              Làm mới
-            </button>
-            <button
               onClick={handleOpenAssign}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-medium shadow-sm"
             >
               <Plus className="w-4 h-4" /> Gán vị trí kho
             </button>
@@ -192,7 +178,7 @@ export function ProductInStoragesPage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm kiếm mã SKU, tên hàng, phân khu kho, số ô kệ..."
+            placeholder="Tìm kiếm theo mã SKU, tên hàng, phân khu kho, số ô kệ..."
             className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-white placeholder-gray-400"
           />
         </div>
@@ -200,7 +186,7 @@ export function ProductInStoragesPage() {
         {isLoading ? (
           <div className="flex items-center justify-center py-20 text-gray-400">
             <RefreshCw className="w-6 h-6 animate-spin mr-2" />
-            <span>Đang tải dữ liệu từ backend...</span>
+            <span>Đang tải dữ liệu từ hệ thống...</span>
           </div>
         ) : productLocations.length === 0 ? (
           <div className="text-center py-20 text-gray-400">
@@ -213,7 +199,7 @@ export function ProductInStoragesPage() {
         )}
       </div>
 
-      {/* Drawer chi tiết */}
+      {/* Detail Modal */}
       <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
@@ -222,10 +208,10 @@ export function ProductInStoragesPage() {
       >
         {selected && (
           <div className="space-y-6">
-            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
-              <p className="text-xs text-blue-700 dark:text-blue-400 font-semibold uppercase tracking-wider">Ô kệ lưu trữ</p>
-              <p className="text-xl font-bold text-blue-700 dark:text-blue-300 mt-1">{selected.binCode}</p>
-              <p className="text-sm text-blue-500 dark:text-blue-400">{selected.zoneCode || '—'}</p>
+            <div className="p-4 bg-primary/10 rounded-xl border border-primary/20">
+              <p className="text-xs text-primary font-semibold uppercase tracking-wider">Ô kệ lưu trữ</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">{selected.binCode}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{selected.zoneCode || 'Chưa phân khu'}</p>
             </div>
 
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
@@ -238,14 +224,14 @@ export function ProductInStoragesPage() {
                 <span className="font-semibold text-gray-900 dark:text-white">{selected.productName}</span>
               </div>
               <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
-                <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1"><Grid className="w-3.5 h-3.5" /> Số Lượng Tồn Kệ:</span>
-                <span className={`font-mono font-bold text-lg ${selected.quantity === 0 ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                  {selected.quantity}
+                <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1"><Grid className="w-3.5 h-3.5" /> Số lượng tồn kệ:</span>
+                <span className={`font-mono font-bold text-lg ${selected.quantity === 0 ? 'text-red-500' : 'text-primary'}`}>
+                  {selected.quantity.toLocaleString('vi-VN')}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Tình trạng kệ:</span>
-                <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
+                <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                   selected.quantity === 0 ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
                 }`}>
                   {selected.quantity === 0 ? 'Trống kệ' : 'Có hàng'}
@@ -274,12 +260,12 @@ export function ProductInStoragesPage() {
             <select
               value={assignForm.productId}
               onChange={(e) => setAssignForm({ ...assignForm, productId: Number(e.target.value) })}
-              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
               required
             >
               <option value={0}>-- Chọn sản phẩm --</option>
               {products.map((p) => (
-                <option key={p.id} value={Number(p.id)}>{p.sku} – {p.name}</option>
+                <option key={p.id} value={Number(p.id)}>{p.sku} — {p.name}</option>
               ))}
             </select>
           </div>
@@ -288,7 +274,7 @@ export function ProductInStoragesPage() {
             <select
               value={assignForm.binId}
               onChange={(e) => setAssignForm({ ...assignForm, binId: Number(e.target.value) })}
-              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
               required
             >
               <option value={0}>-- Chọn ô kệ kho --</option>
@@ -304,22 +290,22 @@ export function ProductInStoragesPage() {
               min={0}
               value={assignForm.quantity}
               onChange={(e) => setAssignForm({ ...assignForm, quantity: Number(e.target.value) })}
-              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-primary"
               required
             />
           </div>
-          <div className="flex justify-end gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
-              Hủy
+              Hủy bỏ
             </button>
             <button
               type="submit"
               disabled={isSaving}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
             >
               {isSaving && <RefreshCw className="w-4 h-4 animate-spin" />}
               {isSaving ? 'Đang lưu...' : 'Xác nhận gán'}

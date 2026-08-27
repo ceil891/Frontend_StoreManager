@@ -480,8 +480,8 @@ export function WarehouseAreasPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => !isSaving && setIsModalOpen(false)}
-        title={modalMode === 'create' ? '📦 Khai báo dãy kệ hàng (Rack) mới' : '⚙️ Cấu hình thông số dãy kệ'}
-        width="max-w-2xl"
+        title={modalMode === 'create' ? 'Khai báo dãy kệ hàng (Rack) mới' : 'Cấu hình thông số dãy kệ'}
+        size="erp"
       >
         <form onSubmit={(e) => handleSave(e, false)} className="space-y-4 text-xs relative max-h-[80vh] overflow-y-auto pr-1">
           {isSaving && (

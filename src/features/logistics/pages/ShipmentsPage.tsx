@@ -241,7 +241,7 @@ export function ShipmentsPage() {
     () => [
       {
         accessorKey: 'shipmentCode',
-        header: 'Mã vận đơn & Đơn hàng',
+        header: 'Mã vận đơn & đơn hàng',
         cell: ({ row }) => (
           <div>
             <span className="font-mono font-bold text-primary px-2 py-0.5 bg-primary/10 rounded border border-primary/20">
@@ -253,7 +253,7 @@ export function ShipmentsPage() {
       },
       {
         accessorKey: 'trackingNumber',
-        header: 'Mã Tracking & Hãng',
+        header: 'Mã tracking & hãng',
         cell: ({ row }) => (
           <div>
             <p className="font-mono font-bold text-emerald-700 dark:text-emerald-400 text-sm">{row.original.trackingNumber}</p>
@@ -263,7 +263,7 @@ export function ShipmentsPage() {
       },
       {
         accessorKey: 'recipientName',
-        header: 'Người nhận & Địa chỉ',
+        header: 'Người nhận & địa chỉ',
         cell: ({ row }) => (
           <div>
             <p className="font-bold text-gray-900 dark:text-white text-sm">{row.original.recipientName} - {row.original.recipientPhone}</p>
@@ -273,13 +273,13 @@ export function ShipmentsPage() {
       },
       {
         accessorKey: 'codAmount',
-        header: 'Tiền thu COD & Phí',
+        header: 'Tiền thu COD & cước phí',
         cell: ({ row }) => (
           <div className="font-mono text-xs">
             <p className="font-bold text-emerald-600 dark:text-emerald-400">
-              {row.original.collectCod ? `${row.original.codAmount.toLocaleString()} VNĐ` : 'Không thu COD'}
+              {row.original.collectCod ? `${row.original.codAmount.toLocaleString('vi-VN')} đ` : 'Không thu COD'}
             </p>
-            <p className="text-gray-500">Cước phí: {row.original.totalShippingFee.toLocaleString()} VNĐ</p>
+            <p className="text-gray-500">Cước phí: {row.original.totalShippingFee.toLocaleString('vi-VN')} đ</p>
           </div>
         ),
       },
@@ -302,7 +302,7 @@ export function ShipmentsPage() {
           <button
             onClick={() => setSelectedShipment(row.original)}
             className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-600 dark:text-gray-300"
-            title="Xem chi tiết vận đơn"
+            title="Xem chi tiết"
           >
             <Eye className="w-4 h-4" />
           </button>
@@ -313,21 +313,21 @@ export function ShipmentsPage() {
   );
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Package className="w-7 h-7 text-primary" /> Quản Lý Danh Sách Vận Đơn (Shipments)
+            <Package className="w-6 h-6 text-primary" /> Danh sách vận đơn
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Quản lý vận đơn hàng hóa, mã tracking, thông tin người gửi/nhận, tiền thu hộ COD và cước phí.
+            Quản lý vận đơn hàng hóa, mã tracking, thông tin người gửi/nhận, tiền thu hộ COD và cước phí
           </p>
         </div>
         <button
           onClick={handleOpenCreate}
-          className="px-4 py-2.5 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg shadow flex items-center gap-2 text-sm"
+          className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg shadow-sm flex items-center gap-2 text-sm transition-colors"
         >
-          <Plus className="w-4 h-4" /> Tạo Vận Đơn Mới
+          <Plus className="w-4 h-4" /> Thêm mới vận đơn
         </button>
       </div>
 
@@ -336,10 +336,10 @@ export function ShipmentsPage() {
           <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
           <input
             type="text"
-            placeholder="Tìm theo mã vận đơn, mã đơn hàng, mã tracking, tên hoặc SĐT người nhận..."
+            placeholder="Tìm kiếm theo mã vận đơn, mã đơn hàng, mã tracking, tên hoặc SĐT người nhận..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary"
+            className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary text-gray-900 dark:text-white"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -347,7 +347,7 @@ export function ShipmentsPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm"
+            className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-white"
           >
             <option value="all">Tất cả trạng thái</option>
             <option value="CREATED">Mới tạo</option>
@@ -363,86 +363,86 @@ export function ShipmentsPage() {
         <ReusableDataTable columns={columns} data={filtered} />
       </div>
 
-      {/* Form Tạo Vận Đơn (Form 9) */}
+      {/* Form Tạo Vận Đơn */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Form Tạo Vận Đơn Mới (Shipment Form)"
+        title="Thêm mới vận đơn"
         width="max-w-4xl"
       >
-        <form onSubmit={handleSave} className="space-y-6 text-sm">
+        <form onSubmit={handleSave} className="space-y-6 text-sm p-2">
           {/* Section 1: Thông tin vận đơn */}
-          <div className="erp-form-section space-y-4">
-            <h3 className="text-base font-bold text-gray-900 dark:text-white border-b pb-2">1. Thông tin vận đơn</h3>
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">1. Thông tin vận đơn</h3>
             <div className="grid grid-cols-4 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mã vận đơn *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã vận đơn *</label>
                 <input
                   type="text"
                   required
                   value={formState.shipmentCode || ''}
                   onChange={(e) => setFormState({ ...formState, shipmentCode: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm font-bold"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm font-bold"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mã đơn hàng *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã đơn hàng *</label>
                 <input
                   type="text"
                   required
                   value={formState.orderCode || ''}
                   onChange={(e) => setFormState({ ...formState, orderCode: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tracking Number</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã tracking</label>
                 <input
                   type="text"
                   value={formState.trackingNumber || ''}
                   onChange={(e) => setFormState({ ...formState, trackingNumber: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm text-emerald-600 font-bold"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 font-mono text-sm text-emerald-600 font-bold"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Trạng thái *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái *</label>
                 <select
                   value={formState.status || 'CREATED'}
                   onChange={(e) => setFormState({ ...formState, status: e.target.value as any })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm font-bold"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm font-medium"
                 >
-                  <option value="CREATED">CREATED - Mới tạo</option>
-                  <option value="CONFIRMED">CONFIRMED - Đã xác nhận</option>
-                  <option value="PICKUP_PENDING">PICKUP_PENDING - Chờ lấy hàng</option>
-                  <option value="PICKED_UP">PICKED_UP - Đã lấy hàng</option>
-                  <option value="IN_TRANSIT">IN_TRANSIT - Đang vận chuyển</option>
-                  <option value="OUT_FOR_DELIVERY">OUT_FOR_DELIVERY - Đang giao hàng</option>
-                  <option value="DELIVERED">DELIVERED - Giao thành công</option>
-                  <option value="DELIVERY_FAILED">DELIVERY_FAILED - Giao thất bại</option>
-                  <option value="CANCELLED">CANCELLED - Đã hủy</option>
+                  <option value="CREATED">Mới tạo</option>
+                  <option value="CONFIRMED">Đã xác nhận</option>
+                  <option value="PICKUP_PENDING">Chờ lấy hàng</option>
+                  <option value="PICKED_UP">Đã lấy hàng</option>
+                  <option value="IN_TRANSIT">Đang vận chuyển</option>
+                  <option value="OUT_FOR_DELIVERY">Đang giao hàng</option>
+                  <option value="DELIVERED">Giao thành công</option>
+                  <option value="DELIVERY_FAILED">Giao thất bại</option>
+                  <option value="CANCELLED">Đã hủy</option>
                 </select>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Carrier đối tác *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Đơn vị vận chuyển *</label>
                 <input
                   type="text"
                   required
                   value={formState.carrierName || 'Viettel Post'}
                   onChange={(e) => setFormState({ ...formState, carrierName: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm font-semibold"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Phương thức vận chuyển *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phương thức vận chuyển *</label>
                 <input
                   type="text"
                   required
-                  value={formState.shippingMethod || 'Giao Hỏa Tốc'}
+                  value={formState.shippingMethod || 'Giao hỏa tốc'}
                   onChange={(e) => setFormState({ ...formState, shippingMethod: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-800 text-sm font-semibold"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm"
                 />
               </div>
             </div>
@@ -450,70 +450,70 @@ export function ShipmentsPage() {
 
           {/* Section 2 & 3: Người gửi & Người nhận */}
           <div className="grid grid-cols-2 gap-6">
-            <div className="erp-form-section space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border">
-              <h4 className="font-bold text-gray-900 dark:text-white text-sm border-b pb-2">2. Người gửi (Sender)</h4>
+            <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
+              <h4 className="font-bold text-gray-900 dark:text-white text-sm border-b border-gray-200 dark:border-gray-700 pb-2">2. Người gửi</h4>
               <div>
-                <label className="block text-xs font-semibold text-gray-500">Tên người gửi *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên người gửi *</label>
                 <input
                   type="text"
                   required
                   value={formState.senderName || ''}
                   onChange={(e) => setFormState({ ...formState, senderName: e.target.value })}
-                  className="w-full px-3 py-1.5 border rounded bg-white dark:bg-gray-800 text-xs"
+                  className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500">Số điện thoại *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại *</label>
                 <input
                   type="text"
                   required
                   value={formState.senderPhone || ''}
                   onChange={(e) => setFormState({ ...formState, senderPhone: e.target.value })}
-                  className="w-full px-3 py-1.5 border rounded bg-white dark:bg-gray-800 text-xs font-mono"
+                  className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs font-mono"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500">Địa chỉ lấy hàng *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ lấy hàng *</label>
                 <input
                   type="text"
                   required
                   value={formState.senderAddress || ''}
                   onChange={(e) => setFormState({ ...formState, senderAddress: e.target.value })}
-                  className="w-full px-3 py-1.5 border rounded bg-white dark:bg-gray-800 text-xs"
+                  className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs"
                 />
               </div>
             </div>
 
-            <div className="erp-form-section space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border">
-              <h4 className="font-bold text-gray-900 dark:text-white text-sm border-b pb-2">3. Người nhận (Recipient)</h4>
+            <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
+              <h4 className="font-bold text-gray-900 dark:text-white text-sm border-b border-gray-200 dark:border-gray-700 pb-2">3. Người nhận</h4>
               <div>
-                <label className="block text-xs font-semibold text-gray-500">Tên người nhận *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên người nhận *</label>
                 <input
                   type="text"
                   required
                   value={formState.recipientName || ''}
                   onChange={(e) => setFormState({ ...formState, recipientName: e.target.value })}
-                  className="w-full px-3 py-1.5 border rounded bg-white dark:bg-gray-800 text-xs font-bold"
+                  className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs font-semibold"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500">Số điện thoại *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số điện thoại *</label>
                 <input
                   type="text"
                   required
                   value={formState.recipientPhone || ''}
                   onChange={(e) => setFormState({ ...formState, recipientPhone: e.target.value })}
-                  className="w-full px-3 py-1.5 border rounded bg-white dark:bg-gray-800 text-xs font-mono font-bold"
+                  className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs font-mono font-semibold"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500">Địa chỉ giao hàng *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ giao hàng *</label>
                 <input
                   type="text"
                   required
                   value={formState.recipientAddress || ''}
                   onChange={(e) => setFormState({ ...formState, recipientAddress: e.target.value })}
-                  className="w-full px-3 py-1.5 border rounded bg-white dark:bg-gray-800 text-xs"
+                  className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs"
                 />
               </div>
             </div>
@@ -521,52 +521,52 @@ export function ShipmentsPage() {
 
           {/* Section 4 & 5: Hàng hóa & COD */}
           <div className="grid grid-cols-2 gap-6">
-            <div className="erp-form-section space-y-3">
-              <h4 className="font-bold text-gray-900 dark:text-white text-sm border-b pb-2">4. Thông tin hàng hóa</h4>
+            <div className="space-y-3">
+              <h4 className="font-bold text-gray-900 dark:text-white text-sm border-b border-gray-200 dark:border-gray-700 pb-2">4. Thông tin hàng hóa</h4>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500">Loại hàng *</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại hàng *</label>
                   <input
                     type="text"
                     required
                     value={formState.goodsType || 'Hàng điện tử'}
                     onChange={(e) => setFormState({ ...formState, goodsType: e.target.value })}
-                    className="w-full px-3 py-1.5 border rounded text-xs"
+                    className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-xs bg-white dark:bg-gray-800"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500">Tổng trọng lượng (kg) *</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tổng trọng lượng (kg) *</label>
                   <input
                     type="number"
                     step="0.1"
                     required
                     value={formState.totalWeightKg || 1}
                     onChange={(e) => setFormState({ ...formState, totalWeightKg: Number(e.target.value) })}
-                    className="w-full px-3 py-1.5 border rounded text-xs font-mono"
+                    className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono bg-white dark:bg-gray-800"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="erp-form-section space-y-3">
-              <h4 className="font-bold text-gray-900 dark:text-white text-sm border-b pb-2">5. Thu hộ COD & SLA</h4>
+            <div className="space-y-3">
+              <h4 className="font-bold text-gray-900 dark:text-white text-sm border-b border-gray-200 dark:border-gray-700 pb-2">5. Thu hộ COD & cam kết SLA</h4>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500">Số tiền COD (VNĐ)</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số tiền COD (VNĐ)</label>
                   <input
                     type="number"
                     value={formState.codAmount || 0}
                     onChange={(e) => setFormState({ ...formState, codAmount: Number(e.target.value) })}
-                    className="w-full px-3 py-1.5 border rounded text-xs font-mono font-bold text-emerald-600"
+                    className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono font-bold text-emerald-600 bg-white dark:bg-gray-800"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500">SLA Cam kết</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Cam kết SLA</label>
                   <input
                     type="text"
                     value={formState.committedSla || '24h'}
                     onChange={(e) => setFormState({ ...formState, committedSla: e.target.value })}
-                    className="w-full px-3 py-1.5 border rounded text-xs font-mono"
+                    className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono bg-white dark:bg-gray-800"
                   />
                 </div>
               </div>
@@ -577,15 +577,15 @@ export function ShipmentsPage() {
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-semibold"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
             >
-              Hủy
+              Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold shadow"
+              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium shadow"
             >
-              Lưu Vận Đơn
+              Lưu thông tin
             </button>
           </div>
         </form>

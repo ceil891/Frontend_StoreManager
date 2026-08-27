@@ -6,9 +6,9 @@ import TicketMessagesPage from './TicketMessagesPage';
 import { FeedbackPage } from './FeedbackPage';
 
 const tabs = [
-  { id: 'tickets', label: 'Yêu cầu hỗ trợ (Tickets)', icon: LifeBuoy, permission: 'crm:ticket:view' },
+  { id: 'tickets', label: 'Yêu cầu hỗ trợ', icon: LifeBuoy, permission: 'crm:ticket:view' },
   { id: 'messages', label: 'Tin nhắn trao đổi', icon: MessageSquare, permission: 'crm:ticket-message:view' },
-  { id: 'feedback', label: 'Phản hồi Khách hàng', icon: MessageCircleHeart, permission: 'crm:feedback:view' },
+  { id: 'feedback', label: 'Phản hồi khách hàng', icon: MessageCircleHeart, permission: 'crm:feedback:view' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];
@@ -30,9 +30,9 @@ export function CrmSupportTabbedPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Chăm sóc & Hỗ trợ Khách hàng</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Chăm sóc & hỗ trợ khách hàng</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Tiếp nhận phiếu hỗ trợ kỹ thuật/khiếu nại, tin nhắn tương tác và ý kiến phản hồi từ khách
+            Tiếp nhận phiếu hỗ trợ kỹ thuật/khiếu nại, tin nhắn tương tác và ý kiến phản hồi từ khách hàng
           </p>
         </div>
       </div>

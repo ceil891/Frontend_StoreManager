@@ -7,6 +7,15 @@ import { axiosClient } from '@/shared/lib/axiosClient';
 import { extractPageContent } from '@/shared/lib/apiHelpers';
 import { toast } from 'sonner';
 
+const formatNumberString = (val: string | number | undefined | null) => {
+  if (val === undefined || val === null || val === '') return '';
+  const num = String(val).replace(/[^0-9]/g, '');
+  return num ? Number(num).toLocaleString('vi-VN') : '';
+};
+const parseNumberString = (val: string) => {
+  return Number(val.replace(/[^0-9]/g, '')) || 0;
+};
+
 export interface PurchasePaymentRecord {
   id: string;
   paymentCode: string;
@@ -55,6 +64,11 @@ export function PurchasePaymentsPage() {
   const [fundsList, setFundsList] = useState<FundAccount[]>([]);
   const [formFiles, setFormFiles] = useState<{ name: string; size: string }[]>([]);
 
+  const allowedFunds = useMemo(() => {
+    const isCash = editingItem.paymentMethod === 'TIEN_MAT';
+    return fundsList.filter(f => isCash ? f.type === 'CASH' : f.type === 'BANK');
+  }, [editingItem.paymentMethod, fundsList]);
+
   const loggedInUser = 'Super Admin (Hưng)';
 
   const fetchMasterData = async () => {
@@ -62,7 +76,13 @@ export function PurchasePaymentsPage() {
       // 1. Fetch Invoices / POs with remaining debt
       axiosClient.get('/purchase/orders?size=500').then((res: any) => {
         const list = extractPageContent<any>(res);
-        const mapped: InvoiceLookup[] = list.map((item: any, idx: number) => {
+        const approvedList = list.filter((item: any) => 
+          item.status === 'APPROVED' || 
+          item.status === 'DELIVERED' || 
+          item.status === 'COMPLETED' || 
+          item.status === 'DISPATCHED/IN_TRANSIT'
+        );
+        const mapped: InvoiceLookup[] = approvedList.map((item: any, idx: number) => {
           const code = item.poNumber || `PO-2026-${String(item.id).padStart(4, '0')}`;
           const total = Number(item.totalCost || item.totalAmount || 270000);
           const status = item.paymentStatus || 'UNPAID';
@@ -94,34 +114,34 @@ export function PurchasePaymentsPage() {
         ]);
       });
 
-      // 2. Fetch Fund / Bank Accounts
-      axiosClient.get('/finance/fund-cash').then((res: any) => {
-        const list = extractPageContent<any>(res);
-        const mapped: FundAccount[] = list.map((f: any, idx: number) => ({
-          id: f.id || idx + 1,
-          name: f.accountName || f.name || 'Tài khoản quỹ',
-          type: f.type || (f.accountNumber ? 'BANK' : 'CASH'),
-          accountNumber: f.accountNumber || '',
-          balance: Number(f.balance || f.currentBalance || 50000000),
-        }));
-        if (mapped.length === 0) {
-          setFundsList([
-            { id: 1, name: 'Techcombank - 1902838392 (Công ty StoreManager)', type: 'BANK', accountNumber: '1902838392', balance: 125000000 },
-            { id: 2, name: 'Vietcombank - 0918273645 (TK Thanh toán NCC)', type: 'BANK', accountNumber: '0918273645', balance: 85000000 },
-            { id: 3, name: 'Quỹ tiền mặt Kho chính (Hà Nội)', type: 'CASH', balance: 25000000 },
-            { id: 4, name: 'Quỹ tiền mặt Chi nhánh Quận 1 (TP.HCM)', type: 'CASH', balance: 18000000 },
-          ]);
-        } else {
-          setFundsList(mapped);
-        }
-      }).catch(() => {
-        setFundsList([
-          { id: 1, name: 'Techcombank - 1902838392 (Công ty StoreManager)', type: 'BANK', accountNumber: '1902838392', balance: 125000000 },
-          { id: 2, name: 'Vietcombank - 0918273645 (TK Thanh toán NCC)', type: 'BANK', accountNumber: '0918273645', balance: 85000000 },
-          { id: 3, name: 'Quỹ tiền mặt Kho chính (Hà Nội)', type: 'CASH', balance: 25000000 },
-          { id: 4, name: 'Quỹ tiền mặt Chi nhánh Quận 1 (TP.HCM)', type: 'CASH', balance: 18000000 },
+      // 2. Fetch Fund / Bank Accounts (Real configured accounts)
+      try {
+        const [bankRes, cashRes] = await Promise.allSettled([
+          axiosClient.get('/finance/bank-accounts'),
+          axiosClient.get('/finance/fund-cash')
         ]);
-      });
+        const bankList = bankRes.status === 'fulfilled' ? extractPageContent<any>(bankRes.value) : [];
+        const cashList = cashRes.status === 'fulfilled' ? extractPageContent<any>(cashRes.value) : [];
+        
+        const mappedBanks: FundAccount[] = (Array.isArray(bankList) ? bankList : []).map((b: any) => ({
+          id: b.id,
+          name: `${b.bankName || 'Ngân hàng'} - ${b.accountNumber || ''} (${b.accountHolder || 'Doanh nghiệp'})`,
+          type: 'BANK',
+          accountNumber: b.accountNumber,
+          balance: Number(b.balance || b.currentBalance || 0),
+        }));
+
+        const mappedCash: FundAccount[] = (Array.isArray(cashList) ? cashList : []).map((c: any) => ({
+          id: c.id,
+          name: c.fundName || c.name || 'Quỹ tiền mặt',
+          type: 'CASH',
+          balance: Number(c.balance || c.currentBalance || 0),
+        }));
+
+        setFundsList([...mappedBanks, ...mappedCash]);
+      } catch (fundErr) {
+        console.error('Lỗi khi tải danh sách quỹ/TKNH:', fundErr);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -322,25 +342,31 @@ export function PurchasePaymentsPage() {
       return;
     }
 
+    if (formFiles.length === 0 && !editingItem.attachmentUrl) {
+      toast.error('Bắt buộc phải đính kèm ảnh chụp biên lai / tệp UNC giao dịch!');
+      return;
+    }
+
     const recordPayload: PurchasePaymentRecord = {
       id: editingItem.id || String(Date.now()),
       paymentCode: editingItem.paymentCode,
       invoiceCode: editingItem.invoiceCode,
       supplierName: editingItem.supplierName,
       paymentMethod: editingItem.paymentMethod || 'CHUYEN_KHOAN',
-      fundAccountName: editingItem.fundAccountName || fundsList[0]?.name || 'Quỹ tiền mặt Kho chính',
+      fundAccountName: editingItem.fundAccountName || (allowedFunds[0]?.name || 'Quỹ tiền mặt Kho chính'),
       paymentDate: editingItem.paymentDate || new Date().toISOString().split('T')[0],
       amount: payAmount,
       remainingInvoiceDebt: maxAllowed,
       handler: editingItem.handler || loggedInUser,
       status: (editingItem.status as any) || 'CHO_DUYET',
       notes: editingItem.notes || '',
-      attachmentName: formFiles[0]?.name,
+      attachmentName: formFiles[0]?.name || editingItem.attachmentName,
+      attachmentUrl: editingItem.attachmentUrl,
     };
 
     try {
       if (modalMode === 'create') {
-        await axiosClient.post('/finance/payment-vouchers', {
+        const res = await axiosClient.post('/finance/payment-vouchers', {
           voucherCode: recordPayload.paymentCode,
           receiverName: recordPayload.supplierName,
           invoiceCode: recordPayload.invoiceCode,
@@ -349,13 +375,16 @@ export function PurchasePaymentsPage() {
           handler: recordPayload.handler,
           voucherDate: recordPayload.paymentDate,
           amount: recordPayload.amount,
-          status: recordPayload.status,
-          reason: recordPayload.notes,
-        }).catch(() => {});
+          status: 'PENDING_APPROVAL',
+          notes: recordPayload.notes,
+          attachmentUrl: recordPayload.attachmentName || 'UNC-default.pdf',
+        });
+        const createdItem = res.data || res;
+        recordPayload.id = String(createdItem.id);
         const nextList = [recordPayload, ...data];
         setData(nextList);
         saveLocalPayments(nextList);
-        toast.success(`Tạo phiếu chi ${recordPayload.paymentCode} thành công (Trạng thái: Chờ duyệt)`);
+        toast.success(`Tạo phiếu chi ${recordPayload.paymentCode} thành công!`);
       } else {
         await axiosClient.put(`/finance/payment-vouchers/${recordPayload.id}`, {
           voucherCode: recordPayload.paymentCode,
@@ -366,18 +395,20 @@ export function PurchasePaymentsPage() {
           handler: recordPayload.handler,
           voucherDate: recordPayload.paymentDate,
           amount: recordPayload.amount,
-          status: recordPayload.status,
-          reason: recordPayload.notes,
-        }).catch(() => {});
+          status: recordPayload.status === 'DA_THANH_TOAN' ? 'COMPLETED' : 'PENDING_APPROVAL',
+          notes: recordPayload.notes,
+          attachmentUrl: recordPayload.attachmentName || 'UNC-default.pdf',
+        });
         const nextList = data.map(d => d.id === recordPayload.id ? recordPayload : d);
         setData(nextList);
         saveLocalPayments(nextList);
         toast.success('Cập nhật phiếu chi thành công');
       }
       setIsModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lưu phiếu chi thất bại');
+      const msg = err.response?.data?.message || err.message || 'Lưu phiếu chi thất bại';
+      toast.error(msg);
     }
   };
 
@@ -387,8 +418,12 @@ export function PurchasePaymentsPage() {
       const updated: PurchasePaymentRecord = { ...payment, status: 'DA_THANH_TOAN' };
 
       await axiosClient.put(`/finance/payment-vouchers/${payment.id}`, {
-        status: 'COMPLETED'
-      }).catch(() => {});
+        status: 'COMPLETED',
+        voucherCode: payment.paymentCode,
+        amount: payment.amount,
+        paymentMethod: payment.paymentMethod,
+        fundAccountName: payment.fundAccountName,
+      });
 
       // 1. Update local state & persist
       const nextList = data.map(d => d.id === payment.id ? updated : d);
@@ -397,22 +432,18 @@ export function PurchasePaymentsPage() {
       if (selected?.id === payment.id) {
         setSelected(updated);
       }
-
-      // 2. Trigger accounting toast & log simulation
-      toast.success(
-        `ĐÃ DUYỆT PHIẾU CHI ${payment.paymentCode} (${payment.amount.toLocaleString('vi-VN')} ₫)!\n` +
-        `✓ (1) Trừ ${payment.amount.toLocaleString('vi-VN')} ₫ vào dư nợ hóa đơn ${payment.invoiceCode}\n` +
-        `✓ (2) Giảm ${payment.amount.toLocaleString('vi-VN')} ₫ công nợ NCC ${payment.supplierName}\n` +
-        `✓ (3) Trừ ${payment.amount.toLocaleString('vi-VN')} ₫ số dư ${payment.fundAccountName}`,
-        { duration: 5000 }
-      );
-    } catch (err) {
+} catch (err) {
       console.error(err);
       toast.error('Lỗi khi duyệt phiếu chi');
     }
   };
 
   const handleDelete = async (id: string) => {
+    const item = data.find(d => d.id === id);
+    if (item?.status === 'DA_THANH_TOAN') {
+      toast.error('Tuyệt đối không được phép xóa phiếu chi đã ở trạng thái Đã duyệt / Đã thanh toán!');
+      return;
+    }
     if (confirm('Bạn có chắc chắn muốn xóa phiếu chi này?')) {
       try {
         await axiosClient.delete(`/finance/payment-vouchers/${id}`).catch(() => {});
@@ -440,29 +471,41 @@ export function PurchasePaymentsPage() {
       },
       {
         accessorKey: 'invoiceCode',
-        header: 'Mã Hóa đơn / PO gốc',
-        cell: (info) => <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">{info.getValue() as string}</span>,
+        header: 'Hóa đơn / PO liên kết',
+        cell: (info) => <span className="font-mono font-semibold text-gray-700 dark:text-gray-300">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'supplierName',
-        header: 'Nhà cung cấp nhận',
-        cell: (info) => <span className="font-bold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
+        header: 'Nhà cung cấp',
+        cell: (info) => <span className="font-semibold text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'amount',
         header: 'Số tiền chi',
-        cell: (info) => <span className="font-mono font-extrabold text-red-600 text-sm">{formatCurrency(info.getValue() as number)}</span>,
+        cell: (info) => <span className="font-mono font-bold text-red-600 dark:text-red-400">{formatCurrency(info.getValue() as number)}</span>,
+      },
+      {
+        accessorKey: 'paymentMethod',
+        header: 'Hình thức',
+        cell: (info) => {
+          const method = info.getValue() as string;
+          const label = method === 'TIEN_MAT' ? 'Tiền mặt' : method === 'CHUYEN_KHOAN' ? 'Chuyển khoản' : 'Thẻ';
+          return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">{label}</span>;
+        },
       },
       {
         accessorKey: 'fundAccountName',
-        header: 'Nguồn tiền chi / Quỹ rút',
-        cell: ({ row }) => (
-          <div className="space-y-0.5">
-            <span className="font-semibold text-gray-800 dark:text-gray-200 block text-xs truncate max-w-xs">{row.original.fundAccountName}</span>
-            <span className="text-[10px] text-gray-400 block font-mono">
-              Hình thức: {row.original.paymentMethod === 'CHUYEN_KHOAN' ? 'Chuyển khoản NH' : row.original.paymentMethod === 'TIEN_MAT' ? 'Tiền mặt' : 'Thẻ'}
-            </span>
-          </div>
+        header: 'Tài khoản / Quỹ tiền',
+        cell: (info) => <span className="text-xs text-gray-600 dark:text-gray-400 truncate max-w-[180px] block">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'paymentDate',
+        header: 'Ngày lập chi',
+        cell: (info) => (
+          <span className="inline-flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">
+            <Calendar className="w-3 h-3 text-gray-400" />
+            {info.getValue() as string}
+          </span>
         ),
       },
       {
@@ -492,29 +535,24 @@ export function PurchasePaymentsPage() {
             >
               <Eye className="w-4 h-4" />
             </button>
-            {row.original.status === 'CHO_DUYET' && (
-              <button
-                onClick={() => handleApprovePayment(row.original)}
-                className="p-1.5 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded transition-colors font-bold text-xs flex items-center gap-0.5"
-                title="Duyệt Phiếu Chi (Thực hiện chi tiền)"
-              >
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              </button>
+            {row.original.status !== 'DA_THANH_TOAN' && (
+              <>
+                <button
+                  onClick={() => handleOpenEdit(row.original)}
+                  className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
+                  title="Sửa"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(row.original.id)}
+                  className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
+                  title="Xóa"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
             )}
-            <button
-              onClick={() => handleOpenEdit(row.original)}
-              className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
-              title="Sửa"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(row.original.id)}
-              className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
-              title="Xóa"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
           </div>
         ),
       },
@@ -639,229 +677,258 @@ export function PurchasePaymentsPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={modalMode === 'create' ? '🔴 Lập Phiếu Chi Thanh Toán NCC Mới' : '⚙️ Chỉnh sửa Phiếu Chi'}
-        width="max-w-3xl"
+        size="erp"
       >
-        <form onSubmit={handleSave} className="space-y-4 text-xs">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã phiếu chi *</label>
-              <input
-                type="text"
-                value={editingItem.paymentCode || ''}
-                readOnly
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-gray-100 dark:bg-gray-900 text-red-600 font-bold"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Người lập phiếu * (Tự động)</label>
-              <input
-                type="text"
-                value={editingItem.handler || loggedInUser}
-                readOnly
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày lập phiếu chi *</label>
-              <input
-                type="date"
-                value={editingItem.paymentDate || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, paymentDate: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-semibold"
-                required
-              />
-            </div>
-          </div>
-
-          {/* 2. RÀNG BUỘC & TỰ ĐỘNG HÓA LIÊN KẾT HÓA ĐƠN (Lookup Auto-fill) */}
-          <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-900 space-y-3">
-            <div className="flex justify-between items-center">
-              <label className="block text-[11px] font-bold text-emerald-900 dark:text-emerald-300 uppercase flex items-center gap-1">
-                🔗 CHỌN HÓA ĐƠN / ĐƠN MUA NỢ (Lookup Auto-fill) *
-              </label>
-              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono">Chỉ lọc đơn đang còn nợ</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Chọn Hóa đơn mua còn nợ *</label>
-                <select
-                  value={editingItem.invoiceCode || ''}
-                  onChange={(e) => handleSelectInvoice(e.target.value)}
-                  className="w-full p-2 border border-emerald-300 dark:border-emerald-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono font-bold"
-                  required
-                >
-                  <option value="">-- Chọn hóa đơn mua còn nợ --</option>
-                  {invoicesList.map((inv) => (
-                    <option key={inv.id} value={inv.code}>
-                      {inv.code} - {inv.supplierName} (Nợ còn lại: {inv.remainingDebt.toLocaleString('vi-VN')} ₫)
-                    </option>
-                  ))}
-                </select>
+        {(() => {
+          const isLocked = editingItem.status === 'DA_THANH_TOAN' || editingItem.status === 'DA_HUY';
+          return (
+            <form onSubmit={handleSave} className="space-y-4 text-xs">
+              {isLocked && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-955/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/40 rounded-xl text-xs font-semibold">
+                  🔒 Phiếu chi này đã được thanh toán hoặc hủy (đã khóa). Không thể chỉnh sửa thêm.
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã phiếu chi *</label>
+                  <input
+                    type="text"
+                    value={editingItem.paymentCode || ''}
+                    readOnly
+                    className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-gray-100 dark:bg-gray-900 text-red-600 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Người lập phiếu * (Tự động)</label>
+                  <input
+                    type="text"
+                    value={editingItem.handler || loggedInUser}
+                    readOnly
+                    className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày lập phiếu chi *</label>
+                  <input
+                    type="date"
+                    value={editingItem.paymentDate || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, paymentDate: e.target.value })}
+                    className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-semibold"
+                    disabled={isLocked}
+                    required
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Tên Nhà Cung Cấp (Tự động khóa)</label>
+              {/* 2. RÀNG BUỘC & TỰ ĐỘNG HÓA LIÊN KẾT HÓA ĐƠN (Lookup Auto-fill) */}
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-900 space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="block text-[11px] font-bold text-emerald-900 dark:text-emerald-300 uppercase flex items-center gap-1">
+                    🔗 CHỌN HÓA ĐƠN / ĐƠN MUA NỢ (Lookup Auto-fill) *
+                  </label>
+                  <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono">Chỉ lọc đơn đang còn nợ</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Chọn Hóa đơn mua còn nợ *</label>
+                    <select
+                      value={editingItem.invoiceCode || ''}
+                      onChange={(e) => handleSelectInvoice(e.target.value)}
+                      className="w-full p-2 border border-emerald-300 dark:border-emerald-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono font-bold"
+                      disabled={modalMode === 'edit' || isLocked}
+                      required
+                    >
+                      <option value="">-- Chọn hóa đơn mua còn nợ --</option>
+                      {invoicesList.map((inv) => (
+                        <option key={inv.id} value={inv.code}>
+                          {inv.code} - {inv.supplierName} (Nợ còn lại: {inv.remainingDebt.toLocaleString('vi-VN')} ₫)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Tên Nhà Cung Cấp (Tự động khóa)</label>
+                    <input
+                      type="text"
+                      value={editingItem.supplierName || ''}
+                      readOnly
+                      placeholder="Tự động điền theo hóa đơn..."
+                      className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="p-2 bg-white dark:bg-gray-900 rounded-lg border border-emerald-200 dark:border-emerald-800 flex justify-between items-center text-xs">
+                  <span className="text-gray-500 font-medium">Dư nợ còn lại của Hóa đơn này:</span>
+                  <span className="font-mono font-extrabold text-emerald-600 dark:text-emerald-400 text-sm">
+                    {(editingItem.remainingInvoiceDebt || 0).toLocaleString('vi-VN')} ₫
+                  </span>
+                </div>
+              </div>
+
+              {/* 1. CHỌN NGUỒN TIỀN CHI / QUỸ RÚT TIỀN */}
+              <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-900 space-y-3">
+                <label className="block text-[11px] font-bold text-blue-900 dark:text-blue-300 uppercase flex items-center gap-1">
+                  🏦 CHỌN NGUỒN TIỀN CHI / QUỸ RÚT TIỀN (Trừ số dư phân hệ Ngân hàng & Quỹ) *
+                </label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Hình thức thanh toán *</label>
+                    <select
+                      value={editingItem.paymentMethod || 'CHUYEN_KHOAN'}
+                      onChange={(e) => {
+                        const method = e.target.value as any;
+                        const defaultRef = fundsList.find(f => method === 'TIEN_MAT' ? f.type === 'CASH' : f.type === 'BANK')?.name || '';
+                        setEditingItem({ ...editingItem, paymentMethod: method, fundAccountName: defaultRef });
+                      }}
+                      className="w-full p-2 border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
+                      disabled={isLocked}
+                    >
+                      <option value="CHUYEN_KHOAN">Chuyển khoản Ngân hàng (Ủy nhiệm chi)</option>
+                      <option value="TIEN_MAT">Tiền mặt tại Quỹ</option>
+                      <option value="THE">Thẻ doanh nghiệp / POS</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Tài khoản Ngân hàng / Quỹ rút tiền *</label>
+                    <select
+                      value={editingItem.fundAccountName || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, fundAccountName: e.target.value })}
+                      className="w-full p-2 border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-semibold"
+                      disabled={isLocked}
+                      required
+                    >
+                      {allowedFunds.map((fund) => (
+                        <option key={fund.id} value={fund.name}>
+                          [{fund.type === 'BANK' ? 'NGÂN HÀNG' : 'QUỸ MẶT'}] {fund.name} (Dư: {fund.balance.toLocaleString('vi-VN')} ₫)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* SỐ TIỀN CHI VÀ RÀNG BUỘC VALIDATION */}
+              <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-xl border border-red-200 dark:border-red-900 space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="block text-[11px] font-bold text-red-900 dark:text-red-300 uppercase">
+                    💵 SỐ TIỀN CHI THANH TOÁN (₫) *
+                  </label>
+                  <span className="text-[10px] text-red-600 font-mono">
+                    Tối đa: {(editingItem.remainingInvoiceDebt || 0).toLocaleString('vi-VN')} ₫
+                  </span>
+                </div>
+
                 <input
                   type="text"
-                  value={editingItem.supplierName || ''}
-                  readOnly
-                  placeholder="Tự động điền theo hóa đơn..."
-                  className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
+                  value={formatNumberString(editingItem.amount ?? 0)}
+                  onChange={(e) => setEditingItem({ ...editingItem, amount: parseNumberString(e.target.value) })}
+                  className="w-full p-2.5 border border-red-300 dark:border-red-700 rounded bg-white dark:bg-gray-900 text-red-600 font-mono font-black text-base text-right font-bold"
+                  disabled={isLocked}
                   required
                 />
-              </div>
-            </div>
-
-            <div className="p-2 bg-white dark:bg-gray-900 rounded-lg border border-emerald-200 dark:border-emerald-800 flex justify-between items-center text-xs">
-              <span className="text-gray-500 font-medium">Dư nợ còn lại của Hóa đơn này:</span>
-              <span className="font-mono font-extrabold text-emerald-600 dark:text-emerald-400 text-sm">
-                {(editingItem.remainingInvoiceDebt || 0).toLocaleString('vi-VN')} ₫
-              </span>
-            </div>
-          </div>
-
-          {/* 1. CHỌN NGUỒN TIỀN CHI / QUỸ RÚT TIỀN */}
-          <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-900 space-y-3">
-            <label className="block text-[11px] font-bold text-blue-900 dark:text-blue-300 uppercase flex items-center gap-1">
-              🏦 CHỌN NGUỒN TIỀN CHI / QUỸ RÚT TIỀN (Trừ số dư phân hệ Ngân hàng & Quỹ) *
-            </label>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Hình thức thanh toán *</label>
-                <select
-                  value={editingItem.paymentMethod || 'CHUYEN_KHOAN'}
-                  onChange={(e) => setEditingItem({ ...editingItem, paymentMethod: e.target.value as any })}
-                  className="w-full p-2 border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
-                >
-                  <option value="CHUYEN_KHOAN">Chuyển khoản Ngân hàng (Ủy nhiệm chi)</option>
-                  <option value="TIEN_MAT">Tiền mặt tại Quỹ</option>
-                  <option value="THE">Thẻ doanh nghiệp / POS</option>
-                </select>
+                {editingItem.amount && editingItem.remainingInvoiceDebt && editingItem.amount > editingItem.remainingInvoiceDebt && (
+                  <p className="text-[11px] text-red-600 font-bold flex items-center gap-1">
+                    ⚠️ Cảnh báo: Số tiền chi ({editingItem.amount.toLocaleString('vi-VN')} ₫) vượt quá dư nợ còn lại ({editingItem.remainingInvoiceDebt.toLocaleString('vi-VN')} ₫)!
+                  </p>
+                )}
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Tài khoản Ngân hàng / Quỹ rút tiền *</label>
-                <select
-                  value={editingItem.fundAccountName || ''}
-                  onChange={(e) => setEditingItem({ ...editingItem, fundAccountName: e.target.value })}
-                  className="w-full p-2 border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-semibold"
-                  required
-                >
-                  {fundsList.map((fund) => (
-                    <option key={fund.id} value={fund.name}>
-                      [{fund.type === 'BANK' ? 'NGÂN HÀNG' : 'QUỸ MẶT'}] {fund.name} (Dư: {fund.balance.toLocaleString('vi-VN')} ₫)
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
+              {/* 3. ĐÍNH KÈM ỦY NHIỆM CHI / BIÊN LAI (FILE UPLOAD) */}
+              <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
+                <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase flex items-center gap-1">
+                  📎 ĐÍNH KÈM ỦY NHIỆM CHI (UNC) / BIÊN LAI NGÂN HÀNG (PDF, Ảnh) *
+                </label>
+                <div className="flex items-center gap-3">
+                  <label className="cursor-pointer px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-xs font-semibold flex items-center gap-1.5 shadow-sm text-gray-700 dark:text-gray-300">
+                    <Upload className="w-4 h-4 text-red-600" /> Tải Tệp UNC / Biên Lai
+                    <input type="file" onChange={handleFileUpload} className="hidden" disabled={isLocked} />
+                  </label>
+                  <span className="text-[11px] text-gray-400">Đính kèm chứng từ đối chiếu ngân hàng hoặc phiếu nộp tiền...</span>
+                </div>
 
-          {/* SỐ TIỀN CHI VÀ RÀNG BUỘC VALIDATION */}
-          <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-xl border border-red-200 dark:border-red-900 space-y-2">
-            <div className="flex justify-between items-center">
-              <label className="block text-[11px] font-bold text-red-900 dark:text-red-300 uppercase">
-                💵 SỐ TIỀN CHI THANH TOÁN (₫) *
-              </label>
-              <span className="text-[10px] text-red-600 font-mono">
-                Tối đa: {(editingItem.remainingInvoiceDebt || 0).toLocaleString('vi-VN')} ₫
-              </span>
-            </div>
-
-            <input
-              type="number"
-              min={1}
-              max={editingItem.remainingInvoiceDebt || 1000000000}
-              value={editingItem.amount || 0}
-              onChange={(e) => setEditingItem({ ...editingItem, amount: parseFloat(e.target.value) || 0 })}
-              className="w-full p-2.5 border border-red-300 dark:border-red-700 rounded bg-white dark:bg-gray-900 text-red-600 font-mono font-black text-base text-right"
-              required
-            />
-            {editingItem.amount && editingItem.remainingInvoiceDebt && editingItem.amount > editingItem.remainingInvoiceDebt && (
-              <p className="text-[11px] text-red-600 font-bold flex items-center gap-1">
-                ⚠️ Cảnh báo: Số tiền chi ({editingItem.amount.toLocaleString('vi-VN')} ₫) vượt quá dư nợ còn lại ({editingItem.remainingInvoiceDebt.toLocaleString('vi-VN')} ₫)!
-              </p>
-            )}
-          </div>
-
-          {/* 3. ĐÍNH KÈM ỦY NHIỆM CHI / BIÊN LAI (FILE UPLOAD) */}
-          <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
-            <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase flex items-center gap-1">
-              📎 ĐÍNH KÈM ỦY NHIỆM CHI (UNC) / BIÊN LAI NGÂN HÀNG (PDF, Ảnh)
-            </label>
-            <div className="flex items-center gap-3">
-              <label className="cursor-pointer px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-xs font-semibold flex items-center gap-1.5 shadow-sm text-gray-700 dark:text-gray-300">
-                <Upload className="w-4 h-4 text-red-600" /> Tải Tệp UNC / Biên Lai
-                <input type="file" onChange={handleFileUpload} className="hidden" />
-              </label>
-              <span className="text-[11px] text-gray-400">Đính kèm chứng từ đối chiếu ngân hàng hoặc phiếu nộp tiền...</span>
-            </div>
-
-            {formFiles.length > 0 && (
-              <div className="flex flex-wrap gap-2 pt-1">
-                {formFiles.map((f, idx) => (
-                  <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-800 text-xs">
-                    <Paperclip className="w-3.5 h-3.5 text-gray-400" />
-                    <span className="font-medium text-gray-800 dark:text-gray-200">{f.name}</span>
-                    <span className="text-[10px] text-gray-400">({f.size})</span>
-                    <button
-                      type="button"
-                      onClick={() => setFormFiles(formFiles.filter((_, i) => i !== idx))}
-                      className="text-gray-400 hover:text-red-500 ml-1"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+                {formFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {formFiles.map((f, idx) => (
+                      <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-800 text-xs">
+                        <Paperclip className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="font-medium text-gray-800 dark:text-gray-200">{f.name}</span>
+                        <span className="text-[10px] text-gray-400">({f.size})</span>
+                        {!isLocked && (
+                          <button
+                            type="button"
+                            onClick={() => setFormFiles(formFiles.filter((_, i) => i !== idx))}
+                            className="text-gray-400 hover:text-red-500 ml-1"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+                {modalMode === 'edit' && editingItem.attachmentName && formFiles.length === 0 && (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-800 text-xs w-fit">
+                    <Paperclip className="w-3.5 h-3.5 text-gray-400" />
+                    <span className="font-medium text-emerald-600 dark:text-emerald-400">{editingItem.attachmentName}</span>
+                    <span className="text-[10px] text-gray-400">(Hiện có)</span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* 4. PHÂN QUYỀN DUYỆT & TRẠNG THÁI (CHO_DUYET READ-ONLY KHI CREATING) */}
-          {modalMode === 'edit' && (
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">TRẠNG THÁI DUYỆT PHIẾU CHI *</label>
-              <select
-                value={editingItem.status || 'CHO_DUYET'}
-                onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
-              >
-                <option value="CHO_DUYET">Chờ duyệt (Chờ chi tiền)</option>
-                <option value="DA_THANH_TOAN">Đã duyệt (Đã chi tiền & hạch toán sổ quỹ)</option>
-                <option value="DA_HUY">Đã hủy phiếu chi</option>
-              </select>
-            </div>
-          )}
+              {/* 4. PHÂN QUYỀN DUYỆT & TRẠNG THÁI (CHO_DUYET READ-ONLY KHI CREATING) */}
+              {modalMode === 'edit' && (
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">TRẠNG THÁI DUYỆT PHIẾU CHI *</label>
+                  <select
+                    value={editingItem.status || 'CHO_DUYET'}
+                    onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as any })}
+                    className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
+                    disabled={isLocked}
+                  >
+                    <option value="CHO_DUYET">Chờ duyệt (Chờ chi tiền)</option>
+                    <option value="DA_THANH_TOAN">Đã duyệt (Đã chi tiền & hạch toán sổ quỹ)</option>
+                    <option value="DA_HUY">Đã hủy phiếu chi</option>
+                  </select>
+                </div>
+              )}
 
-          <div>
-            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">DIỄN GIẢI / LÝ DO CHI TIỀN</label>
-            <textarea
-              value={editingItem.notes || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-              rows={2}
-              placeholder="Nhập nội dung diễn giải thanh toán..."
-            />
-          </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">DIỄN GIẢI / LÝ DO CHI TIỀN</label>
+                <textarea
+                  value={editingItem.notes || ''}
+                  onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
+                  className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                  rows={2}
+                  placeholder="Nhập nội dung diễn giải thanh toán..."
+                  disabled={isLocked}
+                />
+              </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-gray-200 dark:border-gray-800">
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold"
-            >
-              Hủy
-            </button>
-            <button
-              type="submit"
-              className="flex items-center gap-1.5 px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold shadow-sm transition"
-            >
-              <DollarSign className="w-4 h-4" /> {modalMode === 'create' ? 'Lập Phiếu Chi (Chờ duyệt)' : 'Lưu Cập Nhật'}
-            </button>
-          </div>
-        </form>
+              <div className="flex justify-end gap-2 pt-3 border-t border-gray-200 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="flex items-center gap-1.5 px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold shadow-sm transition"
+                  disabled={isLocked}
+                >
+                  {modalMode === 'create' ? 'Lập Phiếu Chi (Chờ duyệt)' : 'Lưu Cập Nhật'}
+                </button>
+              </div>
+            </form>
+          );
+        })()}
       </Modal>
     </div>
   );

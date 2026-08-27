@@ -365,8 +365,8 @@ export function SupplierStoragesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? '📦 Thêm Khu vực kho mới' : '⚙️ Sửa thông tin khu vực kho'}
-        width="max-w-xl"
+        title={modalMode === 'create' ? 'Thêm điểm kho (Zone đối tác) mới' : 'Chỉnh sửa thông tin điểm kho đối tác'}
+        size="erp"
       >
         <form onSubmit={handleSave} className="space-y-4 text-sm">
           {/* Group 1: Thông tin chung */}
@@ -512,14 +512,33 @@ export function SupplierStoragesPage() {
             </div>
 
             <div className="pt-2.5 border-t dark:border-gray-800">
-              <label className="block text-[10px] font-bold text-gray-500 uppercase">Giờ vận hành (Operating Hours)</label>
-              <input
-                type="text"
-                value={editingItem.operatingHours || '08:00 - 17:30'}
-                onChange={(e) => setEditingItem({ ...editingItem, operatingHours: e.target.value })}
-                className="w-full mt-1 p-2 border rounded font-mono text-xs dark:bg-gray-950 dark:border-gray-700"
-                placeholder="Ví dụ: 08:00 - 17:30 (Thứ 2 - Thứ 6)"
-              />
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Khung giờ vận hành (Operating Hours)</label>
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={(editingItem.operatingHours || '08:00 - 17:30').split(' - ')[0] || '08:00'}
+                  onChange={(e) => {
+                    const close = (editingItem.operatingHours || '08:00 - 17:30').split(' - ')[1] || '17:30';
+                    setEditingItem({ ...editingItem, operatingHours: `${e.target.value} - ${close}` });
+                  }}
+                  className="w-full p-2 border rounded font-mono text-xs dark:bg-gray-950 dark:border-gray-700"
+                >
+                  {['06:00', '06:30', '07:00', '07:30', '08:00', '08:30', '09:00'].map(t => (
+                    <option key={t} value={t}>Mở: {t}</option>
+                  ))}
+                </select>
+                <select
+                  value={(editingItem.operatingHours || '08:00 - 17:30').split(' - ')[1] || '17:30'}
+                  onChange={(e) => {
+                    const open = (editingItem.operatingHours || '08:00 - 17:30').split(' - ')[0] || '08:00';
+                    setEditingItem({ ...editingItem, operatingHours: `${open} - ${e.target.value}` });
+                  }}
+                  className="w-full p-2 border rounded font-mono text-xs dark:bg-gray-950 dark:border-gray-700"
+                >
+                  {['16:30', '17:00', '17:30', '18:00', '19:00', '20:00', '21:00', '22:00', '24/24'].map(t => (
+                    <option key={t} value={t}>Đóng: {t}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
