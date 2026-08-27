@@ -17,50 +17,7 @@ import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import { compressImage } from '@/shared/utils/imageCompressor';
-import { PermissionGuard } from '@/shared/components/ui/PermissionGuard';
-
-const parseAddressString = (fullAddress: string | undefined) => {
-  if (!fullAddress) {
-    return { province: '', district: '', ward: '', addressDetail: '' };
-  }
-  const parts = fullAddress.split(',').map(s => s.trim()).filter(Boolean);
-  if (parts.length >= 4) {
-    const province = parts[parts.length - 1];
-    const district = parts[parts.length - 2];
-    const ward = parts[parts.length - 3];
-    const addressDetail = parts.slice(0, parts.length - 3).join(', ');
-    return { province, district, ward, addressDetail };
-  } else if (parts.length === 3) {
-    const province = parts[2];
-    const district = parts[1];
-    const ward = parts[0];
-    return { province, district, ward, addressDetail: '' };
-  } else if (parts.length === 2) {
-    const province = parts[1];
-    const district = parts[0];
-    return { province, district, ward: '', addressDetail: '' };
-  } else {
-    return { province: '', district: '', ward: '', addressDetail: fullAddress };
-  }
-};
-
-const genderLabel: Record<string, string> = {
-  MALE: 'Nam',
-  FEMALE: 'Nữ',
-  OTHER: 'Khác'
-};
-
-const groupLabel: Record<string, string> = {
-  'GRP-VIP': 'Khách hàng VIP / Doanh nghiệp',
-  'GRP-RETAIL': 'Khách hàng Bán lẻ',
-  'GRP-WHOLESALE': 'Đại lý / Bán sỉ'
-};
-
-const areaLabel: Record<string, string> = {
-  'AREA-HN': 'Khu vực Hà Nội & Miền Bắc',
-  'AREA-HCM': 'Khu vực TP. Hồ Chí Minh & Miền Nam',
-  'AREA-DN': 'Khu vực Đà Nẵng & Miền Trung'
-};
+import { UnifiedSearchInput } from '@/shared/components/ui/UnifiedSearchInput';
 
 const TIER_THRESHOLDS = {
   BRONZE: 0,
@@ -507,17 +464,14 @@ export function CustomersPage() {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="flex-1 w-full">
-            <input
-              type="text"
-              placeholder="Tìm theo tên, SĐT, email..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
-          <div className="w-full sm:w-auto flex items-center gap-3 shrink-0">
+        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <UnifiedSearchInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder="Tìm kiếm khách hàng theo tên, SĐT, email..."
+            containerClassName="w-full sm:w-96"
+          />
+          <div className="w-full sm:w-auto flex items-center gap-3">
             <select
               value={selectedTier}
               onChange={(e) => setSelectedTier(e.target.value)}

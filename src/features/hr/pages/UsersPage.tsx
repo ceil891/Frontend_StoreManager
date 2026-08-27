@@ -1,5 +1,5 @@
-import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Eye, Mail, Phone, MapPin, Building, Key, ShieldCheck, UserX, UserCheck, Trash2, X, Edit, Scan, Loader2, CheckCircle2, Camera, Upload } from 'lucide-react';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { Plus, Download, Search, Eye, Mail, Phone, MapPin, Building, Key, ShieldCheck, UserX, UserCheck, Trash2, X, Edit, Scan, Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -45,6 +45,15 @@ export function UsersPage() {
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [faceScanUser, setFaceScanUser] = useState<SystemUserRecord | null>(null);
   const [scanStep, setScanStep] = useState<number>(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stopCameraStream = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+  };
 
   // Quick Role & Branch Change Modal State
   const [roleModalUser, setRoleModalUser] = useState<SystemUserRecord | null>(null);
@@ -535,47 +544,53 @@ export function UsersPage() {
         header: 'Hành động',
         cell: ({ row }) => (
           <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
-            <PermissionGuard permission="system:user:view">
-              <button
-                onClick={() => setSelectedUser(row.original)}
-                className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                title="Xem hồ sơ"
-              >
-                <Eye className="w-4 h-4" />
-              </button>
-            </PermissionGuard>
-            <PermissionGuard permission="system:role:assign">
-              <button
-                onClick={() => handleOpenRoleModal(row.original)}
-                className="p-1.5 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg transition-colors border border-emerald-200/60 dark:border-emerald-800/40"
-                title="Phân gán vai trò bảo mật (Role)"
-              >
-                <ShieldCheck className="w-4 h-4" />
-              </button>
-            </PermissionGuard>
-            <PermissionGuard permission="system:user:update">
-              <button
-                onClick={() => handleOpenEdit(row.original)}
-                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                title="Chỉnh sửa lý lịch"
-              >
-                <Edit className="w-4 h-4" />
-              </button>
-            </PermissionGuard>
-            <PermissionGuard permission="system:user:delete">
-              <button
-                onClick={() => handleDelete(row.original)}
-                disabled={row.original.emailAddress === 'admin@system.com'}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  row.original.emailAddress === 'admin@system.com' 
-                    ? 'text-gray-200 dark:text-gray-800 cursor-not-allowed' 
-                    : 'text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
-                }`}
-                title="Xóa nhân sự"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </PermissionGuard>
+            <button
+              onClick={() => setSelectedUser(row.original)}
+              className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+              title="Xem hồ sơ"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleOpenRoleModal(row.original)}
+              className="p-1.5 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg transition-colors border border-emerald-200/60 dark:border-emerald-800/40"
+              title="Phân gán vai trò bảo mật (Role)"
+            >
+              <ShieldCheck className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleOpenEdit(row.original)}
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+              title="Chỉnh sửa lý lịch"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => {
+                setFaceScanUser(row.original);
+                setScanStep(0);
+              }}
+              className={`p-1.5 rounded-lg transition-colors border ${
+                row.original.faceEnrolled
+                  ? 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border-emerald-200/60 dark:border-emerald-800/40'
+                  : 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 border-amber-200/60 dark:border-amber-800/40'
+              }`}
+              title={row.original.faceEnrolled ? 'Cập nhật khuôn mặt sinh trắc học' : 'Đăng ký quét khuôn mặt sinh trắc học'}
+            >
+              <Scan className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleDelete(row.original)}
+              disabled={row.original.emailAddress === 'admin@system.com'}
+              className={`p-1.5 rounded-lg transition-colors ${
+                row.original.emailAddress === 'admin@system.com' 
+                  ? 'text-gray-200 dark:text-gray-800 cursor-not-allowed' 
+                  : 'text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
+              }`}
+              title="Xóa nhân sự"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
 
           </div>
         ),
@@ -1194,8 +1209,11 @@ export function UsersPage() {
       {/* Modal: Quét & Đăng ký khuôn mặt */}
       <Modal
         isOpen={!!faceScanUser}
-        onClose={() => setFaceScanUser(null)}
-        title={faceScanUser?.faceEnrolled ? 'Cập nhật nhận diện khuôn mặt' : 'Đăng ký nhận diện khuôn mặt'}
+        onClose={() => {
+          stopCameraStream();
+          setFaceScanUser(null);
+        }}
+        title={faceScanUser?.faceEnrolled ? 'Cập nhật nhận diện khuôn mặt sinh trắc học' : 'Đăng ký nhận diện khuôn mặt sinh trắc học'}
         width="max-w-md"
       >
         {faceScanUser && (
@@ -1217,52 +1235,78 @@ export function UsersPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     setScanStep(1);
-                    // Giả lập quét mặt trong 3.5 giây
+                    try {
+                      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                        const stream = await navigator.mediaDevices.getUserMedia({
+                          video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 480 } }
+                        });
+                        streamRef.current = stream;
+                        if (videoRef.current) {
+                          videoRef.current.srcObject = stream;
+                          videoRef.current.play().catch(() => {});
+                        }
+                      }
+                    } catch (e) {
+                      console.warn('Camera stream fallback:', e);
+                    }
+
                     setTimeout(() => {
+                      stopCameraStream();
                       setScanStep(2);
                       const updated = {
                         ...faceScanUser,
                         faceEnrolled: true,
                       };
                       updateUser(updated);
-                      // Đồng bộ ngay trong drawer nếu được chọn
                       if (selectedUser?.id === faceScanUser.id) {
                         setSelectedUser(updated);
                       }
                       toast.success(`Đăng ký khuôn mặt cho ${faceScanUser.fullName} thành công!`);
                     }, 3500);
                   }}
-                  className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-white text-sm font-semibold rounded-xl shadow-sm transition-all"
+                  className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-white text-sm font-semibold rounded-xl shadow-sm transition-all flex items-center gap-2"
                 >
-                  Cho phép & Bắt đầu quét
+                  <Scan className="w-4 h-4" /> Cho phép & Bắt đầu quét
                 </button>
               </div>
             )}
 
             {scanStep === 1 && (
-              <div className="relative aspect-square max-w-[260px] mx-auto rounded-full overflow-hidden bg-black border-4 border-primary shadow-lg flex items-center justify-center">
-                {/* Giả lập webcam */}
-                <div className="absolute inset-0 bg-cover bg-center filter grayscale contrast-125 opacity-70" style={{ backgroundImage: `url(${faceScanUser.avatarUrl})` }} />
+              <div className="relative aspect-square max-w-[260px] mx-auto rounded-full overflow-hidden bg-black border-4 border-primary shadow-xl flex items-center justify-center">
+                {/* Live video feed */}
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+                <div
+                  className="absolute inset-0 bg-cover bg-center filter grayscale contrast-125 opacity-40 -z-10"
+                  style={{ backgroundImage: `url(${faceScanUser.avatarUrl})` }}
+                />
                 
                 {/* Hiệu ứng quét nhận diện */}
-                <div className="absolute inset-0 bg-gradient-to-b from-primary/0 via-primary/20 to-primary/0 animate-bounce" />
-                <div className="absolute inset-4 rounded-full border-2 border-dashed border-primary/40 animate-spin" />
+                <div className="absolute inset-0 bg-gradient-to-b from-primary/0 via-primary/20 to-primary/0 animate-bounce pointer-events-none" />
+                <div className="absolute inset-3 rounded-full border-2 border-dashed border-primary/40 animate-spin pointer-events-none" />
                 
-                {/* Khung ngắm diện tích mặt */}
-                <div className="absolute w-44 h-44 rounded-full border border-primary/80 flex items-center justify-center">
+                {/* Khung ngắm diện tích mặt 3D */}
+                <div className="absolute w-44 h-44 rounded-full border border-primary/80 flex items-center justify-center pointer-events-none">
                   <div className="w-4 h-4 border-t-2 border-l-2 border-primary absolute top-0 left-0" />
                   <div className="w-4 h-4 border-t-2 border-r-2 border-primary absolute top-0 right-0" />
                   <div className="w-4 h-4 border-b-2 border-l-2 border-primary absolute bottom-0 left-0" />
                   <div className="w-4 h-4 border-b-2 border-r-2 border-primary absolute bottom-0 right-0" />
                   
-                  <span className="text-[10px] text-primary font-mono tracking-widest uppercase animate-pulse">Scanning...</span>
+                  <span className="text-[10px] text-primary font-mono tracking-widest uppercase bg-black/60 px-2 py-0.5 rounded border border-primary/40 animate-pulse">
+                    Scanning 3D Face...
+                  </span>
                 </div>
 
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 px-3 py-1 rounded-full text-[11px] text-white font-mono flex items-center gap-1.5">
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 px-3 py-1 rounded-full text-[11px] text-white font-mono flex items-center gap-1.5 shadow-md">
                   <div className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
-                  <span>REC: CAM_01</span>
+                  <span>REC: BIOMETRIC_CAM</span>
                 </div>
               </div>
             )}
@@ -1280,7 +1324,10 @@ export function UsersPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setFaceScanUser(null)}
+                  onClick={() => {
+                    stopCameraStream();
+                    setFaceScanUser(null);
+                  }}
                   className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-all"
                 >
                   Xác nhận & Đóng

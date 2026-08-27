@@ -4,12 +4,13 @@ import { Plus, Download, Search, Filter, Eye, Building2, CreditCard, Building, S
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 
 
+import type { ColumnDef } from '@tanstack/react-table';
 import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
-import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type CorporateBankAccount } from '../store/financeStore';
 import { toast } from 'sonner';
 import { exportToCsv } from '@/shared/utils/exportCsv';
+import { UnifiedSearchInput } from '@/shared/components/ui/UnifiedSearchInput';
 
 const formatBalance = (amount: number, currency: string) => {
   if (currency === 'VND') {
@@ -284,19 +285,13 @@ export function BankAccountsPage() {
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="flex-1 relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-gray-400" />
-            </div>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm kiếm tài khoản theo tên ngân hàng, số tài khoản hoặc mã SWIFT/BIC..."
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all"
-            />
-          </div>
-          <button className="flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors text-sm font-medium">
+          <UnifiedSearchInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder="Tìm kiếm tài khoản theo tên ngân hàng, số tài khoản hoặc mã SWIFT/BIC..."
+            containerClassName="flex-1 w-full sm:max-w-md"
+          />
+          <button className="flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors text-sm">
             <Filter className="w-4 h-4" /> Lọc tài khoản
           </button>
         </div>

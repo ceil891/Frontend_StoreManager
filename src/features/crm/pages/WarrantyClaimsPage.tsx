@@ -1,11 +1,12 @@
-import { useMemo, useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit, Trash2 } from 'lucide-react';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { Plus, Search, Eye, Edit, Trash2, Scan, Sparkles, ShieldCheck } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { useCrmStore } from '../store/crmStore';
 import { axiosClient } from '@/shared/lib/axiosClient';
+import { playBarcodeBeep } from '@/shared/utils/barcodeScanner';
 
 export interface ClaimRecord {
   id: string;
@@ -58,6 +59,19 @@ export function WarrantyClaimsPage() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ClaimRecord | null>(null);
   
+  // Barcode scanner modal
+  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
+  const [targetScanField, setTargetScanField] = useState<'search' | 'form-warranty'>('search');
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stopCameraStream = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+  };
+
   // Create / Edit modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ClaimRecord | null>(null);
@@ -88,6 +102,48 @@ export function WarrantyClaimsPage() {
       setMockCustomer(null);
     }
   };
+
+  // Hardware Barcode Scanner listener
+  useEffect(() => {
+    let buffer = '';
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const now = Date.now();
+      if (now - lastKeyTime > 65) {
+        buffer = '';
+      }
+      lastKeyTime = now;
+
+      if (e.key === 'Enter') {
+        if (buffer.length >= 3) {
+          const scanned = buffer.trim();
+          buffer = '';
+          playBarcodeBeep();
+          toast.success(`Máy quét mã vạch: Đã nhận diện mã [${scanned}]`);
+
+          if (isModalOpen) {
+            setForm(prev => ({ ...prev, warrantyCode: scanned }));
+            setMockCustomer({
+              name: 'Nguyễn Văn A',
+              phone: '0988123456',
+              product: 'iPhone 15 Pro Max',
+            });
+          } else {
+            setSearch(scanned);
+          }
+        }
+        return;
+      }
+
+      if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen]);
 
   const generateClaimCode = () => {
     const today = new Date();
@@ -287,8 +343,23 @@ export function WarrantyClaimsPage() {
     <>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Yêu cầu bảo hành</h1>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Yêu cầu Bảo hành</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Tiếp nhận, xử lý và tra cứu phiếu bảo hành bằng máy quét mã vạch hoặc Camera.
+            </p>
+          </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setTargetScanField('search');
+                setIsCameraScannerOpen(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors cursor-pointer"
+              title="Quét mã vạch / Serial / QR Code bằng Camera"
+            >
+              <Scan className="w-4 h-4" /> Quét mã vạch / Serial
+            </button>
             <button
               className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm font-medium shadow-sm"
               onClick={handleOpenCreate}
@@ -304,9 +375,19 @@ export function WarrantyClaimsPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm kiếm theo mã yêu cầu, mã bảo hành, người xử lý..."
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-all"
+              placeholder="Nhập hoặc quét mã yêu cầu, mã bảo hành, serial, người xử lý..."
+              className="block w-full pl-10 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm transition-all"
             />
+            <button
+              onClick={() => {
+                setTargetScanField('search');
+                setIsCameraScannerOpen(true);
+              }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-indigo-600 transition-colors"
+              title="Mở Camera quét mã"
+            >
+              <Scan className="w-4 h-4" />
+            </button>
           </div>
         </div>
         <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row) => setSelected(row)} />
@@ -397,15 +478,29 @@ export function WarrantyClaimsPage() {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã bảo hành</label>
-              <input
-                type="text"
-                required
-                value={form.warrantyCode}
-                onBlur={handleWarrantyCodeBlur}
-                onChange={(e) => setForm({ ...form, warrantyCode: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono"
-              />
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã bảo hành / Serial</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  value={form.warrantyCode}
+                  onBlur={handleWarrantyCodeBlur}
+                  onChange={(e) => setForm({ ...form, warrantyCode: e.target.value })}
+                  placeholder="Quét hoặc nhập mã bảo hành/Serial..."
+                  className="w-full pl-3 pr-9 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTargetScanField('form-warranty');
+                    setIsCameraScannerOpen(true);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-indigo-600 transition-colors"
+                  title="Quét mã vạch bảo hành"
+                >
+                  <Scan className="w-4 h-4" />
+                </button>
+              </div>
               {mockCustomer && (
                 <div className="mt-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800/30 text-sm">
                   <p><strong>Khách hàng:</strong> {mockCustomer.name} - {mockCustomer.phone}</p>
@@ -518,6 +613,94 @@ export function WarrantyClaimsPage() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal Quét mã vạch bằng Camera */}
+      <Modal
+        isOpen={isCameraScannerOpen}
+        onClose={() => {
+          stopCameraStream();
+          setIsCameraScannerOpen(false);
+        }}
+        title="Quét mã vạch / Serial tiếp nhận bảo hành"
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">
+            Hướng camera về phía tem mã vạch Serial / Mã sổ bảo hành hoặc chọn mã mô phỏng để test nhanh:
+          </p>
+
+          <div className="relative aspect-video rounded-xl overflow-hidden bg-slate-950 border-2 border-indigo-500 shadow-xl flex items-center justify-center">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            
+            <div className="absolute inset-x-4 h-0.5 bg-red-500 shadow-[0_0_12px_#ef4444] animate-bounce pointer-events-none" />
+            
+            <div className="w-56 h-28 border-2 border-dashed border-indigo-400/80 rounded-lg flex items-center justify-center relative pointer-events-none">
+              <div className="w-3 h-3 border-t-2 border-l-2 border-indigo-400 absolute -top-1 -left-1" />
+              <div className="w-3 h-3 border-t-2 border-r-2 border-indigo-400 absolute -top-1 -right-1" />
+              <div className="w-3 h-3 border-b-2 border-l-2 border-indigo-400 absolute -bottom-1 -left-1" />
+              <div className="w-3 h-3 border-b-2 border-r-2 border-indigo-400 absolute -bottom-1 -right-1" />
+              <span className="text-[10px] text-indigo-300 font-mono tracking-wider bg-black/60 px-2 py-0.5 rounded">
+                CLAIM / SERIAL ALIGN
+              </span>
+            </div>
+
+            <div className="absolute bottom-2 left-3 bg-black/70 px-2.5 py-0.5 rounded text-[10px] text-white font-mono flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+              <span>SCANNER: READY</span>
+            </div>
+          </div>
+
+          <div className="bg-gray-50 dark:bg-gray-900/60 p-3 rounded-xl border border-gray-200 dark:border-gray-700">
+            <p className="text-[11px] font-semibold text-gray-500 mb-2">Mã mẫu test thử (bấm để quét ngay):</p>
+            <div className="flex flex-wrap gap-2">
+              {['WRT-1001', 'YCBH-240827-1001', 'SN-IP15PM-0982', 'WRT-8821'].map((code) => (
+                <button
+                  key={code}
+                  type="button"
+                  onClick={() => {
+                    playBarcodeBeep();
+                    toast.success(`Đã quét mã: ${code}`);
+                    if (targetScanField === 'form-warranty') {
+                      setForm(prev => ({ ...prev, warrantyCode: code }));
+                      setMockCustomer({
+                        name: 'Nguyễn Văn A',
+                        phone: '0988123456',
+                        product: 'iPhone 15 Pro Max',
+                      });
+                    } else {
+                      setSearch(code);
+                    }
+                    stopCameraStream();
+                    setIsCameraScannerOpen(false);
+                  }}
+                  className="px-2.5 py-1 text-xs font-mono font-semibold bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:border-indigo-500 hover:text-indigo-600 transition-colors shadow-2xs cursor-pointer"
+                >
+                  {code}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                stopCameraStream();
+                setIsCameraScannerOpen(false);
+              }}
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-semibold transition-colors"
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
       </Modal>
     </>
   );

@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { User } from 'lucide-react';
 import { resolveUserAvatarUrl } from '@/shared/utils/userAvatar';
 
 interface UserAvatarProps {
   name: string;
   avatarUrl?: string | null;
+  src?: string | null;
   seed?: string;
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
@@ -18,9 +19,15 @@ const sizeClasses = {
   xl: 'w-24 h-24 text-2xl',
 };
 
-export function UserAvatar({ name, avatarUrl, seed, size = 'md', className = '' }: UserAvatarProps) {
+export function UserAvatar({ name, avatarUrl, src: legacySrc, seed, size = 'md', className = '' }: UserAvatarProps) {
   const [failed, setFailed] = useState(false);
-  const src = resolveUserAvatarUrl(failed ? null : avatarUrl, seed ?? name);
+  const actualUrl = avatarUrl || legacySrc;
+
+  useEffect(() => {
+    setFailed(false);
+  }, [actualUrl]);
+
+  const resolvedSrc = resolveUserAvatarUrl(failed ? null : actualUrl, seed ?? name);
   const dim = sizeClasses[size];
 
   if (failed) {
@@ -36,7 +43,7 @@ export function UserAvatar({ name, avatarUrl, seed, size = 'md', className = '' 
 
   return (
     <img
-      src={src}
+      src={resolvedSrc}
       alt={name}
       title={name}
       onError={() => setFailed(true)}
