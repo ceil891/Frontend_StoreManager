@@ -17,6 +17,7 @@ import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import { compressImage } from '@/shared/utils/imageCompressor';
+import { UnifiedSearchInput } from '@/shared/components/ui/UnifiedSearchInput';
 
 const TIER_THRESHOLDS = {
   BRONZE: 0,
@@ -399,15 +400,12 @@ export function CustomersPage() {
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="w-full sm:w-80">
-            <input
-              type="text"
-              placeholder="Tìm theo tên, SĐT, email..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary"
-            />
-          </div>
+          <UnifiedSearchInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder="Tìm kiếm khách hàng theo tên, SĐT, email..."
+            containerClassName="w-full sm:w-96"
+          />
           <div className="w-full sm:w-auto flex items-center gap-3">
             <select
               value={selectedTier}

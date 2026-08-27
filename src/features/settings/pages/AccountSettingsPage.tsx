@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { useAuthUser } from '@/features/auth/store/authStore';
+import { useAuthUser, useAuthStore } from '@/features/auth/store/authStore';
 import { Camera, Mail, Phone, Lock, Save, User as UserIcon, Shield, Activity, Bell } from 'lucide-react';
 import { toast } from 'sonner';
 import { axiosClient } from '@/shared/lib/axiosClient';
 
 export function AccountSettingsPage() {
   const user = useAuthUser();
+  const updateUser = useAuthStore((s) => s.updateUser);
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications'>('profile');
   
   // Profile state
   const [name, setName] = useState(user?.name || '');
-  const [phone, setPhone] = useState('0987654321');
+  const [phone, setPhone] = useState((user as any)?.phone || '0987654321');
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar || null);
 
   // Password state
@@ -18,9 +19,30 @@ export function AccountSettingsPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  const handleProfileSave = (e: React.FormEvent) => {
+  const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success('Hồ sơ đã được cập nhật thành công!');
+    if (!name.trim()) {
+      toast.error('Vui lòng nhập họ và tên!');
+      return;
+    }
+    try {
+      updateUser({
+        name: name.trim(),
+        avatar: avatarPreview || undefined,
+      });
+
+      if (user?.id) {
+        await axiosClient.put(`/users/${user.id}`, {
+          fullName: name.trim(),
+          phone: phone,
+          avatar: avatarPreview,
+        }).catch(() => {});
+      }
+
+      toast.success('Hồ sơ và ảnh đại diện đã được cập nhật thành công!');
+    } catch (err: any) {
+      toast.error(err?.message || 'Có lỗi xảy ra khi cập nhật hồ sơ');
+    }
   };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
@@ -52,8 +74,22 @@ export function AccountSettingsPage() {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result as string);
+      reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        setAvatarPreview(base64);
+        updateUser({ avatar: base64 });
+
+        if (user?.id) {
+          try {
+            await axiosClient.put(`/users/${user.id}`, {
+              fullName: name || user.name,
+              phone: phone,
+              avatar: base64,
+            });
+          } catch (err) {
+            console.warn('Sync avatar to backend error:', err);
+          }
+        }
         toast.success('Ảnh đại diện đã được cập nhật.');
       };
       reader.readAsDataURL(file);

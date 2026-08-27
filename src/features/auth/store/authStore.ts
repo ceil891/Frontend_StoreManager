@@ -35,6 +35,7 @@ interface AuthActions {
   loadPermissions: () => Promise<void>;
   // Used by axios interceptor to refresh tokens
   setAccessToken: (token: string) => void;
+  updateUser: (partialUser: Partial<User>) => void;
 }
 
 // ----------------------------------------------------------------
@@ -170,6 +171,13 @@ export const useAuthStore = create<AuthState & AuthActions>()(
       clearError: () => set({ error: null }),
 
       setAccessToken: (token) => set({ accessToken: token }),
+
+      updateUser: (partialUser) => {
+        const currentUser = get().user;
+        if (!currentUser) return;
+        const updated = { ...currentUser, ...partialUser };
+        set({ user: updated });
+      },
     }),
     {
       name: 'retailhub-auth',

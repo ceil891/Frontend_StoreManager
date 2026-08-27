@@ -1,0 +1,17 @@
+{
+  "admin": {
+    "email": "admin@storemanager.com",
+    "password": "password123",
+    "role": "SUPER_ADMIN"
+  },
+  "manager": {
+    "email": "manager@storemanager.com",
+    "password": "password123",
+    "role": "STORE_MANAGER"
+  },
+  "staff": {
+    "email": "staff@storemanager.com",
+    "password": "password123",
+    "role": "STAFF"
+  }
+}
