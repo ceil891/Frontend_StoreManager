@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { axiosClient } from '@/shared/lib/axiosClient';
@@ -40,13 +41,6 @@ const statusBadgeStyles = {
   DISCREPANCY_FLAGGED: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200',
 };
 
-const statusMap = {
-  IN_PROGRESS: 'Đang hoạt động',
-  CLOSED_VERIFIED: 'Đã kết thúc',
-  PENDING_AUDIT_VERIFICATION: 'Chờ đối soát',
-  DISCREPANCY_FLAGGED: 'Đã kết thúc (Có chênh lệch)',
-};
-
 import { usePosSessionStore } from '../store/posSessionStore';
 
 export function PosSessionsPage() {
@@ -56,7 +50,10 @@ export function PosSessionsPage() {
     addSession,
     updateSession,
     closeSession,
+    deleteSession,
   } = usePosSessionStore();
+
+  const [deletingSession, setDeletingSession] = useState<PosSessionRecord | null>(null);
 
   useEffect(() => {
     fetchSessions();
@@ -358,6 +355,13 @@ export function PosSessionsPage() {
             >
               <Edit className="w-4 h-4" />
             </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setDeletingSession(row.original); }}
+              title="Xóa ca làm việc"
+              className="p-2 text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors border border-transparent hover:border-red-500/20 dark:text-gray-400"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
         ),
       },
@@ -405,16 +409,16 @@ export function PosSessionsPage() {
         </div>
 
         {/* Filter Bar with Segmented Controls & Search */}
-        <div className="flex flex-col lg:flex-row gap-4 p-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm transition-all">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm transition-all">
           <SearchInput
             value={search}
             onValueChange={setSearch}
             placeholder="Tìm theo mã phiên, quầy hoặc thu ngân..."
-            containerClassName="flex-1 max-w-md"
+            containerClassName="flex-1 w-full"
           />
 
           {/* Dynamic Status Filters */}
-          <div className="flex flex-wrap items-center gap-1.5 bg-gray-100 dark:bg-gray-900/60 p-1 rounded-xl">
+          <div className="flex flex-wrap items-center gap-1.5 bg-gray-100 dark:bg-gray-900/60 p-1 rounded-xl shrink-0">
             {[
               { code: 'ALL', label: 'Tất cả' },
               { code: 'IN_PROGRESS', label: 'Đang hoạt động' },
@@ -437,13 +441,11 @@ export function PosSessionsPage() {
         </div>
 
         {/* Table View */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-          <ReusableDataTable 
-            columns={columns} 
-            data={filtered} 
-            onRowClick={(row) => setSelectedSessionId(row.id)} 
-          />
-        </div>
+        <ReusableDataTable 
+          columns={columns} 
+          data={filtered} 
+          onRowClick={(row) => setSelectedSessionId(row.id)} 
+        />
       </div>
 
       {/* Main shift dossier modal */}
@@ -944,6 +946,26 @@ export function PosSessionsPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Confirm Delete Shift Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deletingSession}
+        onClose={() => setDeletingSession(null)}
+        onConfirm={async () => {
+          if (!deletingSession) return;
+          try {
+            await deleteSession(deletingSession.id);
+            toast.success(`Đã xóa ca làm việc ${deletingSession.sessionCode} thành công!`);
+          } catch (e) {
+            toast.error('Lỗi khi xóa ca làm việc.');
+          } finally {
+            setDeletingSession(null);
+          }
+        }}
+        title="Xác nhận xóa ca làm việc"
+        description="Bạn có chắc chắn muốn xóa phiên làm việc này không? Dữ liệu đối soát ca sẽ bị loại bỏ khỏi danh sách."
+        itemName={deletingSession?.sessionCode}
+      />
     </>
   );
 }

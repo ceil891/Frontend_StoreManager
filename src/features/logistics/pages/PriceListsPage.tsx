@@ -507,10 +507,11 @@ export function PriceListsPage() {
                   <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Tỷ lệ markup (%)</label>
                   <input
                     type="text"
-                    value={editingList.markupPercentage ?? 0}
+                    value={editingList.markupPercentage === 0 ? '' : (editingList.markupPercentage ?? '')}
+                    placeholder="0"
                     onChange={(e) => {
-                      const clean = e.target.value.replace(/^0+(?=\d)/, '');
-                      setEditingList({ ...editingList, markupPercentage: parseFloat(clean) || 0 });
+                      const clean = e.target.value.replace(/[^0-9.]/g, '');
+                      setEditingList({ ...editingList, markupPercentage: clean === '' ? 0 : parseFloat(clean) || 0 });
                     }}
                     className="w-full px-3 py-2 border border-emerald-300 dark:border-emerald-700 rounded-lg text-xs text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-950/30"
                   />

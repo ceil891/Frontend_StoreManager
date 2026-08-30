@@ -6,6 +6,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { extractPageContent } from '@/shared/lib/apiHelpers';
 import { toast } from 'sonner';
+import { useAuthStore } from '@/features/auth/store/authStore';
 
 export interface RFQLineItem {
   id: string;
@@ -65,7 +66,8 @@ export function SupplierRequestsPage() {
   // Form attachments
   const [formFiles, setFormFiles] = useState<{ name: string; size: string }[]>([]);
 
-  const loggedInUser = 'Super Admin (Hưng)';
+  const currentUser = useAuthStore((s) => s.user);
+  const loggedInUser = currentUser?.fullName || currentUser?.name || currentUser?.username || 'Nhân viên thu mua';
 
   const fetchMasterData = async () => {
     try {
@@ -78,64 +80,26 @@ export function SupplierRequestsPage() {
           email: s.email || s.contactEmail || `contact@${(s.code || 'supplier').toLowerCase()}.vn`,
           code: s.code || s.supplierCode || `SUP-${idx + 1}`,
         }));
-        if (mapped.length === 0) {
-          setSuppliersList([
-            { id: 1, name: 'Công ty Coca Cola Việt Nam', email: 'sales@cocacola.com.vn', code: 'SUP-01' },
-            { id: 2, name: 'Công ty TNHH Vinamilk', email: 'procurement@vinamilk.com.vn', code: 'SUP-02' },
-            { id: 3, name: 'Công ty PepsiCo Việt Nam', email: 'contact@pepsico.com.vn', code: 'SUP-03' },
-            { id: 4, name: 'Công ty Unilever Việt Nam', email: 'supply@unilever.com.vn', code: 'SUP-04' },
-          ]);
-        } else {
-          setSuppliersList(mapped);
-        }
-      }).catch(() => {
-        setSuppliersList([
-          { id: 1, name: 'Công ty Coca Cola Việt Nam', email: 'sales@cocacola.com.vn', code: 'SUP-01' },
-          { id: 2, name: 'Công ty TNHH Vinamilk', email: 'procurement@vinamilk.com.vn', code: 'SUP-02' },
-          { id: 3, name: 'Công ty PepsiCo Việt Nam', email: 'contact@pepsico.com.vn', code: 'SUP-03' },
-        ]);
+        setSuppliersList(mapped);
       });
 
-      // Load products catalog
+      // Load products
       axiosClient.get('/products?size=500').then((res: any) => {
         const list = extractPageContent<any>(res);
         const mapped: ProductOption[] = list.map((p: any, idx: number) => ({
           id: p.id || idx + 1,
-          sku: p.sku || p.productCode || `SKU-${idx + 1}`,
+          sku: p.sku || `SKU-${idx + 1}`,
           name: p.name || p.productName || 'Sản phẩm',
-          unit: p.unit || p.unitName || 'Cái',
+          unit: p.unit || 'Cái',
         }));
-        if (mapped.length === 0) {
-          setProductsList([
-            { id: 1, sku: 'SKU-MILK-01', name: 'Sữa tươi Vinamilk 1L', unit: 'Hộp' },
-            { id: 2, sku: 'SKU-COCA-330', name: 'Nước ngọt Coca Cola 330ml', unit: 'Thùng' },
-            { id: 3, sku: 'SKU-PEPSI-15', name: 'Chai Pepsi 1.5L', unit: 'Chai' },
-          ]);
-        } else {
-          setProductsList(mapped);
-        }
-      }).catch(() => {
-        setProductsList([
-          { id: 1, sku: 'SKU-MILK-01', name: 'Sữa tươi Vinamilk 1L', unit: 'Hộp' },
-          { id: 2, sku: 'SKU-COCA-330', name: 'Nước ngọt Coca Cola 330ml', unit: 'Thùng' },
-        ]);
+        setProductsList(mapped);
       });
 
       // Load branches
       axiosClient.get('/branches').then((res: any) => {
         const list = extractPageContent<any>(res);
-        const names = list.map((b: any) => b.branchName || b.name || '').filter(Boolean);
-        if (names.length > 0) {
-          setBranchesList(names);
-        } else {
-          setBranchesList([
-            'Kho phân phối Trung tâm (Hà Nội)',
-            'Kho Chi nhánh Quận 1 (TP.HCM)',
-            'Kho tổng miền Trung (Đà Nẵng)',
-          ]);
-        }
-      }).catch(() => {
-        setBranchesList([
+        const mapped: string[] = list.map((b: any) => b.branchName || b.name || '').filter(Boolean);
+        setBranchesList(mapped.length > 0 ? mapped : [
           'Kho phân phối Trung tâm (Hà Nội)',
           'Kho Chi nhánh Quận 1 (TP.HCM)',
           'Kho tổng miền Trung (Đà Nẵng)',
@@ -150,36 +114,34 @@ export function SupplierRequestsPage() {
     try {
       setIsLoading(true);
       const res = await axiosClient.get('/purchase/orders?size=500');
-      const list = (res as any).content || res || [];
+      const list = extractPageContent<any>(res);
       const mapped: RFQRecord[] = (Array.isArray(list) ? list : []).map((item: any) => {
         let status: RFQRecord['status'] = 'CHO_BAO_GIA';
         if (item.status === 'CONFIRMED' || item.status === 'COMPLETED' || item.status === 'APPROVED') status = 'DA_BAO_GIA';
         else if (item.status === 'CANCELLED') status = 'DA_HUY';
         
-        const suppName = item.supplierName || item.supplier?.name || 'Công ty Coca Cola Việt Nam';
+        const suppName = item.supplierName || item.supplier?.name || 'Nhà cung cấp';
+        const rawDetails = Array.isArray(item.details) && item.details.length > 0 ? item.details : (Array.isArray(item.poLines) ? item.poLines : (Array.isArray(item.items) ? item.items : []));
         return {
           id: String(item.id),
-          rfqCode: item.poNumber?.startsWith('RFQ-') ? item.poNumber : `RFQ-2026-${String(item.id).padStart(4, '0')}`,
+          rfqCode: item.poCode || item.poNumber || `RFQ-2026-${String(item.id).padStart(4, '0')}`,
           selectedSuppliers: [suppName],
           supplierName: suppName,
           supplierEmails: [`contact@${suppName.split(' ')[0].toLowerCase()}.vn`],
-          destinationBranch: item.destinationStore || 'Kho phân phối Trung tâm (Hà Nội)',
-          sentDate: item.orderDate || new Date().toISOString().split('T')[0],
-          expiryDate: item.estDeliveryDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-          handler: item.orderedBy || loggedInUser,
+          destinationBranch: item.branchName || item.destinationStore || 'Kho phân phối Trung tâm (Hà Nội)',
+          sentDate: item.poDate ? String(item.poDate).split('T')[0] : (item.orderDate ? String(item.orderDate).split('T')[0] : new Date().toISOString().split('T')[0]),
+          expiryDate: item.expectedDate ? String(item.expectedDate).split('T')[0] : (item.estDeliveryDate ? String(item.estDeliveryDate).split('T')[0] : ''),
+          handler: item.createdByName || item.orderedBy || loggedInUser,
           status,
-          notes: item.notes || '',
-          items: Array.isArray(item.poLines) && item.poLines.length > 0 ? item.poLines.map((l: any, idx: number) => ({
-            id: String(idx + 1),
-            sku: l.sku || `SKU-${idx + 1}`,
-            productName: l.productName || 'Sản phẩm đặt mua',
-            quantity: Number(l.quantity || 10),
+          notes: item.note || item.notes || '',
+          items: rawDetails.map((l: any, idx: number) => ({
+            id: String(l.id || idx + 1),
+            sku: l.productSku || l.sku || `SKU-${l.productId || idx + 1}`,
+            productName: l.productName || l.product?.name || 'Sản phẩm đặt mua',
+            quantity: Number(l.quantity || 1),
             unit: l.unit || 'Cái',
             specifications: l.specifications || 'Quy chuẩn đóng gói tiêu chuẩn',
-          })) : [
-            { id: '1', sku: 'SKU-COCA-330', productName: 'Nước ngọt Coca Cola 330ml', quantity: 50, unit: 'Thùng', specifications: 'Hạn sử dụng > 9 tháng, thùng nguyên đai nguyên kiện' },
-            { id: '2', sku: 'SKU-MILK-01', productName: 'Sữa tươi Vinamilk 1L', quantity: 100, unit: 'Hộp', specifications: 'Bảo quản nhiệt độ 2-8 độ C' },
-          ],
+          })),
           attachments: [
             { name: 'Yeu_Cau_Ky_Thuat_RFQ.pdf', size: '1.2 MB' }
           ]
@@ -213,7 +175,7 @@ export function SupplierRequestsPage() {
 
   const handleOpenCreate = () => {
     setModalMode('create');
-    const defaultSupp = suppliersList[0]?.name || 'Công ty Coca Cola Việt Nam';
+    const defaultSupp = suppliersList[0]?.name || 'Nhà cung cấp';
     setEditingItem({
       rfqCode: `RFQ-2026-${Date.now().toString().slice(-4)}`,
       selectedSuppliers: [defaultSupp],
@@ -767,6 +729,7 @@ export function SupplierRequestsPage() {
               <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày gửi RFQ *</label>
               <input
                 type="date"
+                min={new Date().toISOString().split('T')[0]}
                 value={editingItem.sentDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, sentDate: e.target.value })}
                 className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
@@ -777,6 +740,7 @@ export function SupplierRequestsPage() {
               <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày hết hạn nhận báo giá *</label>
               <input
                 type="date"
+                min={editingItem.sentDate || new Date().toISOString().split('T')[0]}
                 value={editingItem.expiryDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, expiryDate: e.target.value })}
                 className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"

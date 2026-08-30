@@ -5,6 +5,7 @@ import { axiosClient } from '@/shared/lib/axiosClient';
 export interface Banner {
   id: string;
   title: string;
+  description?: string;
   imageUrl: string;
   linkUrl: string;
   isActive: boolean;
@@ -38,6 +39,7 @@ export const useBannerStore = create<BannerState>()(
             set({ banners: data.map((item: any) => ({
               id: String(item.id),
               title: item.title || '',
+              description: item.description || item.subtitle || '',
               imageUrl: item.imageUrl || '',
               linkUrl: item.linkUrl || '',
               isActive: Boolean(item.isActive !== false),
@@ -55,6 +57,7 @@ export const useBannerStore = create<BannerState>()(
         try {
           const payload = {
             title: banner.title,
+            description: banner.description,
             imageUrl: banner.imageUrl,
             linkUrl: banner.linkUrl,
             isActive: banner.isActive,

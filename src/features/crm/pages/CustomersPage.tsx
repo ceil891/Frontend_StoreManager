@@ -20,6 +20,7 @@ import { compressImage } from '@/shared/utils/imageCompressor';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { validateCustomerForm } from '@/shared/utils/validators';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 
 const TIER_THRESHOLDS = {
   BRONZE: 0,
@@ -104,7 +105,7 @@ export function CustomersPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveCustomer = (e: React.FormEvent) => {
+  const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = editingCustomer.name?.trim();
     const cleanPhone = editingCustomer.phone?.trim().replace(/\s+/g, '');
@@ -124,35 +125,55 @@ export function CustomersPage() {
 
     const autoTier = calcTier(editingCustomer.lifetimeSpent ?? 0);
 
-    if (modalMode === 'create') {
-      const newCust: Omit<CustomerProfile, 'id'> = {
-        customerCode:   editingCustomer.customerCode || `CUST-${Math.floor(10000 + Math.random() * 90000)}`,
-        name:           cleanName,
-        phone:          cleanPhone,
-        email:          editingCustomer.email?.trim() || '',
-        address:        editingCustomer.address || '',
-        taxCode:        editingCustomer.taxCode || '',
-        gender:         editingCustomer.gender || 'OTHER',
-        dateOfBirth:    editingCustomer.dateOfBirth || '',
-        creditLimit:    editingCustomer.creditLimit || 0,
-        groupId:        editingCustomer.groupId || '',
-        areaId:         editingCustomer.areaId || '',
-        avatarUrl:      editingCustomer.avatarUrl?.trim() || '',
-        loyaltyTier:    autoTier,
-        loyaltyPoints:  editingCustomer.loyaltyPoints || 0,
-        lifetimeSpent:  editingCustomer.lifetimeSpent || 0,
-        registeredDate: editingCustomer.registeredDate || new Date().toISOString().split('T')[0],
-        lastActive:     editingCustomer.lastActive    || new Date().toISOString().split('T')[0],
-        status:         editingCustomer.status || 'ACTIVE',
-        notes:          editingCustomer.notes,
-      };
-      addCustomer(newCust);
-      toast.success(`Đã thêm khách hàng mới: ${cleanName}`);
-    } else if (editingCustomer.id) {
-      updateCustomer(editingCustomer.id, { ...editingCustomer, name: cleanName, phone: cleanPhone, loyaltyTier: autoTier });
-      toast.success(`Đã cập nhật thông tin khách hàng: ${cleanName}`);
+    try {
+      if (modalMode === 'create') {
+        const newCust: Omit<CustomerProfile, 'id'> = {
+          customerCode:   editingCustomer.customerCode || `CUST-${Math.floor(10000 + Math.random() * 90000)}`,
+          name:           cleanName || '',
+          phone:          cleanPhone || '',
+          email:          editingCustomer.email?.trim() || '',
+          address:        editingCustomer.address || '',
+          taxCode:        editingCustomer.taxCode || '',
+          gender:         editingCustomer.gender || 'OTHER',
+          dateOfBirth:    editingCustomer.dateOfBirth || '',
+          creditLimit:    editingCustomer.creditLimit || 0,
+          groupId:        editingCustomer.groupId || '',
+          areaId:         editingCustomer.areaId || '',
+          avatarUrl:      editingCustomer.avatarUrl?.trim() || '',
+          loyaltyTier:    autoTier,
+          loyaltyPoints:  editingCustomer.loyaltyPoints || 0,
+          lifetimeSpent:  editingCustomer.lifetimeSpent || 0,
+          registeredDate: editingCustomer.registeredDate || new Date().toISOString().split('T')[0],
+          lastActive:     editingCustomer.lastActive    || new Date().toISOString().split('T')[0],
+          status:         editingCustomer.status || 'ACTIVE',
+          notes:          editingCustomer.notes || '',
+        };
+        await addCustomer(newCust);
+        toast.success(`Đã thêm khách hàng mới: ${cleanName}`);
+      } else if (editingCustomer.id) {
+        await updateCustomer(editingCustomer.id, { 
+          ...editingCustomer, 
+          customerCode: editingCustomer.customerCode,
+          name: cleanName, 
+          phone: cleanPhone, 
+          loyaltyTier: autoTier,
+          taxCode: editingCustomer.taxCode || '',
+          gender: editingCustomer.gender || 'OTHER',
+          dateOfBirth: editingCustomer.dateOfBirth || '',
+          creditLimit: editingCustomer.creditLimit || 0,
+          groupId: editingCustomer.groupId || '',
+          areaId: editingCustomer.areaId || '',
+          notes: editingCustomer.notes || '',
+          avatarUrl: editingCustomer.avatarUrl || '',
+        });
+        toast.success(`Đã cập nhật thông tin khách hàng: ${cleanName}`);
+      }
+      await fetchCustomers();
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error('Lỗi lưu khách hàng:', err);
+      toast.error(err.message || 'Lỗi khi lưu thông tin khách hàng');
     }
-    setIsModalOpen(false);
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -451,9 +472,31 @@ export function CustomersPage() {
               <div className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800">
                 <span className="text-gray-400 block font-semibold mb-1">TÍCH ĐIỂM & CHI TIÊU</span>
                 <p className="font-bold text-emerald-600 text-sm">{selectedCustomer.loyaltyPoints} điểm khả dụng</p>
-                <p className="text-gray-500 mt-1">Tổng chi tiêu: ${(selectedCustomer.lifetimeSpent || 0).toLocaleString()}</p>
+                <p className="text-gray-500 mt-1">Tổng chi tiêu: {(selectedCustomer.lifetimeSpent || 0).toLocaleString('vi-VN')} ₫</p>
               </div>
             </div>
+
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800 space-y-1">
+                <span className="text-gray-400 block font-semibold mb-1">THÔNG TIN BỔ SUNG</span>
+                <p><span className="text-gray-500">Mã số thuế:</span> <span className="font-mono font-medium text-gray-900 dark:text-white">{selectedCustomer.taxCode || '—'}</span></p>
+                <p><span className="text-gray-500">Giới tính:</span> <span className="font-medium text-gray-900 dark:text-white">{selectedCustomer.gender === 'MALE' ? 'Nam' : selectedCustomer.gender === 'FEMALE' ? 'Nữ' : 'Khác'}</span></p>
+                <p><span className="text-gray-500">Ngày sinh:</span> <span className="font-mono text-gray-900 dark:text-white">{selectedCustomer.dateOfBirth || '—'}</span></p>
+              </div>
+              <div className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800 space-y-1">
+                <span className="text-gray-400 block font-semibold mb-1">TÀI CHÍNH & PHÂN LOẠI</span>
+                <p><span className="text-gray-500">Hạn mức nợ:</span> <span className="font-mono font-bold text-emerald-600">{(selectedCustomer.creditLimit || 0).toLocaleString('vi-VN')} ₫</span></p>
+                <p><span className="text-gray-500">Nhóm KH:</span> <span className="font-medium text-gray-900 dark:text-white">{selectedCustomer.groupId || 'Mặc định'}</span></p>
+                <p><span className="text-gray-500">Khu vực:</span> <span className="font-medium text-gray-900 dark:text-white">{selectedCustomer.areaId || 'Toàn quốc'}</span></p>
+              </div>
+            </div>
+
+            {selectedCustomer.notes && (
+              <div className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800 text-xs">
+                <span className="text-gray-400 block font-semibold mb-1">GHI CHÚ KHÁCH HÀNG</span>
+                <p className="text-gray-700 dark:text-gray-300 italic">{selectedCustomer.notes}</p>
+              </div>
+            )}
           </div>
         </Modal>
       )}
@@ -509,13 +552,33 @@ export function CustomersPage() {
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã KH *</label>
+                    {modalMode === 'create' && (
+                      <label className="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isAutoCode}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setIsAutoCode(checked);
+                            if (checked) {
+                              setEditingCustomer(prev => ({ ...prev, customerCode: `CUST-${Math.floor(10000 + Math.random() * 90000)}` }));
+                            }
+                          }}
+                          className="rounded text-primary focus:ring-primary w-3 h-3"
+                        />
+                        <span>Tự động tạo</span>
+                      </label>
+                    )}
                   </div>
                   <input
                     type="text"
                     value={editingCustomer.customerCode || ''}
-                    onChange={(e) => setEditingCustomer({ ...editingCustomer, customerCode: e.target.value })}
-                    disabled={modalMode === 'create' && isAutoCode}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary disabled:opacity-60"
+                    onChange={(e) => {
+                      setIsAutoCode(false);
+                      setEditingCustomer({ ...editingCustomer, customerCode: e.target.value });
+                    }}
+                    placeholder="Ví dụ: CUST-41588"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
                     required
                   />
                 </div>
@@ -723,34 +786,14 @@ export function CustomersPage() {
       )}
 
       {/* Delete Confirmation Modal */}
-      {deletingCustomer && (
-        <Modal
-          isOpen={Boolean(deletingCustomer)}
-          onClose={() => setDeletingCustomer(null)}
-          title="Xác nhận xóa khách hàng"
-          size="sm"
-        >
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Bạn có chắc chắn muốn xóa hồ sơ khách hàng <strong className="text-gray-900 dark:text-white">{deletingCustomer.name}</strong> không?
-            </p>
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <SecondaryButton
-                type="button"
-                onClick={() => setDeletingCustomer(null)}
-              >
-                Hủy bỏ
-              </SecondaryButton>
-              <DangerButton
-                type="button"
-                onClick={handleDeleteConfirm}
-              >
-                Xóa khách hàng
-              </DangerButton>
-            </div>
-          </div>
-        </Modal>
-      )}
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingCustomer)}
+        onClose={() => setDeletingCustomer(null)}
+        onConfirm={handleDeleteConfirm}
+        title="Xác nhận xóa khách hàng"
+        description="Bạn có chắc chắn muốn xóa hồ sơ khách hàng này không? Hành động này không thể hoàn tác."
+        itemName={deletingCustomer?.name}
+      />
 
       {/* Admin Reset Password Modal */}
       {resetPasswordCustomer && (

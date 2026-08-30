@@ -13,6 +13,9 @@ import { resolveCustomerName } from '../store/salesHelpers';
 import { useCrmStore } from '@/features/crm/store/crmStore';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { OrderLinesEditor, sumOrderLines } from '@/shared/components/sales/OrderLinesEditor';
+import { SearchInput } from '@/shared/components/ui/SearchInput';
+import { CreateButton, SecondaryButton } from '@/shared/components/ui/Button';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { salesService } from '../services/salesService';
 import { toast } from 'sonner';
 
@@ -368,34 +371,30 @@ export function QuotesPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm font-semibold shadow-sm hover:shadow active:scale-95 whitespace-nowrap shrink-0">
-              <Download className="w-4 h-4" /> Xuất Danh Sách
-            </button>
+            <SecondaryButton
+              leftIcon={<Download className="w-4 h-4" />}
+            >
+              Xuất danh sách
+            </SecondaryButton>
             {canManage && (
-              <button onClick={handleOpenCreate} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition-all text-sm font-bold shadow hover:shadow-lg active:scale-95 whitespace-nowrap shrink-0">
-                <Plus className="w-4 h-4" /> Tạo Báo Giá Mới
-              </button>
+              <CreateButton onClick={handleOpenCreate}>
+                Tạo báo giá mới
+              </CreateButton>
             )}
           </div>
         </div>
 
         {/* Filter bar */}
-        <div className="flex flex-col sm:flex-row gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="flex-1 relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-gray-400" />
-            </div>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm kiếm mã báo giá, tên khách hàng..."
-              className="block w-full sm:max-w-xs pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm transition-all"
-            />
-          </div>
-          <button title="Bộ lọc" className="flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors text-sm whitespace-nowrap shrink-0">
-            <Filter className="w-4 h-4" /> Bộ lọc
-          </button>
+        <div className="flex flex-col sm:flex-row items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <SearchInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder="Tìm kiếm mã báo giá, tên khách hàng..."
+            containerClassName="flex-1 w-full"
+          />
+          <SecondaryButton leftIcon={<Filter className="w-4 h-4" />}>
+            Bộ lọc
+          </SecondaryButton>
         </div>
 
         {/* Table */}
@@ -974,35 +973,14 @@ export function QuotesPage() {
       </Modal>
 
       {/* Delete Confirmation Modal */}
-      <Modal
+      <ConfirmDeleteModal
         isOpen={!!deletingQuote}
         onClose={() => setDeletingQuote(null)}
+        onConfirm={handleDeleteConfirm}
         title="Xác nhận xóa báo giá"
-        isDestructive
-        width="max-w-md"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-300">
-            Bạn có chắc chắn muốn xóa báo giá <strong className="text-gray-900 dark:text-white">{deletingQuote?.code}</strong> không? Hành động này không thể hoàn tác.
-          </p>
-          <div className="flex justify-end gap-3 pt-4">
-            <button
-              type="button"
-              onClick={() => setDeletingQuote(null)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-bold rounded-lg transition-colors text-sm"
-            >
-              Hủy bỏ
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteConfirm}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow transition-colors text-sm"
-            >
-              Xóa báo giá
-            </button>
-          </div>
-        </div>
-      </Modal>
+        description="Bạn có chắc chắn muốn xóa báo giá này không? Hành động này không thể hoàn tác."
+        itemName={deletingQuote?.code}
+      />
 
       {/* Send Confirmation Modal */}
       <Modal

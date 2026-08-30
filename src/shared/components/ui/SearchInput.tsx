@@ -70,10 +70,16 @@ export const SearchInput = React.forwardRef<SearchInputRef, SearchInputProps>(
       lg: 'h-12 text-base pl-11 pr-10',
     }[size];
 
-    const iconSizeStyles = {
-      default: 'w-4 h-4 left-3',
-      sm: 'w-3.5 h-3.5 left-2.5',
-      lg: 'w-5 h-5 left-3.5',
+    const iconPlStyle = {
+      default: 'pl-3',
+      sm: 'pl-2.5',
+      lg: 'pl-3.5',
+    }[size];
+
+    const iconSvgSize = {
+      default: 'w-4 h-4',
+      sm: 'w-3.5 h-3.5',
+      lg: 'w-5 h-5',
     }[size];
 
     return (
@@ -81,11 +87,11 @@ export const SearchInput = React.forwardRef<SearchInputRef, SearchInputProps>(
         {/* Search Icon */}
         <div
           className={cn(
-            'absolute inset-y-0 flex items-center pointer-events-none text-gray-400 dark:text-gray-500 transition-colors',
-            iconSizeStyles
+            'absolute inset-y-0 left-0 flex items-center pointer-events-none text-gray-400 dark:text-gray-500 transition-colors',
+            iconPlStyle
           )}
         >
-          <Search className="shrink-0" />
+          <Search className={cn('shrink-0', iconSvgSize)} />
         </div>
 
         {/* Input */}

@@ -9,6 +9,7 @@ import { extractPageContent } from '@/shared/lib/apiHelpers';
 import { toast } from 'sonner';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Bản nháp',
@@ -76,11 +77,11 @@ export function PurchaseOrdersPage() {
     const nextWeek = new Date();
     nextWeek.setDate(nextWeek.getDate() + 7);
     
-    const initialLines: POLineItem[] = apiProducts.length > 0
-      ? [{ productName: apiProducts[0].name, quantity: 10, unitPrice: apiProducts[0].price }]
-      : [];
-    const totalQty = initialLines.reduce((acc, l) => acc + l.quantity, 0);
-    const totalVal = initialLines.reduce((acc, l) => acc + (l.quantity * l.unitPrice), 0);
+    const initialLines: POLineItem[] = [
+      { productName: '', quantity: 1, unitPrice: 0 }
+    ];
+    const totalQty = 1;
+    const totalVal = 0;
 
     const now = new Date();
     setEditingPO({
@@ -101,17 +102,15 @@ export function PurchaseOrdersPage() {
   };
 
   const handleAddPOLine = () => {
-    const lines = editingPO.poLines || [];
-    const newLine: POLineItem = apiProducts.length > 0
-      ? { productName: apiProducts[0].name, quantity: 10, unitPrice: apiProducts[0].price }
-      : { productName: '', quantity: 1, unitPrice: 0 };
-    const updatedLines = [...lines, newLine];
-    const totalQty = updatedLines.reduce((acc, l) => acc + Number(l.quantity), 0);
-    const totalVal = updatedLines.reduce((acc, l) => acc + (Number(l.quantity) * Number(l.unitPrice)), 0);
+    const lines = [...(editingPO.poLines || [])];
+    lines.push({ productName: '', quantity: 1, unitPrice: 0 });
+
+    const totalQty = lines.reduce((acc, l) => acc + Number(l.quantity || 0), 0);
+    const totalVal = lines.reduce((acc, l) => acc + (Number(l.quantity || 0) * Number(l.unitPrice || 0)), 0);
 
     setEditingPO({
       ...editingPO,
-      poLines: updatedLines,
+      poLines: lines,
       itemsCount: totalQty,
       totalCost: totalVal
     });
@@ -119,15 +118,30 @@ export function PurchaseOrdersPage() {
 
   const handlePOLineChange = (index: number, field: keyof POLineItem, val: any) => {
     const lines = [...(editingPO.poLines || [])];
-    const item = { ...lines[index], [field]: val };
 
     if (field === 'productName') {
       const found = apiProducts.find(p => p.name === val);
-      if (found) {
-        item.unitPrice = found.price;
+      const unitPrice = found ? found.price : 0;
+      
+      // Check if another line already contains this product
+      const existingIdx = lines.findIndex((l, i) => i !== index && l.productName.trim().toLowerCase() === val.trim().toLowerCase());
+      if (existingIdx >= 0 && val) {
+        lines[existingIdx].quantity += (lines[index].quantity || 1);
+        lines.splice(index, 1);
+        toast.info(`Sản phẩm "${val}" đã có trong danh sách. Hệ thống đã tự động gộp số lượng!`);
+      } else {
+        lines[index] = {
+          ...lines[index],
+          productName: val,
+          unitPrice: unitPrice
+        };
       }
+    } else {
+      lines[index] = {
+        ...lines[index],
+        [field]: val
+      };
     }
-    lines[index] = item;
 
     const totalQty = lines.reduce((acc, l) => acc + Number(l.quantity), 0);
     const totalVal = lines.reduce((acc, l) => acc + (Number(l.quantity) * Number(l.unitPrice)), 0);
@@ -752,13 +766,16 @@ export function PurchaseOrdersPage() {
                             />
                           </div>
                           <div>
-                            <label className="block text-[10px] font-semibold text-gray-400 uppercase">Đơn giá (₫)</label>
+                            <div className="flex items-center justify-between">
+                              <label className="block text-[10px] font-semibold text-gray-400 uppercase">Đơn giá (₫)</label>
+                              <span className="text-[9px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/60 px-1 rounded">Báo giá NCC</span>
+                            </div>
                             <input
-                              type="number"
-                              min="0"
-                              value={line.unitPrice}
-                              onChange={(e) => handlePOLineChange(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
-                              className="w-full mt-0.5 px-2 py-1 text-xs border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
+                              type="text"
+                              readOnly
+                              value={(line.unitPrice || 0).toLocaleString('vi-VN')}
+                              title="Đơn giá cố định theo báo giá NCC đã duyệt, không được chỉnh sửa tùy tiện."
+                              className="w-full mt-0.5 px-2 py-1 text-xs border border-gray-300 dark:border-gray-700 rounded bg-gray-100 dark:bg-gray-800/80 text-gray-800 dark:text-gray-200 font-mono font-bold cursor-not-allowed text-right"
                             />
                           </div>
                         </div>
@@ -807,35 +824,14 @@ export function PurchaseOrdersPage() {
 
 
       {/* Delete Confirmation */}
-      <Modal
+      <ConfirmDeleteModal
         isOpen={!!deletingPO}
         onClose={() => setDeletingPO(null)}
+        onConfirm={handleDeleteConfirm}
         title="Xác nhận xóa Đơn mua"
-        isDestructive
-        width="max-w-md"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-300">
-            Bạn có chắc chắn muốn xóa đơn đặt hàng <strong className="text-gray-900 dark:text-white">{deletingPO?.poNumber}</strong> không? Hành động này không thể hoàn tác.
-          </p>
-          <div className="flex justify-end gap-3 pt-4">
-            <button
-              type="button"
-              onClick={() => setDeletingPO(null)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors text-sm"
-            >
-              Hủy bỏ
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteConfirm}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
-            >
-              Đồng ý xóa
-            </button>
-          </div>
-        </div>
-      </Modal>
+        description="Bạn có chắc chắn muốn xóa đơn đặt hàng này không? Hành động này không thể hoàn tác."
+        itemName={deletingPO?.poNumber}
+      />
     </>
   );
 }

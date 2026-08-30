@@ -79,7 +79,16 @@ export const userService = {
 
     const rawUsers = Array.isArray(response) ? response : (response?.content || response?.data || response?.items || []);
 
-    return (Array.isArray(rawUsers) ? rawUsers : []).map((u: any) => {
+    const customerRoles = new Set(['USER', 'CUSTOMER', 'KHÁCH HÀNG', 'KHACH HANG', 'NGƯỜI DÙNG', 'NGUOI DUNG']);
+
+    return (Array.isArray(rawUsers) ? rawUsers : [])
+      .filter((u: any) => {
+        const rName = (u.role?.roleName || u.roleName || '').trim().toUpperCase();
+        const rCode = (u.role?.roleCode || u.roleCode || '').trim().toUpperCase();
+        if (!rName && !rCode) return false;
+        return !customerRoles.has(rName) && !customerRoles.has(rCode);
+      })
+      .map((u: any) => {
       const userRoleId = u.role?.id ? String(u.role.id) : (u.roleId ? String(u.roleId) : undefined);
       const roleObj = Array.isArray(roles) ? roles.find((r: any) => String(r.id) === userRoleId || r.roleName === (u.roleName || u.role?.roleName)) : undefined;
       const roleCode = roleObj?.roleCode || roleObj?.roleName || u.roleName || u.role?.roleName || 'STAFF';

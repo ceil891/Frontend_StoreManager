@@ -135,6 +135,21 @@ export default function BannerManagementPage() {
 
   const handleSaveBanner = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!editingBanner.title?.trim()) {
+      toast.error('Tiêu đề banner không được để trống!');
+      return;
+    }
+    if (!editingBanner.imageUrl?.trim()) {
+      toast.error('Vui lòng chọn hình ảnh cho banner!');
+      return;
+    }
+    if (editingBanner.validFrom && editingBanner.validUntil) {
+      if (editingBanner.validUntil < editingBanner.validFrom) {
+        toast.error('Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu áp dụng!');
+        return;
+      }
+    }
+
     if (modalMode === 'create') {
       addBanner(editingBanner as Omit<Banner, 'id'>);
       toast.success('Thêm banner thành công!');
@@ -163,6 +178,8 @@ export default function BannerManagementPage() {
       reader.readAsDataURL(file);
     }
   };
+
+  const today = new Date().toISOString().split('T')[0];
 
   return (
     <div className="space-y-6">
@@ -233,6 +250,17 @@ export default function BannerManagementPage() {
             </div>
 
             <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Nội dung / Mô tả khuyến mãi (Hiển thị trên Trang chủ)</label>
+              <textarea
+                rows={2}
+                value={editingBanner.description || ''}
+                onChange={(e) => setEditingBanner({ ...editingBanner, description: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-gray-900"
+                placeholder="VD: Sở hữu ngay các thiết bị công nghệ, thời trang và hàng tiêu dùng cao cấp với mức ưu đãi giảm tới 50%..."
+              />
+            </div>
+
+            <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Đường dẫn khi click (Link URL)</label>
               <div className="relative">
                 <LinkIcon className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
@@ -250,6 +278,7 @@ export default function BannerManagementPage() {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Bắt đầu áp dụng</label>
               <input
                 type="date"
+                min={modalMode === 'create' ? today : undefined}
                 value={editingBanner.validFrom || ''}
                 onChange={(e) => setEditingBanner({ ...editingBanner, validFrom: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-gray-900"
@@ -260,6 +289,7 @@ export default function BannerManagementPage() {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Kết thúc</label>
               <input
                 type="date"
+                min={editingBanner.validFrom || today}
                 value={editingBanner.validUntil || ''}
                 onChange={(e) => setEditingBanner({ ...editingBanner, validUntil: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-gray-900"

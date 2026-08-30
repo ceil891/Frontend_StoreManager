@@ -6,8 +6,10 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore, type OperatingCost } from '../store/financeStore';
-import { toast } from 'sonner';
 import { exportToCsv } from '@/shared/utils/exportCsv';
+import { SearchInput } from '@/shared/components/ui/SearchInput';
+import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 
 const categoryMap: Record<string, string> = {
   RENTAL: 'Thuê mặt bằng',
@@ -489,38 +491,14 @@ export function OperatingCostsPage() {
       </Modal>
 
       {/* Modal: Xác nhận xóa */}
-      <Modal
+      <ConfirmDeleteModal
         isOpen={!!deletingCost}
         onClose={() => setDeletingCost(null)}
+        onConfirm={handleDeleteConfirm}
         title="Xác nhận hủy khoản chi"
-        isDestructive
-        width="max-w-md"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-            Bạn có chắc chắn muốn xóa hồ sơ khoản chi <strong className="text-gray-900 dark:text-white">{deletingCost?.costCode}</strong>: <span className="font-semibold">{deletingCost?.costName}</span>?
-          </p>
-          <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2.5 rounded-lg border border-red-200 dark:border-red-800/40">
-            Thao tác này sẽ gỡ bỏ dữ liệu khoản chi khỏi các báo cáo tổng hợp kết quả hoạt động kinh doanh (P&L). Đảm bảo rằng khoản chi này là do nhập liệu sai hoặc đã được hủy bỏ giao dịch.
-          </p>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <button
-              type="button"
-              onClick={() => setDeletingCost(null)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors text-sm"
-            >
-              Hủy bỏ
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteConfirm}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
-            >
-              Đồng ý xóa
-            </button>
-          </div>
-        </div>
-      </Modal>
+        description="Bạn có chắc chắn muốn xóa hồ sơ khoản chi này không? Thao tác này sẽ gỡ bỏ dữ liệu khoản chi khỏi các báo cáo tổng hợp."
+        itemName={`${deletingCost?.costCode} - ${deletingCost?.costName}`}
+      />
     </>
   );
 }

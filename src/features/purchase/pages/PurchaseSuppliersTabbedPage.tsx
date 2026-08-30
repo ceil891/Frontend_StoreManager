@@ -6,9 +6,9 @@ import { SupplierContractsPage } from './SupplierContractsPage';
 import { SupplierEvaluationsPage } from './SupplierEvaluationsPage';
 
 const tabs = [
-  { id: 'suppliers', label: 'Danh sách Nhà cung cấp', icon: Building2, permission: 'purchase:supplier:view' },
-  { id: 'contracts', label: 'Hợp đồng NCC', icon: FileCheck2, permission: 'purchase:contract:view' },
-  { id: 'evaluations', label: 'Đánh giá NCC', icon: Award, permission: 'purchase:evaluation:view' },
+  { id: 'suppliers', label: 'Danh mục nhà cung cấp', icon: Building2, permission: 'purchase:supplier:view' },
+  { id: 'contracts', label: 'Hợp đồng NCC (Supplier Contract)', icon: FileCheck2, permission: 'purchase:contract:view' },
+  { id: 'evaluations', label: 'Đánh giá NCC (Vendor Evaluation)', icon: Award, permission: 'purchase:evaluation:view' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];

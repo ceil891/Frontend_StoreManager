@@ -215,10 +215,12 @@ export const purchaseService = {
     const payload = {
       poCode: uniquePoCode,
       poDate: formatLocalDateTime(po.orderDate),
-      expectedDate: po.estDeliveryDate ? formatLocalDateTime(po.estDeliveryDate) : null,
+      expectedDate: (po.estDeliveryDate || (po as any).expectedDeliveryDate || (po as any).expectedDate) ? formatLocalDateTime(po.estDeliveryDate || (po as any).expectedDeliveryDate || (po as any).expectedDate) : null,
       supplierId: supplierId || 1,
       branchId: branchId || 1,
       status: po.status || 'DRAFT',
+      paymentStatus: po.paymentStatus || 'UNPAID',
+      advanceAmount: Number((po as any).advanceAmount || 0),
       note: po.notes || '',
       details: details,
     };
@@ -229,6 +231,8 @@ export const purchaseService = {
       id: String(item?.id || Date.now()),
       ...po,
       poNumber: item?.poCode || po.poNumber,
+      status: item?.status || po.status,
+      paymentStatus: item?.paymentStatus || po.paymentStatus,
       totalCost: item?.totalAmount ? Number(item.totalAmount) : po.totalCost,
     };
   },
@@ -276,10 +280,12 @@ export const purchaseService = {
 
     const payload = {
       poDate: formatLocalDateTime(data.orderDate),
-      expectedDate: data.estDeliveryDate ? formatLocalDateTime(data.estDeliveryDate) : null,
+      expectedDate: (data.estDeliveryDate || (data as any).expectedDeliveryDate || (data as any).expectedDate) ? formatLocalDateTime(data.estDeliveryDate || (data as any).expectedDeliveryDate || (data as any).expectedDate) : null,
       supplierId: supplierId,
       branchId: branchId,
       status: data.status || 'DRAFT',
+      paymentStatus: data.paymentStatus || 'UNPAID',
+      advanceAmount: Number((data as any).advanceAmount || 0),
       note: data.notes || '',
       details: details,
     };

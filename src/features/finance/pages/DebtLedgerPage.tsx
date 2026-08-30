@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { exportToCsv } from '@/shared/utils/exportCsv';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 
 const entityTypeMap: Record<string, string> = {
   CUSTOMER: 'Khách hàng',
@@ -571,38 +572,14 @@ export function DebtLedgerPage() {
       </Modal>
 
       {/* Modal: Xác nhận xóa */}
-      <Modal
+      <ConfirmDeleteModal
         isOpen={!!deletingDebt}
         onClose={() => setDeletingDebt(null)}
+        onConfirm={handleDeleteConfirm}
         title="Xác nhận gỡ bỏ hồ sơ công nợ"
-        isDestructive
-        width="max-w-md"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-            Bạn có chắc chắn muốn xóa vĩnh viễn hồ sơ công nợ <strong className="text-gray-900 dark:text-white">{deletingDebt?.debtCode}</strong> của đối tác <span className="font-semibold">{deletingDebt?.entityName}</span>?
-          </p>
-          <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2.5 rounded-lg border border-red-200 dark:border-red-800/40">
-            Thao tác này sẽ xóa toàn bộ số dư đối chiếu sổ sách của đối tác này trong hệ thống. Hãy đảm bảo khoản nợ đã được tất toán hoặc có biên bản đồng ý xóa nợ hợp lệ.
-          </p>
-          <div className="flex justify-end gap-3 pt-4">
-            <button
-              type="button"
-              onClick={() => setDeletingDebt(null)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors text-sm"
-            >
-              Hủy bỏ
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteConfirm}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
-            >
-              Đồng ý xóa
-            </button>
-          </div>
-        </div>
-      </Modal>
+        description="Bạn có chắc chắn muốn xóa vĩnh viễn hồ sơ công nợ này không? Hãy đảm bảo khoản nợ đã được tất toán hoặc có biên bản đồng ý hợp lệ."
+        itemName={`${deletingDebt?.debtCode} (${deletingDebt?.entityName})`}
+      />
     </>
   );
 }

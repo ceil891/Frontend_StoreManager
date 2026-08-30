@@ -45,9 +45,7 @@ export function PurchaseInvoicesPage() {
     quantity: number;
     unitPrice: number;
     vatPercent: number;
-  }>([
-    { id: '1', sku: 'SKU-MILK-01', productName: 'Sữa tươi tiệt trùng Vinamilk 1L', quantity: 100, unitPrice: 28000, vatPercent: 8 }
-  ]);
+  }>([]);
 
   const updatePurItemsAndTotals = (newItems: typeof purItems) => {
     setPurItems(newItems);
@@ -100,7 +98,7 @@ export function PurchaseInvoicesPage() {
     setIsLoading(true);
     try {
       const res = await axiosClient.get('/purchase/orders');
-      const list = Array.isArray(res) ? res : (res as any)?.content || [];
+      const list = extractPageContent<any>(res);
       const mapped: PurchaseInvoiceRecord[] = list.map((item: any) => {
         const status: PurchaseInvoiceRecord['status'] =
           item.paymentStatus === 'PAID'
@@ -111,13 +109,13 @@ export function PurchaseInvoicesPage() {
         return {
           id: String(item.id),
           invoiceCode: `INV-MH-${item.id}`,
-          poCode: item.poNumber || '',
+          poCode: item.poCode || item.poNumber || `PO-${item.id}`,
           supplierName: item.supplierName || item.supplier?.name || '',
-          invoiceDate: item.orderDate ? String(item.orderDate).substring(0, 10) : '',
-          dueDate: item.estDeliveryDate ? String(item.estDeliveryDate).substring(0, 10) : '',
-          subTotal: Math.round((item.totalAmount || 0) * 0.9),
-          vatAmount: Math.round((item.totalAmount || 0) * 0.1),
-          totalAmount: item.totalAmount || 0,
+          invoiceDate: item.poDate ? String(item.poDate).split('T')[0] : (item.orderDate ? String(item.orderDate).split('T')[0] : ''),
+          dueDate: item.expectedDate ? String(item.expectedDate).split('T')[0] : (item.estDeliveryDate ? String(item.estDeliveryDate).split('T')[0] : ''),
+          subTotal: Math.round((Number(item.totalAmount) || 0) * 0.9),
+          vatAmount: Math.round((Number(item.totalAmount) || 0) * 0.1),
+          totalAmount: Number(item.totalAmount) || 0,
           status,
         };
       });
@@ -160,13 +158,35 @@ export function PurchaseInvoicesPage() {
       status: 'CHO_THANH_TOAN',
       notes: '',
     });
+    setPurItems([]);
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (item: PurchaseInvoiceRecord) => {
+  const handleOpenEdit = async (item: PurchaseInvoiceRecord) => {
     setModalMode('edit');
     setEditingItem(item);
     setIsModalOpen(true);
+
+    try {
+      const res = await axiosClient.get<any, any>(`/purchase/orders/${item.id}`);
+      const poData = res?.data || res;
+      const rawLines = Array.isArray(poData.details) && poData.details.length > 0 ? poData.details : (Array.isArray(poData.poLines) ? poData.poLines : []);
+      if (rawLines.length > 0) {
+        const mapped = rawLines.map((l: any, idx: number) => ({
+          id: String(l.id || idx + 1),
+          sku: l.productSku || l.sku || `SKU-${l.productId || idx + 1}`,
+          productName: l.productName || l.product?.name || 'Sản phẩm đặt mua',
+          quantity: Number(l.quantity || 1),
+          unitPrice: Number(l.unitPrice || 0),
+          vatPercent: 10,
+        }));
+        setPurItems(mapped);
+      } else {
+        setPurItems([]);
+      }
+    } catch (err) {
+      console.warn('Failed to load detailed PO lines for invoice:', err);
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {

@@ -13,6 +13,7 @@ import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/sh
 interface SupplierEvaluationItem {
   id: string;
   evaluationId: string;
+  supplierId?: number;
   supplierName: string;
   evaluationDate: string;
   deliveryDelayScore: number; // Điểm độ trễ giao hàng (thang điểm 10)
@@ -25,12 +26,28 @@ interface SupplierEvaluationItem {
 
 export function SupplierEvaluationsPage() {
   const [data, setData] = useState<SupplierEvaluationItem[]>([]);
+  const [suppliersList, setSuppliersList] = useState<{ id: number; name: string; code: string }[]>([]);
   const [search, setSearch] = useState('');
   const [scoreFilter, setScoreFilter] = useState<string>('Tất cả');
   const [selectedItem, setSelectedItem] = useState<SupplierEvaluationItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Partial<SupplierEvaluationItem>>({});
   const [isLoading, setIsLoading] = useState(false);
+
+  const fetchSuppliers = async () => {
+    try {
+      const res = await axiosClient.get('/partnerarea/suppliers?size=500');
+      const list = (res as any)?.content || (res as any)?.data || (Array.isArray(res) ? res : []);
+      const mapped = (Array.isArray(list) ? list : []).map((s: any) => ({
+        id: Number(s.id),
+        name: s.supplierName || s.name || s.fullName || '',
+        code: s.supplierCode || s.code || `SUP-${s.id}`
+      })).filter((s: any) => s.name);
+      setSuppliersList(mapped);
+    } catch (err) {
+      console.error('Lỗi khi tải danh sách nhà cung cấp:', err);
+    }
+  };
 
   const fetchEvaluations = async () => {
     try {
@@ -45,6 +62,7 @@ export function SupplierEvaluationsPage() {
         return {
           id: String(item.id),
           evaluationId: `EV-${item.id}`,
+          supplierId: item.supplier?.id,
           supplierName: item.supplier?.name || '',
           evaluationDate: item.evalDate || '',
           deliveryDelayScore: delivery,
@@ -66,6 +84,7 @@ export function SupplierEvaluationsPage() {
 
   useEffect(() => {
     fetchEvaluations();
+    fetchSuppliers();
   }, []);
 
   const filtered = data.filter((item) => {
@@ -85,7 +104,8 @@ export function SupplierEvaluationsPage() {
   const handleOpenCreate = () => {
     setEditingItem({
       evaluationId: `DG-2026-00${data.length + 1}`,
-      supplierName: '',
+      supplierId: suppliersList.length > 0 ? suppliersList[0].id : undefined,
+      supplierName: suppliersList.length > 0 ? suppliersList[0].name : '',
       evaluationDate: new Date().toISOString().split('T')[0],
       deliveryDelayScore: 8,
       defectRateScore: 8,
@@ -98,7 +118,10 @@ export function SupplierEvaluationsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.supplierName) return;
+    if (!editingItem.supplierId) {
+      toast.error('Vui lòng chọn nhà cung cấp cần đánh giá');
+      return;
+    }
 
     const delay = Number(editingItem.deliveryDelayScore || 8);
     const defect = Number(editingItem.defectRateScore || 8);
@@ -107,20 +130,23 @@ export function SupplierEvaluationsPage() {
 
     try {
       const payload = {
+        supplierId: Number(editingItem.supplierId),
         evalDate: editingItem.evaluationDate || new Date().toISOString().split('T')[0],
-        deliveryScore: delay,
-        qualityScore: defect,
-        priceScore: price,
-        overallScore: overall,
+        deliveryScore: Math.round(delay),
+        qualityScore: Math.round(defect),
+        priceScore: Math.round(price),
+        serviceScore: Math.round(delay),
+        overallScore: Math.round(overall),
         remarks: editingItem.comments || 'Không có nhận xét chi tiết.',
       };
       await axiosClient.post('/purchase/evaluations', payload);
       toast.success('Tạo đánh giá nhà cung cấp thành công');
       await fetchEvaluations();
       setIsModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Lỗi tạo đánh giá:', err);
-      toast.error('Không thể tạo đánh giá nhà cung cấp');
+      const errMsg = err?.response?.data?.message || err?.response?.data?.errors?.supplierId || 'Không thể tạo đánh giá nhà cung cấp';
+      toast.error(errMsg);
     }
   };
 
@@ -377,14 +403,38 @@ export function SupplierEvaluationsPage() {
 
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhà cung cấp cần đánh giá *</label>
-            <input
-              type="text"
-              value={editingItem.supplierName || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, supplierName: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              placeholder="Ví dụ: Công ty Unilever Việt Nam"
-              required
-            />
+            {suppliersList.length > 0 ? (
+              <select
+                value={editingItem.supplierId || ''}
+                onChange={(e) => {
+                  const val = e.target.value ? Number(e.target.value) : undefined;
+                  const selectedSup = suppliersList.find((s) => s.id === val);
+                  setEditingItem({
+                    ...editingItem,
+                    supplierId: val,
+                    supplierName: selectedSup ? selectedSup.name : '',
+                  });
+                }}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 cursor-pointer font-medium"
+                required
+              >
+                <option value="">-- Chọn Nhà Cung Cấp --</option>
+                {suppliersList.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    [{s.code}] {s.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={editingItem.supplierName || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, supplierName: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                placeholder="Ví dụ: Công ty Unilever Việt Nam"
+                required
+              />
+            )}
           </div>
 
           <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-4">

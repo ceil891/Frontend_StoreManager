@@ -23,19 +23,20 @@ export function SuppliersPage() {
   }, [fetchSuppliers, fetchCategories]);
 
   const displayCategories = useMemo(() => {
-    if (categories && categories.length > 0) {
-      const uniqueNames = Array.from(new Set(categories.map(c => c.categoryName).filter(Boolean)));
-      return uniqueNames.map(name => ({ id: name, label: name }));
-    }
-    return [
-      { id: 'Điện thoại & Máy tính bảng', label: 'Điện thoại & Máy tính bảng' },
-      { id: 'Hàng hóa chung', label: 'Hàng hóa chung' },
-      { id: 'Thiết bị điện tử', label: 'Thiết bị điện tử' },
-      { id: 'Thời trang & Phụ kiện', label: 'Thời trang & Phụ kiện' },
-      { id: 'Thực phẩm & Đồ uống', label: 'Thực phẩm & Đồ uống' },
-      { id: 'Công cụ & Phần cứng', label: 'Công cụ & Phần cứng' },
-      { id: 'Bao bì & Đóng gói', label: 'Bao bì & Đóng gói' },
+    const baseCategories = [
+      'Điện thoại & Máy tính bảng',
+      'Laptop & Máy tính để bàn',
+      'Phụ kiện & Thiết bị ngoại vi',
+      'Thiết bị điện tử',
+      'Hàng hóa chung',
+      'Thời trang & Phụ kiện',
+      'Thực phẩm & Đồ uống',
+      'Công cụ & Phần cứng',
+      'Bao bì & Đóng gói',
     ];
+    const catFromStore = (categories || []).map(c => c.categoryName?.trim()).filter(Boolean);
+    const combined = Array.from(new Set([...catFromStore, ...baseCategories]));
+    return combined.map(name => ({ id: name, label: name }));
   }, [categories]);
   const [search, setSearch] = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierRecord | null>(null);
@@ -726,10 +727,20 @@ export function SuppliersPage() {
 
               <div>
                 <AddressCascadeSelect
-                  addressDetail={editingSupplier.address || ''}
+                  province={(editingSupplier as any).province}
+                  district={(editingSupplier as any).district}
+                  ward={(editingSupplier as any).ward}
+                  addressDetail={(editingSupplier as any).addressDetail || editingSupplier.address || ''}
                   onChange={({ province, district, ward, addressDetail }) => {
                     const fullAddr = [addressDetail, ward, district, province].filter(Boolean).join(', ');
-                    setEditingSupplier(prev => ({ ...prev, address: fullAddr }));
+                    setEditingSupplier(prev => ({
+                      ...prev,
+                      province,
+                      district,
+                      ward,
+                      addressDetail,
+                      address: fullAddr
+                    } as any));
                   }}
                 />
               </div>
