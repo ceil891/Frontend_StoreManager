@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff, Mail, Lock, AlertCircle, ArrowRight, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import type { RoleType } from '../types';
+import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
 
 // ----------------------------------------------------------------
 // Validation Schema (Zod)
@@ -50,6 +51,7 @@ export function LoginPage() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [shake, setShake] = useState(false);
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
   const emailId = useId();
   const passwordId = useId();
   const emailRef = useRef<HTMLInputElement>(null);
@@ -246,12 +248,13 @@ export function LoginPage() {
                 <label htmlFor={passwordId} className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Mật khẩu
                 </label>
-                <a
-                  href="#"
-                  className="text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
+                <button
+                  type="button"
+                  onClick={() => setIsForgotPasswordOpen(true)}
+                  className="text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors focus:outline-none"
                 >
                   Quên mật khẩu?
-                </a>
+                </button>
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -318,6 +321,12 @@ export function LoginPage() {
           </p>
         </div>
       </div>
+
+      {/* Forgot Password Modal */}
+      <ForgotPasswordModal
+        isOpen={isForgotPasswordOpen}
+        onClose={() => setIsForgotPasswordOpen(false)}
+      />
     </div>
   );
 }

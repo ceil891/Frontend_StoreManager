@@ -214,7 +214,7 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
 
       {/* Data Table */}
       <div className="rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800 shadow-sm relative">
-        {isLoading && (
+        {isLoading && data.length === 0 && (
           <div className="absolute inset-0 bg-white/50 dark:bg-gray-900/50 z-10 flex items-center justify-center backdrop-blur-[1px]">
             <div className="flex flex-col items-center gap-2">
               <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
@@ -345,7 +345,7 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
           <div className="flex items-center justify-center text-xs font-semibold text-gray-600 dark:text-gray-400 px-2">
             {table.getFilteredRowModel().rows.length === 0 || table.getPageCount() === 0
               ? '0 kết quả'
-              : `Trang ${table.getState().pagination.pageIndex + 1} / ${table.getPageCount()} (${table.getFilteredRowModel().rows.length} kết quả)`}
+              : `Trang ${table.getState().pagination.pageIndex + 1} / ${Math.max(1, table.getPageCount())} (${table.getFilteredRowModel().rows.length} kết quả)`}
           </div>
           <div className="flex items-center space-x-1 sm:space-x-2">
             <button

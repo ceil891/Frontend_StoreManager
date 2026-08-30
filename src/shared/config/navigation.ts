@@ -110,10 +110,10 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     group: 'Khách hàng (CRM)',
     items: [
-      { name: 'Danh sách Khách hàng', href: '/crm/customers', icon: Users, permission: 'crm:customer:view' },
+      { name: 'Danh sách khách hàng', href: '/crm/customers', icon: Users, permission: 'crm:customer:view' },
       { name: 'Hạng thành viên & điểm thưởng', href: '/crm/loyalty', icon: Shield, permission: 'crm:tier:view' },
       { name: 'Mã giảm giá & voucher', href: '/crm/vouchers', icon: Percent, permission: 'crm:voucher:view' },
-      { name: 'Quản lý Bảo hành', href: '/crm/warranties', icon: Shield, permission: 'crm:warranty:view' },
+      { name: 'Quản lý bảo hành', href: '/crm/warranties', icon: Shield, permission: 'crm:warranty:view' },
       { name: 'Chăm sóc & hỗ trợ', href: '/crm/support', icon: LifeBuoy, permission: 'crm:ticket:view' },
       { name: 'Chiến dịch marketing', href: '/crm/campaigns', icon: BarChart2, permission: 'crm:campaign:view' },
     ],
@@ -128,10 +128,10 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     group: 'Báo cáo & thống kê',
     items: [
-      { name: 'Báo cáo Bán hàng', href: '/reports/sales', icon: BarChart2, permission: 'reports:sales:view' },
-      { name: 'Báo cáo Tồn kho', href: '/reports/inventory', icon: BarChart2, permission: 'reports:inventory:view' },
-      { name: 'Báo cáo Tài chính', href: '/reports/finance', icon: BarChart2, permission: 'reports:finance:view' },
-      { name: 'Báo cáo Khách hàng', href: '/reports/crm', icon: BarChart2, permission: 'reports:crm:view' },
+      { name: 'Báo cáo bán hàng', href: '/reports/sales', icon: BarChart2, permission: 'reports:sales:view' },
+      { name: 'Báo cáo tồn kho', href: '/reports/inventory', icon: BarChart2, permission: 'reports:inventory:view' },
+      { name: 'Báo cáo tài chính', href: '/reports/finance', icon: BarChart2, permission: 'reports:finance:view' },
+      { name: 'Báo cáo khách hàng', href: '/reports/crm', icon: BarChart2, permission: 'reports:crm:view' },
     ],
   },
   {

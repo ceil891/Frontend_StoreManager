@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { exportToCsv } from '@/shared/utils/exportCsv';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 
 const categoryMap: Record<string, string> = {
   SALES_REVENUE: 'Doanh thu bán hàng',
@@ -614,23 +615,14 @@ export function ReceiptVouchersPage() {
       </Modal>
 
       {/* Modal: Xác nhận xóa */}
-      <Modal
+      <ConfirmDeleteModal
         isOpen={!!deletingVoucher}
         onClose={() => setDeletingVoucher(null)}
+        onConfirm={handleDeleteConfirm}
         title="Xác nhận hủy phiếu thu"
-        isDestructive
-        width="max-w-md"
-      >
-        <div className="space-y-4 text-xs">
-          <p className="text-gray-600 dark:text-gray-300">
-            Bạn có chắc chắn muốn hủy bỏ phiếu thu <strong>{deletingVoucher?.voucherNumber}</strong> từ nguồn <span className="font-semibold">{deletingVoucher?.payerName}</span>?
-          </p>
-          <div className="flex justify-end gap-3 pt-4">
-            <button type="button" onClick={() => setDeletingVoucher(null)} className="px-4 py-2 border rounded-lg text-gray-700 dark:text-gray-300">Hủy bỏ</button>
-            <button type="button" onClick={handleDeleteConfirm} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg">Đồng ý hủy</button>
-          </div>
-        </div>
-      </Modal>
+        description="Bạn có chắc chắn muốn hủy bỏ phiếu thu này không? Thao tác này sẽ cập nhật trạng thái hủy và điều chỉnh sổ quỹ liên quan."
+        itemName={`${deletingVoucher?.voucherNumber} (${deletingVoucher?.payerName})`}
+      />
     </>
   );
 }

@@ -52,10 +52,39 @@ const AVAILABLE_SERVICES = [
 
 const COVERAGE_OPTIONS = ['Toàn quốc', 'Miền Bắc', 'Miền Trung', 'Miền Nam', 'Quốc tế'];
 
-const VIETNAM_PROVINCES = [
-  'Hà Nội', 'TP. Hồ Chí Minh', 'Đà Nẵng', 'Hải Phòng', 'Cần Thơ',
-  'Bình Dương', 'Đồng Nai', 'Quảng Ninh', 'Khánh Hòa', 'Thừa Thiên Huế', 'Lâm Đồng'
-];
+export const PROVINCE_DISTRICT_MAP: Record<string, string[]> = {
+  'Hà Nội': [
+    'Quận Ba Đình', 'Quận Hoàn Kiếm', 'Quận Đống Đa', 'Quận Cầu Giấy',
+    'Quận Hai Bà Trưng', 'Quận Hoàng Mai', 'Quận Thanh Xuân', 'Quận Nam Từ Liêm',
+    'Quận Bắc Từ Liêm', 'Quận Hà Đông', 'Quận Tây Hồ', 'Quận Long Biên'
+  ],
+  'TP. Hồ Chí Minh': [
+    'Quận 1', 'Quận 3', 'Quận 4', 'Quận 5', 'Quận 6', 'Quận 7', 'Quận 8',
+    'Quận 10', 'Quận 11', 'Quận 12', 'Thành phố Thủ Đức', 'Quận Bình Thạnh',
+    'Quận Gò Vấp', 'Quận Phú Nhuận', 'Quận Tân Bình', 'Quận Tân Phú', 'Quận Bình Tân'
+  ],
+  'Đà Nẵng': [
+    'Quận Hải Châu', 'Quận Thanh Khê', 'Quận Sơn Trà', 'Quận Ngũ Hành Sơn', 'Quận Liên Chiểu', 'Quận Cẩm Lệ'
+  ],
+  'Hải Phòng': [
+    'Quận Hồng Bàng', 'Quận Ngô Quyền', 'Quận Lê Chân', 'Quận Hải An', 'Quận Kiến An'
+  ],
+  'Cần Thơ': [
+    'Quận Ninh Kiều', 'Quận Bình Thủy', 'Quận Cái Răng', 'Quận Ô Môn', 'Quận Thốt Nốt'
+  ],
+  'Bình Dương': [
+    'TP. Thủ Dầu Một', 'TP. Thuận An', 'TP. Dĩ An', 'TP. Bến Cát', 'TP. Tân Uyên'
+  ],
+  'Đồng Nai': [
+    'TP. Biên Hòa', 'TP. Long Khánh', 'Huyện Long Thành', 'Huyện Nhơn Trạch'
+  ],
+  'Quảng Ninh': ['TP. Hạ Long', 'TP. Cẩm Phả', 'TP. Uông Bí', 'TP. Móng Cái'],
+  'Khánh Hòa': ['TP. Nha Trang', 'TP. Cam Ranh', 'Thị xã Ninh Hòa'],
+  'Thừa Thiên Huế': ['TP. Huế', 'Thị xã Hương Thủy', 'Thị xã Hương Trà'],
+  'Lâm Đồng': ['TP. Đà Lạt', 'TP. Bảo Lộc', 'Huyện Đức Trọng']
+};
+
+const VIETNAM_PROVINCES = Object.keys(PROVINCE_DISTRICT_MAP);
 
 const PRESET_LOGOS = [
   { name: 'Viettel Post', logo: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=120&auto=format&fit=crop&q=80' },
@@ -355,21 +384,92 @@ export function ShippingCarriersPage() {
 
   const toggleServiceType = (serviceId: string) => {
     setFormState(prev => {
-      const current = prev.serviceTypes || [];
-      const updated = current.includes(serviceId)
-        ? current.filter(s => s !== serviceId)
-        : [...current, serviceId];
-      return { ...prev, serviceTypes: updated };
+      const currentServices = prev.serviceTypes || [];
+      const isAdding = !currentServices.includes(serviceId);
+      const updatedServices = isAdding
+        ? [...currentServices, serviceId]
+        : currentServices.filter(s => s !== serviceId);
+
+      let updatedRegions = [...(prev.coverageRegions || ['Toàn quốc'])];
+
+      // Logic: Nếu Dịch vụ cung cấp có tích box 'Quốc tế' (International) thì Vùng giao hàng khả dụng tự động chọn luôn 'Quốc tế', nếu bỏ tích thì tự động bỏ chọn
+      if (serviceId === 'International') {
+        if (isAdding) {
+          if (!updatedRegions.includes('Quốc tế')) {
+            updatedRegions.push('Quốc tế');
+            toast.info('Đã tự động chọn vùng giao hàng "Quốc tế" tương ứng với dịch vụ');
+          }
+        } else {
+          updatedRegions = updatedRegions.filter(r => r !== 'Quốc tế');
+          if (updatedRegions.length === 0) updatedRegions = ['Toàn quốc'];
+        }
+      }
+
+      return { ...prev, serviceTypes: updatedServices, coverageRegions: updatedRegions };
     });
   };
 
   const toggleCoverageRegion = (region: string) => {
     setFormState(prev => {
-      const current = prev.coverageRegions || [];
-      const updated = current.includes(region)
-        ? current.filter(r => r !== region)
-        : [...current, region];
-      return { ...prev, coverageRegions: updated };
+      const currentRegions = prev.coverageRegions || [];
+      let updatedRegions: string[] = [];
+
+      if (region === 'Toàn quốc') {
+        const wasSelected = currentRegions.includes('Toàn quốc');
+        if (wasSelected) {
+          updatedRegions = currentRegions.filter(r => r !== 'Toàn quốc');
+        } else {
+          const preserved = currentRegions.filter(r => !['Miền Bắc', 'Miền Trung', 'Miền Nam', 'Toàn quốc'].includes(r));
+          updatedRegions = ['Toàn quốc', ...preserved];
+        }
+      } else if (['Miền Bắc', 'Miền Trung', 'Miền Nam'].includes(region)) {
+        let domRegions = currentRegions.filter(r => ['Miền Bắc', 'Miền Trung', 'Miền Nam'].includes(r));
+        const isAdding = !domRegions.includes(region);
+        if (isAdding) {
+          domRegions.push(region);
+        } else {
+          domRegions = domRegions.filter(r => r !== region);
+        }
+
+        const preserved = currentRegions.filter(r => !['Miền Bắc', 'Miền Trung', 'Miền Nam', 'Toàn quốc'].includes(r));
+
+        // If all 3 regions (North, Central, South) are selected -> auto-select Toàn quốc and clear the 3 individual regions
+        if (domRegions.includes('Miền Bắc') && domRegions.includes('Miền Trung') && domRegions.includes('Miền Nam')) {
+          updatedRegions = ['Toàn quốc', ...preserved];
+          toast.info('Đã tự động chọn "Toàn quốc" khi chọn cả 3 miền');
+        } else {
+          updatedRegions = [...domRegions, ...preserved];
+        }
+      } else if (region === 'Quốc tế') {
+        const wasSelected = currentRegions.includes('Quốc tế');
+        if (wasSelected) {
+          updatedRegions = currentRegions.filter(r => r !== 'Quốc tế');
+        } else {
+          updatedRegions = [...currentRegions, 'Quốc tế'];
+        }
+      } else {
+        const wasSelected = currentRegions.includes(region);
+        if (wasSelected) {
+          updatedRegions = currentRegions.filter(r => r !== region);
+        } else {
+          updatedRegions = [...currentRegions, region];
+        }
+      }
+
+      let updatedServices = [...(prev.serviceTypes || [])];
+
+      // Synchronize International service type if 'Quốc tế' region is toggled
+      if (region === 'Quốc tế') {
+        if (updatedRegions.includes('Quốc tế')) {
+          if (!updatedServices.includes('International')) {
+            updatedServices.push('International');
+          }
+        } else {
+          updatedServices = updatedServices.filter(s => s !== 'International');
+        }
+      }
+
+      return { ...prev, coverageRegions: updatedRegions, serviceTypes: updatedServices };
     });
   };
 
@@ -520,9 +620,14 @@ export function ShippingCarriersPage() {
   return (
     <div className="space-y-6">
       <datalist id="area-carrier-suggestions">
-        {areas.map((area) => (
-          <option key={area.id} value={area.parentName ? `${area.name}, ${area.parentName}` : area.name} />
+        {(PROVINCE_DISTRICT_MAP[formState.province || 'Hà Nội'] || []).map((dist) => (
+          <option key={dist} value={`${dist}, ${formState.province || 'Hà Nội'}`} />
         ))}
+        {areas
+          .filter(a => !formState.province || a.name.includes(formState.province) || (a.parentName && a.parentName.includes(formState.province)))
+          .map((area) => (
+            <option key={area.id} value={area.parentName ? `${area.name}, ${area.parentName}` : area.name} />
+          ))}
       </datalist>
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -772,11 +877,22 @@ export function ShippingCarriersPage() {
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Tỉnh / thành phố</label>
+                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Tỉnh / thành phố *</label>
                 <select
                   value={formState.province || 'Hà Nội'}
-                  onChange={(e) => setFormState({ ...formState, province: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:border-slate-900 font-semibold text-slate-900 dark:text-white"
+                  onChange={(e) => {
+                    const newProv = e.target.value;
+                    const districts = PROVINCE_DISTRICT_MAP[newProv] || [];
+                    const defaultDist = districts[0] || '';
+                    setFormState(prev => ({
+                      ...prev,
+                      province: newProv,
+                      district: defaultDist,
+                      addressDetail: `${defaultDist}, ${newProv}`,
+                      address: `${defaultDist}, ${newProv}`
+                    }));
+                  }}
+                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:border-slate-900 font-semibold text-slate-900 dark:text-white cursor-pointer"
                 >
                   {VIETNAM_PROVINCES.map(p => (
                     <option key={p} value={p}>{p}</option>
@@ -785,14 +901,24 @@ export function ShippingCarriersPage() {
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Quận / huyện</label>
-                <input
-                  type="text"
-                  value={formState.district || ''}
-                  onChange={(e) => setFormState({ ...formState, district: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:border-slate-900 text-slate-900 dark:text-white"
-                  placeholder="Quận Ba Đình, Cầu Giấy..."
-                />
+                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Quận / huyện *</label>
+                <select
+                  value={formState.district || (PROVINCE_DISTRICT_MAP[formState.province || 'Hà Nội']?.[0] || '')}
+                  onChange={(e) => {
+                    const newDist = e.target.value;
+                    setFormState(prev => ({
+                      ...prev,
+                      district: newDist,
+                      addressDetail: `${newDist}, ${prev.province || 'Hà Nội'}`,
+                      address: `${newDist}, ${prev.province || 'Hà Nội'}`
+                    }));
+                  }}
+                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:border-slate-900 font-semibold text-slate-900 dark:text-white cursor-pointer"
+                >
+                  {(PROVINCE_DISTRICT_MAP[formState.province || 'Hà Nội'] || ['Quận / Huyện trung tâm']).map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
               </div>
             </div>
 

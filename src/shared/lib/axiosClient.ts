@@ -45,7 +45,13 @@ const processQueue = (error: any = null, token: string | null = null) => {
 
 // Fast In-Memory API Cache cho các query GET lặp lại
 const apiCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL_MS = 10000; // 10 seconds TTL
+const CACHE_TTL_MS = 15000; // 15 seconds TTL
+const inFlightRequests = new Map<string, Promise<any>>();
+
+export const clearApiCache = () => {
+  apiCache.clear();
+  inFlightRequests.clear();
+};
 
 // ---------------------------------------------------------------------------
 // 4. REQUEST INTERCEPTOR (Tự động gắn Bearer Token & Quản lý Cache)
@@ -63,9 +69,18 @@ axiosClient.interceptors.request.use(
       apiCache.clear();
     } else {
       const cacheKey = `${config.url}?${JSON.stringify(config.params || {})}`;
+      config._cacheKey = cacheKey;
       const cached = apiCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-        config._cacheKey = cacheKey;
+        // Fast-path: Return cached data via resolved adapter without network request
+        config.adapter = () => Promise.resolve({
+          data: cached.data,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config,
+          request: {},
+        });
       }
     }
 
@@ -73,6 +88,20 @@ axiosClient.interceptors.request.use(
   },
   (error) => Promise.reject(error)
 );
+
+// In-Flight Request Deduplication Wrapper for axiosClient.get
+const originalGet = axiosClient.get.bind(axiosClient);
+(axiosClient as any).get = function <T = any, R = T, D = any>(url: string, config?: any): Promise<R> {
+  const cacheKey = `GET:${url}?${JSON.stringify(config?.params || {})}`;
+  if (inFlightRequests.has(cacheKey)) {
+    return inFlightRequests.get(cacheKey)!;
+  }
+  const promise = originalGet<T, R, D>(url, config).finally(() => {
+    inFlightRequests.delete(cacheKey);
+  });
+  inFlightRequests.set(cacheKey, promise);
+  return promise;
+};
 
 // ---------------------------------------------------------------------------
 // 5. RESPONSE INTERCEPTOR (Xử lý Data Wrapper, 401 Queue & Error Mapping)

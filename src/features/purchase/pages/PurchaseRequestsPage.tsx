@@ -7,6 +7,7 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
+import { useAuthStore } from '@/features/auth/store/authStore';
 
 interface PurchaseRequestItem {
   id: string;
@@ -104,13 +105,14 @@ export function PurchaseRequestsPage() {
   });
 
   const handleOpenCreate = () => {
+    const user = useAuthStore.getState().user;
     setEditingItem({
       requestCode: `PR-2026-00${data.length + 1}`,
       requestDate: new Date().toISOString().split('T')[0],
       department: 'Bộ phận Kho vận',
       reason: '',
       estimatedTotal: 0,
-      proposedBy: 'Nguyễn Văn A',
+      proposedBy: user?.name || user?.fullName || '',
       status: 'CHỜ_DUYỆT',
       notes: '',
     });

@@ -805,14 +805,14 @@ export function UsersPage() {
       <Modal
         isOpen={formOpen}
         onClose={() => setFormOpen(false)}
-        title={formMode === 'create' ? '⚡ Cấp tài khoản đăng nhập mới' : '✏️ Chỉnh sửa thông tin tài khoản & nhân sự'}
+        title={formMode === 'create' ? 'Cấp tài khoản đăng nhập mới' : 'Chỉnh sửa thông tin tài khoản & nhân sự'}
         width="max-w-2xl"
       >
         <form onSubmit={handleSave} className="space-y-5">
           {/* Section 1: Thông tin đăng nhập & phân quyền cốt lõi (6-7 trường) */}
           <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-800 space-y-4">
-            <h3 className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-emerald-200 dark:border-emerald-800 pb-2">
-              <Key className="w-4 h-4 text-emerald-600" /> 1. Thông tin tài khoản &amp; Truy cập hệ thống
+            <h3 className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider border-b border-emerald-200 dark:border-emerald-800 pb-2">
+              1. Thông tin tài khoản &amp; Truy cập hệ thống
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -875,7 +875,7 @@ export function UsersPage() {
                   }}
                   className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
                 >
-                  <option value="ALL">🏢 Tất cả chi nhánh (Toàn hệ thống)</option>
+                  <option value="ALL">Tất cả chi nhánh (Toàn hệ thống)</option>
                   {branches.map((b) => (
                     <option key={b.id} value={b.id}>{b.name} ({b.branchCode || `CN-${b.id}`})</option>
                   ))}
@@ -914,7 +914,7 @@ export function UsersPage() {
                 >
                   {roles.map(r => (
                     <option key={r.id} value={r.roleCode}>
-                      {r.roleCode === 'SUPER_ADMIN' ? '👑 ' : ''}{r.roleTitle || r.roleName} ({r.roleCode || r.roleName})
+                      {r.roleTitle || r.roleName} ({r.roleCode || r.roleName})
                     </option>
                   ))}
                 </select>
@@ -950,10 +950,10 @@ export function UsersPage() {
                   onChange={(e) => setFormData(p => ({ ...p, status: e.target.value as any }))}
                   className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-semibold"
                 >
-                  <option value="ACTIVE">🟢 ĐANG LÀM VIỆC (ACTIVE)</option>
-                  <option value="SUSPENDED">🔴 TẠM KHÓA (SUSPENDED)</option>
-                  <option value="ON_LEAVE">🟡 NGHỈ PHÉP (ON_LEAVE)</option>
-                  <option value="TERMINATED">⚪ ĐÃ NGHỈ VIỆC (TERMINATED)</option>
+                  <option value="ACTIVE">Đang làm việc (ACTIVE)</option>
+                  <option value="SUSPENDED">Tạm khóa (SUSPENDED)</option>
+                  <option value="ON_LEAVE">Nghỉ phép (ON_LEAVE)</option>
+                  <option value="TERMINATED">Đã nghỉ việc (TERMINATED)</option>
                 </select>
               </div>
             </div>
@@ -978,8 +978,7 @@ export function UsersPage() {
           <details className="group border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50/60 dark:bg-gray-900/40 p-4 transition-all">
             <summary className="cursor-pointer text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center justify-between select-none">
               <span className="flex items-center gap-1.5">
-                <Building className="w-4 h-4 text-gray-500" />
-                📁 Mở rộng thông tin hồ sơ nhân sự (CCCD, Ngày sinh, HĐLĐ, Ghi chú...)
+                Mở rộng thông tin hồ sơ nhân sự (CCCD, Ngày sinh, HĐLĐ, Ghi chú...)
               </span>
               <span className="text-[10px] text-emerald-600 font-semibold group-open:rotate-180 transition-transform">
                 ▼
@@ -1080,9 +1079,8 @@ export function UsersPage() {
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold shadow-md transition-colors flex items-center gap-1.5"
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold shadow-md transition-colors"
             >
-              <CheckCircle2 className="w-4 h-4" />
               {formMode === 'create' ? 'Cấp tài khoản ngay' : 'Lưu cập nhật'}
             </button>
           </div>
@@ -1309,7 +1307,7 @@ export function UsersPage() {
                 onChange={(e) => setSelectedBranchId(e.target.value)}
                 className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 shadow-xs"
               >
-                <option value="ALL">🏢 Tất cả chi nhánh (Toàn hệ thống)</option>
+                <option value="ALL">Tất cả chi nhánh (Toàn hệ thống)</option>
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name} ({b.branchCode || `CN-${b.id}`})

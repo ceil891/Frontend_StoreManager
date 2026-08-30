@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { exportToCsv } from '@/shared/utils/exportCsv';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 
 const categoryMap: Record<string, string> = {
   SUPPLIER_PAYMENT: 'Thanh toán nhà cung cấp',
@@ -618,38 +619,14 @@ export function PaymentVouchersPage() {
       </Modal>
 
       {/* Modal: Xác nhận xóa */}
-      <Modal
+      <ConfirmDeleteModal
         isOpen={!!deletingVoucher}
         onClose={() => setDeletingVoucher(null)}
+        onConfirm={handleDeleteConfirm}
         title="Xác nhận hủy phiếu chi"
-        isDestructive
-        width="max-w-md"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-            Bạn có chắc chắn muốn hủy bỏ phiếu chi <strong className="text-gray-900 dark:text-white">{deletingVoucher?.voucherNumber}</strong> giải ngân cho <span className="font-semibold">{deletingVoucher?.payeeName}</span>?
-          </p>
-          <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2.5 rounded-lg border border-red-200 dark:border-red-800/40">
-            Hành động này sẽ gỡ bỏ chứng từ khỏi hệ thống kế toán tổng hợp. Chỉ nên thực hiện nếu lệnh chuyển khoản chưa thực sự được ngân hàng xử lý hoặc đây là phiếu tạo nhầm.
-          </p>
-          <div className="flex justify-end gap-3 pt-4">
-            <button
-              type="button"
-              onClick={() => setDeletingVoucher(null)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors text-sm"
-            >
-              Hủy bỏ
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteConfirm}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
-            >
-              Đồng ý hủy
-            </button>
-          </div>
-        </div>
-      </Modal>
+        description="Bạn có chắc chắn muốn hủy bỏ phiếu chi này không? Thao tác này sẽ gỡ bỏ chứng từ và điều chỉnh số dư tài khoản tương ứng."
+        itemName={`${deletingVoucher?.voucherNumber} (${deletingVoucher?.payeeName})`}
+      />
     </>
   );
 }

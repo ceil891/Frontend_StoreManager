@@ -10,6 +10,8 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { recordActivity } from '@/shared/utils/activityLogger';
 import { useBranchStore } from '../store/branchStore';
 import { useUserStore } from '@/features/hr/store/userStore';
+import { toast } from 'sonner';
+import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
 
 // --- TYPES ---
 interface Branch {
@@ -105,59 +107,86 @@ export function BranchManagementPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingBranch.name || !editingBranch.location) return;
+    if (!editingBranch.name?.trim()) {
+      toast.error('Tên chi nhánh không được để trống!');
+      return;
+    }
+    if (!editingBranch.branchCode?.trim()) {
+      toast.error('Mã chi nhánh không được để trống!');
+      return;
+    }
+    if (!editingBranch.location?.trim()) {
+      toast.error('Vui lòng chọn địa chỉ cho chi nhánh!');
+      return;
+    }
+
+    const isDuplicateCode = branches.some(
+      b => b.branchCode?.trim().toLowerCase() === editingBranch.branchCode?.trim().toLowerCase() && (modalMode === 'create' || b.id !== editingBranch.id)
+    );
+    if (isDuplicateCode) {
+      toast.error(`Mã chi nhánh "${editingBranch.branchCode}" đã tồn tại trong hệ thống. Vui lòng đổi mã khác!`);
+      return;
+    }
 
     const selectedManager = users.find(u => u.id === editingBranch.managerId);
     const managerName = selectedManager ? selectedManager.fullName : '—';
 
-    if (modalMode === 'create') {
-      await addBranch({
-        branchCode: editingBranch.branchCode || `BR-${Date.now().toString().slice(-4)}`,
-        name: editingBranch.name,
-        location: editingBranch.location,
-        phone: editingBranch.phone || '',
-        manager: managerName,
-        managerId: editingBranch.managerId,
-        status: editingBranch.status || 'ACTIVE',
-        revenueTarget: editingBranch.revenueTarget || 300000000,
-        openedDate: editingBranch.openedDate || new Date().toISOString().split('T')[0],
-      });
-      recordActivity({
-        actionType: 'CREATE',
-        moduleName: 'Hệ thống',
-        pageName: 'Quản lý chi nhánh',
-        entityType: 'Branch',
-        entityId: editingBranch.branchCode || 'NEW',
-        entityLabel: editingBranch.name,
-        description: `Thêm Chi Nhánh ${editingBranch.name}, QL ${managerName}.`,
-        changedFields: ['name', 'location', 'manager', 'status'],
-      });
-    } else {
-      if (editingBranch.id) {
-        await updateBranch(editingBranch.id, {
-          branchCode: editingBranch.branchCode,
-          name: editingBranch.name,
-          location: editingBranch.location,
-          phone: editingBranch.phone,
+    try {
+      if (modalMode === 'create') {
+        await addBranch({
+          branchCode: editingBranch.branchCode.trim(),
+          name: editingBranch.name.trim(),
+          location: editingBranch.location.trim(),
+          phone: editingBranch.phone || '',
           manager: managerName,
           managerId: editingBranch.managerId,
-          status: editingBranch.status,
-          revenueTarget: editingBranch.revenueTarget,
-          openedDate: editingBranch.openedDate,
+          status: editingBranch.status || 'ACTIVE',
+          revenueTarget: editingBranch.revenueTarget || 300000000,
+          openedDate: editingBranch.openedDate || new Date().toISOString().split('T')[0],
         });
+        toast.success(`Đã thêm mới chi nhánh ${editingBranch.name} thành công!`);
         recordActivity({
-          actionType: 'UPDATE',
+          actionType: 'CREATE',
           moduleName: 'Hệ thống',
           pageName: 'Quản lý chi nhánh',
           entityType: 'Branch',
-          entityId: editingBranch.id,
+          entityId: editingBranch.branchCode || 'NEW',
           entityLabel: editingBranch.name,
-          description: `Sửa thông tin chi nhánh ${editingBranch.name}.`,
-          changedFields: ['name', 'location', 'manager', 'status', 'revenueTarget'],
+          description: `Thêm Chi Nhánh ${editingBranch.name}, QL ${managerName}.`,
+          changedFields: ['name', 'location', 'manager', 'status'],
         });
+      } else {
+        if (editingBranch.id) {
+          await updateBranch(editingBranch.id, {
+            branchCode: editingBranch.branchCode.trim(),
+            name: editingBranch.name.trim(),
+            location: editingBranch.location.trim(),
+            phone: editingBranch.phone,
+            manager: managerName,
+            managerId: editingBranch.managerId,
+            status: editingBranch.status,
+            revenueTarget: editingBranch.revenueTarget,
+            openedDate: editingBranch.openedDate,
+          });
+          toast.success(`Đã cập nhật chi nhánh ${editingBranch.name} thành công!`);
+          recordActivity({
+            actionType: 'UPDATE',
+            moduleName: 'Hệ thống',
+            pageName: 'Quản lý chi nhánh',
+            entityType: 'Branch',
+            entityId: editingBranch.id,
+            entityLabel: editingBranch.name,
+            description: `Sửa thông tin chi nhánh ${editingBranch.name}.`,
+            changedFields: ['name', 'location', 'manager', 'status', 'revenueTarget'],
+          });
+        }
       }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error('Lỗi lưu chi nhánh:', err);
+      const msg = err.response?.data?.message || err.message || 'Lỗi khi lưu chi nhánh. Vui lòng kiểm tra lại!';
+      toast.error(msg);
     }
-    setIsModalOpen(false);
   };
 
   const handleDeleteConfirm = async () => {
@@ -475,14 +504,12 @@ export function BranchManagementPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ chi nhánh *</label>
-                <input
-                  required
-                  type="text"
-                  value={editingBranch.location || ''}
-                  onChange={e => setEditingBranch({ ...editingBranch, location: e.target.value })}
-                  placeholder="123 Lê Lợi, Phường Bến Thành, Quận 1, TP.HCM"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500"
+                <AddressCascadeSelect
+                  addressDetail={editingBranch.location || ''}
+                  onChange={({ province, district, ward, addressDetail }) => {
+                    const fullAddr = [addressDetail, ward, district, province].filter(Boolean).join(', ');
+                    setEditingBranch(prev => ({ ...prev, location: fullAddr }));
+                  }}
                 />
               </div>
 

@@ -262,9 +262,11 @@ export function LoyaltyTiersPage() {
         await updateLoyaltyTier(editingTier.key, {
           tierName: normalizedName,
           tierCode: editingTier.key,
-          minPoints: editForm.minSpend,
-          pointMultiplier: editForm.pointRate,
-          discountPct: editForm.discountPct,
+          minPoints: Number(editForm.minSpend) || 0,
+          minSpend: Number(editForm.minSpend) || 0,
+          pointMultiplier: Number(editForm.pointRate) || 1,
+          discountPercent: Number(editForm.discountPct) || 0,
+          isActive: true,
         });
 
         setTiers((prev) =>
@@ -293,9 +295,11 @@ export function LoyaltyTiersPage() {
       await addLoyaltyTier({
         tierCode: tierKey,
         tierName: normalizedName,
-        minPoints: editForm.minSpend,
-        pointMultiplier: editForm.pointRate,
-        discountPct: editForm.discountPct,
+        minPoints: Number(editForm.minSpend) || 0,
+        minSpend: Number(editForm.minSpend) || 0,
+        pointMultiplier: Number(editForm.pointRate) || 1,
+        discountPercent: Number(editForm.discountPct) || 0,
+        isActive: true,
       });
 
       const newTier: LoyaltyTier = {

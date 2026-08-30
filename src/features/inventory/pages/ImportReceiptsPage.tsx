@@ -1224,7 +1224,7 @@ export function ImportReceiptsPage() {
       <Modal
         isOpen={!!deletingReceipt}
         onClose={() => setDeletingReceipt(null)}
-        title="Xác nhận xóa Phiếu Nhập"
+        title="Xác nhận xóa phiếu nhập kho"
         isDestructive
         width="max-w-md"
       >

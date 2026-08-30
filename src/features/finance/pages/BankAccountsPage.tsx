@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { exportToCsv } from '@/shared/utils/exportCsv';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 
 const formatBalance = (amount: number, currency: string) => {
   if (currency === 'VND') {
@@ -608,38 +609,14 @@ export function BankAccountsPage() {
       </Modal>
 
       {/* Modal: Xác nhận xóa */}
-      <Modal
+      <ConfirmDeleteModal
         isOpen={!!deletingAccount}
         onClose={() => setDeletingAccount(null)}
+        onConfirm={handleDeleteConfirm}
         title="Xác nhận hủy liên kết tài khoản"
-        isDestructive
-        width="max-w-md"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-            Bạn có chắc chắn muốn gỡ bỏ liên kết tài khoản <strong className="text-gray-900 dark:text-white">{deletingAccount?.accountNumberMasked}</strong> của ngân hàng <span className="font-semibold">{deletingAccount?.bankName}</span> khỏi kho bạc hệ thống?
-          </p>
-          <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2.5 rounded-lg border border-red-200 dark:border-red-800/40">
-            Thao tác này sẽ ngắt kết nối đồng bộ sao kê tự động với hệ thống kế toán doanh nghiệp. Bạn vẫn có thể liên kết lại bất kỳ lúc nào nếu cần.
-          </p>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <button
-              type="button"
-              onClick={() => setDeletingAccount(null)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg transition-colors text-sm"
-            >
-              Hủy bỏ
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteConfirm}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
-            >
-              Đồng ý gỡ
-            </button>
-          </div>
-        </div>
-      </Modal>
+        description="Bạn có chắc chắn muốn gỡ bỏ liên kết tài khoản ngân hàng này khỏi kho bạc hệ thống? Thao tác này sẽ ngắt kết nối đồng bộ sao kê tự động."
+        itemName={`${deletingAccount?.bankName} - ${deletingAccount?.accountNumberMasked}`}
+      />
     </>
   );
 }

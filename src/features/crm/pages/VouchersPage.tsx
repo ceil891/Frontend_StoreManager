@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { useCrmStore } from '../store/crmStore';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 import { axiosClient } from '@/shared/lib/axiosClient';
 
@@ -230,7 +231,7 @@ export function VouchersPage() {
           };
           return (
             <span className="font-bold text-gray-900 dark:text-white text-sm">
-              {type === 'PERCENTAGE' ? `${val}%` : type === 'FIXED_AMOUNT' ? `$${val.toFixed(2)}` : typeMap[type] || type}
+              {type === 'PERCENTAGE' ? `${val}%` : type === 'FIXED_AMOUNT' ? formatCurrency(val) : typeMap[type] || type}
             </span>
           );
         },
@@ -238,7 +239,7 @@ export function VouchersPage() {
       {
         accessorKey: 'minOrderValue',
         header: 'Đơn tối thiểu',
-        cell: (info) => <span className="font-mono text-gray-700 dark:text-gray-300">${(info.getValue() as number).toFixed(2)}</span>,
+        cell: (info) => <span className="font-mono text-gray-700 dark:text-gray-300">{formatCurrency(info.getValue() as number)}</span>,
       },
       {
         accessorKey: 'applicableScope',
@@ -433,7 +434,7 @@ export function VouchersPage() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Giá trị khuyến mãi</p>
                   <p className="text-xl font-bold text-gray-900 dark:text-white">
-                    {selectedVoucher.type === 'PERCENTAGE' ? `${selectedVoucher.discountValue}% GIẢM` : selectedVoucher.type === 'FIXED_AMOUNT' ? `$${selectedVoucher.discountValue.toFixed(2)} GIẢM` : selectedVoucher.type === 'FREE_SHIPPING' ? 'Miễn phí vận chuyển' : 'Tặng sản phẩm'}
+                    {selectedVoucher.type === 'PERCENTAGE' ? `${selectedVoucher.discountValue}% GIẢM` : selectedVoucher.type === 'FIXED_AMOUNT' ? `${formatCurrency(selectedVoucher.discountValue)} GIẢM` : selectedVoucher.type === 'FREE_SHIPPING' ? 'Miễn phí vận chuyển' : 'Tặng sản phẩm'}
                   </p>
                 </div>
               </div>
@@ -476,12 +477,12 @@ export function VouchersPage() {
 
               <div className="flex justify-between items-center text-sm pt-2">
                 <span className="text-gray-500 dark:text-gray-400">Giá trị đơn hàng tối thiểu:</span>
-                <span className="font-bold font-mono text-gray-900 dark:text-white">${selectedVoucher.minOrderValue.toFixed(2)}</span>
+                <span className="font-bold font-mono text-gray-900 dark:text-white">{formatCurrency(selectedVoucher.minOrderValue)}</span>
               </div>
               {selectedVoucher.maxDiscount && (
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-500 dark:text-gray-400">Mức giảm tối đa (Capped):</span>
-                  <span className="font-semibold font-mono text-primary">${selectedVoucher.maxDiscount.toFixed(2)}</span>
+                  <span className="font-semibold font-mono text-primary">{formatCurrency(selectedVoucher.maxDiscount)}</span>
                 </div>
               )}
               <div className="flex justify-between items-center text-sm">

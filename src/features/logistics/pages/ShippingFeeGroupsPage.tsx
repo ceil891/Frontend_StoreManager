@@ -302,10 +302,11 @@ export function ShippingFeeGroupsPage() {
               <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Giá trị đơn tối thiểu (đ)</label>
               <input
                 type="text"
-                value={editingItem.minOrderValueVnd ?? 0}
+                value={editingItem.minOrderValueVnd === 0 ? '' : (editingItem.minOrderValueVnd ?? '')}
+                placeholder="0"
                 onChange={(e) => {
-                  const clean = e.target.value.replace(/^0+(?=\d)/, '');
-                  setEditingItem({ ...editingItem, minOrderValueVnd: parseFloat(clean) || 0 });
+                  const clean = e.target.value.replace(/[^0-9]/g, '');
+                  setEditingItem({ ...editingItem, minOrderValueVnd: clean === '' ? 0 : parseInt(clean, 10) || 0 });
                 }}
                 className="w-full p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-mono font-bold text-gray-900 dark:text-white"
               />
@@ -314,10 +315,11 @@ export function ShippingFeeGroupsPage() {
               <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Mức phí áp dụng (đ)</label>
               <input
                 type="text"
-                value={editingItem.flatFeeVnd ?? 0}
+                value={editingItem.flatFeeVnd === 0 ? '' : (editingItem.flatFeeVnd ?? '')}
+                placeholder="0"
                 onChange={(e) => {
-                  const clean = e.target.value.replace(/^0+(?=\d)/, '');
-                  setEditingItem({ ...editingItem, flatFeeVnd: parseFloat(clean) || 0 });
+                  const clean = e.target.value.replace(/[^0-9]/g, '');
+                  setEditingItem({ ...editingItem, flatFeeVnd: clean === '' ? 0 : parseInt(clean, 10) || 0 });
                 }}
                 className="w-full p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-mono text-primary font-bold"
               />

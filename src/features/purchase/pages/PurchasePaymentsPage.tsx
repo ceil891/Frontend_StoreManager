@@ -6,6 +6,10 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { extractPageContent } from '@/shared/lib/apiHelpers';
 import { toast } from 'sonner';
+import { useAuthStore } from '@/features/auth/store/authStore';
+import { useUserStore } from '@/features/hr/store/userStore';
+import { usePurchaseStore } from '@/features/purchase/store/purchaseStore';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 
 const formatNumberString = (val: string | number | undefined | null) => {
   if (val === undefined || val === null || val === '') return '';
@@ -51,12 +55,22 @@ interface FundAccount {
 }
 
 export function PurchasePaymentsPage() {
+  const currentUser = useAuthStore((s) => s.user);
+  const { users, fetchUsers } = useUserStore();
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const loggedInUser = currentUser?.fullName || currentUser?.name || currentUser?.username || 'Nhân viên kế toán';
+
   const [data, setData] = useState<PurchasePaymentRecord[]>([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<PurchasePaymentRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<PurchasePaymentRecord>>({});
+  const [deletingPayment, setDeletingPayment] = useState<PurchasePaymentRecord | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   // Master Data Lookups
@@ -68,8 +82,6 @@ export function PurchasePaymentsPage() {
     const isCash = editingItem.paymentMethod === 'TIEN_MAT';
     return fundsList.filter(f => isCash ? f.type === 'CASH' : f.type === 'BANK');
   }, [editingItem.paymentMethod, fundsList]);
-
-  const loggedInUser = 'Super Admin (Hưng)';
 
   const fetchMasterData = async () => {
     try {
@@ -83,35 +95,21 @@ export function PurchasePaymentsPage() {
           item.status === 'DISPATCHED/IN_TRANSIT'
         );
         const mapped: InvoiceLookup[] = approvedList.map((item: any, idx: number) => {
-          const code = item.poNumber || `PO-2026-${String(item.id).padStart(4, '0')}`;
-          const total = Number(item.totalCost || item.totalAmount || 270000);
+          const code = item.poCode || item.poNumber || `PO-2026-${String(item.id).padStart(4, '0')}`;
+          const total = Number(item.totalCost || item.totalAmount || 0);
           const status = item.paymentStatus || 'UNPAID';
           const paid = status === 'PAID' ? total : (status === 'PARTIAL_ADVANCE' ? (item.advanceAmount || Math.round(total * 0.5)) : 0);
           const remaining = Math.max(0, total - paid);
           return {
             id: item.id || idx + 1,
             code,
-            supplierName: item.supplierName || item.supplier?.name || 'Công ty Coca Cola Việt Nam',
+            supplierName: item.supplierName || item.supplier?.name || 'Nhà cung cấp',
             totalAmount: total,
             paidAmount: paid,
-            remainingDebt: remaining > 0 ? remaining : 150000,
+            remainingDebt: remaining,
           };
         });
-        if (mapped.length === 0) {
-          setInvoicesList([
-            { id: 1, code: 'PO-2026-7394416', supplierName: 'Công ty Coca Cola Việt Nam', totalAmount: 270000, paidAmount: 0, remainingDebt: 270000 },
-            { id: 2, code: 'PO-2026-6756535', supplierName: 'Công ty Coca Cola Việt Nam', totalAmount: 270000, paidAmount: 135000, remainingDebt: 135000 },
-            { id: 3, code: 'PO-2026-5483', supplierName: 'Công ty Vinamilk', totalAmount: 5000000, paidAmount: 2000000, remainingDebt: 3000000 },
-          ]);
-        } else {
-          setInvoicesList(mapped);
-        }
-      }).catch(() => {
-        setInvoicesList([
-          { id: 1, code: 'PO-2026-7394416', supplierName: 'Công ty Coca Cola Việt Nam', totalAmount: 270000, paidAmount: 0, remainingDebt: 270000 },
-          { id: 2, code: 'PO-2026-6756535', supplierName: 'Công ty Coca Cola Việt Nam', totalAmount: 270000, paidAmount: 135000, remainingDebt: 135000 },
-          { id: 3, code: 'PO-2026-5483', supplierName: 'Công ty Vinamilk', totalAmount: 5000000, paidAmount: 2000000, remainingDebt: 3000000 },
-        ]);
+        setInvoicesList(mapped);
       });
 
       // 2. Fetch Fund / Bank Accounts (Real configured accounts)
@@ -270,13 +268,13 @@ export function PurchasePaymentsPage() {
     
     setEditingItem({
       paymentCode: `PAY-PUR-${Date.now().toString().slice(-4)}`,
-      invoiceCode: firstInvoice?.code || 'PO-2026-7394416',
-      supplierName: firstInvoice?.supplierName || 'Công ty Coca Cola Việt Nam',
+      invoiceCode: firstInvoice?.code || '',
+      supplierName: firstInvoice?.supplierName || '',
       paymentMethod: 'CHUYEN_KHOAN',
       fundAccountName: defaultFund,
       paymentDate: new Date().toISOString().split('T')[0],
-      amount: firstInvoice?.remainingDebt || 270000,
-      remainingInvoiceDebt: firstInvoice?.remainingDebt || 270000,
+      amount: firstInvoice?.remainingDebt || 0,
+      remainingInvoiceDebt: firstInvoice?.remainingDebt || 0,
       handler: loggedInUser,
       status: 'CHO_DUYET',
       notes: '',
@@ -420,9 +418,11 @@ export function PurchasePaymentsPage() {
       await axiosClient.put(`/finance/payment-vouchers/${payment.id}`, {
         status: 'COMPLETED',
         voucherCode: payment.paymentCode,
+        invoiceCode: payment.invoiceCode,
         amount: payment.amount,
         paymentMethod: payment.paymentMethod,
         fundAccountName: payment.fundAccountName,
+        handler: payment.handler,
       });
 
       // 1. Update local state & persist
@@ -432,29 +432,46 @@ export function PurchasePaymentsPage() {
       if (selected?.id === payment.id) {
         setSelected(updated);
       }
-} catch (err) {
+
+      // 2. Synchronize PO paymentStatus to PAID in purchaseStore & Master Data
+      const { purchaseOrders, updatePurchaseOrder, fetchPurchaseOrders } = usePurchaseStore.getState();
+      const matchingPO = purchaseOrders.find(
+        p => p.poNumber === payment.invoiceCode || (p as any).poCode === payment.invoiceCode || String(p.id) === String(payment.invoiceCode)
+      );
+      if (matchingPO) {
+        updatePurchaseOrder(matchingPO.id, { paymentStatus: 'PAID' }).catch(() => {});
+      }
+      fetchPurchaseOrders().catch(() => {});
+
+      await fetchMasterData();
+      toast.success(`Duyệt phiếu chi ${payment.paymentCode} thành công! Đã tự động cập nhật trạng thái đơn mua hàng.`);
+    } catch (err) {
       console.error(err);
       toast.error('Lỗi khi duyệt phiếu chi');
     }
   };
 
-  const handleDelete = async (id: string) => {
-    const item = data.find(d => d.id === id);
+  const handleDelete = (item: PurchasePaymentRecord) => {
     if (item?.status === 'DA_THANH_TOAN') {
       toast.error('Tuyệt đối không được phép xóa phiếu chi đã ở trạng thái Đã duyệt / Đã thanh toán!');
       return;
     }
-    if (confirm('Bạn có chắc chắn muốn xóa phiếu chi này?')) {
-      try {
-        await axiosClient.delete(`/finance/payment-vouchers/${id}`).catch(() => {});
-        const nextList = data.filter(d => d.id !== id);
-        setData(nextList);
-        saveLocalPayments(nextList);
-        toast.success('Đã xóa phiếu chi');
-      } catch (err) {
-        console.error(err);
-        toast.error('Xóa phiếu chi thất bại');
-      }
+    setDeletingPayment(item);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingPayment) return;
+    try {
+      await axiosClient.delete(`/finance/payment-vouchers/${deletingPayment.id}`).catch(() => {});
+      const nextList = data.filter(d => d.id !== deletingPayment.id);
+      setData(nextList);
+      saveLocalPayments(nextList);
+      toast.success('Đã xóa phiếu chi');
+    } catch (err) {
+      console.error(err);
+      toast.error('Xóa phiếu chi thất bại');
+    } finally {
+      setDeletingPayment(null);
     }
   };
 
@@ -545,7 +562,7 @@ export function PurchasePaymentsPage() {
                   <Edit className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => handleDelete(row.original.id)}
+                  onClick={() => handleDelete(row.original)}
                   className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
                   title="Xóa"
                 >
@@ -899,6 +916,24 @@ export function PurchasePaymentsPage() {
               )}
 
               <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">NGƯỜI LẬP PHIẾU *</label>
+                <select
+                  value={editingItem.handler || loggedInUser}
+                  onChange={(e) => setEditingItem({ ...editingItem, handler: e.target.value })}
+                  className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
+                  disabled={isLocked}
+                  required
+                >
+                  <option value={loggedInUser}>{loggedInUser} (Tài khoản đang đăng nhập)</option>
+                  {users.filter(u => u.fullName && u.fullName !== loggedInUser).map(u => (
+                    <option key={u.id} value={u.fullName}>
+                      {u.fullName} ({u.assignedRole || 'Nhân viên'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">DIỄN GIẢI / LÝ DO CHI TIỀN</label>
                 <textarea
                   value={editingItem.notes || ''}
@@ -930,6 +965,16 @@ export function PurchasePaymentsPage() {
           );
         })()}
       </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingPayment)}
+        onClose={() => setDeletingPayment(null)}
+        onConfirm={handleDeleteConfirm}
+        title="Xác nhận xóa phiếu chi"
+        description="Bạn có chắc chắn muốn xóa phiếu chi này không? Hành động này không thể hoàn tác."
+        itemName={`${deletingPayment?.paymentCode} (${deletingPayment?.supplierName})`}
+      />
     </div>
   );
 }

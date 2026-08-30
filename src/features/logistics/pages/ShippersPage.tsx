@@ -234,8 +234,26 @@ export function ShippersPage() {
   };
 
   const validateInputs = () => {
-    if (!editingItem.companyName || !editingItem.contactPhone) {
-      toast.error('Vui lòng nhập tên công ty và số điện thoại liên hệ!');
+    if (!editingItem.companyName?.trim()) {
+      toast.error('Vui lòng nhập Họ và tên / Tên đối tác giao hàng!');
+      return false;
+    }
+
+    // Name validation: must contain only letters (including Vietnamese letters with diacritics) and spaces, no digits or special characters!
+    const nameRegex = /^[\p{L}\s]+$/u;
+
+    if (editingItem.contactPerson && editingItem.contactPerson.trim() && !nameRegex.test(editingItem.contactPerson.trim())) {
+      toast.error('Họ và tên người liên hệ chỉ được chứa chữ cái, không được chứa chữ số hoặc ký tự đặc biệt!');
+      return false;
+    }
+
+    if (editingItem.companyName && editingItem.companyName.trim() && !nameRegex.test(editingItem.companyName.trim())) {
+      toast.error('Họ và tên / Tên đối tác chỉ được chứa chữ cái, không được chứa chữ số hoặc ký tự đặc biệt (Ví dụ: Lê Minh Chí)!');
+      return false;
+    }
+
+    if (!editingItem.contactPhone) {
+      toast.error('Vui lòng nhập số điện thoại liên hệ!');
       return false;
     }
 
@@ -627,13 +645,13 @@ export function ShippersPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên đối tác / công ty *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Họ và tên / Tên đối tác *</label>
             <input
               type="text"
               value={editingItem.companyName || ''}
               onChange={(e) => setEditingItem({ ...editingItem, companyName: e.target.value })}
               required
-              placeholder="Ví dụ: Viettel Post, Giao Hàng Tiết Kiệm..."
+              placeholder="Ví dụ: Lê Minh Chí, Nguyễn Văn A..."
               className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white"
             />
           </div>

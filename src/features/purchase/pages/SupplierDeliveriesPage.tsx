@@ -197,11 +197,17 @@ export function SupplierDeliveriesPage() {
             branchName: branchStr,
             orderDate: po.orderDate ? String(po.orderDate).substring(0, 10) : new Date().toISOString().substring(0, 10),
             totalAmount: Number(po.totalAmount || 19980000),
-            status: po.status || 'CONFIRMED',
+            status: po.status || 'APPROVED',
             lines: parsedLines,
           };
         });
-        setPurchaseOrders(mappedPOs);
+
+        // CHỈ LẤY CÁC ĐƠN ĐÃ ĐƯỢC DUYỆT / ĐANG GIAO HÀNG ĐỂ TẠO ĐỢT NHẬN HÀNG (LOẠI BỎ DRAFT / CHỜ DUYỆT)
+        const approvedPOs = mappedPOs.filter((po) => {
+          const st = String(po.status || '').toUpperCase();
+          return st !== 'DRAFT' && st !== 'PENDING_APPROVAL' && st !== 'BẢN NHÁP' && st !== 'CHỜ DUYỆT' && st !== 'CANCELLED' && st !== 'ĐÃ HỦY';
+        });
+        setPurchaseOrders(approvedPOs);
       } catch (e) {
         console.warn('Failed to fetch PO list for lookup:', e);
       }
@@ -307,9 +313,9 @@ export function SupplierDeliveriesPage() {
   }, [search, statusFilter, data]);
 
   // Handle PO Selection in Form
-  const handleSelectPo = (poIdStr: string) => {
-    setSelectedPoId(poIdStr);
-    const matchedPo = purchaseOrders.find((p) => String(p.id) === poIdStr || p.poCode === poIdStr);
+  const handleSelectPo = (poVal: string) => {
+    setSelectedPoId(poVal);
+    const matchedPo = purchaseOrders.find((p) => p.poCode === poVal || String(p.id) === poVal || p.poCode.toLowerCase() === poVal.toLowerCase());
     if (matchedPo) {
       setEditingItem((prev) => ({
         ...prev,
@@ -397,11 +403,11 @@ export function SupplierDeliveriesPage() {
     setModalMode('edit');
     const matchedPo = purchaseOrders.find(
       (p) =>
-        (item.purchaseOrderId && String(p.id) === String(item.purchaseOrderId)) ||
-        (item.poCode && p.poCode.toLowerCase() === item.poCode.toLowerCase())
+        (item.poCode && p.poCode.trim().toLowerCase() === item.poCode.trim().toLowerCase()) ||
+        (item.purchaseOrderId && String(p.id) === String(item.purchaseOrderId))
     );
-    const targetPoId = matchedPo ? String(matchedPo.id) : (item.purchaseOrderId ? String(item.purchaseOrderId) : item.poCode || '');
-    setSelectedPoId(targetPoId);
+    const targetPoCode = matchedPo ? matchedPo.poCode : (item.poCode || '');
+    setSelectedPoId(targetPoCode);
     setEditingItem({
       ...item,
       purchaseOrderId: matchedPo ? matchedPo.id : item.purchaseOrderId,
@@ -945,13 +951,13 @@ export function SupplierDeliveriesPage() {
                   required
                 >
                   <option value="">-- 🔍 Chọn đơn mua PO... --</option>
-                  {editingItem.poCode && !purchaseOrders.some((p) => String(p.id) === String(selectedPoId) || p.poCode.toLowerCase() === editingItem.poCode?.toLowerCase()) && (
-                    <option value={selectedPoId || editingItem.poCode}>
-                      {editingItem.poCode} - {editingItem.supplierName} ({editingItem.status === 'DA_NHAN' ? 'Đã nhận đủ' : 'Đang xử lý'})
+                  {editingItem.poCode && !purchaseOrders.some((p) => p.poCode.toLowerCase() === editingItem.poCode?.toLowerCase()) && (
+                    <option value={editingItem.poCode}>
+                      {editingItem.poCode} - {editingItem.supplierName} ({editingItem.status === 'DA_NHAN' ? 'Đã nhận đủ' : 'Đơn hiện tại'})
                     </option>
                   )}
                   {purchaseOrders.map((po) => (
-                    <option key={po.id} value={String(po.id)}>
+                    <option key={po.id || po.poCode} value={po.poCode}>
                       {po.poCode} - {po.supplierName} ({po.status})
                     </option>
                   ))}

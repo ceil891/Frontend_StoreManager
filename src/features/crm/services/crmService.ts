@@ -17,7 +17,6 @@ import type {
 } from '../store/crmStore';
 
 function normalizeCustomer(partial: Partial<CustomerProfile> & Pick<CustomerProfile, 'id' | 'name'>): CustomerProfile {
-  const seed = partial.email || partial.customerCode || partial.name;
   return {
     id: partial.id,
     customerCode: partial.customerCode ?? `CUST-${Math.floor(10000 + Math.random() * 90000)}`,
@@ -32,12 +31,13 @@ function normalizeCustomer(partial: Partial<CustomerProfile> & Pick<CustomerProf
     registeredDate: partial.registeredDate ?? new Date().toISOString().split('T')[0],
     lastActive: partial.lastActive ?? new Date().toISOString().split('T')[0],
     status: partial.status ?? 'ACTIVE',
-    notes: partial.notes,
-    taxCode: partial.taxCode,
+    notes: partial.notes ?? '',
+    taxCode: partial.taxCode ?? '',
     gender: partial.gender,
-    dateOfBirth: partial.dateOfBirth,
-    groupId: partial.groupId,
-    areaId: partial.areaId,
+    dateOfBirth: partial.dateOfBirth ?? '',
+    creditLimit: partial.creditLimit ?? 0,
+    groupId: partial.groupId ? String(partial.groupId) : '',
+    areaId: partial.areaId ? String(partial.areaId) : '',
   };
 }
 
@@ -52,6 +52,14 @@ function normalizeRank(rank?: string): CustomerProfile['loyaltyTier'] {
 }
 
 function mapCustomer(item: any): CustomerProfile {
+  let normalizedGender: CustomerProfile['gender'] = undefined;
+  if (item.gender) {
+    const g = String(item.gender).toUpperCase();
+    if (g === 'MALE' || g === 'NAM') normalizedGender = 'MALE';
+    else if (g === 'FEMALE' || g === 'NỮ' || g === 'NU') normalizedGender = 'FEMALE';
+    else normalizedGender = 'OTHER';
+  }
+
   return normalizeCustomer({
     id: String(item.id),
     customerCode: item.customerCode || `CUST-${item.id}`,
@@ -66,8 +74,9 @@ function mapCustomer(item: any): CustomerProfile {
     status: item.isActive === false ? 'DORMANT' : 'ACTIVE',
     notes: item.note || item.notes || '',
     taxCode: item.taxCode || '',
-    gender: item.gender || '',
-    dateOfBirth: item.dob || '',
+    gender: normalizedGender,
+    dateOfBirth: item.dob || item.dateOfBirth || '',
+    creditLimit: Number(item.debtLimit || item.creditLimit || 0),
     groupId: item.groupId ? String(item.groupId) : '',
     areaId: item.areaId ? String(item.areaId) : '',
   });
@@ -96,17 +105,14 @@ export const crmService = {
       gender: customer.gender,
       groupId: customer.groupId,
       areaId: customer.areaId,
+      debtLimit: customer.creditLimit,
       avatarUrl: customer.avatarUrl,
     });
     const res = await axiosClient.post<any, any>('/partnerarea/customers', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     const item = res?.data || res;
-    return normalizeCustomer({
-      id: String(item?.id || Date.now()),
-      ...customer,
-      ...(item || {}),
-    });
+    return mapCustomer(item || { ...customer });
   },
 
   async updateCustomer(id: string, data: Partial<CustomerProfile>): Promise<Partial<CustomerProfile>> {
@@ -123,6 +129,7 @@ export const crmService = {
       gender: data.gender,
       groupId: data.groupId,
       areaId: data.areaId,
+      debtLimit: data.creditLimit,
       avatarUrl: data.avatarUrl,
       membershipRank: data.loyaltyTier,
       points: data.loyaltyPoints,
@@ -131,7 +138,7 @@ export const crmService = {
     const res = await axiosClient.put<any, any>(`/partnerarea/customers/${id}`, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
-    return res?.data || res || data;
+    return mapCustomer(res?.data || res || data);
   },
 
   async deleteCustomer(id: string): Promise<void> {

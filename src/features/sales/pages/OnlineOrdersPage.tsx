@@ -11,6 +11,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { useSalesStore } from '../store/salesStore';
 import { usePermission } from '@/shared/hooks/usePermission';
+import { useUserStore } from '@/features/hr/store/userStore';
 
 export interface BranchOption {
   id: string | number;
@@ -66,15 +67,104 @@ export function OnlineOrdersPage() {
   const [branchPackingNote, setBranchPackingNote] = useState('');
 
   // Modal for assigning Shipper / Carrier
+  const { users, fetchUsers } = useUserStore();
   const [isAssignShipperOpen, setIsAssignShipperOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [assignmentHistory, setAssignmentHistory] = useState<any[]>([]);
+  const [dynamicShippers, setDynamicShippers] = useState<any[]>([]);
+  const [dynamicCarriers, setDynamicCarriers] = useState<string[]>([]);
   const [shipperForm, setShipperForm] = useState({
-    carrier: 'Viettel Post',
+    carrier: '',
     trackingCode: '',
-    shipperName: 'Nguyễn Văn Minh',
-    shipperPhone: '0912 345 678'
+    shipperName: '',
+    shipperPhone: ''
   });
+
+  const fetchDynamicShippersAndCarriers = async () => {
+    try {
+      // 1. Shippers from API and local storage
+      let shpList: any[] = [];
+      try {
+        const res = await axiosClient.get<any, any>('/logistics/shippers');
+        const items = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : (Array.isArray(res?.content) ? res.content : []));
+        if (items && items.length > 0) {
+          shpList = items.map((it: any) => ({
+            id: String(it.id || it.shipperCode),
+            name: it.fullName || it.companyName || it.contactPerson || 'Shipper',
+            phone: it.phone || it.contactPhone || '',
+            carrier: it.companyName || 'Đơn vị vận chuyển',
+            label: `${it.fullName || it.companyName} — ${it.phone || it.contactPhone || ''}`
+          }));
+        }
+      } catch {}
+
+      if (shpList.length === 0) {
+        try {
+          const saved = localStorage.getItem('shippers_list_data');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              shpList = parsed.map((it: any) => ({
+                id: String(it.id || it.partnerCode),
+                name: it.companyName || it.contactPerson || 'Shipper',
+                phone: it.contactPhone || '',
+                carrier: it.companyName || 'Đơn vị vận chuyển',
+                label: `${it.companyName} — ${it.contactPhone || ''}`
+              }));
+            }
+          }
+        } catch {}
+      }
+      setDynamicShippers(shpList);
+
+      // 2. Carriers from API and local storage
+      let carList: string[] = [];
+      try {
+        const res = await axiosClient.get<any, any>('/logistics/carriers');
+        const items = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : (Array.isArray(res?.content) ? res.content : []));
+        if (items && items.length > 0) {
+          carList = items.map((it: any) => it.carrierName).filter(Boolean);
+        }
+      } catch {}
+
+      if (carList.length === 0) {
+        try {
+          const saved = localStorage.getItem('retailhub_carriers_list');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              carList = parsed.map((it: any) => it.carrierName).filter(Boolean);
+            }
+          }
+        } catch {}
+      }
+
+      const defaultCarriers = ['Viettel Post', 'Giao Hàng Tiết Kiệm (GHTK)', 'Giao Hàng Nhanh (GHN)', 'Shopee Express', 'GrabExpress', 'Đội xe AuraMart (Nội bộ)'];
+      const mergedCarriers = Array.from(new Set([...carList, ...defaultCarriers]));
+      setDynamicCarriers(mergedCarriers);
+    } catch (e) {
+      console.warn('Failed to load dynamic shippers/carriers:', e);
+    }
+  };
+
+  const availableShippers = useMemo(() => {
+    const staffShippers = (users || [])
+      .filter(u => u.status === 'ACTIVE' || !u.status)
+      .map(u => ({
+        id: `staff_${u.id}`,
+        name: u.fullName || u.username,
+        phone: u.phone || u.phoneNumber || '',
+        carrier: 'Đội xe AuraMart (Nội bộ)',
+        label: `${u.fullName} — ${u.phone || '0912 345 678'} (${u.assignedRole || 'Nhân viên giao hàng'})`
+      }));
+
+    return [...dynamicShippers, ...staffShippers];
+  }, [users, dynamicShippers]);
+
+  useEffect(() => {
+    fetchUsers();
+    fetchDynamicShippersAndCarriers();
+  }, [fetchUsers]);
 
   const fetchBranches = async () => {
     try {
@@ -307,11 +397,15 @@ export function OnlineOrdersPage() {
 
   const handleOpenAssignShipperModal = () => {
     if (!selectedOrder) return;
+    const defaultCarrier = selectedOrder.carrier && selectedOrder.carrier !== 'Chưa chọn (Chờ đóng gói)'
+      ? selectedOrder.carrier
+      : (dynamicCarriers[0] || 'Viettel Post');
+
     setShipperForm({
-      carrier: selectedOrder.carrier && selectedOrder.carrier !== 'Chưa chọn (Chờ đóng gói)' ? selectedOrder.carrier : 'Viettel Post',
+      carrier: defaultCarrier,
       trackingCode: selectedOrder.trackingCode && selectedOrder.trackingCode !== 'Tự động tạo' ? selectedOrder.trackingCode : `VTP-${selectedOrder.id}`,
-      shipperName: selectedOrder.shipperName || 'Nguyễn Văn Minh',
-      shipperPhone: selectedOrder.shipperPhone || '0912 345 678'
+      shipperName: selectedOrder.shipperName || (availableShippers[0]?.name || ''),
+      shipperPhone: selectedOrder.shipperPhone || (availableShippers[0]?.phone || '')
     });
     setIsAssignShipperOpen(true);
   };
@@ -319,6 +413,19 @@ export function OnlineOrdersPage() {
   const handleConfirmAssignShipper = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrder) return;
+    if (!shipperForm.shipperName.trim()) {
+      toast.error('Vui lòng chọn hoặc nhập tên Shipper / Tài xế giao hàng!');
+      return;
+    }
+    if (!shipperForm.shipperPhone.trim()) {
+      toast.error('Vui lòng nhập số điện thoại Shipper!');
+      return;
+    }
+    if (!shipperForm.carrier.trim()) {
+      toast.error('Vui lòng chọn đơn vị vận chuyển!');
+      return;
+    }
+
     handleUpdateStatus(selectedOrder.id, 'DA_GIAO_NTVC', shipperForm);
     setIsAssignShipperOpen(false);
   };
@@ -944,49 +1051,46 @@ export function OnlineOrdersPage() {
               <select
                 onChange={(e) => {
                   const val = e.target.value;
-                  if (val === 'minh') {
-                    setShipperForm({ ...shipperForm, shipperName: 'Nguyễn Văn Minh', shipperPhone: '0912 345 678', carrier: 'Viettel Post' });
-                  } else if (val === 'huy') {
-                    setShipperForm({ ...shipperForm, shipperName: 'Trần Quốc Huy', shipperPhone: '0987 654 321', carrier: 'Giao Hàng Tiết Kiệm (GHTK)' });
-                  } else if (val === 'nam') {
-                    setShipperForm({ ...shipperForm, shipperName: 'Lê Hoàng Nam', shipperPhone: '0905 112 233', carrier: 'Giao Hàng Nhanh (GHN)' });
-                  } else if (val === 'anh') {
-                    setShipperForm({ ...shipperForm, shipperName: 'Phạm Đức Anh', shipperPhone: '0933 445 566', carrier: 'Shopee Express' });
-                  } else if (val === 'son') {
-                    setShipperForm({ ...shipperForm, shipperName: 'Vũ Thanh Sơn', shipperPhone: '0977 889 900', carrier: 'GrabExpress' });
-                  } else if (val === 'auramart') {
-                    setShipperForm({ ...shipperForm, shipperName: 'Đội xe AuraMart Nội bộ', shipperPhone: '0283 888 999', carrier: 'Đội xe AuraMart (Nội bộ)' });
-                  } else if (val === 'custom') {
+                  if (val === 'custom') {
                     setShipperForm({ ...shipperForm, shipperName: '', shipperPhone: '' });
+                    return;
+                  }
+                  const found = availableShippers.find(s => s.id === val);
+                  if (found) {
+                    setShipperForm({
+                      ...shipperForm,
+                      shipperName: found.name,
+                      shipperPhone: found.phone,
+                      carrier: found.carrier || shipperForm.carrier
+                    });
                   }
                 }}
                 className="w-full px-3 py-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-xl text-sm font-semibold text-emerald-900 dark:text-emerald-300 focus:ring-2 focus:ring-emerald-500"
               >
-                <option value="minh">Nguyễn Văn Minh — 0912 345 678 (Viettel Post)</option>
-                <option value="huy">Trần Quốc Huy — 0987 654 321 (GHTK)</option>
-                <option value="nam">Lê Hoàng Nam — 0905 112 233 (GHN)</option>
-                <option value="anh">Phạm Đức Anh — 0933 445 566 (Shopee Express)</option>
-                <option value="son">Vũ Thanh Sơn — 0977 889 900 (GrabExpress)</option>
-                <option value="auramart">Đội xe AuraMart Nội bộ — 0283 888 999</option>
+                <option value="">-- Chọn Shipper / Tài xế từ Đội ngũ nhân sự --</option>
+                {availableShippers.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
                 <option value="custom">-- Nhập tên & SĐT tùy chỉnh --</option>
               </select>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                Đơn vị vận chuyển
+                Đơn vị vận chuyển *
               </label>
               <select
                 value={shipperForm.carrier}
                 onChange={(e) => setShipperForm({ ...shipperForm, carrier: e.target.value })}
+                required
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
               >
-                <option value="Viettel Post">Viettel Post</option>
-                <option value="Giao Hàng Tiết Kiệm (GHTK)">Giao Hàng Tiết Kiệm (GHTK)</option>
-                <option value="Giao Hàng Nhanh (GHN)">Giao Hàng Nhanh (GHN)</option>
-                <option value="Shopee Express">Shopee Express</option>
-                <option value="GrabExpress">GrabExpress</option>
-                <option value="Đội xe AuraMart (Nội bộ)">Đội xe AuraMart (Nội bộ)</option>
+                <option value="">-- Chọn Đơn vị vận chuyển --</option>
+                {dynamicCarriers.map(car => (
+                  <option key={car} value={car}>{car}</option>
+                ))}
               </select>
             </div>
 

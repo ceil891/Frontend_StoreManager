@@ -254,41 +254,86 @@ export function ProductExcelImportPage() {
 
     const payloadRequests = validRows.map((row) => {
       // Map conversion units
-      const mappedConversionUnits = (row.conversionUnits || []).map((u) => {
-        let uId = u.unitId;
-        if (!uId) {
-          const matched = unitsList.find(
-            (item) => item.unitName.toLowerCase() === u.unitName.toLowerCase() || item.code.toLowerCase() === u.unitName.toLowerCase()
-          );
-          uId = matched ? Number(matched.id) : 1;
-        }
-        return {
-          unitId: uId,
-          conversionRate: u.conversionRate,
-          price: u.price,
-          barcode: u.barcode || null,
-        };
-      });
+      const mappedConversionUnits = (row.conversionUnits || [])
+        .map((u) => {
+          let uId = u.unitId;
+          if (!uId || isNaN(Number(uId))) {
+            const matched = unitsList.find(
+              (item) =>
+                item.unitName.toLowerCase() === (u.unitName || '').toLowerCase() ||
+                (item.code && item.code.toLowerCase() === (u.unitName || '').toLowerCase())
+            );
+            if (matched && !isNaN(Number(matched.id))) {
+              uId = Number(matched.id);
+            } else {
+              const firstValid = unitsList.find((item) => !isNaN(Number(item.id)));
+              uId = firstValid ? Number(firstValid.id) : 1;
+            }
+          } else {
+            uId = Number(uId);
+          }
+          return {
+            unitId: uId,
+            conversionRate: Number(u.conversionRate) || 1,
+            price: Number(u.price) || 0,
+            barcode: u.barcode || null,
+          };
+        })
+        .filter((u) => u.unitId && !isNaN(u.unitId));
 
       const initialStocks =
         row.initialStock && row.initialStock > 0
-          ? [{ branchId: branchIdNum, quantity: row.initialStock }]
+          ? [{ branchId: branchIdNum, quantity: Number(row.initialStock) }]
           : [];
+
+      let finalBaseUnitId = row.resolvedBaseUnitId;
+      if (!finalBaseUnitId || isNaN(Number(finalBaseUnitId))) {
+        const matched = unitsList.find(
+          (item) =>
+            item.unitName.toLowerCase() === (row.baseUnitName || '').toLowerCase() ||
+            (item.code && item.code.toLowerCase() === (row.baseUnitName || '').toLowerCase())
+        );
+        if (matched && !isNaN(Number(matched.id))) {
+          finalBaseUnitId = Number(matched.id);
+        } else {
+          const firstValid = unitsList.find((item) => !isNaN(Number(item.id)));
+          finalBaseUnitId = firstValid ? Number(firstValid.id) : 1;
+        }
+      } else {
+        finalBaseUnitId = Number(finalBaseUnitId);
+      }
+
+      let finalCatId = row.resolvedCategoryId;
+      if (!finalCatId || isNaN(Number(finalCatId))) {
+        const matchedCat = categories.find(
+          (c) =>
+            c.categoryName.toLowerCase() === (row.categoryName || '').toLowerCase() ||
+            (c.code && c.code.toLowerCase() === (row.categoryName || '').toLowerCase())
+        );
+        if (matchedCat && !isNaN(Number(matchedCat.id))) {
+          finalCatId = Number(matchedCat.id);
+        } else {
+          const firstCat = categories.find((c) => !isNaN(Number(c.id)));
+          finalCatId = firstCat ? Number(firstCat.id) : 1;
+        }
+      } else {
+        finalCatId = Number(finalCatId);
+      }
 
       return {
         productCode: row.productCode || null,
         name: row.name,
         description: row.description || '',
-        basePrice: row.basePrice,
-        costPrice: row.costPrice || 0,
+        basePrice: Number(row.basePrice) || 0,
+        costPrice: Number(row.costPrice) || 0,
         brand: row.brand || '',
         barcode: row.barcode || null,
         isActive: true,
-        weight: row.weight || 0,
-        reorderPoint: row.reorderPoint || 0,
-        minStock: row.minStock || 0,
-        categoryId: row.resolvedCategoryId || (categories[0] ? Number(categories[0].id) : 1),
-        baseUnitId: row.resolvedBaseUnitId || (unitsList[0] ? Number(unitsList[0].id) : 1),
+        weight: Number(row.weight) || 0,
+        reorderPoint: Number(row.reorderPoint) || 0,
+        minStock: Number(row.minStock) || 0,
+        categoryId: finalCatId,
+        baseUnitId: finalBaseUnitId,
         conversionUnits: mappedConversionUnits,
         initialStocks: initialStocks,
       };

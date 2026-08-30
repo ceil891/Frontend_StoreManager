@@ -182,22 +182,17 @@ export function PosTerminalPage() {
       .then((res) => {
         const list: any[] = Array.isArray(res) ? res : (res?.data || res?.content || res || []);
         const map: Record<string, number> = {};
-        let posDeductionsMap: Record<string, number> = {};
-        try {
-          const saved = localStorage.getItem('retailhub_pos_stock_deductions');
-          if (saved) posDeductionsMap = JSON.parse(saved);
-        } catch {}
 
         list.forEach((b: any) => {
           const rawQty = Number(b.availableQuantity ?? b.onHandQuantity ?? 0);
-          const pKey = String(b.productId || b.productVariantId || b.sku || '');
-          const deducted = (posDeductionsMap[pKey] !== undefined ? posDeductionsMap[pKey] : 0) ||
-                           (b.sku && posDeductionsMap[b.sku] !== undefined ? posDeductionsMap[b.sku] : 0);
-          const finalQty = Math.max(0, rawQty - deducted);
+          const pId = b.productId ? String(b.productId) : '';
+          const vId = b.productVariantId ? String(b.productVariantId) : '';
+          const sku = b.sku ? String(b.sku) : '';
 
-          if (b.productId) map[String(b.productId)] = finalQty;
-          if (b.productVariantId) map[String(b.productVariantId)] = finalQty;
-          if (b.sku) map[b.sku] = finalQty;
+          // Cộng dồn tồn kho theo productId, variantId và sku qua các lô/kệ khác nhau
+          if (pId) map[pId] = (map[pId] || 0) + rawQty;
+          if (vId) map[vId] = (map[vId] || 0) + rawQty;
+          if (sku) map[sku] = (map[sku] || 0) + rawQty;
         });
         setBranchStockMap(map);
       })
@@ -212,6 +207,8 @@ export function PosTerminalPage() {
       const saved = localStorage.getItem('retailhub_pos_stock_deductions');
       if (saved) posDeductionsMap = JSON.parse(saved);
     } catch {}
+
+    const isOffline = usePosConfigStore.getState().enableOfflineMode;
 
     const singleList = (products || [])
       .filter((p) => p.status !== 'INACTIVE' && (p as any).isActive !== false)
@@ -238,7 +235,7 @@ export function PosTerminalPage() {
         }
 
         const pKey = String(p.id);
-        const deducted = posDeductionsMap[pKey] ?? posDeductionsMap[p.sku] ?? 0;
+        const deducted = (posDeductionsMap[pKey] ?? (p.sku ? posDeductionsMap[p.sku] : 0) ?? 0);
         const stock = Math.max(0, branchSpecificStock - deducted);
 
         return {
@@ -344,7 +341,7 @@ export function PosTerminalPage() {
     const active = paymentMethodsFromConfig.filter((m) => m.status === 'ACTIVE');
     if (active.length === 0) return FALLBACK_PAYMENTS;
     return active.map((m) => ({
-      id: m.id,
+      id: String(m.id),
       label: m.methodName.length > 40 ? `${m.methodName.slice(0, 38)}…` : m.methodName,
       icon: iconForProvider(m.providerType),
       isCash: m.providerType === 'CASH_DRAWER',
@@ -758,184 +755,220 @@ export function PosTerminalPage() {
 
   // ── Confirm payment ──────────────────────────────────────────────────────────
   const handleConfirmPayment = () => {
-    const user = useAuthStore.getState().user;
-    const pay = displayPayments.find((d) => d.id === selectedPaymentId);
-    const payLabel = pay?.label ?? 'Tiền mặt';
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
-    const orderLines = items.map((i, idx) => ({
-      id: `pos_${now.getTime()}_${idx}`,
-      productVariantId: Number(i.id),
-      sku: i.sku || String(i.id),
-      productName: i.name,
-      quantity: i.quantity,
-      unitPrice: i.price,
-      lineTotal: Math.round(i.quantity * i.price),
-    }));
-    const itemsSummary = orderLines
-      .map((l) => `${l.productName}×${l.quantity}`)
-      .join(', ')
-      .slice(0, 240);
+    try {
+      const user = useAuthStore.getState().user;
+      const pay = displayPayments.find((d) => String(d?.id ?? '') === String(selectedPaymentId ?? ''));
+      const payLabel = pay?.label ?? 'Tiền mặt';
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
+      const orderLines = items.map((i, idx) => ({
+        id: `pos_${now.getTime()}_${idx}`,
+        productVariantId: Number(i.id) || 1,
+        sku: String(i.sku || i.id || ''),
+        productName: i.name || 'Sản phẩm',
+        quantity: Number(i.quantity) || 1,
+        unitPrice: Number(i.price) || 0,
+        lineTotal: Math.round((Number(i.quantity) || 1) * (Number(i.price) || 0)),
+      }));
+      const itemsSummary = orderLines
+        .map((l) => `${l.productName}×${l.quantity}`)
+        .join(', ')
+        .slice(0, 240);
 
-    const branchId = activeBranchId;
-    const branchName = activeBranchName;
-    const cashierName = user?.name || 'Thu ngân POS';
-    const customerDisplayName = activeCustomer
-      ? activeCustomer.name
-      : `${cashierName} (Khách vãng lai)`;
+      const branchId = activeBranchId;
+      const branchName = activeBranchName;
+      const cashierName = user?.name || 'Thu ngân POS';
+      const customerDisplayName = activeCustomer
+        ? activeCustomer.name
+        : `${cashierName} (Khách vãng lai)`;
 
-    const performOrderCreation = () => {
-      addSaleOrder({
-        code,
-        orderCode: code,
-        orderDate: new Date().toISOString(),
-        customerId: Number(activeCustomer?.id) || 1,
-        branchId: Number(branchId) || 1,
-        customerName: customerDisplayName,
-        date: dateStr,
-        subTotal: Math.round(subtotal),
-        taxAmount: Math.round(vatAmount),
-        discountAmount: Math.round(voucherDiscount + pointsDiscount),
-        totalAmount: Math.round(totalAmountToPay),
-        status: 'COMPLETED',
-        paymentStatus: 'PAID',
-        paymentMethod: payLabel,
-        cashier: user?.name ?? 'Thu ngân',
-        createdByName: user?.name ?? 'Thu ngân',
-        createdByEmail: user?.email,
-        branchName,
-        origin: 'POS',
-        currency: 'VND',
-        itemsSummary,
-        orderLines,
-        details: items.map(i => ({
-          productVariantId: Number(i.id) || 1,
-          quantity: i.quantity,
-          unitPriceSnapshot: i.price
-        })),
-        amountTendered: isCashPayment ? Math.round(cashGivenNum) : Math.round(totalAmountToPay),
-        changeAmount: isCashPayment ? Math.round(changeAmount) : 0,
-        shiftId: deriveShiftId(now),
-        promoCodeApplied: appliedVoucher?.code,
-        paymentMethodId: selectedPaymentConfig ? Number(selectedPaymentConfig.id) : null,
-        paymentMethodCode: selectedPaymentConfig ? selectedPaymentConfig.methodCode : null,
-      } as any);
-
-      // Tự động trừ tồn kho hiển thị (onHand) trên POS ngay lập tức & đồng bộ toàn hệ thống
-      try {
-        const savedD = localStorage.getItem('retailhub_pos_stock_deductions');
-        const posDeductionsMap: Record<string, number> = savedD ? JSON.parse(savedD) : {};
-
-        items.forEach((it) => {
-          const pId = String(it.id);
-          posDeductionsMap[pId] = (posDeductionsMap[pId] || 0) + it.quantity;
-          if (it.sku) posDeductionsMap[it.sku] = (posDeductionsMap[it.sku] || 0) + it.quantity;
-        });
-        localStorage.setItem('retailhub_pos_stock_deductions', JSON.stringify(posDeductionsMap));
-
-        const deductions = items.map((it) => ({ productId: String(it.id), sku: it.sku, qty: it.quantity }));
-        (useInventoryStore.getState() as any).deductProductStock(deductions);
-        setBranchStockMap((prev) => {
-          const nextMap = { ...prev };
-          items.forEach((it) => {
-            const pId = String(it.id);
-            const cur = nextMap[pId] ?? nextMap[it.sku] ?? (products.find(p => String(p.id) === pId)?.onHand ?? 10);
-            nextMap[pId] = Math.max(0, cur - it.quantity);
-            if (it.sku) nextMap[it.sku] = Math.max(0, cur - it.quantity);
-          });
-          return nextMap;
-        });
-      } catch (err) {
-        console.error('Failed to deduct local POS inventory state:', err);
-      }
-
-      // Tự động tích điểm cho Khách hàng & Ghi nhật ký Lịch sử Loyalty CRM
-      if (activeCustomer) {
+      const performOrderCreation = async () => {
         try {
-          const earnedPoints = Math.floor((totalAmount / (loyaltyConfig?.earnRateAmount || 10000)) * (activeCustomer?.membershipRank === 'Thành viên Vàng' ? 1.5 : activeCustomer?.membershipRank === 'Thành viên Bạc' ? 1.2 : 1.0));
+          await addSaleOrder({
+            code,
+            orderCode: code,
+            orderDate: new Date().toISOString(),
+            customerId: Number(activeCustomer?.id) || 1,
+            branchId: Number(branchId) || 1,
+            customerName: customerDisplayName,
+            date: dateStr,
+            subTotal: Math.round(subtotal),
+            taxAmount: Math.round(vatAmount),
+            discountAmount: Math.round(voucherDiscount + pointsDiscount),
+            totalAmount: Math.round(totalAmountToPay),
+            status: 'COMPLETED',
+            paymentStatus: 'PAID',
+            paymentMethod: payLabel,
+            cashier: user?.name ?? 'Thu ngân',
+            createdByName: user?.name ?? 'Thu ngân',
+            createdByEmail: user?.email,
+            branchName,
+            origin: 'POS',
+            currency: 'VND',
+            itemsSummary,
+            orderLines,
+            details: items.map(i => ({
+              productVariantId: Number(i.id) || 1,
+              quantity: Number(i.quantity) || 1,
+              unitPriceSnapshot: Number(i.price) || 0
+            })),
+            amountTendered: isCashPayment ? Math.round(cashGivenNum) : Math.round(totalAmountToPay),
+            changeAmount: isCashPayment ? Math.round(changeAmount) : 0,
+            shiftId: deriveShiftId(now),
+            promoCodeApplied: appliedVoucher?.code,
+            paymentMethodId: selectedPaymentConfig ? Number(selectedPaymentConfig.id) : null,
+            paymentMethodCode: selectedPaymentConfig ? selectedPaymentConfig.methodCode : null,
+          } as any);
 
-          if (earnedPoints > 0) {
-            useCrmStore.getState().addCustomerPoints(String(activeCustomer.id), earnedPoints, {
-              code: `TX-EARN-${Date.now().toString().slice(-6)}`,
-              customerId: String(activeCustomer.id),
-              customerName: activeCustomer.name,
-              phone: activeCustomer.phone || '',
-              pointsChange: earnedPoints,
-              transactionType: 'TÍCH ĐIỂM BÁN HÀNG POS',
-              refDocument: code,
-              date: dateStr,
-              balanceAfter: (activeCustomer.loyaltyPoints || 0) + earnedPoints,
-              amount: Math.round(totalAmount),
-              actionType: 'EARN',
-              createdAt: dateStr,
+          // Tự động trừ tồn kho hiển thị (onHand) trên POS ngay lập tức & đồng bộ toàn hệ thống
+          try {
+            const savedD = localStorage.getItem('retailhub_pos_stock_deductions');
+            const posDeductionsMap: Record<string, number> = savedD ? JSON.parse(savedD) : {};
+
+            const deductions: { productId?: string; sku?: string; qty: number; branchId?: string }[] = [];
+            items.forEach((it) => {
+              const combo = (combos || []).find((c) => String(c.id) === String(it.id) || c.comboCode === it.sku);
+              if (combo && combo.details && combo.details.length > 0) {
+                combo.details.forEach((cd) => {
+                  const qty = (Number(cd.quantity) || 1) * it.quantity;
+                  deductions.push({
+                    productId: String(cd.id || ''),
+                    sku: cd.sku,
+                    qty,
+                    branchId: activeBranchId,
+                  });
+                  if (cd.id) posDeductionsMap[String(cd.id)] = (posDeductionsMap[String(cd.id)] || 0) + qty;
+                  if (cd.sku) posDeductionsMap[cd.sku] = (posDeductionsMap[cd.sku] || 0) + qty;
+                });
+              } else {
+                deductions.push({
+                  productId: String(it.id),
+                  sku: it.sku,
+                  qty: it.quantity,
+                  branchId: activeBranchId,
+                });
+                const pId = String(it.id);
+                posDeductionsMap[pId] = (posDeductionsMap[pId] || 0) + it.quantity;
+                if (it.sku) posDeductionsMap[it.sku] = (posDeductionsMap[it.sku] || 0) + it.quantity;
+              }
             });
+            localStorage.setItem('retailhub_pos_stock_deductions', JSON.stringify(posDeductionsMap));
+
+            (useInventoryStore.getState() as any).deductProductStock(deductions);
+            setBranchStockMap((prev) => {
+              const nextMap = { ...prev };
+              deductions.forEach((d) => {
+                const pId = d.productId;
+                if (pId && nextMap[pId] !== undefined) {
+                  nextMap[pId] = Math.max(0, nextMap[pId] - d.qty);
+                }
+                if (d.sku && nextMap[d.sku] !== undefined) {
+                  nextMap[d.sku] = Math.max(0, nextMap[d.sku] - d.qty);
+                }
+              });
+              return nextMap;
+            });
+          } catch (err) {
+            console.error('Failed to deduct local POS inventory state:', err);
           }
 
-          if (usedPoints > 0) {
-            useCrmStore.getState().addCustomerPoints(String(activeCustomer.id), -usedPoints, {
-              code: `TX-REDEEM-${Date.now().toString().slice(-6)}`,
-              customerId: String(activeCustomer.id),
-              customerName: activeCustomer.name,
-              phone: activeCustomer.phone || '',
-              pointsChange: -usedPoints,
-              transactionType: 'TIÊU ĐIỂM BÁN HÀNG POS',
-              refDocument: code,
-              date: dateStr,
-              balanceAfter: Math.max(0, (activeCustomer.loyaltyPoints || 0) - usedPoints),
-              amount: Math.round(pointsDiscount),
-              actionType: 'REDEEM',
-              createdAt: dateStr,
-            });
+          // Tự động tích điểm cho Khách hàng & Ghi nhật ký Lịch sử Loyalty CRM
+          if (activeCustomer) {
+            try {
+              const earnedPoints = Math.floor((totalAmount / (loyaltyConfig?.earnRateAmount || 10000)) * (activeCustomer?.membershipRank === 'Thành viên Vàng' ? 1.5 : activeCustomer?.membershipRank === 'Thành viên Bạc' ? 1.2 : 1.0));
+
+              if (earnedPoints > 0) {
+                useCrmStore.getState().addCustomerPoints(String(activeCustomer.id), earnedPoints, {
+                  code: `TX-EARN-${Date.now().toString().slice(-6)}`,
+                  customerId: String(activeCustomer.id),
+                  customerName: activeCustomer.name,
+                  phone: activeCustomer.phone || '',
+                  pointsChange: earnedPoints,
+                  transactionType: 'TÍCH ĐIỂM BÁN HÀNG POS',
+                  refDocument: code,
+                  date: dateStr,
+                  balanceAfter: (activeCustomer.loyaltyPoints || 0) + earnedPoints,
+                  amount: Math.round(totalAmount),
+                  actionType: 'EARN',
+                  createdAt: dateStr,
+                });
+              }
+
+              if (usedPoints > 0) {
+                useCrmStore.getState().addCustomerPoints(String(activeCustomer.id), -usedPoints, {
+                  code: `TX-REDEEM-${Date.now().toString().slice(-6)}`,
+                  customerId: String(activeCustomer.id),
+                  customerName: activeCustomer.name,
+                  phone: activeCustomer.phone || '',
+                  pointsChange: -usedPoints,
+                  transactionType: 'TIÊU ĐIỂM BÁN HÀNG POS',
+                  refDocument: code,
+                  date: dateStr,
+                  balanceAfter: Math.max(0, (activeCustomer.loyaltyPoints || 0) - usedPoints),
+                  amount: Math.round(pointsDiscount),
+                  actionType: 'REDEEM',
+                  createdAt: dateStr,
+                });
+              }
+            } catch (err) {
+              console.error('Failed to update CRM customer loyalty points:', err);
+            }
           }
-        } catch (err) {
-          console.error('Failed to update CRM customer loyalty points:', err);
+
+          const printInvoicePayload: PrintInvoiceData = {
+            documentTitle: 'HÓA ĐƠN BÁN LẺ (VAT)',
+            code,
+            date: dateStr,
+            customerOrSupplierName: customerDisplayName,
+            phone: activeCustomer?.phone || 'N/A',
+            branchName: branchName || 'Chi nhánh Trung Tâm POS',
+            createdByName: cashierName,
+            subTotal: Math.round(subtotal),
+            taxAmount: Math.round(vatAmount),
+            discountAmount: Math.round(voucherDiscount + pointsDiscount),
+            totalAmount: Math.round(totalAmountToPay),
+            items: items.map((i) => ({
+              sku: String(i.sku || i.id),
+              name: i.name,
+              quantity: i.quantity,
+              price: i.price,
+              total: Math.round(i.quantity * i.price),
+            })),
+          };
+
+          setCompletedPrintInvoice(printInvoicePayload);
+          setPaymentState('success');
+
+          setTimeout(() => {
+            if (tabs.length > 1) {
+              closeTab(activeTabId);
+            } else {
+              clearCart();
+            }
+            setVoucherError('');
+            setPaymentState('idle');
+            setIsPaymentOpen(false);
+            setCurrentOrderCode('');
+            toast.success(`Thanh toán thành công đơn hàng ${code}!`);
+          }, 1000);
+        } catch (err: any) {
+          console.error('Lỗi khi thực hiện lưu đơn hàng POS:', err);
+          toast.error(err?.message || 'Có lỗi xảy ra khi tạo đơn hàng');
+          setPaymentState('idle');
         }
-      }
-
-      const printInvoicePayload: PrintInvoiceData = {
-        documentTitle: 'HÓA ĐƠN BÁN LẺ (VAT)',
-        code,
-        date: dateStr,
-        customerOrSupplierName: customerDisplayName,
-        phone: activeCustomer?.phone || 'N/A',
-        branchName: branchName || 'Chi nhánh Trung Tâm POS',
-        createdByName: cashierName,
-        subTotal: Math.round(subtotal),
-        taxAmount: Math.round(vatAmount),
-        discountAmount: Math.round(voucherDiscount + pointsDiscount),
-        totalAmount: Math.round(totalAmountToPay),
-        items: items.map((i) => ({
-          sku: i.sku || String(i.id),
-          name: i.name,
-          quantity: i.quantity,
-          price: i.price,
-          total: Math.round(i.quantity * i.price),
-        })),
       };
 
-      setCompletedPrintInvoice(printInvoicePayload);
-      setPaymentState('success');
-
-      setTimeout(() => {
-        if (tabs.length > 1) {
-          closeTab(activeTabId);
-        } else {
-          clearCart();
-        }
-        setVoucherError('');
-        setPaymentState('idle');
-        setIsPaymentOpen(false);
-        setCurrentOrderCode('');
-        toast.success(`Thanh toán thành công đơn hàng ${code}!`);
-      }, 1000);
-    };
-
-    onCompleteRef.current = performOrderCreation;
-    setPaymentState('processing');
-    if (isCashPayment) {
-      paymentTimerRef.current = setTimeout(performOrderCreation, 1200);
+      onCompleteRef.current = performOrderCreation;
+      setPaymentState('processing');
+      if (isCashPayment) {
+        paymentTimerRef.current = setTimeout(performOrderCreation, 1200);
+      }
+    } catch (globalErr: any) {
+      console.error('Crash Handler POS Checkout:', globalErr);
+      toast.error('Lỗi xử lý xác nhận thanh toán. Giỏ hàng được giữ nguyên.');
+      setPaymentState('idle');
     }
   };
 
@@ -1556,7 +1589,11 @@ export function PosTerminalPage() {
                       ) : (
                         <svg className="w-full h-full text-emerald-600" viewBox="0 0 100 100">
                           <path d="M10 25 V10 H25 M75 10 H90 V25 M90 75 V90 H75 M25 90 H10 V75" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-                          {selectedPayment.id.includes('ewallet') || selectedPayment.id.includes('transfer') || selectedPayment.id.includes('qr') || selectedPaymentConfig?.providerType === 'GATEWAY' ? (
+                          {String(selectedPayment?.id || '').toLowerCase().includes('ewallet') ||
+                           String(selectedPayment?.id || '').toLowerCase().includes('transfer') ||
+                           String(selectedPayment?.id || '').toLowerCase().includes('qr') ||
+                           selectedPaymentConfig?.providerType === 'GATEWAY' ||
+                           selectedPaymentConfig?.providerType === 'BANK_TRANSFER' ? (
                             <>
                               <rect x="20" y="20" width="15" height="15" fill="currentColor" />
                               <rect x="65" y="20" width="15" height="15" fill="currentColor" />

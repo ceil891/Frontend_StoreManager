@@ -21,12 +21,21 @@ export enum StockTransferExecutionStatus {
   CANCELLED = 'CANCELLED',
 }
 
-const STATUS_MAP: Record<StockTransferExecutionStatus | string, { label: string; cls: string }> = {
+const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   [StockTransferExecutionStatus.DRAFT]: { label: 'Bản nháp', cls: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-300' },
+  'DRAFT': { label: 'Bản nháp', cls: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-300' },
+  'PENDING_APPROVAL': { label: 'Chờ duyệt', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 font-semibold' },
+  'APPROVED': { label: 'Đã duyệt (Chờ xuất)', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 font-semibold' },
   [StockTransferExecutionStatus.READY_TO_SHIP]: { label: 'Chờ xuất kho', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 font-semibold' },
+  'READY_TO_SHIP': { label: 'Chờ xuất kho', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 font-semibold' },
+  'SHIPPED': { label: 'Đang vận chuyển (Đã xuất nguồn)', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 font-bold' },
   [StockTransferExecutionStatus.IN_TRANSIT]: { label: 'Đang vận chuyển (Đã xuất nguồn)', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 font-bold' },
+  'IN_TRANSIT': { label: 'Đang vận chuyển (Đã xuất nguồn)', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 font-bold' },
+  'RECEIVED': { label: 'Đã hoàn thành (Đã nhập đích)', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 font-bold' },
   [StockTransferExecutionStatus.COMPLETED]: { label: 'Đã hoàn thành (Đã nhập đích)', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 font-bold' },
+  'COMPLETED': { label: 'Đã hoàn thành (Đã nhập đích)', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 font-bold' },
   [StockTransferExecutionStatus.CANCELLED]: { label: 'Đã hủy', cls: 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 border-red-200' },
+  'CANCELLED': { label: 'Đã hủy', cls: 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 border-red-200' },
 };
 
 export function StockTransferPage() {
@@ -374,19 +383,19 @@ export function StockTransferPage() {
             >
               <Eye className="w-4 h-4" />
             </button>
-            {row.original.status === StockTransferExecutionStatus.READY_TO_SHIP && (
+            {(row.original.status === StockTransferExecutionStatus.READY_TO_SHIP || row.original.status === 'READY_TO_SHIP' || row.original.status === 'PENDING_APPROVAL' || row.original.status === 'APPROVED' || row.original.status === 'DRAFT') && (
               <button
                 onClick={(e) => { e.stopPropagation(); handleShipStock(row.original); }}
-                className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-lg shadow-sm flex items-center gap-1"
+                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-lg shadow-sm flex items-center gap-1 cursor-pointer transition-all active:scale-95"
                 title="Xuất kho nguồn (Trừ tồn nguồn)"
               >
                 <Truck className="w-3.5 h-3.5" /> Xuất kho
               </button>
             )}
-            {row.original.status === StockTransferExecutionStatus.IN_TRANSIT && (
+            {(row.original.status === StockTransferExecutionStatus.IN_TRANSIT || row.original.status === 'IN_TRANSIT' || row.original.status === 'SHIPPED') && (
               <button
                 onClick={(e) => { e.stopPropagation(); handleCompleteStock(row.original); }}
-                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg shadow-sm flex items-center gap-1"
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg shadow-sm flex items-center gap-1 cursor-pointer transition-all active:scale-95"
                 title="Nhập kho đích (Cộng tồn đích)"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" /> Nhập kho
@@ -493,18 +502,18 @@ export function StockTransferPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                {selected.status === StockTransferExecutionStatus.READY_TO_SHIP && (
+                {(selected.status === StockTransferExecutionStatus.READY_TO_SHIP || selected.status === 'READY_TO_SHIP' || selected.status === 'PENDING_APPROVAL' || selected.status === 'APPROVED' || selected.status === 'DRAFT') && (
                   <button
                     onClick={() => handleShipStock(selected)}
-                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs shadow-md flex items-center gap-1.5"
+                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs shadow-md flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                   >
                     <Truck className="w-4 h-4" /> Xuất Kho Nguồn (Trừ Tồn Nguồn)
                   </button>
                 )}
-                {selected.status === StockTransferExecutionStatus.IN_TRANSIT && (
+                {(selected.status === StockTransferExecutionStatus.IN_TRANSIT || selected.status === 'IN_TRANSIT' || selected.status === 'SHIPPED') && (
                   <button
                     onClick={() => handleCompleteStock(selected)}
-                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-md flex items-center gap-1.5"
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-md flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                   >
                     <CheckCircle2 className="w-4 h-4" /> Nhập Kho Đích (Cộng Tồn Đích)
                   </button>

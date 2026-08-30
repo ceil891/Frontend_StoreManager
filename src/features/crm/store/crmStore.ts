@@ -326,6 +326,12 @@ export const useCrmStore = create<CRMState>()((set) => ({
         lastActive: new Date().toISOString().split('T')[0],
         status: customer.status || 'ACTIVE',
         notes: customer.notes,
+        taxCode: customer.taxCode,
+        gender: customer.gender,
+        dateOfBirth: customer.dateOfBirth,
+        creditLimit: customer.creditLimit,
+        groupId: customer.groupId,
+        areaId: customer.areaId,
       };
     }
     set((state) => {
@@ -687,6 +693,11 @@ export const useCrmStore = create<CRMState>()((set) => ({
       try {
         localStorage.setItem('retailhub_crm_loyalty_histories', JSON.stringify(nextHistories));
       } catch {}
+
+      // Persist to backend
+      crmService.addLoyaltyHistory(newHistoryItem).catch((err) => {
+        console.warn('Background sync loyalty history to backend failed:', err);
+      });
 
       return {
         customers: updatedCustomers,
