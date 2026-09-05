@@ -1,8 +1,9 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, MapPin, Grid } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-
+import { toast } from 'sonner';
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type AreaRecord } from '@/features/inventory/store/inventoryStore';
@@ -44,6 +45,8 @@ export function StorageAreasPage() {
     setIsModalOpen(true);
   };
 
+  const [deletingItem, setDeletingItem] = useState<AreaRecord | null>(null);
+
   const handleOpenEdit = (item: AreaRecord) => {
     setModalMode('edit');
     setEditingItem(item);
@@ -52,27 +55,44 @@ export function StorageAreasPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.areaCode || !editingItem.areaName || !editingItem.zoneId) return;
+    if (!editingItem.areaCode?.trim() || !editingItem.areaName?.trim() || !editingItem.zoneId) {
+      toast.error('Vui lòng điền mã bãi kho, tên bãi kho và chọn phân khu (zone)!');
+      return;
+    }
 
     const payload = {
-      areaCode: editingItem.areaCode.toUpperCase(),
-      areaName: editingItem.areaName,
+      areaCode: editingItem.areaCode.trim().toUpperCase(),
+      areaName: editingItem.areaName.trim(),
       zoneId: editingItem.zoneId,
       isActive: editingItem.isActive !== false,
       description: editingItem.description || '',
     };
 
-    if (modalMode === 'create') {
-      await addArea(payload);
-    } else {
-      await updateArea(editingItem.id!, payload);
+    try {
+      if (modalMode === 'create') {
+        await addArea(payload);
+        toast.success(`Tạo bãi kho ${payload.areaCode} thành công!`);
+      } else {
+        await updateArea(editingItem.id!, payload);
+        toast.success(`Cập nhật bãi kho ${payload.areaCode} thành công!`);
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi lưu bãi kho: ' + (err?.message || 'Thất bại'));
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa bãi kho (Storage Area) này?')) {
-      await deleteArea(id);
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await deleteArea(deletingItem.id);
+      toast.success(`Đã xóa bãi kho "${deletingItem.areaName}" thành công!`);
+      if (selected?.id === deletingItem.id) setSelected(null);
+      setDeletingItem(null);
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi xóa bãi kho: ' + (err?.message || 'Thất bại'));
     }
   };
 
@@ -128,7 +148,7 @@ export function StorageAreasPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeletingItem(row.original)}
               className="p-1 text-gray-500 hover:text-red-600 rounded"
               title="Xóa"
             >
@@ -366,6 +386,14 @@ export function StorageAreasPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa bãi kho"
+        description={`Bạn có chắc chắn muốn xóa bãi kho "${deletingItem?.areaName}" không?`}
+      />
     </div>
   );
 }

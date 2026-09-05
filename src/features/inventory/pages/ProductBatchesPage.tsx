@@ -1,6 +1,6 @@
 import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Eye, Layers, Building2, Calendar, FileText, AlertTriangle, ShieldCheck, Edit, Trash2, X, SlidersHorizontal } from 'lucide-react';
+import { Plus, Download, Search, Eye, Layers, Building2, Calendar, FileText, AlertTriangle, ShieldCheck, ShieldAlert, Edit, Trash2, X, SlidersHorizontal } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
@@ -38,6 +38,8 @@ export function ProductBatchesPage() {
 
   // Filter states
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  type BatchFilterPreset = 'all' | 'expiring_soon' | 'expired' | 'in_stock' | 'quarantined';
+  const [filterPreset, setFilterPreset] = useState<BatchFilterPreset>('all');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
@@ -47,25 +49,87 @@ export function ProductBatchesPage() {
   const [adjustQty, setAdjustQty] = useState(0);
   const [adjustReason, setAdjustReason] = useState('');
   const [expiringBatch, setExpiringBatch] = useState<ProductBatchRecord | null>(null);
+  const [quarantineTarget, setQuarantineTarget] = useState<{ batch: ProductBatchRecord; newStatus: 'QUARANTINED' | 'RECALLED' } | null>(null);
 
-  const filtered = data.filter((item) => {
-    // 1. Text search
-    let matchesSearch = true;
-    const q = search.toLowerCase();
-    if (q) {
-      matchesSearch = (
-        item.productName.toLowerCase().includes(q) ||
-        item.batchNumber.toLowerCase().includes(q) ||
-        item.sku.toLowerCase().includes(q) ||
-        item.supplierName.toLowerCase().includes(q)
-      );
-    }
+  const presetCounts = useMemo(() => {
+    const now = new Date();
+    const in30Days = new Date();
+    in30Days.setDate(in30Days.getDate() + 30);
 
-    // 2. Status filter
-    const matchesStatus = statusFilter === 'all' || item.qualityStatus === statusFilter;
+    let expiringSoonCount = 0;
+    let expiredCount = 0;
+    let inStockCount = 0;
+    let quarantinedCount = 0;
 
-    return matchesSearch && matchesStatus;
-  });
+    data.forEach((b) => {
+      const exp = b.expiryDate ? new Date(b.expiryDate) : null;
+      if (b.qualityStatus === 'EXPIRED' || (exp && exp < now)) {
+        expiredCount++;
+      } else if (exp && exp >= now && exp <= in30Days) {
+        expiringSoonCount++;
+      }
+
+      if (Number(b.remainingUnits || 0) > 0) {
+        inStockCount++;
+      }
+
+      if (b.qualityStatus === 'QUARANTINED') {
+        quarantinedCount++;
+      }
+    });
+
+    return {
+      all: data.length,
+      expiring_soon: expiringSoonCount,
+      expired: expiredCount,
+      in_stock: inStockCount,
+      quarantined: quarantinedCount,
+    };
+  }, [data]);
+
+  const filtered = useMemo(() => {
+    const now = new Date();
+    const in30Days = new Date();
+    in30Days.setDate(in30Days.getDate() + 30);
+
+    return data.filter((item) => {
+      // 1. Text search
+      let matchesSearch = true;
+      const q = search.toLowerCase();
+      if (q) {
+        matchesSearch = (
+          item.productName.toLowerCase().includes(q) ||
+          item.batchNumber.toLowerCase().includes(q) ||
+          item.sku.toLowerCase().includes(q) ||
+          item.supplierName.toLowerCase().includes(q)
+        );
+      }
+      if (!matchesSearch) return false;
+
+      // 2. Status filter dropdown
+      if (statusFilter !== 'all' && item.qualityStatus !== statusFilter) {
+        return false;
+      }
+
+      // 3. Quick preset pills
+      if (filterPreset === 'expiring_soon') {
+        if (!item.expiryDate) return false;
+        const exp = new Date(item.expiryDate);
+        return exp >= now && exp <= in30Days && item.qualityStatus !== 'EXPIRED';
+      }
+      if (filterPreset === 'expired') {
+        return item.qualityStatus === 'EXPIRED' || (item.expiryDate && new Date(item.expiryDate) < now);
+      }
+      if (filterPreset === 'in_stock') {
+        return Number(item.remainingUnits || 0) > 0;
+      }
+      if (filterPreset === 'quarantined') {
+        return item.qualityStatus === 'QUARANTINED';
+      }
+
+      return true;
+    });
+  }, [data, search, statusFilter, filterPreset]);
 
   const handleOpenCreate = () => {
     setModalMode('create');
@@ -162,6 +226,14 @@ export function ProductBatchesPage() {
     }
   };
 
+  const handleConfirmQuarantine = () => {
+    if (!quarantineTarget) return;
+    updateProductBatch(quarantineTarget.batch.id, { qualityStatus: quarantineTarget.newStatus });
+    toast.warning(`Đã chuyển lô ${quarantineTarget.batch.batchNumber} sang ${quarantineTarget.newStatus === 'QUARANTINED' ? 'CÁCH LY' : 'THU HỒI'} — Tự động chặn bán POS!`);
+    setQuarantineTarget(null);
+    setSelectedBatch(null);
+  };
+
   const openAdjustModal = (batch: ProductBatchRecord) => {
     setAdjustingBatch(batch);
     setAdjustQty(batch.remainingUnits);
@@ -190,11 +262,16 @@ export function ProductBatchesPage() {
         header: 'Hạn sử dụng',
         cell: ({ row }) => {
           const exp = row.original.expiryDate;
-          const isExpired = row.original.qualityStatus === 'EXPIRED';
+          const isExpired = row.original.qualityStatus === 'EXPIRED' || (exp && new Date(exp) < new Date());
           return (
-            <span className={`font-mono text-sm ${isExpired ? 'text-red-600 dark:text-red-400 font-bold' : 'text-gray-500 dark:text-gray-400'}`}>
-              {exp}
-            </span>
+            <div>
+              <span className={`font-mono text-sm ${isExpired ? 'text-red-600 dark:text-red-400 font-bold' : 'text-gray-500 dark:text-gray-400'}`}>
+                {exp || 'N/A'}
+              </span>
+              {isExpired && (
+                <p className="text-[10px] font-semibold text-red-500 mt-0.5">⚠ Đã hết hạn</p>
+              )}
+            </div>
           );
         },
       },
@@ -261,6 +338,18 @@ export function ProductBatchesPage() {
             >
               <SlidersHorizontal className="w-4 h-4" />
             </button>
+            {row.original.qualityStatus === 'PASSED_QA' && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setQuarantineTarget({ batch: row.original, newStatus: 'QUARANTINED' });
+                }}
+                title="Cách ly kiểm định (Chặn bán POS)"
+                className="p-1.5 text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors shrink-0"
+              >
+                <ShieldAlert className="w-4 h-4" />
+              </button>
+            )}
             {row.original.qualityStatus !== 'EXPIRED' && (
               <button
                 onClick={(e) => { e.stopPropagation(); setExpiringBatch(row.original); }}
@@ -303,7 +392,44 @@ export function ProductBatchesPage() {
         </div>
 
         <div className="flex flex-col gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="flex flex-col sm:flex-row gap-3">
+          {/* Quick preset filter pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+            <span className="text-gray-500 dark:text-gray-400 font-medium shrink-0">Lọc nhanh:</span>
+            {[
+              { id: 'all', label: 'Tất cả lô', count: presetCounts.all, color: 'text-gray-700 dark:text-gray-200' },
+              { id: 'expiring_soon', label: 'Cận date (< 30 ngày)', count: presetCounts.expiring_soon, color: 'text-amber-600 dark:text-amber-400' },
+              { id: 'expired', label: 'Đã hết hạn', count: presetCounts.expired, color: 'text-red-600 dark:text-red-400' },
+              { id: 'in_stock', label: 'Còn tồn kho', count: presetCounts.in_stock, color: 'text-emerald-600 dark:text-emerald-400' },
+              { id: 'quarantined', label: 'Cách ly kiểm định', count: presetCounts.quarantined, color: 'text-purple-600 dark:text-purple-400' },
+            ].map((tab) => {
+              const active = filterPreset === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setFilterPreset(tab.id as BatchFilterPreset)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer shrink-0 border ${
+                    active
+                      ? 'bg-primary text-white border-primary shadow-xs'
+                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                      active
+                        ? 'bg-white/20 text-white'
+                        : 'bg-gray-100 dark:bg-gray-700 ' + tab.color
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-gray-100 dark:border-gray-700/60">
             <div className="flex-1 relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="h-4 w-4 text-gray-400" />
@@ -334,12 +460,12 @@ export function ProductBatchesPage() {
               </select>
             </div>
 
-            {(statusFilter !== 'all' || search) && (
+            {(filterPreset !== 'all' || statusFilter !== 'all' || search) && (
               <button
-                onClick={() => { setStatusFilter('all'); setSearch(''); }}
-                className="text-xs text-red-500 hover:text-red-600 font-semibold flex items-center gap-1 ml-auto transition-colors"
+                onClick={() => { setFilterPreset('all'); setStatusFilter('all'); setSearch(''); }}
+                className="text-xs text-red-500 hover:text-red-600 font-semibold flex items-center gap-1 ml-auto transition-colors cursor-pointer"
               >
-                <X className="w-3.5 h-3.5" /> Xóa bộ lọc
+                <X className="w-3.5 h-3.5" /> Xóa tất cả bộ lọc
               </button>
             )}
           </div>
@@ -452,6 +578,15 @@ export function ProductBatchesPage() {
                     <SlidersHorizontal className="w-4 h-4" /> Điều chỉnh số lượng
                   </button>
                   <button
+                    onClick={() => {
+                      const b = selectedBatch;
+                      setQuarantineTarget({ batch: b, newStatus: 'QUARANTINED' });
+                    }}
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
+                  >
+                    <ShieldAlert className="w-4 h-4" /> Cách ly kiểm dịch
+                  </button>
+                  <button
                     onClick={() => setExpiringBatch(selectedBatch)}
                     className="flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
                   >
@@ -524,7 +659,7 @@ export function ProductBatchesPage() {
                   id: p.sku,
                   code: p.sku,
                   name: p.name,
-                  subtitle: `Danh mục: ${p.categoryName || 'Chưa phân loại'}`
+                  subtitle: `Danh mục: ${p.category || (p as any).categoryName || 'Chưa phân loại'}`
                 }))}
                 onChange={(val, opt) => {
                   setEditingBatch(prev => ({
@@ -773,6 +908,42 @@ export function ProductBatchesPage() {
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setExpiringBatch(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium">Hủy bỏ</button>
             <button type="button" onClick={handleExpireConfirm} className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-medium">Xác nhận hết hạn</button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!quarantineTarget}
+        onClose={() => setQuarantineTarget(null)}
+        title="Cảnh báo cách ly / thu hồi lô hàng"
+        isDestructive
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-3.5 bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-800 rounded-xl text-red-800 dark:text-red-300 text-sm">
+            <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">Xác nhận chuyển trạng thái kiểm định!</p>
+              <p className="text-xs mt-1 text-red-700 dark:text-red-400 leading-relaxed">
+                Chuyển lô hàng <strong>{quarantineTarget?.batch.batchNumber}</strong> sang <strong>{quarantineTarget?.newStatus === 'QUARANTINED' ? 'CÁCH LY KIỂM DỊCH' : 'THU HỒI'}</strong> sẽ tự động <span className="font-bold underline">CHẶN BÁN</span> tại quầy POS và đơn bán buôn để bảo đảm an toàn kiểm định.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={() => setQuarantineTarget(null)}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium"
+            >
+              Hủy bỏ
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmQuarantine}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg text-sm transition-colors shadow-sm cursor-pointer"
+            >
+              Xác nhận khóa cách ly
+            </button>
           </div>
         </div>
       </Modal>

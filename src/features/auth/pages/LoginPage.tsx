@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, EyeOff, Mail, Lock, AlertCircle, ArrowRight, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, User, Lock, AlertCircle, ArrowRight, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import type { RoleType } from '../types';
 import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
@@ -13,9 +13,9 @@ import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
 // Validation Schema (Zod)
 // ----------------------------------------------------------------
 const loginSchema = z.object({
-  email: z
+  username: z
     .string()
-    .min(1, 'Vui lòng nhập tên đăng nhập hoặc email')
+    .min(1, 'Vui lòng nhập tên đăng nhập, email hoặc số điện thoại')
     .transform((val) => val.trim()),
   password: z
     .string()
@@ -52,13 +52,13 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [shake, setShake] = useState(false);
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
-  const emailId = useId();
+  const usernameId = useId();
   const passwordId = useId();
-  const emailRef = useRef<HTMLInputElement>(null);
+  const usernameRef = useRef<HTMLInputElement>(null);
 
-  // Auto-focus email on mount
+  // Auto-focus username on mount
   useEffect(() => {
-    emailRef.current?.focus();
+    usernameRef.current?.focus();
     clearError();
   }, [clearError]);
 
@@ -68,12 +68,12 @@ export function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: { username: '', password: '' },
   });
 
   const onSubmit = async (data: LoginFormValues) => {
     try {
-      await loginAsync(data);
+      await loginAsync({ username: data.username, password: data.password });
       const user = useAuthStore.getState().user;
       if (user) {
         navigate(getRedirectPath(user.role), { replace: true });
@@ -86,7 +86,7 @@ export function LoginPage() {
   };
 
   // Destructure register and merge with ref
-  const { ref: emailRegRef, ...emailRegProps } = register('email');
+  const { ref: usernameRegRef, ...usernameRegProps } = register('username');
 
   return (
     <div className="min-h-screen flex bg-white dark:bg-gray-950">
@@ -201,34 +201,34 @@ export function LoginPage() {
               )}
             </AnimatePresence>
 
-            {/* Username / Email Field */}
+            {/* Username / Email / Phone Field */}
             <div>
-              <label htmlFor={emailId} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Tên đăng nhập hoặc Email
+              <label htmlFor={usernameId} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Tên đăng nhập, Email hoặc Số điện thoại
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Mail className="h-4 w-4 text-gray-400" />
+                  <User className="h-4 w-4 text-gray-400" />
                 </div>
                 <input
-                  id={emailId}
+                  id={usernameId}
                   type="text"
                   autoComplete="username"
-                  placeholder="admin hoặc email@domain.com"
+                  placeholder="Tên đăng nhập, email hoặc số điện thoại..."
                   ref={(e) => {
-                    emailRegRef(e);
-                    (emailRef as React.MutableRefObject<HTMLInputElement | null>).current = e;
+                    usernameRegRef(e);
+                    (usernameRef as React.MutableRefObject<HTMLInputElement | null>).current = e;
                   }}
-                  {...emailRegProps}
+                  {...usernameRegProps}
                   className={`block w-full pl-10 pr-4 py-2.5 border rounded-xl text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-150 ${
-                    errors.email
+                    errors.username
                       ? 'border-red-400 dark:border-red-600'
                       : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600'
                   }`}
                 />
               </div>
               <AnimatePresence>
-                {errors.email && (
+                {errors.username && (
                   <motion.p
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -236,7 +236,7 @@ export function LoginPage() {
                     className="mt-1.5 text-xs text-red-500 flex items-center gap-1"
                   >
                     <AlertCircle className="w-3 h-3" />
-                    {errors.email.message}
+                    {errors.username.message}
                   </motion.p>
                 )}
               </AnimatePresence>

@@ -41,7 +41,7 @@ interface PosConfigState {
   // Actions
   setEnableOfflineMode: (enabled: boolean) => void;
   clearLocalOfflineDeductions: () => void;
-  fetchPaymentMethods: () => Promise<void>;
+  fetchPaymentMethods: (branchId?: string | number) => Promise<void>;
   addPaymentMethod: (method: Omit<PaymentMethodRecord, 'id'>) => Promise<void>;
   updatePaymentMethod: (id: string, data: Partial<PaymentMethodRecord>) => Promise<void>;
   deletePaymentMethod: (id: string) => Promise<void>;
@@ -68,9 +68,10 @@ export const usePosConfigStore = create<PosConfigState>()(
         } catch {}
       },
 
-      fetchPaymentMethods: async () => {
+      fetchPaymentMethods: async (branchId?: string | number) => {
         try {
-          const response = await axiosClient.get<any, any[]>('/payment-methods');
+          const url = branchId ? `/payment-methods?branchId=${branchId}` : '/payment-methods';
+          const response: any = await axiosClient.get<any, any>(url);
           const list: any[] = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : (response?.content || []));
           if (list.length > 0) {
             set({ paymentMethods: list });

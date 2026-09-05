@@ -4,6 +4,7 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useHrStore } from '../store/hrStore';
+import { toast } from 'sonner';
 
 interface ContractItem {
   id: string; contractNumber: string; userName: string; userId: string;
@@ -11,8 +12,6 @@ interface ContractItem {
   contractType: 'Thử việc' | 'Xác định thời hạn' | 'Vô thời hạn';
   status: 'ĐANG_HIỆU_LỰC' | 'HẾT_HẠN' | 'ĐÃ_HỦY';
 }
-
-const MOCK: ContractItem[] = [];
 
 
 const statusCfg: Record<string,{cls:string;label:string}> = {
@@ -57,7 +56,6 @@ export function EmployeeContractsPage() {
   const [selected, setSelected] = useState<ContractItem|null>(null);
   const [isModal, setIsModal] = useState(false);
   const [mode, setMode] = useState<'create'|'edit'>('create');
-  const setData = (_fn: any) => {};
   const [form, setForm] = useState<Partial<ContractItem>>({});
   const [deleting, setDeleting] = useState<ContractItem|null>(null);
 
@@ -65,11 +63,49 @@ export function EmployeeContractsPage() {
 
   const openCreate = () => { setMode('create'); setForm({ contractType:'Xác định thời hạn', status:'ĐANG_HIỆU_LỰC' }); setIsModal(true); };
   const openEdit = (item: ContractItem) => { setMode('edit'); setForm(item); setIsModal(true); };
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (mode==='create') setData([{ ...form as ContractItem, id: String(data.length+1) }, ...data]);
-    else setData(data.map(d => d.id===form.id ? form as ContractItem : d));
-    setIsModal(false);
+    if (!form.contractNumber || !form.userName) {
+      toast.error('Vui lòng nhập số hợp đồng và tên nhân viên!');
+      return;
+    }
+
+    const typeMapping: Record<string, 'PROBATION' | 'DEFINITE' | 'INDEFINITE'> = {
+      'Thử việc': 'PROBATION',
+      'Xác định thời hạn': 'DEFINITE',
+      'Vô thời hạn': 'INDEFINITE',
+    };
+
+    const statusMapping: Record<string, 'ACTIVE' | 'EXPIRED' | 'TERMINATED'> = {
+      'ĐANG_HIỆU_LỰC': 'ACTIVE',
+      'HẾT_HẠN': 'EXPIRED',
+      'ĐÃ_HỦY': 'TERMINATED',
+    };
+
+    const payload = {
+      contractCode: form.contractNumber,
+      employeeName: form.userName,
+      employeePhone: form.userId || '0901234567',
+      contractType: typeMapping[form.contractType || 'Xác định thời hạn'] || 'DEFINITE',
+      startDate: form.startDate || new Date().toISOString().split('T')[0],
+      endDate: form.endDate || undefined,
+      baseSalary: 10000000,
+      status: statusMapping[form.status || 'ĐANG_HIỆU_LỰC'] || 'ACTIVE',
+    };
+
+    try {
+      if (mode === 'create') {
+        await addContract(payload);
+        toast.success(`Tạo hợp đồng ${form.contractNumber} thành công!`);
+      } else if (form.id) {
+        await updateContract(form.id, payload);
+        toast.success(`Cập nhật hợp đồng ${form.contractNumber} thành công!`);
+      }
+      setIsModal(false);
+    } catch (err) {
+      console.error('Lỗi khi lưu hợp đồng:', err);
+      toast.error('Không thể lưu thông tin hợp đồng!');
+    }
   };
 
   const columns = useMemo<ColumnDef<ContractItem>[]>(() => [
@@ -166,7 +202,24 @@ export function EmployeeContractsPage() {
           <p className="text-sm text-gray-600 dark:text-gray-300">Bạn có chắc muốn xóa hợp đồng <strong className="text-gray-900 dark:text-white">{deleting?.contractNumber}</strong> của nhân viên <strong>{deleting?.userName}</strong>?</p>
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button onClick={()=>setDeleting(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg text-sm">Quay lại</button>
-            <button onClick={()=>{setData(data.filter(d=>d.id!==deleting!.id));setDeleting(null);}} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg text-sm">Xác nhận xóa</button>
+            <button
+              onClick={async () => {
+                if (deleting) {
+                  try {
+                    await deleteContract(deleting.id);
+                    toast.success(`Đã hủy hợp đồng ${deleting.contractNumber}`);
+                  } catch (err) {
+                    console.error('Lỗi khi xóa hợp đồng:', err);
+                    toast.error('Lỗi khi xóa hợp đồng!');
+                  } finally {
+                    setDeleting(null);
+                  }
+                }
+              }}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg text-sm cursor-pointer"
+            >
+              Xác nhận xóa
+            </button>
           </div>
         </div>
       </Modal>

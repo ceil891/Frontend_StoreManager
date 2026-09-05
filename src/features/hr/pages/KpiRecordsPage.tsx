@@ -1,9 +1,11 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Search, Download, Eye, Edit, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, Search, Download, Eye, Edit, Trash2, TrendingUp, TrendingDown } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useHrStore } from '../store/hrStore';
+import { toast } from 'sonner';
 
 export interface KpiItem {
   id: string;
@@ -24,12 +26,19 @@ const ratingCfg: Record<string, { label: string; cls: string }> = {
   ĐẠT: { label: 'Đạt', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
 };
 
+const ratingToGrade: Record<string, string> = {
+  'XUẤT_SẮC': 'A_EXCELLENT',
+  'TỐT': 'B_GOOD',
+  'ĐẠT': 'C_AVERAGE',
+};
+
 export function KpiRecordsPage() {
-  const setData = (_fn: any) => {};
   const {
     kpiRecords: storeKpis,
     fetchKpiRecords,
     addKpiRecord,
+    updateKpiRecord,
+    deleteKpiRecord,
   } = useHrStore();
 
   useEffect(() => {
@@ -53,12 +62,55 @@ export function KpiRecordsPage() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<KpiItem|null>(null);
   const [isModal, setIsModal] = useState(false);
+  const [mode, setMode] = useState<'create'|'edit'>('create');
   const [form, setForm] = useState<Partial<KpiItem>>({});
+  const [deletingKpi, setDeletingKpi] = useState<KpiItem | null>(null);
 
   const filtered = data.filter(d=>d.userName.toLowerCase().includes(search.toLowerCase())||d.department.toLowerCase().includes(search.toLowerCase()));
 
-  const openCreate = ()=>{ setForm({periodMonth:new Date().getMonth()+1,periodYear:new Date().getFullYear(),targetScore:100,achievedScore:0,rating:'ĐẠT'}); setIsModal(true); };
-  const handleSave=(e:React.FormEvent)=>{ e.preventDefault(); setData([{...form as KpiItem,id:String(data.length+1)}, ...data]); setIsModal(false); };
+  const openCreate = ()=>{ setMode('create'); setForm({periodMonth:new Date().getMonth()+1,periodYear:new Date().getFullYear(),targetScore:100,achievedScore:0,rating:'ĐẠT'}); setIsModal(true); };
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.userName) {
+      toast.error('Vui lòng nhập tên nhân viên!');
+      return;
+    }
+    const payload = {
+      employeeName: form.userName || '',
+      departmentName: form.department || '',
+      kpiMonth: `${form.periodYear || new Date().getFullYear()}-${String(form.periodMonth || 1).padStart(2, '0')}`,
+      targetScore: form.targetScore || 100,
+      achievedScore: form.achievedScore || 0,
+      ratingGrade: (ratingToGrade[form.rating || 'ĐẠT'] || 'C_AVERAGE') as any,
+      bonusAmount: 0,
+      status: 'APPROVED' as any,
+    };
+    try {
+      if (mode === 'create') {
+        await addKpiRecord(payload);
+        toast.success('Ghi nhận đánh giá KPI thành công!');
+      } else if (form.id) {
+        await updateKpiRecord(form.id, payload);
+        toast.success('Cập nhật đánh giá KPI thành công!');
+      }
+      setIsModal(false);
+    } catch (err: any) {
+      console.error('Lỗi lưu KPI:', err);
+      toast.error('Lỗi khi lưu đánh giá KPI: ' + (err?.message || 'Thất bại'));
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingKpi) return;
+    try {
+      await deleteKpiRecord(deletingKpi.id);
+      toast.success(`Đã xóa đánh giá KPI của ${deletingKpi.userName}!`);
+      setDeletingKpi(null);
+    } catch (err: any) {
+      console.error('Lỗi xóa KPI:', err);
+      toast.error('Lỗi khi xóa KPI: ' + (err?.message || 'Thất bại'));
+    }
+  };
 
   const columns = useMemo<ColumnDef<KpiItem>[]>(()=>[
     {accessorKey:'userName',header:'Nhân viên',cell:({row})=><div><p className="font-medium text-gray-900 dark:text-white">{row.original.userName}</p><p className="text-xs text-gray-400">{row.original.department}</p></div>},
@@ -79,6 +131,7 @@ export function KpiRecordsPage() {
       <div className="flex gap-1" onClick={e=>e.stopPropagation()}>
         <button onClick={()=>setSelected(row.original)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"><Eye className="w-4 h-4"/></button>
         <button onClick={()=>{setForm(row.original);setIsModal(true);}} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"><Edit className="w-4 h-4"/></button>
+        <button onClick={()=>setDeletingKpi(row.original)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
       </div>
     )},
   ],[]);
@@ -172,6 +225,15 @@ export function KpiRecordsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={!!deletingKpi}
+        onClose={() => setDeletingKpi(null)}
+        onConfirm={handleDeleteConfirm}
+        title="Xóa đánh giá KPI"
+        description="Bạn có chắc chắn muốn xóa bản ghi đánh giá KPI này không? Hành động này không thể hoàn tác."
+        itemName={deletingKpi?.userName}
+      />
     </>
   );
 }

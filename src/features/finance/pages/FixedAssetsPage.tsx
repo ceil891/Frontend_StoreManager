@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { Search, Download, Eye, Edit, Trash2, Plus } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore } from '../store/financeStore';
 import { toast } from 'sonner';
@@ -20,6 +21,9 @@ export interface FixedAssetItem {
   netValue: number;
   status: string;
   notes?: string;
+  serialNumber?: string;
+  vendorName?: string;
+  warrantyExpiry?: string;
 }
 
 const fmt = (n: number) => (n || 0).toLocaleString('vi-VN') + ' ₫';
@@ -58,6 +62,8 @@ export function FixedAssetsPage() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<FixedAssetItem | null>(null);
   const [isModal, setIsModal] = useState(false);
+  const [deleteItem, setDeleteItem] = useState<FixedAssetItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [form, setForm] = useState<Partial<FixedAssetItem>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -128,16 +134,19 @@ export function FixedAssetsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa tài sản cố định này?')) {
-      try {
-        await deleteFixedAsset(id);
-        toast.success('Đã xóa tài sản cố định!');
-        fetchFixedAssets();
-      } catch (err: any) {
-        console.error('Delete asset error:', err);
-        toast.error('Lỗi khi xóa tài sản cố định!');
-      }
+  const handleConfirmDelete = async () => {
+    if (!deleteItem) return;
+    try {
+      setIsDeleting(true);
+      await deleteFixedAsset(deleteItem.id);
+      toast.success('Đã xóa tài sản cố định!');
+      setDeleteItem(null);
+      fetchFixedAssets();
+    } catch (err: any) {
+      console.error('Delete asset error:', err);
+      toast.error('Lỗi khi xóa tài sản cố định!');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -185,7 +194,7 @@ export function FixedAssetsPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeleteItem(row.original)}
               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               title="Xóa"
             >
@@ -333,6 +342,15 @@ export function FixedAssetsPage() {
         </form>
       </Modal>
 
+      <ConfirmDeleteModal
+        isOpen={Boolean(deleteItem)}
+        onClose={() => setDeleteItem(null)}
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
+        title="Xác nhận xóa tài sản cố định"
+        description="Bạn có chắc chắn muốn xóa tài sản cố định này không? Thao tác này không thể hoàn tác."
+        itemName={deleteItem ? `${deleteItem.assetCode} - ${deleteItem.assetName}` : ''}
+      />
     </>
   );
 }

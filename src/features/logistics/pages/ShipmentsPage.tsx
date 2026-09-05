@@ -604,7 +604,7 @@ export function ShipmentsPage() {
           isOpen={Boolean(selectedShipment)}
           onClose={() => setSelectedShipment(null)}
           title={`Chi tiết Vận đơn: ${selectedShipment.shipmentCode}`}
-          size="2xl"
+          size="erp"
         >
           <div className="space-y-6">
             <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border">
@@ -675,7 +675,7 @@ export function ShipmentsPage() {
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           title={modalMode === 'create' ? 'Tạo Vận Đơn Mới' : `Chỉnh Sửa Vận Đơn ${formState.shipmentCode}`}
-          size="2xl"
+          size="erp"
         >
           <form onSubmit={handleSave} className="space-y-6">
             {/* Section 1: Thông tin vận đơn */}

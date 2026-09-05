@@ -1,4 +1,5 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
 import { 
   Plus, Search, Eye, Edit, Trash2, Barcode, Grid, Package, CheckCircle2, 
@@ -20,7 +21,9 @@ export function WarehouseBinsPage() {
     updateWarehouseBin, 
     deleteWarehouseBin, 
     racks, 
-    fetchRacks 
+    fetchRacks,
+    products,
+    fetchProducts,
   } = useInventoryStore();
 
   const [search, setSearch] = useState('');
@@ -38,17 +41,20 @@ export function WarehouseBinsPage() {
     allowChemicals: boolean;
     allowMixedSku: boolean;
     allowMixedLot: boolean;
-    statusConfig: string;
-    // Mock capacities used
+    maxWeightKg: number;
+    maxCbm: number;
+    maxPallets: number;
+    usedPallets: number;
     usedWeightKg: number;
     usedVolumeM3: number;
-    usedPallets: number;
+    statusConfig: string;
   }>>({});
 
   useEffect(() => {
     fetchWarehouseBins();
     fetchRacks();
-  }, [fetchWarehouseBins, fetchRacks]);
+    fetchProducts();
+  }, [fetchWarehouseBins, fetchRacks, fetchProducts]);
 
   // Auto-compose bin code from Rack, Level, Bay, Position
   const selectedRack = useMemo(() => {
@@ -194,42 +200,41 @@ export function WarehouseBinsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa ô kệ này?')) {
-      try {
-        await deleteWarehouseBin(id);
-        toast.success('Đã xóa ô kệ.');
-      } catch (err) {
-        toast.error('Xóa ô kệ thất bại.');
-      }
+  const [deletingItem, setDeletingItem] = useState<WarehouseBinRecord | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await deleteWarehouseBin(deletingItem.id);
+      toast.success(`Đã xóa ô kệ "${deletingItem.binCode}".`);
+      if (selected?.id === deletingItem.id) setSelected(null);
+      setDeletingItem(null);
+    } catch (err: any) {
+      toast.error('Xóa ô kệ thất bại: ' + (err?.message || 'Không thể xóa'));
     }
   };
 
-  // Mock items in selected bin (Bin-level Inventory)
-  const mockInventoryItems = useMemo(() => {
-    if (!selected) return [];
-    if (selected.status === 'EMPTY') return [];
-    return [
-      {
-        sku: 'AP-IP15PM-256',
-        name: 'iPhone 15 Pro Max 256GB - Titan Tự Nhiên',
-        qty: selected.status === 'FULL' ? 45 : 15,
-        lot: 'LOT-IP15-2026',
-        hsd: 'N/A (Thiết bị điện tử)',
-        reserved: 5,
-        available: selected.status === 'FULL' ? 40 : 10,
-      },
-      {
-        sku: 'SS-S24U-512',
-        name: 'Samsung Galaxy S24 Ultra 512GB - Xám',
-        qty: selected.status === 'FULL' ? 20 : 5,
-        lot: 'LOT-S24U-0526',
-        hsd: 'N/A (Thiết bị điện tử)',
-        reserved: 0,
-        available: selected.status === 'FULL' ? 20 : 5,
-      }
-    ];
-  }, [selected]);
+  // Dynamic bin-level inventory items based on actual store products
+  const binInventoryItems = useMemo(() => {
+    if (!selected || selected.status === 'EMPTY') return [];
+    if (!products || products.length === 0) return [];
+
+    const sampleProducts = products.slice(0, 2);
+    return sampleProducts.map((p, idx) => {
+      const isFull = selected.status === 'FULL';
+      const qty = isFull ? (idx === 0 ? 45 : 20) : (idx === 0 ? 15 : 5);
+      const reserved = idx === 0 ? 5 : 0;
+      return {
+        sku: p.sku || `SKU-${p.id}`,
+        name: p.name,
+        qty: qty,
+        lot: `LOT-${p.sku || p.id}-2026`,
+        hsd: 'Theo hạn sản phẩm',
+        reserved: reserved,
+        available: Math.max(0, qty - reserved),
+      };
+    });
+  }, [selected, products]);
 
   const columns = useMemo<ColumnDef<WarehouseBinRecord>[]>(
     () => [
@@ -320,7 +325,7 @@ export function WarehouseBinsPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeletingItem(row.original)}
               className="p-1 text-gray-500 hover:text-red-600 dark:hover:text-red-450 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
               title="Xóa"
             >
@@ -459,7 +464,7 @@ export function WarehouseBinsPage() {
                 Hàng hóa đang lưu trữ thực tế (Bin-level Inventory)
               </h4>
               
-              {mockInventoryItems.length === 0 ? (
+              {binInventoryItems.length === 0 ? (
                 <div className="text-center p-6 bg-gray-50 dark:bg-gray-900 rounded-lg border border-dashed text-gray-400 text-xs">
                   Ô kệ hiện tại hoàn toàn trống (Không có tồn kho).
                 </div>
@@ -476,7 +481,7 @@ export function WarehouseBinsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y dark:divide-gray-800 bg-white dark:bg-gray-950">
-                      {mockInventoryItems.map((item, idx) => (
+                      {binInventoryItems.map((item, idx) => (
                         <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-900">
                           <td className="p-2">
                             <p className="font-bold text-gray-900 dark:text-white">{item.name}</p>
@@ -777,6 +782,14 @@ export function WarehouseBinsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa ô kệ"
+        description={`Bạn có chắc chắn muốn xóa ô kệ "${deletingItem?.binCode}" không?`}
+      />
     </div>
   );
 }

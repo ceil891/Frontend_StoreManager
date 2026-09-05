@@ -8,6 +8,8 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import type { ColumnDef } from '@tanstack/react-table';
 import { useCrmStore } from '@/features/crm/store/crmStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
+import { exportToCsv } from '@/shared/utils/exportCsv';
+import { toast } from 'sonner';
 
 const TIER_COLORS: Record<string, string> = {
   DIAMOND: '#818CF8',
@@ -95,10 +97,10 @@ export function CrmReportPage() {
       .map((c) => {
         const tierCode = getTierCode(c);
         return {
-          id: c.customerCode || c.code || `CUST-${c.id}`,
+          id: c.customerCode || (c as any).code || `CUST-${c.id}`,
           name: c.name,
           phone: c.phone || 'Chưa cập nhật',
-          tier: TIER_NAMES[tierCode] || c.membershipRank || c.loyaltyTier || 'Đồng',
+          tier: TIER_NAMES[tierCode] || (c as any).membershipRank || c.loyaltyTier || 'Đồng',
           totalSpent: getSpentAmount(c),
           points: getPointsAmount(c),
           lastVisit: getLastVisitDate(c),
@@ -206,6 +208,23 @@ export function CrmReportPage() {
     []
   );
 
+  const handleExportExcel = () => {
+    if (!topCustomers || topCustomers.length === 0) {
+      toast.error('Không có dữ liệu khách hàng để xuất Excel');
+      return;
+    }
+    exportToCsv('Bao_cao_khach_hang_CRM', topCustomers, [
+      { header: 'Mã khách hàng', accessor: (r) => r.id },
+      { header: 'Họ & Tên khách hàng', accessor: (r) => r.name },
+      { header: 'Số điện thoại', accessor: (r) => r.phone },
+      { header: 'Hạng thành viên', accessor: (r) => r.tier },
+      { header: 'Điểm tích lũy', accessor: (r) => r.points },
+      { header: 'Tổng chi tiêu', accessor: (r) => r.totalSpent },
+      { header: 'Lần mua gần nhất', accessor: (r) => r.lastVisit },
+    ]);
+    toast.success('Đã xuất báo cáo khách hàng ra file Excel thành công!');
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -239,7 +258,10 @@ export function CrmReportPage() {
             <option value="6m">6 tháng qua</option>
             <option value="1y">1 năm qua</option>
           </select>
-          <button className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm">
+          <button
+            onClick={handleExportExcel}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm"
+          >
             <Download className="w-4 h-4" />
             Xuất Excel
           </button>

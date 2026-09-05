@@ -148,11 +148,12 @@ export const useAuthStore = create<AuthState & AuthActions>()(
       logout: async () => {
         set({ isLoading: true });
         try {
-          await mockAuthApi.logout();
+          await mockAuthApi.logout().catch(() => {});
         } finally {
-          // Xóa token khỏi localStorage
+          // Xóa token và auth persist state khỏi localStorage
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
+          localStorage.removeItem('retailhub-auth');
 
           // Reset cart store khi logout
           useCartStore.getState().reset();

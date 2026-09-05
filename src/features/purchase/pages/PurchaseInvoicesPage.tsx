@@ -1,13 +1,17 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, Receipt, Printer } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, Receipt, Printer, ArrowUpRight, ArrowDownLeft, Percent, Clock, CheckCircle2, RefreshCw } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 
 
 import { PrintInvoiceModal, type PrintInvoiceData } from '@/shared/components/ui/PrintInvoiceModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
+import { usePurchaseStore } from '@/features/purchase/store/purchaseStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 import { axiosClient } from '@/shared/lib/axiosClient';
+import { extractPageContent } from '@/shared/lib/apiHelpers';
 import { toast } from 'sonner';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
@@ -22,14 +26,19 @@ interface PurchaseInvoiceRecord {
   subTotal: number;
   vatAmount: number;
   totalAmount: number;
-  status: 'CHO_THANH_TOAN' | 'DA_THANH_TOAN' | 'DA_HUY';
+  paidAmount: number;
+  remainingDebt: number;
+  status: 'CHO_THANH_TOAN' | 'DA_THANH_TOAN' | 'PARTIAL_PAID' | 'DA_HUY' | string;
   notes?: string;
 }
 
 export function PurchaseInvoicesPage() {
   const { products, fetchProducts } = useInventoryStore();
+  const { purchaseOrders, fetchPurchaseOrders, suppliers, fetchSuppliers } = usePurchaseStore();
+  const { branches, fetchBranches } = useBranchStore();
   const [data, setData] = useState<PurchaseInvoiceRecord[]>([]);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const [selected, setSelected] = useState<PurchaseInvoiceRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
@@ -45,7 +54,7 @@ export function PurchaseInvoicesPage() {
     quantity: number;
     unitPrice: number;
     vatPercent: number;
-  }>([]);
+  }[]>([]);
 
   const updatePurItemsAndTotals = (newItems: typeof purItems) => {
     setPurItems(newItems);
@@ -97,26 +106,47 @@ export function PurchaseInvoicesPage() {
   const fetchInvoices = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await axiosClient.get('/purchase/orders');
+      const res = await axiosClient.get('/purchase/invoices');
       const list = extractPageContent<any>(res);
       const mapped: PurchaseInvoiceRecord[] = list.map((item: any) => {
-        const status: PurchaseInvoiceRecord['status'] =
-          item.paymentStatus === 'PAID'
-            ? 'DA_THANH_TOAN'
-            : item.status === 'CANCELLED'
-              ? 'DA_HUY'
-              : 'CHO_THANH_TOAN';
+        const tot = Number(item.totalAmount || item.totalCost || 0);
+        const vat = Number(item.vatAmount || item.taxAmount || 0);
+        const sub = Number(item.subTotal || item.subtotal || tot - vat);
+        let paid = item.paidAmount !== undefined && item.paidAmount !== null ? Number(item.paidAmount) : undefined;
+        let remaining = item.remainingDebt !== undefined && item.remainingDebt !== null ? Number(item.remainingDebt) : undefined;
+
+        if (paid === undefined) {
+          if (item.status === 'DA_THANH_TOAN' || item.status === 'PAID') {
+            paid = tot;
+            remaining = 0;
+          } else {
+            paid = 0;
+            remaining = tot;
+          }
+        }
+        if (remaining === undefined) {
+          remaining = Math.max(0, tot - (paid || 0));
+        }
+
+        let st = item.status || 'CHO_THANH_TOAN';
+        if (paid > 0 && remaining > 0 && st !== 'DA_THANH_TOAN' && st !== 'DA_HUY') {
+          st = 'PARTIAL_PAID';
+        }
+
         return {
           id: String(item.id),
-          invoiceCode: `INV-MH-${item.id}`,
-          poCode: item.poCode || item.poNumber || `PO-${item.id}`,
+          invoiceCode: item.invoiceCode || `INV-MH-${item.id}`,
+          poCode: item.poCode || item.poNumber || `PO-${item.poId || item.id}`,
           supplierName: item.supplierName || item.supplier?.name || '',
-          invoiceDate: item.poDate ? String(item.poDate).split('T')[0] : (item.orderDate ? String(item.orderDate).split('T')[0] : ''),
-          dueDate: item.expectedDate ? String(item.expectedDate).split('T')[0] : (item.estDeliveryDate ? String(item.estDeliveryDate).split('T')[0] : ''),
-          subTotal: Math.round((Number(item.totalAmount) || 0) * 0.9),
-          vatAmount: Math.round((Number(item.totalAmount) || 0) * 0.1),
-          totalAmount: Number(item.totalAmount) || 0,
-          status,
+          invoiceDate: item.invoiceDate ? String(item.invoiceDate).split('T')[0] : '',
+          dueDate: item.dueDate ? String(item.dueDate).split('T')[0] : '',
+          subTotal: sub,
+          vatAmount: vat,
+          totalAmount: tot,
+          paidAmount: paid,
+          remainingDebt: remaining,
+          status: st,
+          notes: item.note || '',
         };
       });
       setData(mapped);
@@ -131,25 +161,68 @@ export function PurchaseInvoicesPage() {
   useEffect(() => {
     fetchInvoices();
     fetchProducts();
-  }, [fetchInvoices, fetchProducts]);
+    fetchSuppliers();
+    fetchBranches();
+  }, [fetchInvoices, fetchProducts, fetchSuppliers, fetchBranches]);
+
+  const stats = useMemo(() => {
+    let totalInvoiceAmount = 0;
+    let totalPaidAmount = 0;
+    let totalRemainingDebt = 0;
+    let partialCount = 0;
+    let unpaidCount = 0;
+    let paidCount = 0;
+
+    data.forEach((inv) => {
+      if (inv.status === 'DA_HUY') return;
+      totalInvoiceAmount += inv.totalAmount;
+      totalPaidAmount += inv.paidAmount;
+      totalRemainingDebt += inv.remainingDebt;
+
+      if (inv.remainingDebt === 0 || inv.status === 'DA_THANH_TOAN') {
+        paidCount += 1;
+      } else if (inv.paidAmount > 0 && inv.remainingDebt > 0) {
+        partialCount += 1;
+      } else {
+        unpaidCount += 1;
+      }
+    });
+
+    return {
+      totalInvoiceAmount,
+      totalPaidAmount,
+      totalRemainingDebt,
+      partialCount,
+      unpaidCount,
+      paidCount,
+    };
+  }, [data]);
 
   const filtered = useMemo(() => {
-    if (!search) return data;
     const q = search.toLowerCase();
-    return data.filter(
-      (d) =>
+    return data.filter((d) => {
+      const matchSearch =
+        !q ||
         d.invoiceCode.toLowerCase().includes(q) ||
         d.poCode.toLowerCase().includes(q) ||
-        d.supplierName.toLowerCase().includes(q)
-    );
-  }, [search, data]);
+        d.supplierName.toLowerCase().includes(q);
+
+      if (!matchSearch) return false;
+
+      if (statusFilter === 'DA_THANH_TOAN') return d.remainingDebt === 0 || d.status === 'DA_THANH_TOAN';
+      if (statusFilter === 'PARTIAL_PAID') return d.paidAmount > 0 && d.remainingDebt > 0;
+      if (statusFilter === 'CHO_THANH_TOAN') return d.paidAmount === 0 && d.status !== 'DA_HUY';
+      if (statusFilter === 'DA_HUY') return d.status === 'DA_HUY';
+      return true;
+    });
+  }, [search, statusFilter, data]);
 
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingItem({
       invoiceCode: `INV-PUR-2026-${Date.now().toString().slice(-3)}`,
-      poCode: '',
-      supplierName: '',
+      poCode: `PO-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      supplierName: suppliers[0]?.supplierName || '',
       invoiceDate: new Date().toISOString().split('T')[0],
       dueDate: '',
       subTotal: 0,
@@ -165,78 +238,89 @@ export function PurchaseInvoicesPage() {
   const handleOpenEdit = async (item: PurchaseInvoiceRecord) => {
     setModalMode('edit');
     setEditingItem(item);
-    setIsModalOpen(true);
-
-    try {
-      const res = await axiosClient.get<any, any>(`/purchase/orders/${item.id}`);
-      const poData = res?.data || res;
-      const rawLines = Array.isArray(poData.details) && poData.details.length > 0 ? poData.details : (Array.isArray(poData.poLines) ? poData.poLines : []);
-      if (rawLines.length > 0) {
-        const mapped = rawLines.map((l: any, idx: number) => ({
-          id: String(l.id || idx + 1),
-          sku: l.productSku || l.sku || `SKU-${l.productId || idx + 1}`,
-          productName: l.productName || l.product?.name || 'Sản phẩm đặt mua',
-          quantity: Number(l.quantity || 1),
-          unitPrice: Number(l.unitPrice || 0),
-          vatPercent: 10,
-        }));
-        setPurItems(mapped);
-      } else {
-        setPurItems([]);
-      }
-    } catch (err) {
-      console.warn('Failed to load detailed PO lines for invoice:', err);
+    if ((item as any).items && Array.isArray((item as any).items)) {
+      setPurItems((item as any).items);
+    } else {
+      setPurItems([]);
     }
+    setIsModalOpen(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.invoiceCode || !editingItem.poCode || !editingItem.supplierName) return;
+    if (!editingItem.invoiceCode || !editingItem.poCode || !editingItem.supplierName) {
+      toast.error('Vui lòng nhập đầy đủ Mã hóa đơn, Mã đơn PO và Nhà cung cấp!');
+      return;
+    }
 
-    const sub = Number(editingItem.subTotal || 0);
-    const vat = Number(editingItem.vatAmount || 0);
-    const total = sub + vat;
+    const matchedSupplier = suppliers.find(
+      (s) => s.supplierName.toLowerCase() === (editingItem.supplierName || '').toLowerCase() || String(s.id) === String(editingItem.supplierName)
+    );
+    const supplierId = matchedSupplier ? Number(matchedSupplier.id) : (suppliers[0] ? Number(suppliers[0].id) : 1);
+    const branchId = branches[0] ? Number(branches[0].id) : 1;
+
+    const orderDate = editingItem.invoiceDate
+      ? (editingItem.invoiceDate.includes('T') ? editingItem.invoiceDate : `${editingItem.invoiceDate}T00:00:00`)
+      : new Date().toISOString().substring(0, 19);
+
+    const estDeliveryDate = editingItem.dueDate
+      ? (editingItem.dueDate.includes('T') ? editingItem.dueDate : `${editingItem.dueDate}T00:00:00`)
+      : orderDate;
+
+    const payload = {
+      invoiceCode: editingItem.invoiceCode,
+      poCode: editingItem.poCode,
+      supplierId,
+      branchId,
+      invoiceDate: orderDate,
+      dueDate: estDeliveryDate,
+      subTotal: Number(editingItem.subTotal || 0),
+      vatAmount: Number(editingItem.vatAmount || 0),
+      totalAmount: Number(editingItem.totalAmount || 0),
+      status: editingItem.status || 'CHO_THANH_TOAN',
+      note: editingItem.notes || '',
+      items: purItems.map((i) => ({
+        productVariantId: (i as any).productVariantId || (i as any).productId,
+        productId: (i as any).productId || (i as any).productVariantId,
+        productName: i.productName,
+        sku: i.sku,
+        unitName: (i as any).unitName || 'Cái',
+        quantity: Number(i.quantity) || 1,
+        unitPrice: Number(i.unitPrice) || 0,
+        vatRate: Number((i as any).vatRate) || 0,
+        vatAmount: Number((i as any).vatAmount) || 0,
+        totalAmount: Number(i.quantity * i.unitPrice) || 0,
+      })),
+    };
 
     try {
       if (modalMode === 'create') {
-        await axiosClient.post('/purchase/orders', {
-          poNumber: editingItem.poCode,
-          supplierName: editingItem.supplierName,
-          orderDate: editingItem.invoiceDate,
-          estDeliveryDate: editingItem.dueDate || editingItem.invoiceDate,
-          totalAmount: total,
-          notes: editingItem.notes,
-        });
+        await axiosClient.post('/purchase/invoices', payload);
         toast.success('Tạo hóa đơn mua hàng thành công');
       } else {
-        await axiosClient.put(`/purchase/orders/${editingItem.id}`, {
-          poNumber: editingItem.poCode,
-          supplierName: editingItem.supplierName,
-          orderDate: editingItem.invoiceDate,
-          estDeliveryDate: editingItem.dueDate,
-          totalAmount: total,
-          notes: editingItem.notes,
-        });
+        await axiosClient.put(`/purchase/invoices/${editingItem.id}`, payload);
         toast.success('Cập nhật hóa đơn mua hàng thành công');
       }
       setIsModalOpen(false);
       await fetchInvoices();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lưu hóa đơn thất bại');
+      toast.error('Lưu hóa đơn thất bại: ' + (err?.response?.data?.message || err?.message || 'Lỗi dữ liệu'));
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa hóa đơn này?')) {
-      try {
-        await axiosClient.delete(`/purchase/orders/${id}`);
-        toast.success('Đã xóa hóa đơn mua hàng');
-        await fetchInvoices();
-      } catch (err) {
-        console.error(err);
-        toast.error('Xóa hóa đơn thất bại');
-      }
+  const [deletingItem, setDeletingItem] = useState<PurchaseInvoiceRecord | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await axiosClient.delete(`/purchase/invoices/${deletingItem.id}`);
+      toast.success(`Đã xóa hóa đơn mua hàng ${deletingItem.invoiceCode}`);
+      setDeletingItem(null);
+      await fetchInvoices();
+    } catch (err) {
+      console.error(err);
+      toast.error('Xóa hóa đơn thất bại');
     }
   };
 
@@ -265,7 +349,7 @@ export function PurchaseInvoicesPage() {
       subTotal: record.subTotal || record.totalAmount,
       taxAmount: record.vatAmount || 0,
       totalAmount: record.totalAmount,
-      statusLabel: record.status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : record.status === 'CHO_THANH_TOAN' ? 'Chờ thanh toán' : 'Đã hủy'
+      statusLabel: record.remainingDebt === 0 ? 'Đã thanh toán' : record.paidAmount > 0 ? `Đã trả: ${formatCurrency(record.paidAmount)} - Còn nợ: ${formatCurrency(record.remainingDebt)}` : 'Chờ thanh toán'
     });
   };
 
@@ -274,41 +358,123 @@ export function PurchaseInvoicesPage() {
       {
         accessorKey: 'invoiceCode',
         header: 'Mã hóa đơn',
-        cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'poCode',
         header: 'Mã PO',
-        cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-mono text-blue-600 dark:text-blue-400 text-xs font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'supplierName',
         header: 'Nhà cung cấp',
-        cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
+        cell: (info) => <span className="font-medium text-gray-900 dark:text-white">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'invoiceDate',
-        header: 'Ngày hóa đơn',
-        cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
+        header: 'Ngày lập',
+        cell: (info) => <span className="font-mono text-xs text-gray-500">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'totalAmount',
-        header: 'Tổng thanh toán',
-        cell: (info) => <span className="font-mono font-bold text-blue-600">{formatCurrency(info.getValue() as number)}</span>,
+        header: 'Tổng tiền',
+        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{formatCurrency(info.getValue() as number)}</span>,
+      },
+      {
+        accessorKey: 'paidAmount',
+        header: 'Đã thanh toán',
+        cell: (info) => {
+          const val = (info.getValue() as number) || 0;
+          return (
+            <span className={`font-mono font-semibold ${val > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
+              {val > 0 ? formatCurrency(val) : '0 ₫'}
+            </span>
+          );
+        },
+      },
+      {
+        id: 'progress',
+        header: 'Tiến độ TT',
+        cell: ({ row }) => {
+          const tot = row.original.totalAmount || 0;
+          const paid = row.original.paidAmount || 0;
+          const pct = tot > 0 ? Math.min(100, Math.round((paid / tot) * 100)) : (row.original.remainingDebt === 0 ? 100 : 0);
+          return (
+            <div className="w-24">
+              <div className="flex justify-between text-[11px] font-mono mb-1 text-gray-500">
+                <span>{pct}%</span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    pct >= 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: 'remainingDebt',
+        header: 'Còn nợ lại',
+        cell: (info) => {
+          const val = (info.getValue() as number) || 0;
+          return (
+            <span className={`font-mono font-bold ${val > 0 ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400'}`}>
+              {val > 0 ? formatCurrency(val) : '0 ₫'}
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: 'dueDate',
+        header: 'Hạn TT',
+        cell: (info) => {
+          const dateStr = info.getValue() as string;
+          if (!dateStr) return <span className="text-gray-400">-</span>;
+          const today = new Date().toISOString().substring(0, 10);
+          const isOverdue = dateStr < today;
+          return (
+            <span className={`text-xs font-mono ${isOverdue ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-gray-500'}`}>
+              {dateStr}
+            </span>
+          );
+        },
       },
       {
         accessorKey: 'status',
         header: 'Trạng thái',
-        cell: (info) => {
-          const status = info.getValue() as string;
-          const badgeClass =
-            status === 'DA_THANH_TOAN'
-              ? 'bg-emerald-100 text-emerald-800'
-              : status === 'CHO_THANH_TOAN'
-              ? 'bg-amber-100 text-amber-800'
-              : 'bg-red-100 text-red-800';
-          const label = status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : status === 'CHO_THANH_TOAN' ? 'Chờ thanh toán' : 'Đã hủy';
-          return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
+        cell: ({ row }) => {
+          const st = row.original.status;
+          const rem = row.original.remainingDebt;
+          const paid = row.original.paidAmount;
+          const tot = row.original.totalAmount;
+          const pct = tot > 0 ? Math.round((paid / tot) * 100) : 0;
+
+          if (st === 'DA_HUY') {
+            return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300">Đã hủy</span>;
+          }
+          if (rem === 0 || st === 'DA_THANH_TOAN') {
+            return (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">
+                <CheckCircle2 className="w-3 h-3" /> Đã thanh toán
+              </span>
+            );
+          }
+          if (paid > 0 && rem > 0) {
+            return (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                <Percent className="w-3 h-3" /> Trả 1 phần ({pct}%)
+              </span>
+            );
+          }
+          return (
+            <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+              Chờ thanh toán
+            </span>
+          );
         },
       },
       {
@@ -338,7 +504,7 @@ export function PurchaseInvoicesPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeletingItem(row.original)}
               className="p-1 text-gray-500 hover:text-red-600 rounded"
               title="Xóa"
             >
@@ -348,24 +514,114 @@ export function PurchaseInvoicesPage() {
         ),
       },
     ],
-    [data]
+    []
   );
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hóa đơn mua hàng (nguồn vào)</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Quản lý hóa đơn VAT đầu vào từ các nhà cung cấp nhằm đối chiếu công nợ và kế toán tài chính.
+            Quản lý hóa đơn VAT đầu vào từ các nhà cung cấp, đối chiếu số tiền đã thanh toán và công nợ còn lại.
           </p>
         </div>
-        <CreateButton onClick={handleOpenCreate}>
-          Nhận hóa đơn mới
-        </CreateButton>
+        <div className="flex items-center gap-3">
+          <SecondaryButton
+            onClick={() => {
+              fetchInvoices();
+              toast.success('Đã cập nhật lại danh sách hóa đơn!');
+            }}
+            leftIcon={<RefreshCw className="w-4 h-4" />}
+          >
+            Làm mới
+          </SecondaryButton>
+          <CreateButton onClick={handleOpenCreate}>
+            Nhận hóa đơn mới
+          </CreateButton>
+        </div>
       </div>
 
-      <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+      {/* 4 Thẻ KPI Thống kê Hóa đơn Mua */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-3">
+          <div className="w-11 h-11 rounded-lg bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+            <DollarSign className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Tổng tiền hóa đơn mua</p>
+            <p className="text-lg font-bold font-mono text-gray-900 dark:text-white">
+              {formatCurrency(stats.totalInvoiceAmount)}
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-3">
+          <div className="w-11 h-11 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Đã thanh toán NCC</p>
+            <p className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400">
+              {formatCurrency(stats.totalPaidAmount)}
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-3">
+          <div className="w-11 h-11 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+            <ArrowDownLeft className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Còn nợ lại NCC</p>
+            <p className="text-lg font-bold font-mono text-purple-600 dark:text-purple-400">
+              {formatCurrency(stats.totalRemainingDebt)}
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-3">
+          <div className="w-11 h-11 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+            <Percent className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Đang trả một phần ({stats.partialCount} HĐ)</p>
+            <p className="text-lg font-bold font-mono text-amber-600 dark:text-amber-400">
+              {formatCurrency(stats.totalRemainingDebt > 0 ? stats.totalRemainingDebt : 0)}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Thanh lọc Tab & Tìm kiếm */}
+      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[
+            { key: 'ALL', label: 'Tất cả', count: data.length },
+            { key: 'DA_THANH_TOAN', label: 'Đã thanh toán', count: stats.paidCount },
+            { key: 'PARTIAL_PAID', label: 'Trả một phần', count: stats.partialCount },
+            { key: 'CHO_THANH_TOAN', label: 'Chờ thanh toán', count: stats.unpaidCount },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setStatusFilter(tab.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                statusFilter === tab.key
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+              }`}
+            >
+              <span>{tab.label}</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                statusFilter === tab.key ? 'bg-emerald-700 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
+              }`}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+
         <SearchInput
           value={search}
           onValueChange={setSearch}
@@ -701,6 +957,14 @@ export function PurchaseInvoicesPage() {
         isOpen={!!printData}
         onClose={() => setPrintData(null)}
         data={printData}
+      />
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa hóa đơn mua hàng"
+        description={`Bạn có chắc chắn muốn xóa hóa đơn "${deletingItem?.invoiceCode}" của nhà cung cấp "${deletingItem?.supplierName}" không?`}
       />
     </div>
   );

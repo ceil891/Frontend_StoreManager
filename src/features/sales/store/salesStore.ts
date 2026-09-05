@@ -16,6 +16,16 @@ export interface OrderLineItem {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  barcode?: string;
+  unit?: string;
+  productId?: string | number;
+  productVariantId?: string;
+  discountType?: 'PERCENT' | 'AMOUNT';
+  discountValue?: number;
+  discountAmount?: number;
+  taxRate?: number;
+  taxAmount?: number;
+  description?: string;
 }
 
 export interface SaleOrder {
@@ -34,6 +44,7 @@ export interface SaleOrder {
   paymentStatus: 'PAID' | 'UNPAID';
   paymentMethod?: string;
   cashier?: string;
+  notes?: string;
   createdByName?: string;
   createdByEmail?: string;
   branchId?: string | null;
@@ -77,6 +88,7 @@ export interface QuoteItem {
   id: string;
   code: string;
   customerId: string;
+  customerName?: string;
   issueDate: string;
   revision: number;
   currency?: 'VND' | 'USD';
@@ -104,6 +116,7 @@ export interface QuoteItem {
   attachments?: string;
   pdfUrl?: string;
   itemsCount: number;
+  branchId?: string;
   orderLines?: OrderLineItem[];
 }
 
@@ -117,11 +130,16 @@ export interface ExportInvoiceItem {
   dueDate: string;
   subTotal: number;
   taxAmount: number;
+  subtotal?: number;
   totalAmount: number;
-  paymentTerms: 'IMMEDIATE' | 'NET30' | 'NET60';
-  status: 'DRAFT' | 'ISSUED' | 'CANCELLED';
+  paidAmount?: number;
+  remainingDebt?: number;
+  paymentTerms: 'IMMEDIATE' | 'NET30' | 'NET60' | string;
+  status: 'DRAFT' | 'ISSUED' | 'CANCELLED' | string;
   einvoiceRef?: string;
   notes?: string;
+  billingAddress?: string;
+  orderIds?: string[];
 }
 
 export interface CustomerReturnLine {
@@ -150,10 +168,17 @@ export interface ReturnRequestItem {
   customerPhone?: string;
   requestDate: string;
   reason: string;
-  requestedRefundMethod: string;
+  requestedRefundMethod?: string;
+  refundMethod?: string;
+  requestedRefundAmount?: number;
+  selectedProduct?: any;
+  proofImages?: string[];
+  itemCondition?: string;
+  reasonDetails?: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'PARTIALLY_RETURNED' | 'COMPLETED';
   handlerName?: string;
   notes?: string;
+  customerNotes?: string;
   requestedQty: number;
   returnedQty: number;
   remainingQty: number;
@@ -194,6 +219,7 @@ export interface CustomerReturnItem {
 
 interface SalesState {
   saleOrders: SaleOrder[];
+  quotes: QuoteItem[];
   surveys: any[];
   exportInvoices: ExportInvoiceItem[];
   customerReturns: CustomerReturnItem[];
@@ -211,7 +237,7 @@ interface SalesState {
   addReturnRequest: (req: ReturnRequestItem) => Promise<void>;
   updateReturnRequestStatus: (id: string, status: ReturnRequestItem['status']) => Promise<void>;
 
-  addSaleOrder: (order: Omit<SaleOrder, 'id'>) => Promise<void>;
+  addSaleOrder: (order: Omit<SaleOrder, 'id'>) => Promise<SaleOrder>;
   updateSaleOrder: (id: string, data: Partial<SaleOrder>) => Promise<void>;
   deleteSaleOrder: (id: string) => Promise<void>;
 
@@ -249,10 +275,10 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
     try {
       const created = await salesService.addReturnRequest(req);
       set((state) => ({ returnRequests: [created, ...state.returnRequests], isLoading: false }));
-    } catch (err) {
-      console.warn('API addReturnRequest failed, adding locally:', err);
-      const fallbackItem = { id: String(Date.now()), ...req } as ReturnRequestItem;
-      set((state) => ({ returnRequests: [fallbackItem, ...state.returnRequests], isLoading: false }));
+    } catch (err: any) {
+      console.error('API addReturnRequest failed:', err);
+      set({ isLoading: false, error: err?.message || 'Lỗi tạo yêu cầu trả hàng' });
+      throw err;
     }
   },
 
@@ -264,12 +290,10 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
         returnRequests: state.returnRequests.map((r) => (r.id === id ? { ...r, status } : r)),
         isLoading: false,
       }));
-    } catch (err) {
-      console.warn('API updateReturnRequestStatus failed, updating locally:', err);
-      set((state) => ({
-        returnRequests: state.returnRequests.map((r) => (r.id === id ? { ...r, status } : r)),
-        isLoading: false,
-      }));
+    } catch (err: any) {
+      console.error('API updateReturnRequestStatus failed:', err);
+      set({ isLoading: false, error: err?.message || 'Lỗi cập nhật trạng thái yêu cầu' });
+      throw err;
     }
   },
 
@@ -277,22 +301,10 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const data = await salesService.fetchSaleOrders();
-      let localOrders: SaleOrder[] = [];
-      try {
-        localOrders = JSON.parse(localStorage.getItem('retailhub_pos_orders') || '[]');
-      } catch {}
-      const mergedMap = new Map<string, SaleOrder>();
-      localOrders.forEach(o => mergedMap.set(o.code || o.id, o));
-      (data || []).forEach(o => mergedMap.set(o.code || o.id, o));
-      const combined = Array.from(mergedMap.values()).sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
-      set({ saleOrders: combined, isLoading: false });
+      set({ saleOrders: data || [], isLoading: false });
     } catch (e: any) {
       console.error('Failed to fetch sale orders:', e);
-      let localOrders: SaleOrder[] = [];
-      try {
-        localOrders = JSON.parse(localStorage.getItem('retailhub_pos_orders') || '[]');
-      } catch {}
-      set({ saleOrders: localOrders, isLoading: false, error: e.message || 'Lỗi khi tải đơn bán hàng' });
+      set({ saleOrders: [], isLoading: false, error: e.message || 'Lỗi khi tải đơn bán hàng' });
     }
   },
 
@@ -332,30 +344,15 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
   addSaleOrder: async (order) => {
     set({ isLoading: true, error: null });
     try {
-      let created: SaleOrder;
-      try {
-        created = await salesService.addSaleOrder(order);
-      } catch (err) {
-        created = {
-          id: String(Date.now()),
-          ...order,
-          origin: order.origin || 'POS',
-          status: order.status || 'COMPLETED',
-          paymentStatus: order.paymentStatus || 'PAID',
-        } as SaleOrder;
-      }
-      try {
-        const existingLocal = JSON.parse(localStorage.getItem('retailhub_pos_orders') || '[]');
-        const updatedLocal = [created, ...existingLocal.filter((o: any) => o.id !== created.id && o.code !== created.code)];
-        localStorage.setItem('retailhub_pos_orders', JSON.stringify(updatedLocal));
-      } catch {}
+      const created = await salesService.addSaleOrder(order);
       set((state) => {
         const filtered = state.saleOrders.filter(s => s.id !== created.id && s.code !== created.code);
         return { saleOrders: [created, ...filtered], isLoading: false };
       });
-    } catch (e: any) {
-      console.error(e);
-      set({ isLoading: false, error: e.message || 'Lỗi khi thêm đơn bán' });
+      return created;
+    } catch (err: any) {
+      set({ isLoading: false, error: err?.message || 'Lỗi khi tạo đơn hàng' });
+      throw err;
     }
   },
 
@@ -385,8 +382,9 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
       await salesService.deleteSaleOrder(id);
       set((state) => ({ saleOrders: state.saleOrders.filter((s) => s.id !== id), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ saleOrders: state.saleOrders.filter((s) => s.id !== id), isLoading: false }));
+      console.error('Failed to delete sale order:', e);
+      set({ isLoading: false, error: e.message || 'Lỗi khi xóa đơn hàng' });
+      throw e;
     }
   },
 
@@ -408,7 +406,7 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
       const updated = await salesService.updateQuote(id, data);
       set((state) => {
         const target = state.quotes.find((q) => q.id === id);
-        const merged = target ? { ...target, ...updated } : (updated as Quote);
+        const merged = target ? { ...target, ...updated } : (updated as QuoteItem);
         const others = state.quotes.filter((q) => q.id !== id);
         return {
           quotes: [merged, ...others],
@@ -429,7 +427,8 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
       set((state) => ({ quotes: state.quotes.filter((q) => q.id !== id), isLoading: false }));
     } catch (e: any) {
       console.error(e);
-      set((state) => ({ quotes: state.quotes.filter((q) => q.id !== id), isLoading: false }));
+      set({ isLoading: false, error: e.message || 'Lỗi khi xóa báo giá' });
+      throw e;
     }
   },
 
@@ -451,7 +450,7 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
       const updated = await salesService.updateExportInvoice(id, data);
       set((state) => {
         const target = state.exportInvoices.find((inv) => inv.id === id);
-        const merged = target ? { ...target, ...updated } : (updated as ExportInvoice);
+        const merged = target ? { ...target, ...updated } : (updated as ExportInvoiceItem);
         const others = state.exportInvoices.filter((inv) => inv.id !== id);
         return {
           exportInvoices: [merged, ...others],
@@ -472,7 +471,8 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
       set((state) => ({ exportInvoices: state.exportInvoices.filter((inv) => inv.id !== id), isLoading: false }));
     } catch (e: any) {
       console.error(e);
-      set((state) => ({ exportInvoices: state.exportInvoices.filter((inv) => inv.id !== id), isLoading: false }));
+      set({ isLoading: false, error: e.message || 'Lỗi khi xóa hóa đơn xuất' });
+      throw e;
     }
   },
 
@@ -481,36 +481,45 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
     try {
       const numericCustId = Number(ret.customerId);
       const numericBranchId = Number(ret.returnBranchId.replace(/\D/g, '')) || 1;
-      let numericInvoiceId = 1;
+      let numericInvoiceId: number | null = null;
+      let numericOrderId: number | null = null;
       const matchedSO = get().saleOrders.find((so) => so.code === ret.orderCode);
       const matchedInv = get().exportInvoices.find((inv) => inv.invoiceNumber === ret.orderCode);
       if (matchedInv && !isNaN(Number(matchedInv.id))) {
         numericInvoiceId = Number(matchedInv.id);
       } else if (matchedSO && !isNaN(Number(matchedSO.id))) {
-        numericInvoiceId = Number(matchedSO.id);
-      } else {
-        const rawDigits = (ret.orderCode || '').replace(/\D/g, '');
-        const parsed = Number(rawDigits);
-        if (!isNaN(parsed) && parsed > 0 && parsed < 1000000) {
-          numericInvoiceId = parsed;
+        numericOrderId = Number(matchedSO.id);
+      }
+
+      let validReturnDate = new Date().toISOString().slice(0, 19);
+      if (ret.returnDate) {
+        if (ret.returnDate.includes('T')) {
+          validReturnDate = ret.returnDate.slice(0, 19);
+        } else {
+          validReturnDate = `${ret.returnDate}T00:00:00`;
         }
       }
 
+      const returnDetails = (ret.returnLines || [])
+        .filter((l) => (Number(l.quantity) || 0) > 0)
+        .map((line) => ({
+          productId: Number(line.productId) || 1,
+          quantity: Number(line.quantity) || 1,
+          refundPrice: Math.max(1000, Number(line.price) || 1000),
+        }));
+
       const payload = {
-        returnCode: ret.returnCode,
+        returnCode: ret.returnCode || `RET-${Date.now()}`,
         returnRequestCode: ret.returnRequestCode || null,
-        returnDate: ret.returnDate ? `${ret.returnDate}T00:00:00` : new Date().toISOString(),
+        returnDate: validReturnDate,
         reason: ret.reason || 'Khách hoàn trả',
         status: ret.status || 'PENDING_INSPECTION',
         customerId: isNaN(numericCustId) ? null : numericCustId,
         invoiceId: numericInvoiceId,
-        branchId: numericBranchId,
+        orderId: numericOrderId,
+        branchId: numericBranchId || 1,
         note: ret.notes || '',
-        details: (ret.returnLines || []).map((line) => ({
-          productId: Number(line.productId) || 1,
-          quantity: Number(line.quantity) || 1,
-          refundPrice: Number(line.price) || 0,
-        })),
+        details: returnDetails.length > 0 ? returnDetails : [{ productId: 1, quantity: 1, refundPrice: 10000 }],
       };
 
       await salesService.addCustomerReturn(payload);
@@ -539,32 +548,8 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
       set({ customerReturns: data, isLoading: false });
     } catch (e: any) {
       console.error('Failed to add customer return:', e);
-      // Fallback local update if API fails so UI stays responsive and seamless
-      const newRetItem: CustomerReturnItem = { id: String(Date.now()), ...ret };
-      set((state) => {
-        let updatedRequests = state.returnRequests;
-        if (ret.returnRequestCode) {
-          const reqCode = ret.returnRequestCode;
-          const numReturnedThisTime = (ret.returnLines || []).reduce((sum, l) => sum + (l.quantity || 0), 0);
-          updatedRequests = state.returnRequests.map((r) => {
-            if (r.requestCode !== reqCode) return r;
-            const newReturned = (r.returnedQty || 0) + numReturnedThisTime;
-            const newRemaining = Math.max(0, r.requestedQty - newReturned);
-            const newStatus = newRemaining === 0 ? 'COMPLETED' : 'PARTIALLY_RETURNED';
-            return {
-              ...r,
-              returnedQty: newReturned,
-              remainingQty: newRemaining,
-              status: newStatus,
-            };
-          });
-        }
-        return {
-          customerReturns: [newRetItem, ...state.customerReturns],
-          returnRequests: updatedRequests,
-          isLoading: false,
-        };
-      });
+      set({ isLoading: false, error: e.message || 'Lỗi khi tạo phiếu hoàn trả' });
+      throw e;
     }
   },
 
@@ -580,10 +565,8 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
       set({ customerReturns: updatedList, isLoading: false });
     } catch (e: any) {
       console.error('Failed to update customer return:', e);
-      set((state) => ({
-        customerReturns: state.customerReturns.map((r) => (r.id === id ? { ...r, ...data } : r)),
-        isLoading: false,
-      }));
+      set({ isLoading: false, error: e.message || 'Lỗi khi cập nhật phiếu trả hàng' });
+      throw e;
     }
   },
 
@@ -594,7 +577,8 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
       set((state) => ({ customerReturns: state.customerReturns.filter((r) => r.id !== id), isLoading: false }));
     } catch (e: any) {
       console.error('Failed to delete customer return:', e);
-      set((state) => ({ customerReturns: state.customerReturns.filter((r) => r.id !== id), isLoading: false }));
+      set({ isLoading: false, error: e.message || 'Lỗi khi xóa phiếu trả hàng' });
+      throw e;
     }
   },
 

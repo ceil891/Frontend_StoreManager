@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Search, Download, Eye, Edit, Trash2, Plus, FileText, ChevronRight, HelpCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -33,6 +34,8 @@ export default function ChartOfAccountsPage() {
   const [selectedType, setSelectedType] = useState<string>('ALL');
   const [selected, setSelected] = useState<ChartOfAccountItem | null>(null);
   const [isModal, setIsModal] = useState(false);
+  const [deleteItem, setDeleteItem] = useState<ChartOfAccountItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [form, setForm] = useState<Partial<ChartOfAccountItem>>({});
   const [isLoading, setIsLoading] = useState(false);
 
@@ -137,16 +140,19 @@ export default function ChartOfAccountsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa tài khoản này không?')) {
-      try {
-        await axiosClient.delete(`/accounting/chart-of-accounts/${id}`);
-        toast.success('Xóa tài khoản thành công');
-        await fetchAccounts();
-      } catch (err) {
-        console.error('Lỗi khi xóa tài khoản:', err);
-        toast.error('Không thể xóa tài khoản');
-      }
+  const handleConfirmDelete = async () => {
+    if (!deleteItem) return;
+    try {
+      setIsDeleting(true);
+      await axiosClient.delete(`/accounting/chart-of-accounts/${deleteItem.id}`);
+      toast.success('Xóa tài khoản thành công');
+      setDeleteItem(null);
+      await fetchAccounts();
+    } catch (err) {
+      console.error('Lỗi khi xóa tài khoản:', err);
+      toast.error('Không thể xóa tài khoản');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -208,13 +214,13 @@ export default function ChartOfAccountsPage() {
           <button onClick={() => { setForm(row.original); setIsModal(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg" title="Chỉnh sửa">
             <Edit className="w-4 h-4" />
           </button>
-          <button onClick={() => handleDelete(row.original.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg" title="Xóa">
+          <button onClick={() => setDeleteItem(row.original)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg" title="Xóa">
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
       ),
     },
-  ], [data]);
+  ], []);
 
   return (
     <>
@@ -390,6 +396,16 @@ export default function ChartOfAccountsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deleteItem)}
+        onClose={() => setDeleteItem(null)}
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
+        title="Xác nhận xóa tài khoản kế toán"
+        description="Bạn có chắc chắn muốn xóa tài khoản kế toán này không? Thao tác này không thể hoàn tác."
+        itemName={deleteItem ? `${deleteItem.accountNumber} - ${deleteItem.accountName}` : ''}
+      />
     </>
   );
 }

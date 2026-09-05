@@ -1,4 +1,5 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, MapPin, Truck, CheckCircle, Package, ArrowRight, DollarSign, UserCheck, ShieldAlert, Phone } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
@@ -46,6 +47,7 @@ export function DeliveryListsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<DeliveryRecord>>({});
+  const [deletingItem, setDeletingItem] = useState<DeliveryRecord | null>(null);
 
   const fetchTrips = async () => {
     setIsLoading(true);
@@ -163,39 +165,50 @@ export function DeliveryListsPage() {
     }
 
     try {
-      const record: DeliveryRecord = {
-        id: editingItem.id || String(Date.now()),
-        waybillCode: editingItem.waybillCode || '',
-        carrierTrackingCode: editingItem.carrierTrackingCode || '',
-        orderCode: editingItem.orderCode || '',
-        customerName: editingItem.customerName || '',
-        customerPhone: editingItem.customerPhone || '',
-        shippingAddress: editingItem.shippingAddress || '',
-        carrierName: editingItem.carrierName || 'GHTK',
-        shipperName: editingItem.shipperName || '',
-        shipperPhone: editingItem.shipperPhone || '',
-        weightKg: Number(editingItem.weightKg || 1),
-        packageCount: Number(editingItem.packageCount || 1),
-        totalAmount: Number(editingItem.totalAmount || 0),
-        paidAmount: Number(editingItem.paidAmount || 0),
-        codAmount: Number(editingItem.codAmount || 0),
-        createdDate: editingItem.createdDate || new Date().toISOString().split('T')[0],
-        expectedDeliveryDate: editingItem.expectedDeliveryDate || '',
-        status: editingItem.status || 'CHO_GIAO_DVVC',
-        notes: editingItem.notes || '',
-      };
+      const matchedOrder = saleOrders.find(
+        (so) => so.code === editingItem.orderCode || `SO-${so.id}` === editingItem.orderCode
+      );
 
       if (modalMode === 'create') {
-        setData([record, ...data]);
-        toast.success(`Đã tạo Vận đơn giao hàng ${record.waybillCode} thành công!`);
-      } else {
-        setData(data.map((d) => (d.id === record.id ? record : d)));
-        toast.success(`Đã cập nhật Vận đơn ${record.waybillCode}!`);
+        await axiosClient.post('/logistics/trips', {
+          tripCode: editingItem.waybillCode,
+          status: editingItem.status || 'PENDING',
+          deliveryAddress: editingItem.shippingAddress || '',
+          receiverName: editingItem.customerName || '',
+          receiverPhone: editingItem.customerPhone || '',
+          deliveryNote: editingItem.notes || '',
+          orderId: matchedOrder ? Number(matchedOrder.id) : null,
+        });
+        toast.success(`Đã tạo Vận đơn giao hàng ${editingItem.waybillCode} thành công!`);
+      } else if (editingItem.id) {
+        await axiosClient.put(`/logistics/trips/${editingItem.id}`, {
+          status: editingItem.status,
+          deliveryAddress: editingItem.shippingAddress,
+          receiverName: editingItem.customerName,
+          receiverPhone: editingItem.customerPhone,
+          deliveryNote: editingItem.notes,
+          orderId: matchedOrder ? Number(matchedOrder.id) : undefined,
+        });
+        toast.success(`Đã cập nhật Vận đơn ${editingItem.waybillCode}!`);
       }
       setIsModalOpen(false);
-    } catch (err) {
+      await fetchTrips();
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lỗi khi lưu vận đơn.');
+      toast.error('Lỗi khi lưu vận đơn: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await axiosClient.delete(`/logistics/trips/${deletingItem.id}`);
+      toast.success(`Đã xóa vận đơn ${deletingItem.waybillCode} thành công!`);
+      setDeletingItem(null);
+      await fetchTrips();
+    } catch (err: any) {
+      console.error('Lỗi khi xóa vận đơn:', err);
+      toast.error('Không thể xóa vận đơn: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
   };
 
@@ -303,6 +316,13 @@ export function DeliveryListsPage() {
               className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors"
             >
               <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setDeletingItem(row.original); }}
+              title="Xóa vận đơn"
+              className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
             </button>
             {row.original.status === 'GIAO_THANH_CONG' && (
               <button
@@ -710,6 +730,14 @@ export function DeliveryListsPage() {
           </div>
         </Modal>
       )}
+
+      <ConfirmDeleteModal
+        isOpen={!!deletingItem}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa vận đơn"
+        description={`Bạn có chắc chắn muốn xóa vận đơn "${deletingItem?.waybillCode}" (Đơn hàng: ${deletingItem?.orderCode})?`}
+      />
     </div>
   );
 }

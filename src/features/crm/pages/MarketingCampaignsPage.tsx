@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Plus, Edit, Trash2, Eye, Search } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { useCrmStore } from '../store/crmStore';
@@ -64,15 +65,18 @@ export function MarketingCampaignsPage() {
   const [isModalOpen, setModalOpen] = useState(false);
   const [isEdit, setEdit] = useState(false);
 
-  const handleDelete = async (campaign: Campaign) => {
-    if (!confirm(`Bạn có chắc muốn xóa chiến dịch ${campaign.name}?`)) return;
+  const [deletingCampaign, setDeletingCampaign] = useState<Campaign | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingCampaign) return;
     try {
-      await deleteMarketingCampaign(campaign.id);
-      toast.success(`Đã xóa chiến dịch ${campaign.name}`);
+      await deleteMarketingCampaign(deletingCampaign.id);
+      toast.success(`Đã xóa chiến dịch "${deletingCampaign.name}"`);
+      setDeletingCampaign(null);
       fetchMarketingCampaigns();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deleting campaign:', err);
-      toast.error('Lỗi khi xóa chiến dịch');
+      toast.error('Lỗi khi xóa chiến dịch: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
   };
 
@@ -127,7 +131,7 @@ export function MarketingCampaignsPage() {
           <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setSelected(row.original)} className="p-1 text-gray-400 hover:text-primary" title="Xem chi tiết"><Eye size={16} /></button>
             <button onClick={() => { setSelected(row.original); setEdit(true); setModalOpen(true); }} className="p-1 text-gray-400 hover:text-blue-600" title="Chỉnh sửa"><Edit size={16} /></button>
-            <button onClick={() => handleDelete(row.original)} className="p-1 text-gray-400 hover:text-red-600" title="Xóa"><Trash2 size={16} /></button>
+            <button onClick={() => setDeletingCampaign(row.original)} className="p-1 text-gray-400 hover:text-red-600" title="Xóa"><Trash2 size={16} /></button>
           </div>
         ),
       },
@@ -327,6 +331,15 @@ export function MarketingCampaignsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingCampaign)}
+        onClose={() => setDeletingCampaign(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa chiến dịch marketing"
+        description="Bạn có chắc chắn muốn xóa chiến dịch marketing này khỏi hệ thống?"
+        itemName={deletingCampaign ? `${deletingCampaign.code} - ${deletingCampaign.name}` : undefined}
+      />
     </div>
   );
 }

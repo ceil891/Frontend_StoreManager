@@ -40,7 +40,7 @@ export const sanitize = {
 export const phoneSchema = z.preprocess(
   sanitize.cleanPhone,
   z
-    .string({ required_error: 'Số điện thoại không được để trống' })
+    .string({ message: 'Số điện thoại không được để trống' })
     .min(1, 'Số điện thoại không được để trống')
     .regex(VN_PHONE_REGEX, 'SĐT không hợp lệ (Bắt buộc 10 chữ số, bắt đầu bằng 03, 05, 07, 08, 09)')
 );
@@ -59,7 +59,7 @@ export const optionalPhoneSchema = z.preprocess(
 export const emailSchema = z.preprocess(
   sanitize.toLowerCase,
   z
-    .string({ required_error: 'Email không được để trống' })
+    .string({ message: 'Email không được để trống' })
     .min(1, 'Email không được để trống')
     .regex(EMAIL_REGEX, 'Email không đúng định dạng chuẩn (VD: nguyenvana@gmail.com)')
 );
@@ -78,14 +78,14 @@ export const optionalEmailSchema = z.preprocess(
 export const fullNameSchema = z.preprocess(
   sanitize.trim,
   z
-    .string({ required_error: 'Họ và tên không được để trống' })
+    .string({ message: 'Họ và tên không được để trống' })
     .min(2, 'Họ và tên phải có tối thiểu 2 ký tự')
     .max(100, 'Họ và tên không được vượt quá 100 ký tự')
     .regex(FULLNAME_REGEX, 'Họ và tên chỉ được chứa chữ cái tiếng Việt, không chứa số hoặc ký tự đặc biệt')
 );
 
 export const passwordSchema = z
-  .string({ required_error: 'Mật khẩu không được để trống' })
+  .string({ message: 'Mật khẩu không được để trống' })
   .min(8, 'Mật khẩu phải có tối thiểu 8 ký tự')
   .regex(
     PASSWORD_STRONG_REGEX,
@@ -95,7 +95,7 @@ export const passwordSchema = z
 export const businessCodeSchema = z.preprocess(
   sanitize.toUpperCase,
   z
-    .string({ required_error: 'Mã không được để trống' })
+    .string({ message: 'Mã không được để trống' })
     .min(3, 'Mã phải có tối thiểu 3 ký tự')
     .max(50, 'Mã không vượt quá 50 ký tự')
     .regex(CODE_REGEX, 'Mã chỉ chấp nhận chữ in hoa (không dấu), số và dấu gạch nối (- hoặc _)')
@@ -104,7 +104,7 @@ export const businessCodeSchema = z.preprocess(
 export const positiveMoneySchema = z.preprocess(
   sanitize.parsePositiveNumber,
   z
-    .number({ required_error: 'Số tiền không được để trống' })
+    .number({ message: 'Số tiền không được để trống' })
     .min(0, 'Số tiền không được là số âm')
     .max(100_000_000_000, 'Số tiền vượt quá giới hạn tối đa cho phép')
 );
@@ -112,13 +112,13 @@ export const positiveMoneySchema = z.preprocess(
 export const positiveQuantitySchema = z.preprocess(
   sanitize.parsePositiveNumber,
   z
-    .number({ required_error: 'Số lượng không được để trống' })
+    .number({ message: 'Số lượng không được để trống' })
     .int('Số lượng phải là số nguyên')
     .min(1, 'Số lượng tối thiểu là 1')
 );
 
 export const dateOfBirthSchema = z
-  .string({ required_error: 'Ngày sinh không được để trống' })
+  .string({ message: 'Ngày sinh không được để trống' })
   .min(1, 'Ngày sinh không được để trống')
   .refine((val) => new Date(val) <= new Date(), 'Ngày sinh không được lớn hơn ngày hiện tại');
 
@@ -155,9 +155,9 @@ export type CustomerFormValues = z.infer<typeof customerFormSchema>;
 
 // ── Bank Account Schema (Finance) ──
 export const bankAccountFormSchema = z.object({
-  bankName: z.string({ required_error: 'Tên ngân hàng không được để trống' }).min(2, 'Tên ngân hàng tối thiểu 2 ký tự'),
+  bankName: z.string({ message: 'Tên ngân hàng không được để trống' }).min(2, 'Tên ngân hàng tối thiểu 2 ký tự'),
   accountNumber: z
-    .string({ required_error: 'Số tài khoản không được để trống' })
+    .string({ message: 'Số tài khoản không được để trống' })
     .trim()
     .min(6, 'Số tài khoản tối thiểu 6 chữ số')
     .max(25, 'Số tài khoản tối đa 25 chữ số'),

@@ -1,12 +1,15 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, Lock } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
+import { useAuthStore } from '@/features/auth/store/authStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 
 interface PurchaseReturnRecord {
   id: string;
@@ -24,6 +27,7 @@ export function PurchaseReturnsListsPage() {
   const [data, setData] = useState<PurchaseReturnRecord[]>([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<PurchaseReturnRecord | null>(null);
+  const [deletingItem, setDeletingItem] = useState<PurchaseReturnRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<PurchaseReturnRecord>>({});
@@ -43,7 +47,7 @@ export function PurchaseReturnsListsPage() {
 
       const mapped: PurchaseReturnRecord[] = list.map((item: any) => {
         const status: PurchaseReturnRecord['status'] =
-          item.status === 'APPROVED' || item.status === 'DELIVERED' || item.status === 'COMPLETED'
+          item.status === 'APPROVED' || item.status === 'DELIVERED' || item.status === 'RECEIVED' || item.status === 'COMPLETED'
             ? 'DA_XUAT_TRA'
             : item.status === 'REJECTED' || item.status === 'CANCELLED'
               ? 'DA_HUY'
@@ -90,7 +94,7 @@ export function PurchaseReturnsListsPage() {
     productName: string;
     quantity: number;
     unitPrice: number;
-  }>([
+  }[]>([
     { id: '1', sku: 'RAM-DDR4-16G', productName: 'Thẻ RAM PC Kingston 16GB DDR4', quantity: 5, unitPrice: 850000 }
   ]);
 
@@ -123,25 +127,21 @@ export function PurchaseReturnsListsPage() {
     updateLinesAndTotal(updated);
   };
 
+  const currentUser = useAuthStore((s) => s.user);
+  const currentBranch = useBranchStore((s) => s.currentBranch);
+
   const handleOpenCreate = () => {
     setModalMode('create');
-    const defaultLine = {
-      id: '1',
-      sku: 'RAM-DDR4-16G',
-      productName: 'Thẻ RAM PC Kingston 16GB DDR4',
-      quantity: 5,
-      unitPrice: 850000,
-    };
-    setReturnLines([defaultLine]);
+    setReturnLines([]);
     setEditingItem({
       returnCode: `RTP-2026-${Date.now().toString().slice(-4)}`,
-      poCode: 'PO-2026-7782',
-      supplierName: 'Công Ty TNHH Thiết Bị Điện Tử Samsung',
+      poCode: '',
+      supplierName: '',
       returnDate: new Date().toISOString().split('T')[0],
-      totalAmount: 4250000,
-      handler: 'Trần Văn Hùng',
+      totalAmount: 0,
+      handler: currentUser?.fullName || currentUser?.name || 'Nhân viên kho',
       status: 'CHO_DONG_GOI',
-      notes: 'Xuất trả 5 thanh RAM hỏng khe cắm',
+      notes: '',
     });
     setIsModalOpen(true);
   };
@@ -154,7 +154,10 @@ export function PurchaseReturnsListsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.returnCode || !editingItem.poCode || !editingItem.supplierName) return;
+    if (!editingItem.returnCode || !editingItem.poCode || !editingItem.supplierName) {
+      toast.error('Vui lòng nhập đầy đủ mã trả hàng, mã PO và tên nhà cung cấp');
+      return;
+    }
 
     const payload = {
       returnCode: editingItem.returnCode,
@@ -164,8 +167,8 @@ export function PurchaseReturnsListsPage() {
       totalAmount: Number(editingItem.totalAmount || 0),
       status: editingItem.status === 'DA_XUAT_TRA' ? 'APPROVED' : 'PENDING_SUPPLIER_APPROVAL',
       reason: editingItem.notes || 'Xuất trả hàng nhà cung cấp',
-      supplierId: 1,
-      branchId: 1,
+      supplierId: (editingItem as any)?.supplierId || 1,
+      branchId: currentBranch?.id ? Number(currentBranch.id) : 1,
       returnLines: returnLines.map(l => ({
         productVariantId: Number(l.id) || 1,
         productName: l.productName,
@@ -199,27 +202,21 @@ export function PurchaseReturnsListsPage() {
       setIsModalOpen(false);
       await fetchReturns();
     } catch (err: any) {
-      console.warn('Backend API update failed, applying local update:', err);
-      setData((prev) =>
-        modalMode === 'create'
-          ? [newRecord, ...prev]
-          : prev.map((item) => (item.id === editingItem.id ? newRecord : item))
-      );
-      toast.success(modalMode === 'create' ? 'Đã lưu phiếu xuất trả thành công' : 'Đã cập nhật trạng thái phiếu xuất trả thành công');
-      setIsModalOpen(false);
+      console.error('Lỗi khi lưu phiếu xuất trả:', err);
+      toast.error(err?.response?.data?.message || err?.message || 'Lỗi khi lưu phiếu xuất trả nhà cung cấp!');
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa phiếu trả hàng mua này?')) {
-      try {
-        await axiosClient.delete(`/purchase/orders/${id}`);
-        toast.success('Đã xóa phiếu trả hàng');
-        await fetchReturns();
-      } catch (err) {
-        console.error(err);
-        toast.error('Xóa phiếu trả hàng thất bại');
-      }
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await axiosClient.delete(`/inventory/returns-to-suppliers/${deletingItem.id}`);
+      toast.success(`Đã xóa phiếu trả hàng ${deletingItem.returnCode}`);
+      setDeletingItem(null);
+      await fetchReturns();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Xóa phiếu trả hàng thất bại: ' + (err?.response?.data?.message || err?.message || 'Lỗi kết nối'));
     }
   };
 
@@ -283,20 +280,28 @@ export function PurchaseReturnsListsPage() {
             >
               <Eye className="w-4 h-4" />
             </button>
-            <button
-              onClick={() => handleOpenEdit(row.original)}
-              className="p-1 text-gray-500 hover:text-blue-600 rounded"
-              title="Sửa"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(row.original.id)}
-              className="p-1 text-gray-500 hover:text-red-600 rounded"
-              title="Xóa"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {row.original.status === 'DA_XUAT_TRA' ? (
+              <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 font-medium px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">
+                <Lock className="w-3 h-3 text-gray-400" /> Đã giao NCC
+              </span>
+            ) : (
+              <>
+                <button
+                  onClick={() => handleOpenEdit(row.original)}
+                  className="p-1 text-gray-500 hover:text-blue-600 rounded"
+                  title="Sửa"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setDeletingItem(row.original)}
+                  className="p-1 text-gray-500 hover:text-red-600 rounded"
+                  title="Xóa"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
           </div>
         ),
       },
@@ -620,6 +625,14 @@ export function PurchaseReturnsListsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa phiếu trả hàng mua"
+        description={`Bạn có chắc chắn muốn xóa phiếu trả hàng "${deletingItem?.returnCode}" không?`}
+      />
     </div>
   );
 }

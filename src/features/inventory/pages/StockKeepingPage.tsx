@@ -1,4 +1,5 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, AlertTriangle, Layers, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
@@ -34,6 +35,7 @@ export function StockKeepingPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<any>({});
+  const [deletingProduct, setDeletingProduct] = useState<any | null>(null);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -108,9 +110,17 @@ export function StockKeepingPage() {
     setIsModalOpen(false);
   };
 
-  const handleDelete = async (id: string) => {
-    await deleteProduct(id);
-    if (selected?.id === id) setSelected(null);
+  const handleConfirmDelete = async () => {
+    if (!deletingProduct) return;
+    try {
+      await deleteProduct(deletingProduct.id);
+      toast.success(`Đã xóa sản phẩm "${deletingProduct.name}" thành công!`);
+      if (selected?.id === deletingProduct.id) setSelected(null);
+      setDeletingProduct(null);
+    } catch (err: any) {
+      console.error('Lỗi khi xóa sản phẩm:', err);
+      toast.error('Không thể xóa sản phẩm: ' + (err?.response?.data?.message || err?.message || 'Có ràng buộc dữ liệu tồn kho'));
+    }
   };
 
   const formatCurrency = (val: number) => {
@@ -189,9 +199,9 @@ export function StockKeepingPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeletingProduct(row.original)}
               className="p-1 text-gray-500 hover:text-red-600 rounded"
-              title="Xóa"
+              title="Xóa sản phẩm"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -323,9 +333,9 @@ export function StockKeepingPage() {
                         ...editingItem,
                         sku: val,
                         name: found.name,
-                        unit: found.unit || found.unitName || 'Cái',
-                        unitName: found.unit || found.unitName || 'Cái',
-                        onHand: found.onHand ?? found.currentStock ?? 0,
+                        unit: found.unit || (found as any).unitName || 'Cái',
+                        unitName: found.unit || (found as any).unitName || 'Cái',
+                        onHand: found.onHand ?? (found as any).currentStock ?? 0,
                         minStock: found.minStock || editingItem.minStock || 5,
                         maxStock: found.maxStock || editingItem.maxStock || 100,
                       });
@@ -367,9 +377,9 @@ export function StockKeepingPage() {
                         ...editingItem,
                         name: found.name,
                         sku: found.sku,
-                        unit: found.unit || found.unitName || 'Cái',
-                        unitName: found.unit || found.unitName || 'Cái',
-                        onHand: found.onHand ?? found.currentStock ?? 0,
+                        unit: found.unit || (found as any).unitName || 'Cái',
+                        unitName: found.unit || (found as any).unitName || 'Cái',
+                        onHand: found.onHand ?? (found as any).currentStock ?? 0,
                         minStock: found.minStock || editingItem.minStock || 5,
                         maxStock: found.maxStock || editingItem.maxStock || 100,
                       });
@@ -489,6 +499,14 @@ export function StockKeepingPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={!!deletingProduct}
+        onClose={() => setDeletingProduct(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa sản phẩm"
+        description={`Bạn có chắc chắn muốn xóa sản phẩm "${deletingProduct?.name}" (SKU: ${deletingProduct?.sku}) khỏi kho?`}
+      />
     </div>
   );
 }

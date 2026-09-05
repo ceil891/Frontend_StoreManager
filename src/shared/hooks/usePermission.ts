@@ -30,6 +30,7 @@ export interface PermissionContextResult {
   permissions: string[];
   hasPermission: (permissionKey: string) => boolean;
   hasAnyPermission: (permissionKeys: string[]) => boolean;
+  hasAllPermissions: (permissionKeys: string[]) => boolean;
   hasRole: (roleCode: string) => boolean;
   canViewAllBranches: boolean;
   currentBranchId: string | null;
@@ -70,6 +71,10 @@ export function usePermission(permissionKey?: string): boolean | PermissionConte
     return keys.some((k) => checkPermission(permissions, k, role));
   };
 
+  const hasAllPermissions = (keys: string[]): boolean => {
+    return keys.every((k) => checkPermission(permissions, k, role));
+  };
+
   const hasRole = (roleCode: string): boolean => {
     if (!user) return false;
     if (user.role === roleCode) return true;
@@ -90,6 +95,7 @@ export function usePermission(permissionKey?: string): boolean | PermissionConte
     permissions,
     hasPermission,
     hasAnyPermission,
+    hasAllPermissions,
     hasRole,
     canViewAllBranches: isSuperAdmin,
     currentBranchId,
@@ -114,6 +120,6 @@ export function useCrudPermissions(domain: string, resource: string) {
     canCreate,
     canUpdate,
     canDelete,
-    isSuperAdmin: role === 'SUPER_ADMIN' || role === 'ROLE_SUPER_ADMIN' || role === 'ROLE_SYSTEM_ADMIN',
+    isSuperAdmin: (role as string) === 'SUPER_ADMIN' || (role as string) === 'ROLE_SUPER_ADMIN' || (role as string) === 'ROLE_SYSTEM_ADMIN',
   };
 }

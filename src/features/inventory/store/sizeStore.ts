@@ -140,26 +140,26 @@ export const useSizeStore = create<SizeState>()((set, get) => ({
 
   deleteSize: async (id) => {
     const target = get().sizes.find((s) => s.id === id);
-    set((state) => ({
-      sizes: state.sizes.filter((s) => s.id !== id),
-    }));
-
     try {
-      const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_sizes') || '[]');
-      if (!deletedIds.includes(String(id))) deletedIds.push(String(id));
-      if (target?.sizeCode && !deletedIds.includes(target.sizeCode)) deletedIds.push(target.sizeCode);
-      localStorage.setItem('retailhub_deleted_sizes', JSON.stringify(deletedIds));
+      await axiosClient.delete(`/sizes/${id}`);
+      set((state) => ({
+        sizes: state.sizes.filter((s) => s.id !== id),
+      }));
 
-      const editedMap = JSON.parse(localStorage.getItem('retailhub_edited_sizes') || '{}');
-      delete editedMap[id];
-      if (target?.sizeCode) delete editedMap[target.sizeCode];
-      localStorage.setItem('retailhub_edited_sizes', JSON.stringify(editedMap));
-    } catch (e) {}
+      try {
+        const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_sizes') || '[]');
+        if (!deletedIds.includes(String(id))) deletedIds.push(String(id));
+        if (target?.sizeCode && !deletedIds.includes(target.sizeCode)) deletedIds.push(target.sizeCode);
+        localStorage.setItem('retailhub_deleted_sizes', JSON.stringify(deletedIds));
 
-    try {
-      await axiosClient.delete(`/sizes/${id}`).catch(() => {});
+        const editedMap = JSON.parse(localStorage.getItem('retailhub_edited_sizes') || '{}');
+        delete editedMap[id];
+        if (target?.sizeCode) delete editedMap[target.sizeCode];
+        localStorage.setItem('retailhub_edited_sizes', JSON.stringify(editedMap));
+      } catch (e) {}
     } catch (err: any) {
       console.error('Failed to delete size on API:', err);
+      throw err;
     }
   },
 }));

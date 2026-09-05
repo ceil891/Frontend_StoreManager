@@ -268,7 +268,7 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
                 // Skeleton Rows
                 Array.from({ length: 5 }).map((_, idx) => (
                   <tr key={idx}>
-                    {columns.map((_, colIdx) => (
+                    {Array.from({ length: table.getVisibleLeafColumns().length || effectiveColumns.length }).map((_, colIdx) => (
                       <td key={colIdx} className="px-4 py-4">
                         <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4"></div>
                       </td>
@@ -302,7 +302,7 @@ const ReusableDataTableImpl = memo(function ReusableDataTable<TData, TValue>({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={columns.length} className="h-64 text-center">
+                  <td colSpan={table.getVisibleLeafColumns().length || effectiveColumns.length} className="h-64 text-center">
                     <div className="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 space-y-3">
                       <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center shadow-inner">
                         <Inbox className="w-8 h-8 text-gray-400 dark:text-gray-500" />

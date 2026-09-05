@@ -1,16 +1,14 @@
 import { useSearchParams } from 'react-router';
-import { ShoppingBag, Globe, Store, FileText, Tag } from 'lucide-react';
+import { ShoppingBag, Globe, FileText, Tag } from 'lucide-react';
 import { RoleGuard } from '@/routes/RoleGuard';
 import { SaleOrdersPage } from './SaleOrdersPage';
 import { OnlineOrdersPage } from './OnlineOrdersPage';
-import { MarketOrdersPage } from './MarketOrdersPage';
 import { QuotesPage } from './QuotesPage';
 import { SaleOffersPage } from './SaleOffersPage';
 
 const tabs = [
   { id: 'orders', label: 'Đơn hàng bán', icon: ShoppingBag, permission: 'sales:order:view' },
   { id: 'online', label: 'Đơn hàng Online', icon: Globe, permission: 'sales:online-order:view' },
-  { id: 'market', label: 'Đơn hàng Sàn TMĐT', icon: Store, permission: 'sales:market-order:view' },
   { id: 'quotes', label: 'Báo giá', icon: FileText, permission: 'sales:quote:view' },
   { id: 'offers', label: 'Ưu đãi / Chào hàng', icon: Tag, permission: 'sales:offer:view' },
 ] as const;
@@ -36,7 +34,7 @@ export function SalesOrdersTabbedPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Đơn hàng Bán</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Tổng hợp xử lý đơn hàng bán tại cửa hàng, đơn online, sàn TMĐT, báo giá và chào hàng
+            Tổng hợp xử lý đơn hàng bán tại cửa hàng, đơn online, báo giá và chào hàng
           </p>
         </div>
       </div>
@@ -71,11 +69,6 @@ export function SalesOrdersTabbedPage() {
         {activeTab === 'online' && (
           <RoleGuard requiredPermission="sales:online-order:view">
             <OnlineOrdersPage />
-          </RoleGuard>
-        )}
-        {activeTab === 'market' && (
-          <RoleGuard requiredPermission="sales:market-order:view">
-            <MarketOrdersPage />
           </RoleGuard>
         )}
         {activeTab === 'quotes' && (

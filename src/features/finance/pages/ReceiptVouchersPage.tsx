@@ -187,7 +187,7 @@ export function ReceiptVouchersPage() {
     }));
   };
 
-  const handleSaveVoucher = (e: React.FormEvent) => {
+  const handleSaveVoucher = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingVoucher.voucherNumber || !editingVoucher.payerName) {
       toast.error('Vui lòng chọn Người nộp tiền / Khách hàng');
@@ -213,25 +213,35 @@ export function ReceiptVouchersPage() {
       notes: editingVoucher.notes || '',
     };
 
-    if (modalMode === 'create') {
-      addReceipt(payload as any);
-      toast.success(
-        `Đã lập Phiếu Thu ${payload.voucherNumber} (+${payload.amount.toLocaleString('vi-VN')} ₫)!\n` +
-        `✓ Tăng số dư ${payload.fundAccountName}\n` +
-        `✓ Trừ ${payload.amount.toLocaleString('vi-VN')} ₫ công nợ phải thu của ${payload.payerName}`
-      );
-    } else if (editingVoucher.id) {
-      updateReceipt(editingVoucher.id, payload as any);
-      toast.success('Cập nhật phiếu thu thành công');
+    try {
+      if (modalMode === 'create') {
+        await addReceipt(payload as any);
+        toast.success(
+          `Đã lập Phiếu Thu ${payload.voucherNumber} (+${payload.amount.toLocaleString('vi-VN')} ₫)!\n` +
+          `✓ Tăng số dư ${payload.fundAccountName}\n` +
+          `✓ Trừ ${payload.amount.toLocaleString('vi-VN')} ₫ công nợ phải thu của ${payload.payerName}`
+        );
+      } else if (editingVoucher.id) {
+        await updateReceipt(editingVoucher.id, payload as any);
+        toast.success('Cập nhật phiếu thu thành công');
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error('Lỗi khi lưu phiếu thu:', err);
+      toast.error('Không thể lưu phiếu thu: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
-    setIsModalOpen(false);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingVoucher) return;
-    deleteReceipt(deletingVoucher.id);
-    toast.success(`Đã hủy phiếu thu ${deletingVoucher.voucherNumber}`);
-    setDeletingVoucher(null);
+    try {
+      await deleteReceipt(deletingVoucher.id);
+      toast.success(`Đã hủy phiếu thu ${deletingVoucher.voucherNumber}`);
+      setDeletingVoucher(null);
+    } catch (err: any) {
+      console.error('Lỗi khi xóa phiếu thu:', err);
+      toast.error('Không thể xóa phiếu thu: ' + (err?.response?.data?.message || err?.message || 'Chứng từ đã duyệt hoặc bị khóa'));
+    }
   };
 
   const columns = useMemo<ColumnDef<ReceiptVoucher>[]>(
@@ -386,8 +396,12 @@ export function ReceiptVouchersPage() {
                 <span className="text-[10px] text-emerald-800 dark:text-emerald-400 font-bold uppercase block">Số tiền thực thu nhận</span>
                 <p className="text-2xl font-mono font-black text-emerald-600 dark:text-emerald-400">+{selectedVoucher.amount.toLocaleString('vi-VN')} ₫</p>
               </div>
-              <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full font-bold text-xs">
-                Đã thu tiền & Ghi nhận sổ quỹ
+              <span className={`px-3 py-1 rounded-full font-bold text-xs ${
+                selectedVoucher.status === 'PENDING_APPROVAL'
+                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400'
+                  : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400'
+              }`}>
+                {selectedVoucher.status === 'PENDING_APPROVAL' ? 'Chờ phê duyệt' : 'Đã thu tiền & Ghi nhận sổ quỹ'}
               </span>
             </div>
 
@@ -416,6 +430,25 @@ export function ReceiptVouchersPage() {
               <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg border border-gray-200 dark:border-gray-800">
                 <span className="font-semibold text-gray-500 block mb-1">Ghi chú diễn giải:</span>
                 <p className="text-gray-700 dark:text-gray-300">{selectedVoucher.notes}</p>
+              </div>
+            )}
+
+            {selectedVoucher.status === 'PENDING_APPROVAL' && (
+              <div className="pt-3 border-t border-gray-200 dark:border-gray-800 flex gap-3">
+                <button
+                  onClick={async () => {
+                    try {
+                      await updateReceipt(selectedVoucher.id, { status: 'COMPLETED' } as any);
+                      setSelectedVoucher({ ...selectedVoucher, status: 'COMPLETED' });
+                      toast.success('Đã phê duyệt phiếu thu và ghi nhận tăng số dư quỹ thành công!');
+                    } catch (err: any) {
+                      toast.error(err?.response?.data?.message || err?.message || 'Phê duyệt thất bại');
+                    }
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-xs cursor-pointer"
+                >
+                  Phê duyệt & Ghi nhận sổ quỹ
+                </button>
               </div>
             )}
           </div>

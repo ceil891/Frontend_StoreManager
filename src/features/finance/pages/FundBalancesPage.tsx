@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { Search, Download, Eye, Plus, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { financeService } from '../services/financeService';
 import { toast } from 'sonner';
@@ -27,31 +28,43 @@ const BRANCH_OPTIONS = [
   'Chi nhánh Cầu Giấy, Hà Nội',
 ];
 
+import { useFinanceStore } from '../store/financeStore';
+
 export function FundBalancesPage() {
-  const [data, setData] = useState<FundBalanceItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const {
+    fundBalances: storeBalances,
+    fetchFundBalances,
+    addFundBalance,
+    updateFundBalance,
+    deleteFundBalance,
+    isLoading,
+  } = useFinanceStore();
+
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<FundBalanceItem | null>(null);
   const [isModal, setIsModal] = useState(false);
+  const [deleteItem, setDeleteItem] = useState<FundBalanceItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [form, setForm] = useState<Partial<FundBalanceItem>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const loadData = async () => {
-    setIsLoading(true);
-    try {
-      const items = await financeService.fetchFundBalances();
-      setData(items);
-    } catch (err: any) {
-      console.error('Failed to load fund balances:', err);
-      toast.error('Lỗi khi tải dữ liệu số dư quỹ!');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
-    loadData();
-  }, []);
+    fetchFundBalances();
+  }, [fetchFundBalances]);
+
+  const data: FundBalanceItem[] = useMemo(() => {
+    return (storeBalances || []).map((b: any) => ({
+      id: String(b.id),
+      balanceDate: b.balanceDate || new Date().toISOString().split('T')[0],
+      cashOnHand: Number(b.cashOnHand || 0),
+      bankBalance: Number(b.bankBalance || 0),
+      totalFund: Number(b.totalFund || (Number(b.cashOnHand || 0) + Number(b.bankBalance || 0))),
+      branch: b.branch || BRANCH_OPTIONS[0],
+      manager: b.manager || 'Thủ quỹ',
+      status: (b.status || 'KHOP') as any,
+      notes: b.notes || '',
+    }));
+  }, [storeBalances]);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -91,14 +104,10 @@ export function FundBalancesPage() {
       };
 
       if (form.id) {
-        await financeService.updateFundBalance(form.id, payload);
-        setData((prev) =>
-          prev.map((item) => (item.id === form.id ? ({ ...item, ...payload } as FundBalanceItem) : item))
-        );
+        await updateFundBalance(form.id, payload);
         toast.success('Cập nhật số dư quỹ thành công!');
       } else {
-        const created = await financeService.addFundBalance(payload);
-        setData((prev) => [{ ...payload, id: String(created.id) } as FundBalanceItem, ...prev]);
+        await addFundBalance(payload);
         toast.success('Tạo chốt số dư quỹ mới thành công!');
       }
       setIsModal(false);
@@ -110,16 +119,18 @@ export function FundBalancesPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa bản ghi chốt số dư quỹ này?')) {
-      try {
-        await financeService.deleteFundBalance(id);
-        setData((prev) => prev.filter((d) => d.id !== id));
-        toast.success('Đã xóa bản ghi số dư quỹ thành công!');
-      } catch (err: any) {
-        console.error('Delete fund balance error:', err);
-        toast.error('Lỗi khi xóa bản ghi số dư quỹ!');
-      }
+  const handleConfirmDelete = async () => {
+    if (!deleteItem) return;
+    try {
+      setIsDeleting(true);
+      await deleteFundBalance(deleteItem.id);
+      toast.success('Đã xóa bản ghi số dư quỹ thành công!');
+      setDeleteItem(null);
+    } catch (err: any) {
+      console.error('Delete fund balance error:', err);
+      toast.error('Lỗi khi xóa bản ghi số dư quỹ!');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -200,7 +211,7 @@ export function FundBalancesPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeleteItem(row.original)}
               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               title="Xóa"
             >
@@ -390,6 +401,16 @@ export function FundBalancesPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deleteItem)}
+        onClose={() => setDeleteItem(null)}
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
+        title="Xác nhận xóa bản ghi chốt số dư quỹ"
+        description="Bạn có chắc chắn muốn xóa bản ghi chốt số dư quỹ này không? Thao tác này không thể hoàn tác."
+        itemName={deleteItem ? `${deleteItem.branch} (${deleteItem.balanceDate})` : ''}
+      />
     </>
   );
 }

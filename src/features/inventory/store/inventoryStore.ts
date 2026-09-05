@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { axiosClient } from '@/shared/lib/axiosClient';
+import { extractPageContent } from '@/shared/lib/apiHelpers';
 
 const resolveBranchId = (name?: string): number => {
   if (!name) return 1;
@@ -163,7 +164,7 @@ const applyGoodsReceiptsAdditionsToProducts = (products: ProductInventory[]): Pr
 // ---------------------------
 // Shared enums & helpers
 // ---------------------------
-export type TaxClass = 'VAT_8' | 'VAT_10' | 'EXEMPT';
+export type TaxClass = 'VAT_0' | 'VAT_5' | 'VAT_8' | 'VAT_10' | 'EXEMPT';
 export type ComboType = 'PRE_ASSEMBLED' | 'DYNAMIC_VIRTUAL';
 export type VarianceReason =
   | 'DAMAGED'
@@ -196,7 +197,9 @@ export interface ImportReceiptItem {
   grnNumber: string; // Goods Received Note
   poNumber: string;
   supplierName: string;
+  supplierId?: number | string;
   receivingStore: string;
+  branchId?: number | string;
   receivedDate: string;
   totalItems: number;
   acceptedItems: number;
@@ -227,6 +230,9 @@ export interface ProductVariant {
   size?: string;
   color?: string;
   skuSuffix?: string;
+  colorId?: number;
+  sizeId?: number;
+  attributeValueIds?: number[];
 }
 
 // ---------------------------
@@ -297,6 +303,7 @@ export interface StockTransferItem {
   productName: string;
   variant: string;
   sku: string;
+  availableQuantity?: number;
   requestedQuantity?: number;
   quantity: number;
   receivedQuantity?: number;
@@ -378,6 +385,14 @@ export interface ProductInventory {
   units: ProductUnit[];
   branchStocks?: Record<string, number>;
   branchStockDetails?: { branchId: string; branchName: string; quantity: number; available: number }[];
+  isSerialTracked?: boolean;
+  warrantyPeriodMonths?: number;
+  originCountry?: string;
+  maxStock?: number;
+  baseUnitId?: string | number;
+  categoryId?: string | number;
+  taxClass?: TaxClass;
+  vatRate?: number;
 }
 
 /** Mobile warehouse scanner view — extends core product with POS-oriented fields */
@@ -407,6 +422,7 @@ export interface MobileProduct {
 // ---------------------------
 export interface ComboDetailItem {
   id: string;
+  productId?: string;
   sku: string;
   productName: string;
   quantity: number;
@@ -763,6 +779,17 @@ export interface ProductLocationRecord {
 // ---------------------------
 // Inventory Check (Phiếu kiểm kê)
 // ---------------------------
+export interface InventoryCheckLine {
+  id?: string;
+  productId?: number;
+  productName: string;
+  sku: string;
+  expectedQty: number;
+  actualQty: number;
+  diffQty?: number;
+  reason?: string;
+}
+
 export interface InventoryCheckRecord {
   id: string;
   checkCode: string;
@@ -775,6 +802,7 @@ export interface InventoryCheckRecord {
   netVariance: number;
   checkedBy: string;
   notes?: string;
+  lines?: InventoryCheckLine[];
 }
 
 export interface StockOutDetailItem {
@@ -939,9 +967,10 @@ interface InventoryState {
   completeInventoryCheck: (id: string) => Promise<void>;
   deleteInventoryCheck: (id: string) => Promise<void>;
 
-  addSerialItem: (item: Omit<SerialItemRecord, 'id'>) => void;
-  updateSerialItem: (id: string, data: Partial<SerialItemRecord>) => void;
-  deleteSerialItem: (id: string) => void;
+  fetchSerialItems: () => Promise<void>;
+  addSerialItem: (item: Omit<SerialItemRecord, 'id'>) => Promise<void>;
+  updateSerialItem: (id: string, data: Partial<SerialItemRecord>) => Promise<void>;
+  deleteSerialItem: (id: string) => Promise<void>;
 
   // Serial numbers — wired to backend /products/:id/serials
   fetchSerialsByProduct: (productId: number) => Promise<void>;
@@ -1016,12 +1045,13 @@ interface InventoryState {
   completeLocationTransfer: (id: string) => Promise<void>;
   cancelLocationTransfer: (id: string) => Promise<void>;
 
-  // --- StockOut ---
-  stockOuts: StockOutRecord[];
-  fetchStockOuts: () => Promise<void>;
-  addStockOut: (stockOut: Omit<StockOutRecord, 'id'> | StockOutRecord) => Promise<void>;
-  updateStockOut: (id: string, data: Partial<StockOutRecord>) => Promise<void>;
-  deleteStockOut: (id: string) => Promise<void>;
+  // --- Supplier Products ---
+  supplierProducts: SupplierProductRecord[];
+  fetchSupplierProducts: (supplierId?: any) => Promise<void>;
+  addSupplierProduct: (data: Partial<SupplierProductRecord>) => Promise<void>;
+  updateSupplierProduct: (id: string, data: Partial<SupplierProductRecord>) => Promise<void>;
+  deleteSupplierProduct: (id: string) => Promise<void>;
+  setSupplierProductPreferred: (id: string, value: boolean) => Promise<void>;
 }
 
 // ---------------------------
@@ -1052,7 +1082,6 @@ export const useInventoryStore = create<InventoryState>()(
       categories: [],
       brands: [],
       productBatches: [],
-      stockOuts: [],
       stockTransfers: [],
       products: [],
       combos: [],
@@ -1099,7 +1128,7 @@ export const useInventoryStore = create<InventoryState>()(
             manager: item.createdBy || 'N/A',
             inventoryGlCode: '',
             cogsGlCode: '',
-            taxClass: 'VAT_10' as TaxClass, // Default mock
+            taxClass: (item.taxClass || 'VAT_8') as TaxClass,
           }));
 
           // Apply saved local edits if present
@@ -1113,7 +1142,7 @@ export const useInventoryStore = create<InventoryState>()(
               // Include any newly added categories from cache not in backend response
               Object.keys(editMap).forEach(key => {
                 if (!finalCategories.find(c => c.id === key) && (editMap[key] as any).code) {
-                  finalCategories.unshift(editMap[key] as ProductCategory);
+                  finalCategories.unshift(editMap[key] as any);
                 }
               });
             }
@@ -1151,7 +1180,7 @@ export const useInventoryStore = create<InventoryState>()(
             brand: item.brand || 'N/A',
             unit: item.baseUnitName || item.baseUnitCode || (item.baseUnit ? (item.baseUnit.unitName || item.baseUnit.unitCode) : 'Cái'),
             baseUnitId: item.baseUnitId || (item.baseUnit ? item.baseUnit.id : undefined),
-            weight: '0 kg',
+            weight: item.weight ? `${item.weight} kg` : '0 kg',
             location: 'Kệ chính',
             onHand: Number(item.onHand || 0),
             status: (item.isActive === false || item.is_active === false || item.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE') as 'ACTIVE' | 'INACTIVE',
@@ -1160,11 +1189,16 @@ export const useInventoryStore = create<InventoryState>()(
             mainImage: item.mainImageUrl || item.mainImage || item.imageUrl || '',
             galleryImages: [],
             barcodes: item.barcode ? [item.barcode] : [],
-            reorderPoint: 0,
-            minStock: 0,
-            maxStock: 0,
+            reorderPoint: Number(item.reorderPoint || 0),
+            minStock: Number(item.minStock || 0),
+            maxStock: Number(item.maxStock || 0),
+            isSerialTracked: Boolean(item.isSerialTracked),
+            warrantyPeriodMonths: Number(item.warrantyPeriodMonths || 0),
+            originCountry: item.originCountry || '',
             variants: [],
             units: [],
+            taxClass: item.taxClass || undefined,
+            vatRate: item.vatRate !== undefined ? Number(item.vatRate) : undefined,
             lastUpdated: item.createdAt ? new Date(item.createdAt).toLocaleString('vi-VN') : undefined,
           }));
 
@@ -1364,22 +1398,29 @@ export const useInventoryStore = create<InventoryState>()(
       fetchProductBatches: async () => {
         try {
           const data = await axiosClient.get<any, any[]>('/inventories/batches');
-          const mapped = data.map((item: any) => ({
-            id: String(item.id),
-            batchNumber: item.batchNumber,
-            sku: item.sku,
-            productName: item.productName || '',
-            manufactureDate: item.manufactureDate || '',
-            expiryDate: item.expiryDate || '',
-            initialUnits: Number(item.initialUnits || 0),
-            remainingUnits: Number(item.remainingUnits || 0),
-            unitCost: Number(item.unitCost || 0),
-            supplierName: item.supplierName || '',
-            location: item.location || '',
-            qualityStatus: (item.qualityStatus || 'PASSED_QA') as 'PASSED_QA' | 'QUARANTINED' | 'EXPIRED' | 'RECALLED',
-            inspector: item.inspector || '',
-            notes: item.notes || '',
-          })).sort((a: any, b: any) => Number(b.id) - Number(a.id));
+          const mapped = data.map((item: any) => {
+            // Auto-detect expired batches based on expiry date
+            let qualityStatus = (item.qualityStatus || 'PASSED_QA') as 'PASSED_QA' | 'QUARANTINED' | 'EXPIRED' | 'RECALLED';
+            if (item.expiryDate && new Date(item.expiryDate) < new Date() && qualityStatus === 'PASSED_QA') {
+              qualityStatus = 'EXPIRED';
+            }
+            return {
+              id: String(item.id),
+              batchNumber: item.batchNumber,
+              sku: item.sku,
+              productName: item.productName || '',
+              manufactureDate: item.manufactureDate || '',
+              expiryDate: item.expiryDate || '',
+              initialUnits: Number(item.initialUnits || 0),
+              remainingUnits: Number(item.remainingUnits || 0),
+              unitCost: Number(item.unitCost || 0),
+              supplierName: item.supplierName || '',
+              location: item.location || '',
+              qualityStatus,
+              inspector: item.inspector || '',
+              notes: item.notes || '',
+            };
+          }).sort((a: any, b: any) => Number(b.id) - Number(a.id));
           set({ productBatches: mapped });
         } catch (error) {
           console.error('Failed to fetch product batches:', error);
@@ -1388,8 +1429,8 @@ export const useInventoryStore = create<InventoryState>()(
 
       fetchStockTransfers: async () => {
         try {
-          const data = await axiosClient.get<any, any[]>('/inventories/transfers');
-          const list = Array.isArray(data) ? data : (data?.content || []);
+          const data: any = await axiosClient.get<any, any>('/inventories/transfers');
+          const list = Array.isArray(data) ? data : (data?.content || data?.data || []);
           if (list.length > 0) {
             const mapped = list.map((item: any) => {
               const lines = item.transferLines || [];
@@ -1414,6 +1455,15 @@ export const useInventoryStore = create<InventoryState>()(
                 requestedBy: item.requestedBy || item.createdBy || 'System',
                 approvedBy: item.approvedBy || '',
                 notes: item.note || '',
+                items: lines.map((l: any) => ({
+                  id: String(l.id || ''),
+                  productName: l.productName || 'Sản phẩm',
+                  variant: '',
+                  sku: l.productCode || '',
+                  quantity: Number(l.transferQuantity || 0),
+                  unitPrice: 0,
+                  amount: 0,
+                })),
               };
             }).sort((a: any, b: any) => Number(b.id) - Number(a.id));
             set({ stockTransfers: mapped });
@@ -1491,21 +1541,32 @@ export const useInventoryStore = create<InventoryState>()(
         };
         set((state) => ({ categories: [newRecord, ...state.categories] }));
         try {
-          const editMap = JSON.parse(localStorage.getItem('retailhub_edited_categories') || '{}');
-          editMap[tempId] = newRecord;
-          localStorage.setItem('retailhub_edited_categories', JSON.stringify(editMap));
-        } catch (e) {}
-        try {
           const payload = {
             categoryCode: category.code || `CAT-${Date.now().toString().slice(-4)}`,
             categoryName: category.categoryName,
             description: category.description,
             parentId: category.parentId ? Number(category.parentId) : null,
             isActive: category.status === 'ACTIVE',
+            manager: category.manager || null,
+            inventoryGlCode: category.inventoryGlCode || null,
+            cogsGlCode: category.cogsGlCode || null,
+            taxClass: category.taxClass || null,
           };
-          await axiosClient.post('/categories', payload);
+          const res = await axiosClient.post<any, any>('/categories', payload);
+          const realId = String(res?.data?.id || res?.id || tempId);
+          set((state) => ({
+            categories: state.categories.map((c) => (c.id === tempId ? { ...c, id: realId } : c)),
+          }));
+          try {
+            const editMap = JSON.parse(localStorage.getItem('retailhub_edited_categories') || '{}');
+            editMap[realId] = { ...newRecord, id: realId };
+            delete editMap[tempId];
+            localStorage.setItem('retailhub_edited_categories', JSON.stringify(editMap));
+          } catch (e) {}
         } catch (error) {
-          console.error('Failed to add category on API, kept local:', error);
+          set((state) => ({ categories: state.categories.filter((c) => c.id !== tempId) }));
+          console.error('Failed to add category on API:', error);
+          throw error;
         }
       },
       updateCategory: async (id, data) => {
@@ -1526,25 +1587,33 @@ export const useInventoryStore = create<InventoryState>()(
             description: data.description !== undefined ? data.description : existing?.description,
             parentId: data.parentId ? Number(data.parentId) : (existing?.parentId ? Number(existing.parentId) : null),
             isActive: data.status !== undefined ? (data.status === 'ACTIVE') : (existing?.status === 'ACTIVE'),
+            manager: data.manager !== undefined ? data.manager : (existing?.manager || null),
+            inventoryGlCode: data.inventoryGlCode !== undefined ? data.inventoryGlCode : (existing?.inventoryGlCode || null),
+            cogsGlCode: data.cogsGlCode !== undefined ? data.cogsGlCode : (existing?.cogsGlCode || null),
+            taxClass: data.taxClass !== undefined ? data.taxClass : (existing?.taxClass || null),
           };
           await axiosClient.put(`/categories/${id}`, payload);
         } catch (error) {
           console.error('Failed to update category on API:', error);
+          throw error;
         }
       },
       deleteCategory: async (id) => {
-        set((state) => ({
-          categories: state.categories.filter((c) => c.id !== id),
-        }));
-        try {
-          const editMap = JSON.parse(localStorage.getItem('retailhub_edited_categories') || '{}');
-          delete editMap[id];
-          localStorage.setItem('retailhub_edited_categories', JSON.stringify(editMap));
-        } catch (e) {}
         try {
           await axiosClient.delete(`/categories/${id}`);
+          set((state) => ({
+            categories: state.categories.filter((c) => c.id !== id),
+          }));
+          try {
+            const editMap = JSON.parse(localStorage.getItem('retailhub_edited_categories') || '{}');
+            delete editMap[id];
+            localStorage.setItem('retailhub_edited_categories', JSON.stringify(editMap));
+          } catch (e) {}
+          await get().fetchCategories();
         } catch (error) {
           console.error('Failed to delete category on API:', error);
+          await get().fetchCategories();
+          throw error;
         }
       },
 
@@ -1569,9 +1638,11 @@ export const useInventoryStore = create<InventoryState>()(
           get().fetchProductBatches();
         } catch (error) {
           console.error('Failed to add product batch:', error);
+          throw error;
         }
       },
       updateProductBatch: async (id, data) => {
+        const prev = get().productBatches;
         set((state) => ({
           productBatches: state.productBatches.map((b) => (b.id === id ? { ...b, ...data } : b)),
         }));
@@ -1593,37 +1664,48 @@ export const useInventoryStore = create<InventoryState>()(
           };
           await axiosClient.put(`/inventories/batches/${id}`, payload);
         } catch (error) {
+          set({ productBatches: prev });
           console.error('Failed to update product batch:', error);
+          throw error;
         }
       },
       deleteProductBatch: async (id) => {
+        const prev = get().productBatches;
         set((state) => ({
           productBatches: state.productBatches.filter((b) => b.id !== id),
         }));
         try {
           await axiosClient.delete(`/inventories/batches/${id}`);
         } catch (error) {
+          set({ productBatches: prev });
           console.error('Failed to delete product batch:', error);
+          throw error;
         }
       },
       adjustProductBatch: async (id, adjustedQuantity, reason) => {
+        const prev = get().productBatches;
         set((state) => ({
           productBatches: state.productBatches.map((b) => (b.id === id ? { ...b, remainingUnits: adjustedQuantity } : b)),
         }));
         try {
           await axiosClient.post(`/inventories/batches/${id}/adjust`, { adjustedQuantity, reason });
         } catch (error) {
+          set({ productBatches: prev });
           console.error('Failed to adjust product batch:', error);
+          throw error;
         }
       },
       expireProductBatch: async (id) => {
+        const prev = get().productBatches;
         set((state) => ({
           productBatches: state.productBatches.map((b) => (b.id === id ? { ...b, qualityStatus: 'EXPIRED' } : b)),
         }));
         try {
           await axiosClient.post(`/inventories/batches/${id}/expire`);
         } catch (error) {
+          set({ productBatches: prev });
           console.error('Failed to expire product batch:', error);
+          throw error;
         }
       },
       fetchExpiringBatches: async (days = 30) => {
@@ -1658,29 +1740,46 @@ export const useInventoryStore = create<InventoryState>()(
       },
 
       addStockTransfer: async (transfer) => {
+        const id = (transfer as any).id || Date.now().toString();
+        const fullTransfer: StockTransferOrder = { id, ...transfer } as StockTransferOrder;
+        const previousTransfers = get().stockTransfers;
         set((state) => ({
-          stockTransfers: [transfer, ...state.stockTransfers.filter(s => s.id !== transfer.id)],
+          stockTransfers: [fullTransfer, ...state.stockTransfers.filter(s => s.id !== id)],
         }));
         try {
           const products = get().products;
-          const productId = products.length > 0 ? Number(products[0].id) : 1;
+          const transferLines = (transfer.items && transfer.items.length > 0)
+            ? transfer.items.map(item => {
+                const found = products.find(p => p.sku === item.sku || p.name === ((item as any).productName || (item as any).name));
+                const variantId = (item as any).productVariantId ? Number((item as any).productVariantId) : undefined;
+                const pId = (item as any).productId ? Number((item as any).productId) : (found ? Number(found.id) : undefined);
+                return {
+                  productVariantId: variantId || undefined,
+                  productId: pId || 1,
+                  transferQuantity: Number(item.quantity) || 1,
+                  reason: (item as any).notes || transfer.notes || 'Chuyển kho',
+                };
+              })
+            : [
+                {
+                  productId: products.length > 0 ? Number(products[0].id) : 1,
+                  transferQuantity: Number(transfer.totalUnits) || 1,
+                  reason: transfer.notes || 'Chuyển kho',
+                }
+              ];
+
           const payload = {
             transferCode: transfer.transferNumber || `ST-${Date.now()}`,
             transferDate: new Date().toISOString(),
             fromBranchId: resolveBranchId(transfer.sourceHub),
             toBranchId: resolveBranchId(transfer.destinationHub),
             status: transfer.status || 'DRAFT',
-            transferLines: [
-              {
-                productId,
-                transferQuantity: transfer.totalUnits || 1,
-                reason: transfer.notes || 'Chuyển kho',
-              }
-            ],
+            transferLines: transferLines,
           };
           await axiosClient.post('/inventories/transfers', payload);
         } catch (error) {
-          console.warn('Backend addStockTransfer failed, preserved local item:', error);
+          set({ stockTransfers: previousTransfers });
+          throw error;
         }
       },
       updateStockTransfer: async (id, data) => {
@@ -1694,26 +1793,42 @@ export const useInventoryStore = create<InventoryState>()(
             return;
           }
 
+          const existing = get().stockTransfers.find((s) => s.id === id);
           const products = get().products;
-          const productId = products.length > 0 ? Number(products[0].id) : 1;
+          const itemsSource = (data as any).items || (data as any).transferLines || existing?.items || [];
+          const transferLines = (itemsSource.length > 0)
+            ? itemsSource.map((item: any) => {
+                const found = products.find(p => p.sku === item.sku || p.name === (item.productName || item.name));
+                const variantId = item.productVariantId ? Number(item.productVariantId) : undefined;
+                const pId = item.productId ? Number(item.productId) : (found ? Number(found.id) : undefined);
+                return {
+                  productVariantId: variantId || undefined,
+                  productId: pId || (products.length > 0 ? Number(products[0].id) : 1),
+                  transferQuantity: Number(item.quantity || item.transferQuantity) || 1,
+                  reason: item.notes || item.reason || data.notes || 'Cập nhật chuyển kho',
+                };
+              })
+            : [
+                {
+                  productId: products.length > 0 ? Number(products[0].id) : 1,
+                  transferQuantity: data.totalUnits || 1,
+                  reason: data.notes || 'Cập nhật chuyển kho',
+                }
+              ];
+
           const payload = {
-            transferCode: data.transferNumber,
+            transferCode: data.transferNumber || existing?.transferNumber,
             transferDate: new Date().toISOString(),
-            fromBranchId: data.sourceHub ? resolveBranchId(data.sourceHub) : undefined,
-            toBranchId: data.destinationHub ? resolveBranchId(data.destinationHub) : undefined,
-            status: data.status,
-            transferLines: [
-              {
-                productId,
-                transferQuantity: data.totalUnits || 1,
-                reason: data.notes || 'Cập nhật chuyển kho',
-              }
-            ],
+            fromBranchId: data.sourceHub ? resolveBranchId(data.sourceHub) : (existing?.sourceHub ? resolveBranchId(existing.sourceHub) : undefined),
+            toBranchId: data.destinationHub ? resolveBranchId(data.destinationHub) : (existing?.destinationHub ? resolveBranchId(existing.destinationHub) : undefined),
+            status: data.status || existing?.status,
+            transferLines,
           };
           await axiosClient.put(`/inventories/transfers/${id}`, payload);
-          get().fetchStockTransfers();
+          await get().fetchStockTransfers();
         } catch (error) {
           console.error('Failed to update stock transfer:', error);
+          throw error;
         }
       },
       deleteStockTransfer: async (id) => {
@@ -1725,115 +1840,61 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
       completeStockTransfer: async (id, notes) => {
-        set((state) => {
-          const currentTransfer = state.stockTransfers.find((s) => s.id === id);
-          const updatedTransfers = state.stockTransfers.map((s) =>
-            s.id === id ? { ...s, status: 'COMPLETED' as any, notes: notes || s.notes } : s
-          );
-
-          if (!currentTransfer) return { stockTransfers: updatedTransfers };
-
-          const destBranchId = String(resolveBranchId(currentTransfer.destinationHub));
-          const updatedProducts = state.products.map((p) => {
-            const transferItem = currentTransfer.items?.find((it) => it.sku === p.sku || it.productName === p.name);
-            const qtyToAdd = transferItem ? Number(transferItem.quantity || 0) : (currentTransfer.totalUnits || 0);
-            if (qtyToAdd > 0) {
-              const currentBranchStocks = { ...(p.branchStocks || {}) };
-              const currentQty = currentBranchStocks[destBranchId] ?? 0;
-              currentBranchStocks[destBranchId] = currentQty + qtyToAdd;
-              return {
-                ...p,
-                onHand: (p.onHand || 0) + qtyToAdd,
-                branchStocks: currentBranchStocks,
-              };
-            }
-            return p;
-          });
-
-          return {
-            stockTransfers: updatedTransfers,
-            products: updatedProducts,
-          };
-        });
-
+        const prevTransfers = get().stockTransfers;
+        const prevProducts = get().products;
         try {
           if (!isNaN(Number(id))) {
             await axiosClient.post(`/inventories/transfers/${id}/receive`, { notes: notes || '' });
           }
           await get().fetchStockTransfers();
+          await get().fetchProducts();
         } catch (error) {
-          console.warn('Backend completeStockTransfer call error, local state preserved:', error);
+          set({ stockTransfers: prevTransfers, products: prevProducts });
+          console.error('Failed to complete stock transfer:', error);
+          throw error;
         }
       },
       approveStockTransfer: async (id) => {
-        set((state) => ({
-          stockTransfers: state.stockTransfers.map((s) =>
-            s.id === id ? { ...s, status: 'READY_TO_SHIP' as any } : s
-          ),
-        }));
+        const prevTransfers = get().stockTransfers;
         try {
           if (!isNaN(Number(id))) {
             await axiosClient.post(`/inventories/transfers/${id}/approve`);
           }
           await get().fetchStockTransfers();
         } catch (error) {
-          console.warn('Backend approveStockTransfer call error, local state preserved:', error);
+          set({ stockTransfers: prevTransfers });
+          console.error('Failed to approve stock transfer:', error);
+          throw error;
         }
       },
       shipStockTransfer: async (id) => {
-        set((state) => {
-          const currentTransfer = state.stockTransfers.find((s) => s.id === id);
-          const updatedTransfers = state.stockTransfers.map((s) =>
-            s.id === id ? { ...s, status: 'IN_TRANSIT' as any } : s
-          );
-
-          if (!currentTransfer) return { stockTransfers: updatedTransfers };
-
-          const sourceBranchId = String(resolveBranchId(currentTransfer.sourceHub));
-          const updatedProducts = state.products.map((p) => {
-            const transferItem = currentTransfer.items?.find((it) => it.sku === p.sku || it.productName === p.name);
-            const qtyToDeduct = transferItem ? Number(transferItem.quantity || 0) : (currentTransfer.totalUnits || 0);
-            if (qtyToDeduct > 0) {
-              const currentBranchStocks = { ...(p.branchStocks || {}) };
-              const currentQty = currentBranchStocks[sourceBranchId] ?? p.onHand ?? 0;
-              currentBranchStocks[sourceBranchId] = Math.max(0, currentQty - qtyToDeduct);
-              return {
-                ...p,
-                onHand: Math.max(0, (p.onHand || 0) - qtyToDeduct),
-                branchStocks: currentBranchStocks,
-              };
-            }
-            return p;
-          });
-
-          return {
-            stockTransfers: updatedTransfers,
-            products: updatedProducts,
-          };
-        });
-
+        const prevTransfers = get().stockTransfers;
+        const prevProducts = get().products;
         try {
           if (!isNaN(Number(id))) {
             await axiosClient.post(`/inventories/transfers/${id}/ship`);
           }
           await get().fetchStockTransfers();
+          await get().fetchProducts();
         } catch (error) {
-          console.warn('Backend shipStockTransfer call error, local state preserved:', error);
+          set({ stockTransfers: prevTransfers, products: prevProducts });
+          console.error('Failed to ship stock transfer:', error);
+          throw error;
         }
       },
       cancelStockTransfer: async (id, cancelReason) => {
-        set((state) => ({
-          stockTransfers: state.stockTransfers.map((s) =>
-            s.id === id ? { ...s, status: 'CANCELLED' as any, notes: cancelReason || s.notes } : s
-          ),
-        }));
+        const prevTransfers = get().stockTransfers;
+        const prevProducts = get().products;
         try {
           if (!isNaN(Number(id))) {
             await axiosClient.post(`/inventories/transfers/${id}/cancel`, { cancelReason });
           }
           await get().fetchStockTransfers();
+          await get().fetchProducts();
         } catch (error) {
-          console.warn('Backend cancelStockTransfer call error, local state preserved:', error);
+          set({ stockTransfers: prevTransfers, products: prevProducts });
+          console.error('Failed to cancel stock transfer:', error);
+          throw error;
         }
       },
 
@@ -1879,6 +1940,12 @@ export const useInventoryStore = create<InventoryState>()(
             galleryImages: JSON.stringify(product.galleryImages || []),
             variants: structuredVariants,
             initialStocks: initialStocks,
+            isSerialTracked: product.isSerialTracked !== undefined ? product.isSerialTracked : false,
+            warrantyPeriodMonths: product.warrantyPeriodMonths || null,
+            originCountry: product.originCountry || null,
+            dimensions: (product as any).dimensions || null,
+            allowNegativeStock: (product as any).allowNegativeStock !== undefined ? (product as any).allowNegativeStock : false,
+            taxClass: product.taxClass || null,
             conversionUnits: (product.units || [])
               .filter(u => !u.isBaseUnit)
               .map(u => {
@@ -1930,6 +1997,26 @@ export const useInventoryStore = create<InventoryState>()(
             maxStock: data.maxStock !== undefined ? data.maxStock : currentProd?.maxStock,
             galleryImages: data.galleryImages ? JSON.stringify(data.galleryImages) : (currentProd?.galleryImages ? JSON.stringify(currentProd.galleryImages) : undefined),
             variants: data.variants ? JSON.stringify(data.variants) : undefined,
+            isSerialTracked: data.isSerialTracked !== undefined ? data.isSerialTracked : currentProd?.isSerialTracked,
+            warrantyPeriodMonths: data.warrantyPeriodMonths !== undefined ? data.warrantyPeriodMonths : currentProd?.warrantyPeriodMonths,
+            originCountry: data.originCountry !== undefined ? data.originCountry : currentProd?.originCountry,
+            dimensions: (data as any).dimensions !== undefined ? (data as any).dimensions : (currentProd as any)?.dimensions,
+            allowNegativeStock: (data as any).allowNegativeStock !== undefined ? (data as any).allowNegativeStock : (currentProd as any)?.allowNegativeStock,
+            taxClass: data.taxClass !== undefined ? (data.taxClass || null) : (currentProd?.taxClass || null),
+            conversionUnits: (data.units || currentProd?.units || [])
+              .filter(u => !u.isBaseUnit)
+              .map(u => {
+                const unitMaster = get().unitsList.find(
+                  x => x.code === u.unitCode || x.unitName === u.unitCode
+                );
+                return {
+                  unitId: unitMaster ? Number(unitMaster.id) : Number(u.unitId || 0),
+                  conversionRate: u.conversionRate,
+                  price: u.price,
+                  barcode: u.barcode || undefined,
+                };
+              })
+              .filter(u => u.unitId > 0),
           };
           await axiosClient.put(`/products/${id}`, payload);
           await get().fetchProducts();
@@ -1941,9 +2028,11 @@ export const useInventoryStore = create<InventoryState>()(
       deleteProduct: async (id) => {
         try {
           await axiosClient.delete(`/products/${id}`);
-          get().fetchProducts();
+          await get().fetchProducts();
         } catch (error) {
           console.error('Failed to delete product:', error);
+          await get().fetchProducts();
+          throw error;
         }
       },
 
@@ -1992,9 +2081,15 @@ export const useInventoryStore = create<InventoryState>()(
             branchId: combo.branchId ? Number(combo.branchId) : null,
             details,
           };
-          await axiosClient.post<any, any>('/catalog/combos', payload);
+          const res = await axiosClient.post<any, any>('/catalog/combos', payload);
+          const realId = String(res?.data?.id || res?.id || newCombo.id);
+          set((state) => ({
+            combos: state.combos.map((c) => (c.id === newCombo.id ? { ...c, id: realId } : c)),
+          }));
         } catch (error) {
+          set((state) => ({ combos: state.combos.filter((c) => c.id !== newCombo.id) }));
           console.error('Failed to add combo:', error);
+          throw error;
         }
       },
       updateCombo: async (id, data) => {
@@ -2034,16 +2129,18 @@ export const useInventoryStore = create<InventoryState>()(
           await axiosClient.put<any, any>(`/catalog/combos/${id}`, payload);
         } catch (error) {
           console.error('Failed to update combo:', error);
+          throw error;
         }
       },
       deleteCombo: async (id) => {
-        set((state) => ({
-          combos: state.combos.filter((c) => c.id !== id),
-        }));
         try {
           await axiosClient.delete(`/catalog/combos/${id}`);
+          set((state) => ({
+            combos: state.combos.filter((c) => c.id !== id),
+          }));
         } catch (error) {
           console.error('Failed to delete combo:', error);
+          throw error;
         }
       },
 
@@ -2195,6 +2292,17 @@ export const useInventoryStore = create<InventoryState>()(
               0
             );
 
+            const mappedLines: InventoryCheckLine[] = lines.map((l: any) => ({
+              id: String(l.id || ''),
+              productId: l.productId,
+              productName: l.productName || l.sku || 'Sản phẩm',
+              sku: l.sku || '',
+              expectedQty: Number(l.systemQty ?? 0),
+              actualQty: Number(l.actualQty ?? 0),
+              diffQty: Number(l.diffQty ?? 0),
+              reason: l.reason || '',
+            }));
+
             return {
               id: String(item.id),
               checkCode: item.checkCode || `CHK-${item.id}`,
@@ -2213,6 +2321,7 @@ export const useInventoryStore = create<InventoryState>()(
               netVariance: Number(item.netVariance ?? computedNetVariance),
               checkedBy: item.createdBy || item.checkedBy || '',
               notes: item.notes || item.note || '',
+              lines: mappedLines,
             };
           });
           set({ inventoryChecks: mapped });
@@ -2222,25 +2331,26 @@ export const useInventoryStore = create<InventoryState>()(
       },
       addInventoryCheck: async (payload) => {
         try {
-          const products = get().products;
-          const checkLines = products.length > 0 ? products.map(p => ({
-            productId: Number(p.id),
-            expectedQuantity: 10,
-            actualQuantity: 10,
-            reason: 'Kiểm kê định kỳ',
-          })) : [
-            {
-              productId: 1,
-              expectedQuantity: 10,
-              actualQuantity: 10,
-              reason: 'Kiểm kê định kỳ',
-            }
-          ];
+          const checkLines = (payload as any).checkLines && (payload as any).checkLines.length > 0
+            ? (payload as any).checkLines.map((line: any) => {
+                const systemQty = Number(line.systemQty ?? line.expectedQuantity ?? 0);
+                const actualQty = Number(line.actualQty ?? line.actualQuantity ?? 0);
+                const diffQty = Number(line.diffQty ?? (actualQty - systemQty));
+                return {
+                  productId: Number(line.productId),
+                  systemQty,
+                  actualQty,
+                  diffQty,
+                  reason: line.reason || 'Kiểm kê',
+                };
+              })
+            : [];
 
           const req = {
             checkCode: payload.checkCode,
             checkDate: payload.checkDate ? `${payload.checkDate}T00:00:00` : new Date().toISOString(),
             branchId: payload.branchId,
+            warehouseZoneId: (payload as any).warehouseZoneId,
             checkLines,
           };
           await axiosClient.post('/inventories/checks', req);
@@ -2253,24 +2363,27 @@ export const useInventoryStore = create<InventoryState>()(
       updateInventoryCheck: async (id, payload) => {
         try {
           const check = get().inventoryChecks.find(c => c.id === id);
-          const products = get().products;
-          const checkLines = products.length > 0 ? products.map(p => ({
-            productId: Number(p.id),
-            expectedQuantity: 10,
-            actualQuantity: 10,
-            reason: 'Kiểm kê định kỳ',
-          })) : [
-            {
-              productId: 1,
-              expectedQuantity: 10,
-              actualQuantity: 10,
-              reason: 'Kiểm kê định kỳ',
-            }
-          ];
+          const linesSource = (payload as any).checkLines || (payload as any).lines || (check as any)?.checkLines || (check as any)?.lines || [];
+          const checkLines = linesSource.length > 0
+            ? linesSource.map((line: any) => {
+                const systemQty = Number(line.systemQty ?? line.expectedQuantity ?? 0);
+                const actualQty = Number(line.actualQty ?? line.actualQuantity ?? 0);
+                const diffQty = Number(line.diffQty ?? (actualQty - systemQty));
+                return {
+                  productId: Number(line.productId),
+                  systemQty,
+                  actualQty,
+                  diffQty,
+                  reason: line.reason || 'Kiểm kê định kỳ',
+                };
+              })
+            : [];
           const req = {
-            checkCode: check?.checkCode || `CHK-${id}`,
-            checkDate: check?.checkDate ? `${check.checkDate}T00:00:00` : new Date().toISOString(),
-            branchId: check?.branchId ? Number(check.branchId) : 1,
+            checkCode: (payload as any).checkCode || check?.checkCode || `CHK-${id}`,
+            checkDate: (payload as any).checkDate ? `${(payload as any).checkDate}T00:00:00` : (check?.checkDate ? `${check.checkDate}T00:00:00` : new Date().toISOString()),
+            branchId: (payload as any).branchId || (check?.branchId ? Number(check.branchId) : 1),
+            warehouseZoneId: (payload as any).warehouseZoneId,
+            status: (payload as any).status || check?.status,
             checkLines,
           };
           await axiosClient.put(`/inventories/checks/${id}`, req);
@@ -2303,39 +2416,47 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
 
-      // ── StockOuts Actions ──
-      fetchStockOuts: async () => {
-        // Keeps local state or syncs with backend when endpoint available
-      },
-      addStockOut: async (item) => {
-        set((state) => ({
-          stockOuts: [{ id: Date.now().toString(), ...item }, ...state.stockOuts],
-        }));
-      },
-      updateStockOut: async (id, data) => {
-        set((state) => ({
-          stockOuts: state.stockOuts.map((s) => (s.id === id ? { ...s, ...data } : s)),
-        }));
-      },
-      deleteStockOut: async (id) => {
-        set((state) => ({
-          stockOuts: state.stockOuts.filter((s) => s.id !== id),
-        }));
-      },
 
       // ── SupplierWarehouses Actions ──
-      fetchSupplierWarehouses: async () => {},
+      fetchSupplierWarehouses: async () => {
+        try {
+          const res = await axiosClient.get<any, any[]>('/inventories/supplier-warehouses');
+          if (Array.isArray(res) && res.length > 0) {
+            set({ supplierWarehouses: res.map((w: any) => ({ id: String(w.id), ...w })) });
+          }
+        } catch (err) {
+          // Endpoint not available or network error - keep persisted state
+          console.warn('fetchSupplierWarehouses fallback to persisted state:', err);
+        }
+      },
       addSupplierWarehouse: async (item) => {
+        const newItem = { id: `sw_${Date.now()}`, ...item };
+        try {
+          const res = await axiosClient.post<any, any>('/inventories/supplier-warehouses', item);
+          if (res?.id) newItem.id = String(res.id);
+        } catch (err) {
+          console.warn('addSupplierWarehouse API failed, saving to local store:', err);
+        }
         set((state) => ({
-          supplierWarehouses: [{ id: Date.now().toString(), ...item }, ...state.supplierWarehouses],
+          supplierWarehouses: [newItem, ...state.supplierWarehouses.filter((w) => w.id !== newItem.id)],
         }));
       },
       updateSupplierWarehouse: async (id, data) => {
+        try {
+          await axiosClient.put(`/inventories/supplier-warehouses/${id}`, data);
+        } catch (err) {
+          console.warn('updateSupplierWarehouse API failed, saving to local store:', err);
+        }
         set((state) => ({
           supplierWarehouses: state.supplierWarehouses.map((w) => (w.id === id ? { ...w, ...data } : w)),
         }));
       },
       deleteSupplierWarehouse: async (id) => {
+        try {
+          await axiosClient.delete(`/inventories/supplier-warehouses/${id}`);
+        } catch (err) {
+          console.warn('deleteSupplierWarehouse API failed, removing from local store:', err);
+        }
         set((state) => ({
           supplierWarehouses: state.supplierWarehouses.filter((w) => w.id !== id),
         }));
@@ -2384,25 +2505,68 @@ export const useInventoryStore = create<InventoryState>()(
       },
 
       // ── Serial Numbers API (backend: /products/:id/serials) ──────────────
+      fetchSerialItems: async () => {
+        try {
+          const res = await axiosClient.get<any, any>('/inventories/serials');
+          const list = Array.isArray(res) ? res : (res?.data || []);
+          const mapped: SerialItemRecord[] = list.map((s: any) => ({
+            id: String(s.id),
+            serialNumber: s.serialNumber,
+            sku: s.productCode || '',
+            productName: s.productName || '',
+            category: s.category || 'Thiết bị',
+            unitCost: Number(s.unitCost || 0),
+            status: (s.status || 'AVAILABLE') as SerialItemRecord['status'],
+            currentLocation: s.location || '',
+            receivedDate: s.receivedDate ? s.receivedDate.split('T')[0] : '',
+            warrantyExpiry: s.warrantyExpiry ? s.warrantyExpiry.split('T')[0] : '',
+            vendorName: s.vendorName || '',
+            poReference: s.poReference || '',
+            macAddress: s.macAddress || '',
+            imei1: s.imei1 || '',
+            imei2: s.imei2 || '',
+            notes: s.notes || '',
+          }));
+          set({ serialItems: mapped });
+        } catch (error) {
+          console.error('Failed to fetch serials:', error);
+        }
+      },
       addSerialItem: async (item) => {
         try {
-          await axiosClient.post('/inventories/serials', item);
-          set((state) => ({ serialItems: [{ id: Date.now().toString(), ...item }, ...state.serialItems] }));
-        } catch {
-          set((state) => ({ serialItems: [{ id: Date.now().toString(), ...item }, ...state.serialItems] }));
+          const payload = {
+            serialNumber: item.serialNumber,
+            productId: (item as any).productId || (get().products.find(p => p.name === item.productName || p.sku === item.sku)?.id),
+            status: item.status || 'AVAILABLE',
+            macAddress: item.macAddress,
+            imei1: item.imei1,
+            imei2: item.imei2,
+          };
+          const res = await axiosClient.post<any, any>('/inventories/serials', payload);
+          const savedId = String(res?.data?.id || res?.id || Date.now());
+          set((state) => ({ serialItems: [{ id: savedId, ...item }, ...state.serialItems] }));
+        } catch (error) {
+          console.error('Failed to add serial item:', error);
+          throw error;
         }
       },
       updateSerialItem: async (id, data) => {
         try {
           await axiosClient.put(`/inventories/serials/${id}`, data);
-        } catch { /* fallback */ }
-        set((state) => ({ serialItems: state.serialItems.map((s) => (s.id === id ? { ...s, ...data } : s)) }));
+          set((state) => ({ serialItems: state.serialItems.map((s) => (s.id === id ? { ...s, ...data } : s)) }));
+        } catch (error) {
+          console.error('Failed to update serial item:', error);
+          throw error;
+        }
       },
       deleteSerialItem: async (id) => {
         try {
           await axiosClient.delete(`/inventories/serials/${id}`);
-        } catch { /* fallback */ }
-        set((state) => ({ serialItems: state.serialItems.filter((s) => s.id !== id) }));
+          set((state) => ({ serialItems: state.serialItems.filter((s) => s.id !== id) }));
+        } catch (error) {
+          console.error('Failed to delete serial item:', error);
+          throw error;
+        }
       },
 
       fetchSerialsByProduct: async (productId: number) => {
@@ -2625,7 +2789,7 @@ export const useInventoryStore = create<InventoryState>()(
             const editedMap: Record<string, UnitOfMeasure> = JSON.parse(localStorage.getItem('retailhub_edited_units') || '{}');
             Object.keys(editedMap).forEach((key) => {
               if (key.startsWith('unit_') && !finalUnits.some((u: any) => u.id === key || u.code === editedMap[key].code)) {
-                finalUnits.unshift(editedMap[key]);
+                finalUnits.unshift(editedMap[key] as any);
               }
             });
           } catch (e) {}
@@ -2701,27 +2865,27 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
       deleteUnit: async (id) => {
-        const target = get().unitsList.find((u) => u.id === id);
-        set((state) => ({
-          unitsList: state.unitsList.filter((u) => u.id !== id),
-        }));
-
-        try {
-          const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_units') || '[]');
-          if (!deletedIds.includes(String(id))) deletedIds.push(String(id));
-          if (target?.code && !deletedIds.includes(target.code)) deletedIds.push(target.code);
-          localStorage.setItem('retailhub_deleted_units', JSON.stringify(deletedIds));
-
-          const editedMap = JSON.parse(localStorage.getItem('retailhub_edited_units') || '{}');
-          delete editedMap[id];
-          if (target?.code) delete editedMap[target.code];
-          localStorage.setItem('retailhub_edited_units', JSON.stringify(editedMap));
-        } catch (e) {}
-
         try {
           await axiosClient.delete(`/units/${id}`);
+          set((state) => ({
+            unitsList: state.unitsList.filter((u) => u.id !== id),
+          }));
+          try {
+            const target = get().unitsList.find((u) => u.id === id);
+            const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_units') || '[]');
+            if (!deletedIds.includes(String(id))) deletedIds.push(String(id));
+            if (target?.code && !deletedIds.includes(target.code)) deletedIds.push(target.code);
+            localStorage.setItem('retailhub_deleted_units', JSON.stringify(deletedIds));
+
+            const editedMap = JSON.parse(localStorage.getItem('retailhub_edited_units') || '{}');
+            delete editedMap[id];
+            if (target?.code) delete editedMap[target.code];
+            localStorage.setItem('retailhub_edited_units', JSON.stringify(editedMap));
+          } catch (e) {}
         } catch (error: any) {
           console.error('Failed to delete unit on API:', error);
+          await get().fetchUnits();
+          throw error;
         }
       },
 
@@ -2976,7 +3140,7 @@ export const useInventoryStore = create<InventoryState>()(
       },
       addRack: async (rack) => {
         const newRackRecord: RackRecord = {
-          id: rack.id || String(Date.now()),
+          id: (rack as any).id || String(Date.now()),
           rackCode: rack.rackCode || `RACK-${Date.now().toString().slice(-4)}`,
           rackName: rack.rackName || 'Kệ hàng mới',
           maxWeightKg: rack.maxWeightKg || 500,
@@ -3353,27 +3517,16 @@ export const useInventoryStore = create<InventoryState>()(
           await get().fetchReturnToSuppliers();
         } catch (error) {
           console.error('Failed to add return to supplier:', error);
-          const fallbackRecord = {
-            id: String(Date.now()),
-            rtvNumber: rtv.rtvNumber || `RTV-${Date.now()}`,
-            grnRefNumber: rtv.grnRefNumber || '',
-            supplierName: rtv.supplierName || 'Nhà cung cấp',
-            returnDate: rtv.returnDate || new Date().toISOString().split('T')[0],
-            totalItems: rtv.totalItems || 1,
-            refundValue: rtv.refundValue || 0,
-            status: rtv.status || 'PENDING_SUPPLIER_APPROVAL',
-            reason: rtv.reason || '',
-            notes: rtv.notes || '',
-            returnLines: rtv.returnLines || [],
-          };
-          set((state) => ({ returnToSuppliers: [fallbackRecord, ...state.returnToSuppliers] }));
+          throw error;
         }
       },
       updateReturnToSupplier: async (id, data: any) => {
         try {
-          if (data.status === 'APPROVED_CREDIT_NOTE' || data.status === 'APPROVED') {
+          if (data.status === 'COMPLETED' || data.status === 'COMPLETE') {
+            await axiosClient.post(`/inventory/returns-to-suppliers/${id}/complete`);
+          } else if (data.status === 'APPROVED_CREDIT_NOTE' || data.status === 'APPROVED') {
             await axiosClient.post(`/inventory/returns-to-suppliers/${id}/approve`);
-          } else if (data.status === 'REJECTED') {
+          } else if (data.status === 'CANCELLED' || data.status === 'REJECTED') {
             await axiosClient.patch(`/inventory/returns-to-suppliers/${id}/cancel`);
           } else {
             await axiosClient.put(`/inventory/returns-to-suppliers/${id}`, data);
@@ -3381,9 +3534,7 @@ export const useInventoryStore = create<InventoryState>()(
           await get().fetchReturnToSuppliers();
         } catch (error) {
           console.error('Failed to update return to supplier:', error);
-          set((state) => ({
-            returnToSuppliers: state.returnToSuppliers.map((r) => (r.id === id ? { ...r, ...data } : r)),
-          }));
+          throw error;
         }
       },
       deleteReturnToSupplier: async (id) => {
@@ -3392,7 +3543,7 @@ export const useInventoryStore = create<InventoryState>()(
           await get().fetchReturnToSuppliers();
         } catch (error) {
           console.error('Failed to delete return to supplier:', error);
-          set((state) => ({ returnToSuppliers: state.returnToSuppliers.filter((r) => r.id !== id) }));
+          throw error;
         }
       },
 
@@ -3432,37 +3583,19 @@ export const useInventoryStore = create<InventoryState>()(
         }
       },
       addStockOut: async (stockOut) => {
-        const newRecord: StockOutRecord = {
-          id: stockOut.id || `pxk-${Date.now()}`,
-          stockOutCode: stockOut.stockOutCode || `PXK-2026-${Math.floor(100 + Math.random() * 900)}`,
-          outType: stockOut.outType || 'BAN_HANG',
-          warehouseName: stockOut.warehouseName || 'Chi nhánh Hà Nội (Kho chính)',
-          issuedDate: stockOut.issuedDate || new Date().toISOString().slice(0, 16).replace('T', ' '),
-          totalVariants: stockOut.totalVariants || (stockOut.items ? stockOut.items.length : 1),
-          totalItems: Number(stockOut.totalItems || 0),
-          totalValue: Number(stockOut.totalValue || 0),
-          creator: stockOut.creator || 'Nhân viên kho',
-          status: stockOut.status || 'CHO_XU_LY',
-          notes: stockOut.notes || '',
-          items: stockOut.items || [],
-        };
-        set((state) => ({
-          stockOuts: [newRecord, ...state.stockOuts.filter(s => s.id !== newRecord.id)],
-        }));
-
         try {
           const payload = {
-            stockOutCode: newRecord.stockOutCode,
-            outType: newRecord.outType,
-            warehouseName: newRecord.warehouseName,
-            issuedDate: newRecord.issuedDate,
-            totalVariants: newRecord.totalVariants,
-            totalItems: newRecord.totalItems,
-            totalValue: newRecord.totalValue,
-            creator: newRecord.creator,
-            status: newRecord.status,
-            notes: newRecord.notes,
-            items: (newRecord.items || []).map((i) => ({
+            stockOutCode: stockOut.stockOutCode,
+            outType: stockOut.outType || 'BAN_HANG',
+            warehouseName: stockOut.warehouseName || 'Chi nhánh Hà Nội (Kho chính)',
+            issuedDate: stockOut.issuedDate || new Date().toISOString().slice(0, 16).replace('T', ' '),
+            totalVariants: stockOut.totalVariants || (stockOut.items ? stockOut.items.length : 1),
+            totalItems: Number(stockOut.totalItems || 0),
+            totalValue: Number(stockOut.totalValue || 0),
+            creator: stockOut.creator || 'Nhân viên kho',
+            status: stockOut.status || 'CHO_XU_LY',
+            notes: stockOut.notes || '',
+            items: (stockOut.items || []).map((i) => ({
               productName: i.productName,
               variant: i.variant,
               sku: i.sku,
@@ -3473,34 +3606,34 @@ export const useInventoryStore = create<InventoryState>()(
             })),
           };
           await axiosClient.post('/inventories/exports', payload);
+          await get().fetchStockOuts();
         } catch (error) {
-          console.warn('Backend addStockOut failed, preserved local item:', error);
+          console.error('Backend addStockOut failed:', error);
+          throw error;
         }
       },
       updateStockOut: async (id, data) => {
-        set((state) => ({
-          stockOuts: state.stockOuts.map((s) => (s.id === id ? { ...s, ...data } : s)),
-        }));
         try {
           const numericId = Number(id);
           if (!isNaN(numericId)) {
             await axiosClient.put(`/inventories/exports/${numericId}`, data);
+            await get().fetchStockOuts();
           }
         } catch (error) {
-          console.warn('Backend updateStockOut failed:', error);
+          console.error('Backend updateStockOut failed:', error);
+          throw error;
         }
       },
       deleteStockOut: async (id) => {
-        set((state) => ({
-          stockOuts: state.stockOuts.filter((s) => s.id !== id),
-        }));
         try {
           const numericId = Number(id);
           if (!isNaN(numericId)) {
             await axiosClient.delete(`/inventories/exports/${numericId}`);
+            await get().fetchStockOuts();
           }
         } catch (error) {
-          console.warn('Backend deleteStockOut failed:', error);
+          console.error('Backend deleteStockOut failed:', error);
+          throw error;
         }
       },
     }),

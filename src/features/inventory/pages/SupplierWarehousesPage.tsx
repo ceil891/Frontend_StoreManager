@@ -1,4 +1,5 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
 import { useInventoryStore } from '../store/inventoryStore';
 import { Plus, Eye, Edit, Trash2, MapPin, Building2, User, Phone, Mail, Clock, Box, ShieldCheck, FileText } from 'lucide-react';
@@ -7,6 +8,7 @@ import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
+import { toast } from 'sonner';
 
 export interface SupplierWarehouseRecord {
   id: string;
@@ -115,18 +117,33 @@ export function SupplierWarehousesPage() {
       internalNotes: editingItem.internalNotes || '',
     };
 
-    if (modalMode === 'create') {
-      await addSupplierWarehouse(payload);
-    } else if (editingItem.id) {
-      await updateSupplierWarehouse(editingItem.id, payload);
+    try {
+      if (modalMode === 'create') {
+        await addSupplierWarehouse(payload);
+        toast.success('Đã tạo kho nhà cung cấp mới thành công!');
+      } else if (editingItem.id) {
+        await updateSupplierWarehouse(editingItem.id, payload);
+        toast.success('Đã cập nhật kho nhà cung cấp thành công!');
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error('Lỗi khi lưu kho nhà cung cấp:', err);
+      toast.error('Lỗi khi lưu kho: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa thông tin kho nhà cung cấp này?')) {
-      await deleteSupplierWarehouse(id);
-      if (selected?.id === id) setSelected(null);
+  const [deletingItem, setDeletingItem] = useState<SupplierWarehouseRecord | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await deleteSupplierWarehouse(deletingItem.id);
+      if (selected?.id === deletingItem.id) setSelected(null);
+      toast.success(`Đã xóa thông tin kho "${deletingItem.warehouseName}" thành công!`);
+      setDeletingItem(null);
+    } catch (err: any) {
+      console.error('Lỗi khi xóa kho nhà cung cấp:', err);
+      toast.error('Lỗi khi xóa kho: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
   };
 
@@ -209,7 +226,7 @@ export function SupplierWarehousesPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeletingItem(row.original)}
               className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               title="Xóa"
             >
@@ -738,6 +755,15 @@ export function SupplierWarehousesPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa kho nhà cung cấp"
+        description="Bạn có chắc chắn muốn xóa thông tin kho nhà cung cấp này khỏi hệ thống?"
+        itemName={deletingItem ? `${deletingItem.warehouseCode} - ${deletingItem.warehouseName}` : undefined}
+      />
     </div>
   );
 }

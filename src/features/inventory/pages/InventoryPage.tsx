@@ -314,6 +314,9 @@ function generateSkuCode(existingSkus: string[] = []): string {
       lastUpdated: new Date().toISOString().replace('T', ' ').substring(0, 16),
       units: editingUnits,
       variants: editingProduct.variants || [],
+      isSerialTracked: Boolean(editingProduct.isSerialTracked),
+      warrantyPeriodMonths: Number(editingProduct.warrantyPeriodMonths) || 0,
+      originCountry: editingProduct.originCountry || '',
     };
 
     try {
@@ -404,26 +407,52 @@ function generateSkuCode(existingSkus: string[] = []): string {
     navigate('/purchase/orders');
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingProduct) return;
     if (deletingProduct.status === 'ACTIVE') {
       toast.error(`❌ Không thể xóa "${deletingProduct.name}" vì đang ĐANG KINH DOANH.\nVui lòng chuyển trạng thái sang Ngừng kinh doanh trước khi xóa.`);
       setDeletingProduct(null);
       return;
     }
-    deleteProduct(deletingProduct.id);
-    toast.success(`Đã xóa sản phẩm ${deletingProduct.name}`);
-    setDeletingProduct(null);
+    try {
+      await deleteProduct(deletingProduct.id);
+      toast.success(`Đã xóa sản phẩm ${deletingProduct.name}`);
+      setDeletingProduct(null);
+    } catch (err: any) {
+      console.error('Lỗi khi xóa sản phẩm:', err);
+      const isConstraint =
+        err?.response?.status === 409 ||
+        err?.response?.status === 500 ||
+        String(err?.message || '').toLowerCase().includes('foreign') ||
+        String(err?.response?.data?.message || '').toLowerCase().includes('constraint') ||
+        String(err?.response?.data?.message || '').toLowerCase().includes('cannot delete');
+      if (isConstraint) {
+        toast.error(
+          `❌ Không thể xóa sản phẩm "${deletingProduct.name}" do đã phát sinh Thẻ kho hoặc Đơn hàng. Hệ thống đề xuất chuyển trạng thái sang "Ngừng kinh doanh" thay vì xóa!`,
+          { duration: 6000 }
+        );
+      } else {
+        toast.error('Không thể xóa sản phẩm: ' + (err?.response?.data?.message || err?.message || 'Sản phẩm đang có giao dịch tồn kho/đơn hàng'));
+      }
+      setDeletingProduct(null);
+    }
   };
 
-  const handleBulkDeleteConfirm = () => {
+  const handleBulkDeleteConfirm = async () => {
     if (!deletingBulkProducts) return;
     const { rows, clear } = deletingBulkProducts;
     const ids = rows.map(r => r.id);
-    ids.forEach(id => deleteProduct(id));
-    toast.success(`Đã xóa ${ids.length} sản phẩm`);
-    clear();
-    setDeletingBulkProducts(null);
+    try {
+      for (const id of ids) {
+        await deleteProduct(id);
+      }
+      toast.success(`Đã xóa ${ids.length} sản phẩm`);
+      clear();
+      setDeletingBulkProducts(null);
+    } catch (err: any) {
+      console.error('Lỗi khi xóa hàng loạt:', err);
+      toast.error('Có lỗi xảy ra khi xóa một số sản phẩm: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
+    }
   };
 
   const handleExportCsv = () => {
@@ -586,12 +615,22 @@ function generateSkuCode(existingSkus: string[] = []): string {
       },
       {
         accessorKey: 'category',
-        header: 'Danh mục',
-        cell: (info) => (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/20">
-            {info.getValue() as string}
-          </span>
-        ),
+        header: 'Danh mục & Thuế',
+        cell: ({ row }) => {
+          const cat = row.original.category;
+          const tax = row.original.taxClass;
+          const vatPct = row.original.vatRate !== undefined ? Math.round(row.original.vatRate * 100) : (tax === 'VAT_10' ? 10 : tax === 'VAT_5' ? 5 : tax === 'VAT_0' || tax === 'EXEMPT' ? 0 : 8);
+          return (
+            <div className="flex flex-col gap-1 items-start">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/20">
+                {cat}
+              </span>
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                VAT: {vatPct}%
+              </span>
+            </div>
+          );
+        },
       },
       {
         accessorKey: 'price',
@@ -784,7 +823,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
                 <option value="all">Toàn hệ thống (Tất cả chi nhánh)</option>
                 {branches.map((b) => (
                   <option key={b.id} value={String(b.id)}>
-                    {b.branchName}
+                    {b.name || (b as any).branchName}
                   </option>
                 ))}
               </select>
@@ -1182,7 +1221,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   <div className="space-y-1.5">
                     <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Danh mục</label>
                     <select
@@ -1191,6 +1230,21 @@ function generateSkuCode(existingSkus: string[] = []): string {
                       className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
                     >
                       {categories.map(c => <option key={c.id} value={c.categoryName}>{c.categoryName}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Thuế suất VAT</label>
+                    <select
+                      value={editingProduct.taxClass || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, taxClass: (e.target.value || undefined) as any })}
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                    >
+                      <option value="">Theo danh mục</option>
+                      <option value="VAT_0">VAT 0%</option>
+                      <option value="VAT_5">VAT 5%</option>
+                      <option value="VAT_8">VAT 8%</option>
+                      <option value="VAT_10">VAT 10%</option>
+                      <option value="EXEMPT">Miễn thuế</option>
                     </select>
                   </div>
                   <div className="space-y-1.5">
@@ -1295,6 +1349,41 @@ function generateSkuCode(existingSkus: string[] = []): string {
                       onChange={(e) => setEditingProduct({ ...editingProduct, maxStock: parseFloat(e.target.value) })}
                       className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm"
                     />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-gray-100 dark:border-gray-800">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Xuất xứ / Quốc gia</label>
+                    <input
+                      type="text"
+                      placeholder="VD: Việt Nam, Nhật Bản, Mỹ"
+                      value={editingProduct.originCountry || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, originCountry: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/50 shadow-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Thời hạn bảo hành (tháng)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editingProduct.warrantyPeriodMonths || 0}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, warrantyPeriodMonths: parseInt(e.target.value) || 0 })}
+                      className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/50 shadow-sm"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 pt-6">
+                    <input
+                      type="checkbox"
+                      id="isSerialTracked"
+                      checked={Boolean(editingProduct.isSerialTracked)}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, isSerialTracked: e.target.checked })}
+                      className="w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500"
+                    />
+                    <label htmlFor="isSerialTracked" className="text-xs font-bold text-gray-700 dark:text-gray-300 cursor-pointer">
+                      Quản lý theo Serial / IMEI
+                    </label>
                   </div>
                 </div>
               </div>

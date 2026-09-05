@@ -1,6 +1,7 @@
 import { axiosClient } from '@/shared/lib/axiosClient';
 import type {
   SupplierRecord,
+  PurchaseOrderItem,
   PurchaseOrderRecord,
   PurchaseRequestRecord,
   SupplierContractRecord,
@@ -107,26 +108,59 @@ export const purchaseService = {
   async fetchPurchaseOrders(): Promise<PurchaseOrderItem[]> {
     const res = await axiosClient.get<any, any>('/purchase/orders?sort=id,desc');
     const list = Array.isArray(res) ? res : (res?.content || res?.data || []);
-    return list.map((item: any) => ({
-      id: String(item.id),
-      poNumber: item.poCode || item.poNumber || item.code || `PO-${item.id}`,
-      supplierName: item.supplierName || item.supplier?.name || 'Nhà cung cấp',
-      destinationStore: item.branchName || item.branch?.name || item.destinationStore || 'Chi nhánh chính',
-      orderDate: item.poDate ? String(item.poDate).split('T')[0] : (item.orderDate ? String(item.orderDate).split('T')[0] : new Date().toISOString().split('T')[0]),
-      estDeliveryDate: item.expectedDate ? String(item.expectedDate).split('T')[0] : (item.estDeliveryDate || ''),
-      totalCost: Number(item.totalAmount || item.totalCost || 0),
-      status: item.status || 'DRAFT',
-      paymentStatus: item.paymentStatus || 'UNPAID',
-      orderedBy: item.createdByName || item.orderedBy || 'Admin User',
-      itemsCount: item.details ? item.details.length : Number(item.itemsCount || 1),
-      notes: item.note || item.notes || '',
-      poLines: item.details ? item.details.map((d: any) => ({
-        productId: d.productId || d.product?.id,
-        productName: d.productNameSnapshot || d.productName || d.product?.name || 'Sản phẩm đặt mua',
-        quantity: Number(d.quantity || 1),
-        unitPrice: Number(d.unitPriceSnapshot || d.unitPrice || 0)
-      })) : []
-    }));
+
+    let overrides: Record<string, any> = {};
+    try {
+      const saved = localStorage.getItem('retailhub_po_payment_overrides');
+      if (saved) overrides = JSON.parse(saved);
+    } catch {}
+
+    return list.map((item: any) => {
+      const poNum = item.poCode || item.poNumber || item.code || `PO-${item.id}`;
+      const ov = overrides[String(item.id)] || overrides[poNum] || {};
+
+      const rawStatus = ov.status || item.status || 'DRAFT';
+      const isDraftOrPending =
+        rawStatus === 'DRAFT' ||
+        rawStatus === 'PENDING_APPROVAL' ||
+        rawStatus === 'BẢN NHÁP' ||
+        rawStatus === 'CHỜ DUYỆT';
+
+      // Bản nháp / Chờ duyệt KHÔNG được phép thanh toán -> luôn là UNPAID và advanceAmount = 0
+      const paymentStatus: 'UNPAID' | 'PARTIAL_ADVANCE' | 'PAID' = isDraftOrPending
+        ? 'UNPAID'
+        : (ov.paymentStatus || item.paymentStatus || 'UNPAID');
+
+      const totalCost = Number(item.totalAmount || item.totalCost || 0);
+      const advanceAmount = isDraftOrPending
+        ? 0
+        : (ov.advanceAmount !== undefined ? Number(ov.advanceAmount) : Number(item.advanceAmount || 0));
+
+      return {
+        id: String(item.id),
+        poNumber: poNum,
+        supplierName: item.supplierName || item.supplier?.name || 'Nhà cung cấp',
+        destinationStore: item.branchName || item.branch?.name || item.destinationStore || 'Chi nhánh chính',
+        orderDate: item.poDate ? String(item.poDate).split('T')[0] : (item.orderDate ? String(item.orderDate).split('T')[0] : new Date().toISOString().split('T')[0]),
+        estDeliveryDate: item.expectedDate ? String(item.expectedDate).split('T')[0] : (item.estDeliveryDate || ''),
+        totalCost,
+        status: rawStatus,
+        paymentStatus,
+        advanceAmount,
+        paidAmount: advanceAmount,
+        paymentTerms: item.paymentTerms || 'Net 30',
+        shippingFee: Number(item.shippingFee || 0),
+        orderedBy: item.createdByName || item.orderedBy || 'Admin User',
+        itemsCount: item.details ? item.details.length : Number(item.itemsCount || 1),
+        notes: item.note || item.notes || '',
+        poLines: item.details ? item.details.map((d: any) => ({
+          productId: d.productId || d.product?.id,
+          productName: d.productNameSnapshot || d.productName || d.product?.name || 'Sản phẩm đặt mua',
+          quantity: Number(d.quantity || 1),
+          unitPrice: Number(d.unitPriceSnapshot || d.unitPrice || 0)
+        })) : []
+      };
+    });
   },
 
   async addPurchaseOrder(po: Omit<PurchaseOrderItem, 'id'>): Promise<PurchaseOrderItem> {
@@ -178,23 +212,29 @@ export const purchaseService = {
       prodList = Array.isArray(prodRes) ? prodRes : (prodRes?.content || prodRes?.data || []);
     } catch {}
 
-    const firstValidProdId = prodList.length > 0 && prodList[0].id ? Number(prodList[0].id) : 1;
+    if (!po.poLines || po.poLines.length === 0) {
+      throw new Error('Đơn mua hàng phải có ít nhất một sản phẩm chi tiết.');
+    }
 
-    const details = (po.poLines && po.poLines.length > 0 ? po.poLines : [{ productName: 'Sản phẩm', quantity: 1, unitPrice: po.totalCost || 100000 }]).map((l: any, idx: number) => {
+    const details = po.poLines.map((l: any) => {
       let pid = Number(l.productId);
       if (!pid || isNaN(pid)) {
         const matchedProd = prodList.find(
           (p: any) =>
             (p.name && p.name.toLowerCase() === (l.productName || '').toLowerCase()) ||
-            (p.productCode && p.productCode.toLowerCase() === (l.productName || '').toLowerCase()) ||
-            String(p.id) === String(l.productId)
+            (p.productCode && p.productCode.toLowerCase() === (l.productName || '').toLowerCase())
         );
-        pid = matchedProd?.id ? Number(matchedProd.id) : (prodList[idx % Math.max(1, prodList.length)]?.id ? Number(prodList[idx % Math.max(1, prodList.length)].id) : firstValidProdId);
+        if (matchedProd?.id) {
+          pid = Number(matchedProd.id);
+        }
+      }
+      if (!pid || isNaN(pid)) {
+        throw new Error(`Không tìm thấy sản phẩm '${l.productName || l.productId}' trong hệ thống.`);
       }
       return {
         productId: pid,
         quantity: Math.max(1, Number(l.quantity) || 1),
-        unitPrice: Math.max(1000, Number(l.unitPrice) || 1000),
+        unitPrice: Math.max(0, Number(l.unitPrice) || 0),
       };
     });
 
@@ -212,15 +252,24 @@ export const purchaseService = {
       ? po.poNumber
       : `PO-${now.getFullYear()}-${Date.now().toString().slice(-5)}${Math.floor(10 + Math.random() * 90)}`;
 
+    const rawStatus = (po.status as string) || 'DRAFT';
+    const isDraftOrPending =
+      rawStatus === 'DRAFT' ||
+      rawStatus === 'PENDING_APPROVAL' ||
+      rawStatus === 'BẢN NHÁP' ||
+      rawStatus === 'CHỜ DUYỆT';
+
     const payload = {
       poCode: uniquePoCode,
       poDate: formatLocalDateTime(po.orderDate),
       expectedDate: (po.estDeliveryDate || (po as any).expectedDeliveryDate || (po as any).expectedDate) ? formatLocalDateTime(po.estDeliveryDate || (po as any).expectedDeliveryDate || (po as any).expectedDate) : null,
       supplierId: supplierId || 1,
       branchId: branchId || 1,
-      status: po.status || 'DRAFT',
-      paymentStatus: po.paymentStatus || 'UNPAID',
-      advanceAmount: Number((po as any).advanceAmount || 0),
+      status: rawStatus,
+      paymentStatus: isDraftOrPending ? 'UNPAID' : (po.paymentStatus || 'UNPAID'),
+      advanceAmount: isDraftOrPending ? 0 : Number((po as any).advanceAmount || 0),
+      paymentTerms: po.paymentTerms || 'Net 30',
+      shippingFee: Number(po.shippingFee || 0),
       note: po.notes || '',
       details: details,
     };
@@ -278,14 +327,23 @@ export const purchaseService = {
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     };
 
+    const rawStatus = (data.status as string) || 'DRAFT';
+    const isDraftOrPending =
+      rawStatus === 'DRAFT' ||
+      rawStatus === 'PENDING_APPROVAL' ||
+      rawStatus === 'BẢN NHÁP' ||
+      rawStatus === 'CHỜ DUYỆT';
+
     const payload = {
       poDate: formatLocalDateTime(data.orderDate),
       expectedDate: (data.estDeliveryDate || (data as any).expectedDeliveryDate || (data as any).expectedDate) ? formatLocalDateTime(data.estDeliveryDate || (data as any).expectedDeliveryDate || (data as any).expectedDate) : null,
       supplierId: supplierId,
       branchId: branchId,
-      status: data.status || 'DRAFT',
-      paymentStatus: data.paymentStatus || 'UNPAID',
-      advanceAmount: Number((data as any).advanceAmount || 0),
+      status: rawStatus,
+      paymentStatus: isDraftOrPending ? 'UNPAID' : (data.paymentStatus || 'UNPAID'),
+      advanceAmount: isDraftOrPending ? 0 : Number((data as any).advanceAmount || 0),
+      paymentTerms: data.paymentTerms !== undefined ? data.paymentTerms : undefined,
+      shippingFee: data.shippingFee !== undefined ? Number(data.shippingFee) : undefined,
       note: data.notes || '',
       details: details,
     };
@@ -425,7 +483,16 @@ export const purchaseService = {
   },
 
   async addSupplierContract(ctr: Omit<SupplierContractRecord, 'id'>): Promise<SupplierContractRecord> {
-    const res = await axiosClient.post<any, any>('/purchase/contracts', ctr);
+    const payload = {
+      contractCode: ctr.contractCode,
+      supplierId: (ctr as any).supplierId ? Number((ctr as any).supplierId) : 1,
+      startDate: ctr.startDate || new Date().toISOString().split('T')[0],
+      endDate: ctr.endDate || new Date().toISOString().split('T')[0],
+      contractValue: ctr.contractValue || 0,
+      title: ctr.title || '',
+      status: ctr.status || 'ACTIVE',
+    };
+    const res = await axiosClient.post<any, any>('/purchase/contracts', payload);
     const item = res?.data || res;
     return {
       id: String(item?.id || Date.now()),
@@ -456,12 +523,21 @@ export const purchaseService = {
       priceScore: Number(item.priceScore || 5),
       overallScore: Number(item.overallScore || 5),
       evaluatorName: item.evaluatorName || 'Quản lý mua hàng',
-      evaluatedDate: item.evaluatedDate ? item.evaluatedDate.split('T')[0] : '',
+      evaluatedDate: item.evalDate ? item.evalDate.split('T')[0] : (item.evaluatedDate ? item.evaluatedDate.split('T')[0] : ''),
     }));
   },
 
   async addSupplierEvaluation(evalItem: Omit<SupplierEvaluationRecord, 'id'>): Promise<SupplierEvaluationRecord> {
-    const res = await axiosClient.post<any, any>('/purchase/evaluations', evalItem);
+    const payload = {
+      supplierId: (evalItem as any).supplierId ? Number((evalItem as any).supplierId) : 1,
+      evalDate: evalItem.evaluatedDate || new Date().toISOString().split('T')[0],
+      qualityScore: evalItem.qualityScore || 5,
+      deliveryScore: evalItem.deliveryScore || 5,
+      priceScore: evalItem.priceScore || 5,
+      serviceScore: evalItem.overallScore || 5,
+      notes: (evalItem as any).notes || `Đánh giá định kỳ ${evalItem.evaluationPeriod || ''}`,
+    };
+    const res = await axiosClient.post<any, any>('/purchase/evaluations', payload);
     const item = res?.data || res;
     return {
       id: String(item?.id || Date.now()),

@@ -1,14 +1,16 @@
 import { useSearchParams } from 'react-router';
-import { BookOpen, ListTree, Receipt, HelpCircle } from 'lucide-react';
+import { BookOpen, ListTree, Receipt, HelpCircle, PieChart } from 'lucide-react';
 import { RoleGuard } from '@/routes/RoleGuard';
 import { JournalEntriesPage } from './JournalEntriesPage';
 import ChartOfAccountsPage from './ChartOfAccountsPage';
+import CostCentersPage from './CostCentersPage';
 import { TaxDutiesPage } from './TaxDutiesPage';
 import { TransactionReasonsPage } from './TransactionReasonsPage';
 
 const tabs = [
   { id: 'journal', label: 'Bút toán Sổ nhật ký', icon: BookOpen, permission: 'finance:journal:view' },
   { id: 'coa', label: 'Hệ thống Tài khoản (COA)', icon: ListTree, permission: 'finance:chart-of-accounts:view' },
+  { id: 'cost-centers', label: 'Trung tâm chi phí', icon: PieChart, permission: 'finance:cost-center:view' },
   { id: 'tax', label: 'Thuế & Nghĩa vụ tài chính', icon: Receipt, permission: 'finance:tax-duty:view' },
   { id: 'reasons', label: 'Lý do Giao dịch Thu/Chi', icon: HelpCircle, permission: 'finance:transaction-reason:view' },
 ] as const;
@@ -69,6 +71,11 @@ export function FinanceAccountingTabbedPage() {
         {activeTab === 'coa' && (
           <RoleGuard requiredPermission="finance:chart-of-accounts:view">
             <ChartOfAccountsPage />
+          </RoleGuard>
+        )}
+        {activeTab === 'cost-centers' && (
+          <RoleGuard requiredPermission="finance:cost-center:view">
+            <CostCentersPage />
           </RoleGuard>
         )}
         {activeTab === 'tax' && (

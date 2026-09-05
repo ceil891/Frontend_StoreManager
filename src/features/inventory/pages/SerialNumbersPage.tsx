@@ -15,9 +15,33 @@ interface POLookupOption {
   skus: { sku: string; name: string; unitCost: number }[];
 }
 
+// Validate IMEI using Luhn algorithm (15 digits)
+function isValidIMEI(imei?: string): boolean {
+  if (!imei) return false;
+  const cleaned = imei.trim();
+  if (!/^\d{15}$/.test(cleaned)) return false;
+  let sum = 0;
+  for (let i = 0; i < 15; i++) {
+    let digit = parseInt(cleaned.charAt(i), 10);
+    if (i % 2 === 1) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+  }
+  return sum % 10 === 0;
+}
+
+// Validate alphanumeric Serial (6 - 32 chars, letters, numbers, dashes)
+function isValidSerial(serial?: string): boolean {
+  if (!serial) return false;
+  return /^[A-Za-z0-9\-_]{6,32}$/.test(serial.trim());
+}
+
 export function SerialNumbersPage() {
   const {
     serialItems: data,
+    fetchSerialItems,
     addSerialItem,
     updateSerialItem,
     deleteSerialItem,
@@ -77,68 +101,25 @@ export function SerialNumbersPage() {
       const mapped: POLookupOption[] = list.map((po: any, idx: number) => ({
         poNumber: po.poNumber || `PO-2026-${String(po.id).padStart(4, '0')}`,
         supplierName: po.supplierName || po.supplier?.name || 'Công ty Công nghệ Việt',
-        locationName: po.destinationStore || 'Kho trung tâm',
-        skus: Array.isArray(po.poLines) && po.poLines.length > 0 ? po.poLines.map((l: any) => ({
+        locationName: po.destinationStore || po.branch?.name || 'Kho Chi Nhánh',
+        skus: Array.isArray(po.poLines) ? po.poLines.map((l: any) => ({
           sku: l.sku || `SKU-${idx + 1}`,
           name: l.productName || 'Sản phẩm đặt mua',
-          unitCost: Number(l.unitPrice || 15000000),
-        })) : [
-          { sku: 'SKU-IP15-128', name: 'iPhone 15 Pro Max 256GB', unitCost: 28500000 },
-          { sku: 'SKU-XPRINTER-Q200', name: 'Máy in hóa đơn nhiệt Xprinter Q200', unitCost: 1850000 },
-        ]
+          unitCost: Number(l.unitPrice || 0),
+        })) : []
       }));
 
-      if (mapped.length === 0) {
-        setPoList([
-          {
-            poNumber: 'PO-2026-7394416',
-            supplierName: 'Công ty Công nghệ Việt (VTP)',
-            locationName: 'Kho tổng trung tâm (Hà Nội)',
-            skus: [
-              { sku: 'SKU-IP15-128', name: 'iPhone 15 Pro Max 256GB', unitCost: 28500000 },
-              { sku: 'SKU-DELL-XPS', name: 'Laptop Dell XPS 15 9530', unitCost: 35000000 },
-            ]
-          },
-          {
-            poNumber: 'PO-2026-6756535',
-            supplierName: 'Công ty TNHH Thiết bị số FPT',
-            locationName: 'Kho chi nhánh quận 1 (TP.HCM)',
-            skus: [
-              { sku: 'SKU-SS-S24', name: 'Samsung Galaxy S24 Ultra', unitCost: 26900000 },
-              { sku: 'SKU-XPRINTER-Q200', name: 'Máy in hóa đơn nhiệt Xprinter Q200', unitCost: 1850000 },
-            ]
-          }
-        ]);
-      } else {
-        setPoList(mapped);
-      }
+      setPoList(mapped);
     } catch (err) {
-      setPoList([
-        {
-          poNumber: 'PO-2026-7394416',
-          supplierName: 'Công ty Công nghệ Việt (VTP)',
-          locationName: 'Kho tổng trung tâm (Hà Nội)',
-          skus: [
-            { sku: 'SKU-IP15-128', name: 'iPhone 15 Pro Max 256GB', unitCost: 28500000 },
-            { sku: 'SKU-DELL-XPS', name: 'Laptop Dell XPS 15 9530', unitCost: 35000000 },
-          ]
-        },
-        {
-          poNumber: 'PO-2026-6756535',
-          supplierName: 'Công ty TNHH Thiết bị số FPT',
-          locationName: 'Kho chi nhánh quận 1 (TP.HCM)',
-          skus: [
-            { sku: 'SKU-SS-S24', name: 'Samsung Galaxy S24 Ultra', unitCost: 26900000 },
-          ]
-        }
-      ]);
+      setPoList([]);
     }
   };
 
   useEffect(() => {
     fetchProducts();
+    fetchSerialItems();
     fetchPOReferences();
-  }, [fetchProducts]);
+  }, [fetchProducts, fetchSerialItems]);
 
   useEffect(() => {
     if (serialManagedProducts.length > 0 && !selectedProductId) {
@@ -424,6 +405,30 @@ export function SerialNumbersPage() {
         header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
+            {row.original.status === 'IN_STOCK' && (
+              <button
+                onClick={() => {
+                  updateSerialItem(row.original.id, { status: 'RMA_REPAIR' });
+                  toast.info(`Thiết bị ${row.original.serialNumber} đã chuyển sang trạng thái Bảo hành/Sửa chữa`);
+                }}
+                className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors"
+                title="Chuyển sang Bảo hành / Sửa chữa"
+              >
+                <Wrench className="w-4 h-4" />
+              </button>
+            )}
+            {row.original.status === 'RMA_REPAIR' && (
+              <button
+                onClick={() => {
+                  updateSerialItem(row.original.id, { status: 'IN_STOCK' });
+                  toast.success(`Thiết bị ${row.original.serialNumber} đã hoàn tất bảo hành và nhập lại kho`);
+                }}
+                className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+                title="Hoàn tất bảo hành -> Trở lại Trong kho"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={() => setSelectedSerial(row.original)}
               className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
@@ -775,6 +780,11 @@ export function SerialNumbersPage() {
                       className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono font-bold bg-white dark:bg-gray-900 text-primary"
                       required
                     />
+                    {editingSerial.serialNumber && (
+                      <p className={`text-[10px] mt-1 flex items-center gap-1 font-medium ${isValidSerial(editingSerial.serialNumber) ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                        {isValidSerial(editingSerial.serialNumber) ? '✓ Định dạng Serial hợp lệ (6-32 ký tự)' : '⚠ Serial nên có từ 6 đến 32 ký tự chữ/số'}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Địa chỉ MAC (nếu có)</label>
@@ -805,6 +815,11 @@ export function SerialNumbersPage() {
                         placeholder="Nhập 15 chữ số IMEI 1..."
                         className="w-full p-2 border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-900 text-blue-900 dark:text-blue-200 font-bold"
                       />
+                      {editingSerial.imei1 && (
+                        <p className={`text-[10px] mt-1 flex items-center gap-1 font-medium ${isValidIMEI(editingSerial.imei1) ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                          {isValidIMEI(editingSerial.imei1) ? '✓ IMEI 1 hợp lệ (Chuẩn Luhn GSMA 15 số)' : `⚠ IMEI 1 chưa đúng chuẩn Luhn (Hiện có ${editingSerial.imei1.length}/15 số)`}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Số IMEI 2 (SIM 2 / eSIM)</label>
@@ -816,6 +831,11 @@ export function SerialNumbersPage() {
                         placeholder="Nhập 15 chữ số IMEI 2..."
                         className="w-full p-2 border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-900 text-blue-900 dark:text-blue-200 font-bold"
                       />
+                      {editingSerial.imei2 && (
+                        <p className={`text-[10px] mt-1 flex items-center gap-1 font-medium ${isValidIMEI(editingSerial.imei2) ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                          {isValidIMEI(editingSerial.imei2) ? '✓ IMEI 2 hợp lệ (Chuẩn Luhn GSMA 15 số)' : `⚠ IMEI 2 chưa đúng chuẩn Luhn (Hiện có ${editingSerial.imei2.length}/15 số)`}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

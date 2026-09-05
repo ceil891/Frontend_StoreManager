@@ -9,6 +9,8 @@ export interface PrintLineItem {
   quantity: number;
   price: number;
   discount?: number;
+  taxRate?: number;
+  taxAmount?: number;
   total: number;
 }
 
@@ -124,11 +126,12 @@ export function PrintInvoiceModal({ isOpen, onClose, data }: PrintInvoiceModalPr
                 <tr>
                   <th className="p-2.5 w-10 text-center">STT</th>
                   <th className="p-2.5">Tên sản phẩm / SKU</th>
-                  <th className="p-2.5 w-20 text-center">ĐVT</th>
-                  <th className="p-2.5 w-20 text-center">Số lượng</th>
-                  <th className="p-2.5 w-28 text-right">Đơn giá</th>
-                  <th className="p-2.5 w-24 text-right">Chiết khấu</th>
-                  <th className="p-2.5 w-32 text-right">Thành tiền</th>
+                  <th className="p-2.5 w-16 text-center">ĐVT</th>
+                  <th className="p-2.5 w-16 text-center">Số lượng</th>
+                  <th className="p-2.5 w-24 text-right">Đơn giá</th>
+                  <th className="p-2.5 w-20 text-right">Chiết khấu</th>
+                  <th className="p-2.5 w-20 text-center">Thuế VAT</th>
+                  <th className="p-2.5 w-28 text-right">Thành tiền</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
@@ -144,6 +147,9 @@ export function PrintInvoiceModal({ isOpen, onClose, data }: PrintInvoiceModalPr
                     <td className="p-2.5 text-right font-mono">{item.price.toLocaleString('vi-VN')} đ</td>
                     <td className="p-2.5 text-right font-mono text-red-500 font-medium">
                       {item.discount ? `${item.discount.toLocaleString('vi-VN')} đ` : '-'}
+                    </td>
+                    <td className="p-2.5 text-center font-medium text-gray-700 dark:text-gray-300">
+                      {item.taxRate !== undefined ? `${Math.round(item.taxRate * 100)}%` : '8%'}
                     </td>
                     <td className="p-2.5 text-right font-bold font-mono text-gray-900 dark:text-white">
                       {item.total.toLocaleString('vi-VN')} đ

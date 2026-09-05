@@ -44,12 +44,12 @@ export function PaymentVouchersPage() {
         const list = Array.isArray(res) ? res : (res?.content || res?.data || []);
         const filteredUnpaid = list.filter((p: any) => p.paymentStatus !== 'PAID').map((p: any) => {
           const total = Number(p.totalAmount || p.totalCost || 0);
-          const paid = Number(p.paidAmount || 0);
+          const paid = Number(p.advanceAmount ?? p.paidAmount ?? 0);
           const remaining = Math.max(0, total - paid);
           return {
             code: p.poCode || p.poNumber || `INV-PUR-${p.id}`,
             supplierName: p.supplierName || p.supplier?.name || 'Nhà cung cấp',
-            remainingDebt: remaining > 0 ? remaining : total,
+            remainingDebt: remaining,
           };
         });
         setUnpaidInvoices(filteredUnpaid);
@@ -137,37 +137,51 @@ export function PaymentVouchersPage() {
     }
   };
 
-  const handleSaveVoucher = (e: React.FormEvent) => {
+  const handleSaveVoucher = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingVoucher.voucherNumber || !editingVoucher.payeeName) return;
 
     if (modalMode === 'create') {
-      addPayment({
-        voucherNumber: editingVoucher.voucherNumber || generateAutoCode(),
-        payeeName: editingVoucher.payeeName || 'Đơn vị thụ hưởng',
-        category: editingVoucher.category || 'SUPPLIER_PAYMENT',
-        amount: Number(editingVoucher.amount) || 0,
-        paymentMethod: editingVoucher.paymentMethod || 'BANK_TRANSFER',
-        paymentDate: editingVoucher.paymentDate || new Date().toISOString().substring(0, 10),
-        bankAccountRef: editingVoucher.bankAccountRef || 'Tài khoản công ty',
-        approver: editingVoucher.approver || 'Super Admin',
-        status: editingVoucher.status || 'PENDING_APPROVAL',
-        branchId: editingVoucher.branchId || 'BR-001',
-        referenceDoc: editingVoucher.referenceDoc,
-        notes: editingVoucher.notes,
-      });
-      toast.success(`Đã lập phiếu chi ${editingVoucher.voucherNumber} thành công!`);
+      try {
+        await addPayment({
+          voucherNumber: editingVoucher.voucherNumber || generateAutoCode(),
+          payeeName: editingVoucher.payeeName || 'Đơn vị thụ hưởng',
+          category: editingVoucher.category || 'SUPPLIER_PAYMENT',
+          amount: Number(editingVoucher.amount) || 0,
+          paymentMethod: editingVoucher.paymentMethod || 'BANK_TRANSFER',
+          paymentDate: editingVoucher.paymentDate || new Date().toISOString().substring(0, 10),
+          bankAccountRef: editingVoucher.bankAccountRef || 'Tài khoản công ty',
+          approver: editingVoucher.approver || 'Super Admin',
+          status: editingVoucher.status || 'PENDING_APPROVAL',
+          branchId: editingVoucher.branchId || 'BR-001',
+          referenceDoc: editingVoucher.referenceDoc,
+          notes: editingVoucher.notes,
+        });
+        toast.success(`Đã lập phiếu chi ${editingVoucher.voucherNumber} thành công!`);
+        setIsModalOpen(false);
+      } catch (err: any) {
+        toast.error(err?.response?.data?.message || err?.message || 'Lập phiếu chi thất bại');
+      }
     } else if (editingVoucher.id) {
-      updatePayment(editingVoucher.id, editingVoucher);
-      toast.success(`Đã cập nhật phiếu chi ${editingVoucher.voucherNumber}`);
+      try {
+        await updatePayment(editingVoucher.id, editingVoucher);
+        toast.success(`Đã cập nhật phiếu chi ${editingVoucher.voucherNumber}`);
+        setIsModalOpen(false);
+      } catch (err: any) {
+        toast.error(err?.response?.data?.message || err?.message || 'Cập nhật phiếu chi thất bại');
+      }
     }
-    setIsModalOpen(false);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingVoucher) return;
-    deletePayment(deletingVoucher.id);
-    setDeletingVoucher(null);
+    try {
+      await deletePayment(deletingVoucher.id);
+      toast.success('Đã xóa phiếu chi thành công');
+      setDeletingVoucher(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Không thể xóa phiếu chi');
+    }
   };
 
   const columns = useMemo<ColumnDef<PaymentVoucher>[]>(
@@ -398,12 +412,16 @@ export function PaymentVouchersPage() {
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
               {selectedVoucher.status === 'PENDING_APPROVAL' && (
                 <button
-                  onClick={() => {
-                    updatePayment(selectedVoucher.id, { status: 'COMPLETED' });
-                    setSelectedVoucher({ ...selectedVoucher, status: 'COMPLETED' });
-                    toast.success('Đã phê duyệt & thực hiện lệnh chuyển thành công!');
+                  onClick={async () => {
+                    try {
+                      await updatePayment(selectedVoucher.id, { status: 'COMPLETED' });
+                      setSelectedVoucher({ ...selectedVoucher, status: 'COMPLETED' });
+                      toast.success('Đã phê duyệt & thực hiện lệnh chuyển thành công!');
+                    } catch (err: any) {
+                      toast.error(err?.response?.data?.message || err?.message || 'Phê duyệt thất bại');
+                    }
                   }}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm cursor-pointer"
                 >
                   Phê duyệt & Thực hiện lệnh chuyển
                 </button>

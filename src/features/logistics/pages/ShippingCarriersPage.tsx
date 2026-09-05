@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -318,36 +319,24 @@ export function ShippingCarriersPage() {
         email: recordToSave.email,
         website: recordToSave.website,
         isActive: recordToSave.hasApi,
-        note: recordToSave.notes
+        notes: recordToSave.notes,
+        address: recordToSave.address || `${recordToSave.addressDetail || ''}, ${recordToSave.district || ''}, ${recordToSave.province || ''}`,
+        contactPerson: recordToSave.contactPerson,
       };
 
-      const isNumericId = recordToSave.id && /^\d+$/.test(String(recordToSave.id));
       if (modalMode === 'create') {
         await axiosClient.post('/logistics/carriers', payload);
-      } else if (isNumericId) {
+        toast.success('Thêm Đối Tác vận chuyển mới thành công!');
+      } else {
         await axiosClient.put(`/logistics/carriers/${recordToSave.id}`, payload);
+        toast.success('Cập nhật thông tin đối tác thành công!');
       }
-    } catch (err) {
-      console.warn('API save carrier failed, applying local state update:', err);
+      await fetchCarriers();
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error('API save carrier failed:', err);
+      toast.error('Lỗi khi lưu đối tác vận chuyển: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
-
-    if (modalMode === 'create') {
-      setData(prev => {
-        const next = [recordToSave, ...prev];
-        saveCarriersList(next);
-        return next;
-      });
-      toast.success('Thêm Đối Tác vận chuyển mới thành công!');
-    } else {
-      setData(prev => {
-        const next = prev.map(item => item.id === recordToSave.id ? recordToSave : item);
-        saveCarriersList(next);
-        return next;
-      });
-      toast.success('Cập nhật thông tin đối tác thành công!');
-    }
-
-    setIsModalOpen(false);
   };
 
   const { areas, fetchAreas } = useAreaStore();
@@ -356,29 +345,20 @@ export function ShippingCarriersPage() {
     fetchAreas();
   }, [fetchAreas]);
 
-  const handleDelete = async (id: string) => {
-    const target = data.find(item => item.id === id);
-    if (target && target.contractStatus === 'ACTIVE') {
-      toast.error('Không thể xóa đối tác đang hoạt động! Vui lòng chuyển trạng thái hợp đồng trước khi xóa.');
-      return;
-    }
+  const [deletingItem, setDeletingItem] = useState<CarrierRecord | null>(null);
 
-    if (confirm('Bạn có chắc chắn muốn xóa đối tác này?')) {
-      const isNumericId = /^\d+$/.test(String(id));
-      if (isNumericId) {
-        try {
-          await axiosClient.delete(`/logistics/carriers/${id}`);
-        } catch (err) {
-          console.warn('API delete carrier failed, applying local state update:', err);
-        }
-      }
-      setData(prev => {
-        const next = prev.filter(item => item.id !== id);
-        saveCarriersList(next);
-        return next;
-      });
-      toast.success('Đã xóa đối tác vận chuyển thành công!');
-      setSelected(null);
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    const id = deletingItem.id;
+    try {
+      await axiosClient.delete(`/logistics/carriers/${id}`);
+      toast.success(`Đã xóa đối tác vận chuyển "${deletingItem.carrierName}" thành công!`);
+      if (selected?.id === id) setSelected(null);
+      setDeletingItem(null);
+      await fetchCarriers();
+    } catch (err: any) {
+      console.error('API delete carrier failed:', err);
+      toast.error('Lỗi khi xóa đối tác từ máy chủ: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
   };
 
@@ -604,7 +584,14 @@ export function ShippingCarriersPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); handleDelete(row.original.id); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (row.original.contractStatus === 'ACTIVE') {
+                  toast.error('Không thể xóa đối tác đang hoạt động! Vui lòng chuyển trạng thái hợp đồng trước khi xóa.');
+                  return;
+                }
+                setDeletingItem(row.original);
+              }}
               className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
               title="Xóa đối tác"
             >
@@ -1155,6 +1142,14 @@ export function ShippingCarriersPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa hãng vận chuyển"
+        description={`Bạn có chắc chắn muốn xóa hãng vận chuyển "${deletingItem?.carrierName}" (${deletingItem?.carrierCode}) không?`}
+      />
     </div>
   );
 }

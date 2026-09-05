@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Filter, Eye, Building2, Calendar, FileText, ShieldCheck, FileCheck, Edit, Trash2 } from 'lucide-react';
+import { Plus, Download, Search, Filter, Eye, Building2, Calendar, FileText, ShieldCheck, FileCheck, CheckCircle, Edit, Trash2, AlertCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -10,14 +10,26 @@ import { toast } from 'sonner';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
+import { useAuthStore } from '@/features/auth/store/authStore';
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Bản nháp',
   PENDING_APPROVAL: 'Chờ duyệt',
   APPROVED: 'Đã duyệt',
+  SENT_TO_SUPPLIER: 'Đã gửi NCC',
+  CONFIRMED: 'Đã xác nhận',
   DISPATCHED: 'Đang vận chuyển',
+  IN_TRANSIT: 'Đang vận chuyển',
+  SHIPPED: 'Đang giao hàng',
   DELIVERED: 'Đã giao hàng',
+  RECEIVED: 'Đã nhận hàng',
+  DA_NHAN: 'Đã nhận hàng',
+  COMPLETED: 'Đã hoàn thành',
   CANCELLED: 'Đã hủy',
+  REJECTED: 'Đã từ chối',
+  PARTIALLY_DELIVERED: 'Giao một phần',
+  PARTIALLY_RECEIVED: 'Đã nhận một phần',
+  PARTIAL_RECEIVED: 'Đã nhận một phần',
 };
 
 interface POLineItem {
@@ -29,8 +41,10 @@ interface POLineItem {
 export function PurchaseOrdersPage() {
   const { purchaseOrders: data, addPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, fetchPurchaseOrders } = usePurchaseStore();
   const [apiSuppliers, setApiSuppliers] = useState<string[]>([]);
-  const [apiProducts, setApiProducts] = useState<{ name: string; price: number }[]>([]);
+  const [apiProducts, setApiProducts] = useState<{ id?: string; name: string; price: number; supplierName?: string }[]>([]);
   const [apiBranches, setApiBranches] = useState<string[]>([]);
+  const currentUser = useAuthStore((s) => s.user);
+  const currentUserName = currentUser?.name || currentUser?.email || 'Nhân viên thu mua';
 
   useEffect(() => {
     fetchPurchaseOrders();
@@ -43,8 +57,10 @@ export function PurchaseOrdersPage() {
     axiosClient.get('/products?size=500').then((res: any) => {
       const list = extractPageContent<any>(res);
       setApiProducts(list.map((p: any) => ({
+        id: String(p.id || ''),
         name: p.name || p.productName || '',
-        price: Number(p.costPrice || p.basePrice || p.retailPrice || 0)
+        price: Number(p.costPrice || p.basePrice || p.retailPrice || 0),
+        supplierName: p.supplierName || p.supplier?.supplierName || p.supplier?.name || '',
       })).filter((p: any) => p.name));
     }).catch(() => {});
 
@@ -63,6 +79,22 @@ export function PurchaseOrdersPage() {
   const [editingPO, setEditingPO] = useState<Partial<PurchaseOrderItem> & { poLines?: POLineItem[] }>({});
   const [deletingPO, setDeletingPO] = useState<PurchaseOrderItem | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Filter products by selected supplier
+  const availableProducts = useMemo(() => {
+    if (!editingPO.supplierName) return apiProducts;
+    const match = apiProducts.filter(
+      (p) => p.supplierName && p.supplierName.toLowerCase() === editingPO.supplierName?.toLowerCase()
+    );
+    return match.length > 0 ? match : apiProducts;
+  }, [apiProducts, editingPO.supplierName]);
+
+  const calcTotals = (lines: POLineItem[], shipFee: number = 0) => {
+    const totalQty = lines.reduce((acc, l) => acc + Number(l.quantity || 0), 0);
+    const linesVal = lines.reduce((acc, l) => acc + (Number(l.quantity || 0) * Number(l.unitPrice || 0)), 0);
+    const totalVal = linesVal + Number(shipFee || 0);
+    return { totalQty, totalVal };
+  };
 
   const filtered = data.filter((item) =>
     item.supplierName.toLowerCase().includes(search.toLowerCase()) ||
@@ -93,10 +125,12 @@ export function PurchaseOrdersPage() {
       totalCost: totalVal,
       status: 'DRAFT',
       paymentStatus: 'UNPAID',
-      orderedBy: 'Admin User',
+      orderedBy: currentUserName,
       itemsCount: totalQty,
       notes: 'Giao hàng trong giờ hành chính, kèm đầy đủ chứng từ VAT.',
-      poLines: initialLines
+      poLines: initialLines,
+      paymentTerms: 'Net 30',
+      shippingFee: 0,
     });
     setIsModalOpen(true);
   };
@@ -105,8 +139,7 @@ export function PurchaseOrdersPage() {
     const lines = [...(editingPO.poLines || [])];
     lines.push({ productName: '', quantity: 1, unitPrice: 0 });
 
-    const totalQty = lines.reduce((acc, l) => acc + Number(l.quantity || 0), 0);
-    const totalVal = lines.reduce((acc, l) => acc + (Number(l.quantity || 0) * Number(l.unitPrice || 0)), 0);
+    const { totalQty, totalVal } = calcTotals(lines, editingPO.shippingFee || 0);
 
     setEditingPO({
       ...editingPO,
@@ -143,8 +176,7 @@ export function PurchaseOrdersPage() {
       };
     }
 
-    const totalQty = lines.reduce((acc, l) => acc + Number(l.quantity), 0);
-    const totalVal = lines.reduce((acc, l) => acc + (Number(l.quantity) * Number(l.unitPrice)), 0);
+    const { totalQty, totalVal } = calcTotals(lines, editingPO.shippingFee || 0);
 
     setEditingPO({
       ...editingPO,
@@ -156,8 +188,7 @@ export function PurchaseOrdersPage() {
 
   const handleRemovePOLine = (index: number) => {
     const lines = (editingPO.poLines || []).filter((_, i) => i !== index);
-    const totalQty = lines.reduce((acc, l) => acc + Number(l.quantity), 0);
-    const totalVal = lines.reduce((acc, l) => acc + (Number(l.quantity) * Number(l.unitPrice)), 0);
+    const { totalQty, totalVal } = calcTotals(lines, editingPO.shippingFee || 0);
 
     setEditingPO({
       ...editingPO,
@@ -207,6 +238,10 @@ export function PurchaseOrdersPage() {
 
     setIsSubmitting(true);
     try {
+      const isDraft = editingPO.status === 'DRAFT' || editingPO.status === 'PENDING_APPROVAL';
+      const finalPaymentStatus = isDraft ? 'UNPAID' : (editingPO.paymentStatus as any || 'UNPAID');
+      const finalAdvanceAmount = isDraft ? 0 : Number((editingPO as any).advanceAmount || 0);
+
       if (modalMode === 'create') {
         const newPO: Omit<PurchaseOrderItem, 'id'> = {
           poNumber: editingPO.poNumber,
@@ -216,16 +251,23 @@ export function PurchaseOrdersPage() {
           estDeliveryDate: editingPO.estDeliveryDate || '',
           totalCost: Number(editingPO.totalCost) || 0,
           status: editingPO.status as any || 'DRAFT',
-          paymentStatus: editingPO.paymentStatus as any || 'UNPAID',
-          orderedBy: editingPO.orderedBy || 'Admin User',
+          paymentStatus: finalPaymentStatus,
+          advanceAmount: finalAdvanceAmount,
+          orderedBy: editingPO.orderedBy || currentUserName,
           itemsCount: Number(editingPO.itemsCount) || 1,
           notes: editingPO.notes || '',
-          poLines: editingPO.poLines
+          poLines: editingPO.poLines,
+          paymentTerms: editingPO.paymentTerms || 'Net 30',
+          shippingFee: Number(editingPO.shippingFee) || 0,
         };
         await addPurchaseOrder(newPO);
         toast.success('Đã tạo đơn mua hàng thành công');
       } else if (editingPO.id) {
-        await updatePurchaseOrder(editingPO.id, editingPO);
+        await updatePurchaseOrder(editingPO.id, {
+          ...editingPO,
+          paymentStatus: finalPaymentStatus,
+          advanceAmount: finalAdvanceAmount,
+        });
         toast.success('Đã cập nhật đơn mua hàng');
       }
       fetchPurchaseOrders();
@@ -241,7 +283,7 @@ export function PurchaseOrdersPage() {
   const handleDeleteConfirm = async () => {
     if (!deletingPO) return;
 
-    if (deletingPO.status === 'APPROVED' || deletingPO.status === 'DELIVERED' || deletingPO.status === 'DISPATCHED') {
+    if (deletingPO.status !== 'DRAFT' && deletingPO.status !== 'PENDING_APPROVAL') {
       toast.error(`Không thể xóa đơn mua hàng đang ở trạng thái ${STATUS_LABELS[deletingPO.status] || deletingPO.status}! Chỉ có thể hủy hoặc xóa đơn Nháp/Chờ duyệt.`);
       setDeletingPO(null);
       return;
@@ -291,10 +333,11 @@ export function PurchaseOrdersPage() {
           const status = info.getValue() as string;
           return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-              status === 'DELIVERED' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
-              status === 'DISPATCHED' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' :
-              status === 'APPROVED' ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300' :
+              ['DELIVERED', 'RECEIVED', 'COMPLETED', 'DA_NHAN'].includes(status) ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
+              ['DISPATCHED', 'IN_TRANSIT', 'SHIPPED'].includes(status) ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' :
+              ['APPROVED', 'CONFIRMED', 'SENT_TO_SUPPLIER'].includes(status) ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300' :
               status === 'PENDING_APPROVAL' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' :
+              ['CANCELLED', 'REJECTED'].includes(status) ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300' :
               'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
             }`}>
               {STATUS_LABELS[status] || status}
@@ -306,21 +349,37 @@ export function PurchaseOrdersPage() {
         accessorKey: 'paymentStatus',
         header: 'Thanh toán',
         cell: ({ row }) => {
-          const status = row.original.paymentStatus;
+          const isDraftOrPending = row.original.status === 'DRAFT' || row.original.status === 'PENDING_APPROVAL';
+          const status = isDraftOrPending ? 'UNPAID' : row.original.paymentStatus;
           const totalCost = row.original.totalCost || 0;
-          const adv = (row.original as any).advanceAmount ?? (status === 'PARTIAL_ADVANCE' ? Math.round(totalCost * 0.5) : (status === 'PAID' ? totalCost : 0));
+          const adv = isDraftOrPending
+            ? 0
+            : ((row.original as any).advanceAmount ?? (status === 'PARTIAL_ADVANCE' ? Math.round(totalCost * 0.5) : (status === 'PAID' ? totalCost : 0)));
+          const remaining = Math.max(0, totalCost - adv);
+          const percent = totalCost > 0 ? Math.min(100, Math.round((adv / totalCost) * 100)) : 0;
+
           return (
-            <div className="space-y-0.5">
+            <div className="space-y-1 min-w-[130px]">
               <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${
                 status === 'PAID' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
                 status === 'PARTIAL_ADVANCE' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' :
                 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
               }`}>
-                {status === 'PAID' ? 'Đã thanh toán' : status === 'PARTIAL_ADVANCE' ? 'Đã tạm ứng' : 'Chưa thanh toán'}
+                {status === 'PAID' ? 'Đã thanh toán đủ' : status === 'PARTIAL_ADVANCE' ? `Trả 1 phần (${percent}%)` : 'Chưa thanh toán'}
               </span>
               {status === 'PARTIAL_ADVANCE' && (
-                <div className="text-[10px] text-gray-500 font-mono">
-                  <span>Tạm ứng: <strong className="text-blue-600">{adv.toLocaleString('vi-VN')} ₫</strong></span>
+                <div className="space-y-0.5 text-[10px] text-gray-500 font-mono">
+                  <div className="flex justify-between">
+                    <span>Đã trả:</span>
+                    <strong className="text-blue-600 dark:text-blue-400">{adv.toLocaleString('vi-VN')} ₫</strong>
+                  </div>
+                  <div className="flex justify-between text-rose-600 dark:text-rose-400 font-semibold">
+                    <span>Còn thiếu:</span>
+                    <span>{remaining.toLocaleString('vi-VN')} ₫</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 h-1 rounded-full overflow-hidden">
+                    <div className="bg-blue-500 h-full rounded-full transition-all" style={{ width: `${percent}%` }} />
+                  </div>
                 </div>
               )}
             </div>
@@ -415,10 +474,11 @@ export function PurchaseOrdersPage() {
                 </div>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                selectedPO.status === 'DELIVERED' ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
-                selectedPO.status === 'DISPATCHED' ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100' :
-                selectedPO.status === 'APPROVED' ? 'bg-indigo-200 text-indigo-900 dark:bg-indigo-800 dark:text-indigo-100' :
+                ['DELIVERED', 'RECEIVED', 'COMPLETED', 'DA_NHAN'].includes(selectedPO.status) ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
+                ['DISPATCHED', 'IN_TRANSIT', 'SHIPPED'].includes(selectedPO.status) ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100' :
+                ['APPROVED', 'CONFIRMED', 'SENT_TO_SUPPLIER'].includes(selectedPO.status) ? 'bg-indigo-200 text-indigo-900 dark:bg-indigo-800 dark:text-indigo-100' :
                 selectedPO.status === 'PENDING_APPROVAL' ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
+                ['CANCELLED', 'REJECTED'].includes(selectedPO.status) ? 'bg-rose-200 text-rose-900 dark:bg-rose-800 dark:text-rose-100' :
                 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
               }`}>
                 {STATUS_LABELS[selectedPO.status] || selectedPO.status}
@@ -455,15 +515,29 @@ export function PurchaseOrdersPage() {
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Thanh toán:</span>
-                <span className={`font-bold px-2 py-0.5 rounded text-xs ${
-                  selectedPO.paymentStatus === 'PAID' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
-                  selectedPO.paymentStatus === 'PARTIAL_ADVANCE' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' :
-                  'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
-                }`}>{
-                  selectedPO.paymentStatus === 'PAID' ? 'Đã thanh toán đủ' :
-                  selectedPO.paymentStatus === 'PARTIAL_ADVANCE' ? 'Tạm ứng 1 phần' :
-                  'Chưa thanh toán'
-                }</span>
+                {(() => {
+                  const isDraft = selectedPO.status === 'DRAFT' || selectedPO.status === 'PENDING_APPROVAL';
+                  const pStatus = isDraft ? 'UNPAID' : selectedPO.paymentStatus;
+                  return (
+                    <span className={`font-bold px-2 py-0.5 rounded text-xs ${
+                      pStatus === 'PAID' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
+                      pStatus === 'PARTIAL_ADVANCE' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' :
+                      'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+                    }`}>{
+                      pStatus === 'PAID' ? 'Đã thanh toán đủ' :
+                      pStatus === 'PARTIAL_ADVANCE' ? 'Thanh toán thiếu (tạm ứng)' :
+                      'Chưa thanh toán'
+                    }</span>
+                  );
+                })()}
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Điều khoản công nợ:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{selectedPO.paymentTerms || 'Net 30'}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Cước phí vận chuyển:</span>
+                <span className="font-semibold font-mono text-gray-900 dark:text-white">{Number(selectedPO.shippingFee || 0).toLocaleString('vi-VN')} ₫</span>
               </div>
               <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
                 <span className="text-gray-500 dark:text-gray-400">Nhân viên thu mua:</span>
@@ -513,27 +587,43 @@ export function PurchaseOrdersPage() {
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
               {selectedPO.status === 'PENDING_APPROVAL' && (
                 <button
-                  onClick={() => {
-                    updatePurchaseOrder(selectedPO.id, { status: 'APPROVED' });
-                    setSelectedPO({ ...selectedPO, status: 'APPROVED' });
-                    toast.success('Đã phê duyệt đơn đặt hàng mua thành công!');
+                  onClick={async () => {
+                    try {
+                      await axiosClient.post(`/purchase/orders/${selectedPO.id}/approve`);
+                      await fetchPurchaseOrders();
+                      setSelectedPO({ ...selectedPO, status: 'APPROVED' });
+                      toast.success('Đã phê duyệt đơn đặt hàng mua thành công!');
+                    } catch (e: any) {
+                      toast.error(e?.response?.data?.message || 'Lỗi khi phê duyệt đơn mua');
+                    }
                   }}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
                 >
                   <ShieldCheck className="w-4 h-4" /> Phê duyệt đơn mua
                 </button>
               )}
-              {selectedPO.status === 'DISPATCHED' && (
+              {['APPROVED', 'DISPATCHED', 'IN_TRANSIT', 'CONFIRMED', 'SENT_TO_SUPPLIER'].includes(selectedPO.status) &&
+                !['DELIVERED', 'RECEIVED', 'DA_NHAN', 'COMPLETED', 'ĐÃ NHẬN HÀNG'].includes(selectedPO.status) && (
                 <button
-                  onClick={() => {
-                    updatePurchaseOrder(selectedPO.id, { status: 'DELIVERED' });
-                    setSelectedPO({ ...selectedPO, status: 'DELIVERED' });
-                    toast.success('Đã ghi nhận nhập kho hàng thành công!');
+                  onClick={async () => {
+                    try {
+                      await axiosClient.post(`/purchase/orders/${selectedPO.id}/create-receipt`);
+                      await fetchPurchaseOrders();
+                      setSelectedPO({ ...selectedPO, status: 'DELIVERED' });
+                      toast.success('Đã lập phiếu nhập kho (GRN) và nhập hàng thành công!');
+                    } catch (e: any) {
+                      toast.error(e?.response?.data?.message || 'Lỗi khi lập phiếu nhập kho');
+                    }
                   }}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
                 >
                   <FileCheck className="w-4 h-4" /> Nhập kho hàng (GRN)
                 </button>
+              )}
+              {['DELIVERED', 'RECEIVED', 'DA_NHAN', 'COMPLETED', 'ĐÃ NHẬN HÀNG'].includes(selectedPO.status) && (
+                <div className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 font-semibold rounded-lg border border-emerald-200 dark:border-emerald-800 text-sm">
+                  <CheckCircle className="w-4 h-4 text-emerald-500" /> Đã tạo phiếu nhập kho
+                </div>
               )}
               <button
                 onClick={() => toast.success('Đã tải xuống file PO PDF thành công!')}
@@ -653,53 +743,123 @@ export function PurchaseOrdersPage() {
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái đơn hàng</label>
                   <select
                     value={editingPO.status || 'DRAFT'}
-                    onChange={(e) => setEditingPO({ ...editingPO, status: e.target.value as any })}
+                    onChange={(e) => {
+                      const newStatus = e.target.value as any;
+                      const isDraft = newStatus === 'DRAFT' || newStatus === 'PENDING_APPROVAL';
+                      setEditingPO({
+                        ...editingPO,
+                        status: newStatus,
+                        paymentStatus: isDraft ? 'UNPAID' : editingPO.paymentStatus,
+                        advanceAmount: isDraft ? 0 : (editingPO as any).advanceAmount,
+                      });
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="DRAFT">Bản nháp</option>
                     <option value="PENDING_APPROVAL">Chờ duyệt</option>
                     <option value="APPROVED">Đã duyệt</option>
                     <option value="DISPATCHED">Đang vận chuyển</option>
-                    <option value="DELIVERED">Đã nhận hàng</option>
+                    <option value="DELIVERED">Đã giao hàng</option>
+                    <option value="RECEIVED">Đã nhận hàng</option>
+                    <option value="COMPLETED">Đã hoàn thành</option>
                     <option value="CANCELLED">Đã hủy</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái thanh toán</label>
-                  <select
-                    value={editingPO.paymentStatus || 'UNPAID'}
-                    onChange={(e) => {
-                      const st = e.target.value;
-                      const adv = st === 'PARTIAL_ADVANCE' ? ((editingPO as any).advanceAmount || Math.round((editingPO.totalCost || 0) * 0.5)) : (st === 'PAID' ? editingPO.totalCost : 0);
-                      setEditingPO({ ...editingPO, paymentStatus: st as any, advanceAmount: adv } as any);
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
-                  >
-                    <option value="UNPAID">Chưa thanh toán</option>
-                    <option value="PARTIAL_ADVANCE">Đã tạm ứng</option>
-                    <option value="PAID">Đã thanh toán đủ</option>
-                  </select>
+                  {(() => {
+                    const isDraftOrPending = editingPO.status === 'DRAFT' || editingPO.status === 'PENDING_APPROVAL';
+                    return (
+                      <>
+                        <select
+                          disabled={isDraftOrPending}
+                          value={isDraftOrPending ? 'UNPAID' : (editingPO.paymentStatus || 'UNPAID')}
+                          onChange={(e) => {
+                            const st = e.target.value;
+                            const adv = st === 'PARTIAL_ADVANCE' ? ((editingPO as any).advanceAmount || Math.round((editingPO.totalCost || 0) * 0.5)) : (st === 'PAID' ? editingPO.totalCost : 0);
+                            setEditingPO({ ...editingPO, paymentStatus: st as any, advanceAmount: adv } as any);
+                          }}
+                          className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 font-medium ${
+                            isDraftOrPending
+                              ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed opacity-80'
+                              : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white cursor-pointer'
+                          }`}
+                        >
+                          <option value="UNPAID">Chưa thanh toán</option>
+                          <option value="PARTIAL_ADVANCE">Đã tạm ứng</option>
+                          <option value="PAID">Đã thanh toán đủ</option>
+                        </select>
 
-                  {editingPO.paymentStatus === 'PARTIAL_ADVANCE' && (
-                    <div className="mt-2 p-2.5 bg-blue-50 dark:bg-blue-950/40 rounded-lg border border-blue-200 dark:border-blue-800 space-y-1">
-                      <label className="block text-[11px] font-bold text-blue-900 dark:text-blue-300 uppercase">
-                        SỐ TIỀN ĐÃ TẠM ỨNG (₫) *
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={editingPO.totalCost || 0}
-                        value={(editingPO as any).advanceAmount ?? Math.round((editingPO.totalCost || 0) * 0.5)}
-                        onChange={(e) => setEditingPO({ ...editingPO, advanceAmount: parseFloat(e.target.value) || 0 } as any)}
-                        placeholder="Nhập số tiền tạm ứng..."
-                        className="w-full px-2.5 py-1 border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-900 text-blue-900 dark:text-blue-200 font-mono font-bold text-xs"
-                      />
-                      <div className="flex justify-between text-[10px] font-semibold text-blue-800 dark:text-blue-300 pt-0.5">
-                        <span>Đã tạm ứng: {((editingPO as any).advanceAmount ?? Math.round((editingPO.totalCost || 0) * 0.5)).toLocaleString('vi-VN')} ₫</span>
-                        <span>Còn nợ: {Math.max(0, (editingPO.totalCost || 0) - ((editingPO as any).advanceAmount ?? Math.round((editingPO.totalCost || 0) * 0.5))).toLocaleString('vi-VN')} ₫</span>
-                      </div>
-                    </div>
-                  )}
+                        {isDraftOrPending && (
+                          <div className="mt-1.5 flex items-start gap-1.5 p-2 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800/50 text-[11px] text-amber-700 dark:text-amber-300">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600" />
+                            <span>
+                              Đơn ở trạng thái <strong>{editingPO.status === 'DRAFT' ? 'Bản nháp' : 'Chờ duyệt'}</strong> chưa được phép ghi nhận thanh toán. Vui lòng duyệt đơn trước khi thanh toán.
+                            </span>
+                          </div>
+                        )}
+
+                        {!isDraftOrPending && editingPO.paymentStatus === 'PARTIAL_ADVANCE' && (
+                          <div className="mt-2 p-2.5 bg-blue-50 dark:bg-blue-950/40 rounded-lg border border-blue-200 dark:border-blue-800 space-y-1">
+                            <label className="block text-[11px] font-bold text-blue-900 dark:text-blue-300 uppercase">
+                              SỐ TIỀN ĐÃ TẠM ỨNG (₫) *
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={editingPO.totalCost || 0}
+                              value={(editingPO as any).advanceAmount ?? Math.round((editingPO.totalCost || 0) * 0.5)}
+                              onChange={(e) => setEditingPO({ ...editingPO, advanceAmount: parseFloat(e.target.value) || 0 } as any)}
+                              placeholder="Nhập số tiền tạm ứng..."
+                              className="w-full px-2.5 py-1 border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-900 text-blue-900 dark:text-blue-200 font-mono font-bold text-xs"
+                            />
+                            <div className="flex justify-between text-[10px] font-semibold text-blue-800 dark:text-blue-300 pt-0.5">
+                              <span>Đã tạm ứng: {((editingPO as any).advanceAmount ?? Math.round((editingPO.totalCost || 0) * 0.5)).toLocaleString('vi-VN')} ₫</span>
+                              <span>Còn nợ: {Math.max(0, (editingPO.totalCost || 0) - ((editingPO as any).advanceAmount ?? Math.round((editingPO.totalCost || 0) * 0.5))).toLocaleString('vi-VN')} ₫</span>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Điều khoản công nợ (Payment Terms)</label>
+                  <select
+                    value={editingPO.paymentTerms || 'Net 30'}
+                    onChange={(e) => setEditingPO({ ...editingPO, paymentTerms: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="Net 15">Net 15 (Công nợ 15 ngày)</option>
+                    <option value="Net 30">Net 30 (Công nợ 30 ngày chuẩn)</option>
+                    <option value="Net 45">Net 45 (Công nợ 45 ngày)</option>
+                    <option value="Net 60">Net 60 (Công nợ 60 ngày)</option>
+                    <option value="COD">COD (Thanh toán khi giao nhận hàng)</option>
+                    <option value="Prepaid">Thanh toán trả trước 100%</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Cước phí vận chuyển dự kiến (₫)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editingPO.shippingFee ?? 0}
+                    onChange={(e) => {
+                      const fee = parseFloat(e.target.value) || 0;
+                      const { totalQty, totalVal } = calcTotals(editingPO.poLines || [], fee);
+                      setEditingPO({
+                        ...editingPO,
+                        shippingFee: fee,
+                        totalCost: totalVal,
+                        itemsCount: totalQty,
+                      });
+                    }}
+                    placeholder="0"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-emerald-500"
+                  />
                 </div>
               </div>
             </div>
@@ -707,10 +867,17 @@ export function PurchaseOrdersPage() {
             {/* Section 2: Chi tiết sản phẩm - full width */}
             <div className="erp-form-section space-y-3" style={{gridColumn: '1 / -1'}}>
               <div className="flex items-center justify-between">
-                <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-emerald-600 animate-pulse" />
-                  Chi tiết các sản phẩm đặt mua (PO Line Items)
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-emerald-600 animate-pulse" />
+                    Chi tiết các sản phẩm đặt mua (PO Line Items)
+                  </h3>
+                  {editingPO.supplierName && (
+                    <span className="text-[11px] text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800 font-medium">
+                      Lọc theo: {editingPO.supplierName}
+                    </span>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={handleAddPOLine}
@@ -731,7 +898,7 @@ export function PurchaseOrdersPage() {
                       <button
                         type="button"
                         onClick={() => handleRemovePOLine(idx)}
-                        className="absolute top-2 right-2 text-gray-400 hover:text-red-500 transition-colors"
+                        className="absolute top-2 right-2 text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
                         title="Xóa mặt hàng này"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -746,7 +913,7 @@ export function PurchaseOrdersPage() {
                             className="w-full mt-0.5 px-2 py-1 text-xs border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-medium cursor-pointer"
                           >
                             <option value="">-- Chọn Sản Phẩm --</option>
-                            {apiProducts.map((p) => (
+                            {availableProducts.map((p) => (
                               <option key={p.name} value={p.name}>
                                 {p.name} ({p.price.toLocaleString('vi-VN')} ₫)
                               </option>
@@ -788,6 +955,16 @@ export function PurchaseOrdersPage() {
                   ))}
                 </div>
               )}
+
+              {/* Cost Summary Banner */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-emerald-50/70 dark:bg-emerald-950/30 p-2.5 rounded-lg border border-emerald-200 dark:border-emerald-800 text-xs gap-2">
+                <span className="text-gray-600 dark:text-gray-400">
+                  Tiền hàng: <strong className="font-mono text-gray-900 dark:text-white">{Math.max(0, (editingPO.totalCost || 0) - (editingPO.shippingFee || 0)).toLocaleString('vi-VN')} ₫</strong> | Cước VC: <strong className="font-mono text-gray-900 dark:text-white">{(editingPO.shippingFee || 0).toLocaleString('vi-VN')} ₫</strong>
+                </span>
+                <span className="text-emerald-700 dark:text-emerald-300 font-bold text-sm font-mono">
+                  Tổng đơn PO: {(editingPO.totalCost || 0).toLocaleString('vi-VN')} ₫
+                </span>
+              </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ghi chú & Điều khoản</label>

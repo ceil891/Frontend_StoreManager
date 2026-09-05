@@ -4,6 +4,8 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useHrStore } from '../store/hrStore';
+import { useUserStore } from '../store/userStore';
+import { toast } from 'sonner';
 
 export interface LeaveItem {
   id: string;
@@ -25,7 +27,6 @@ const sCfg: Record<string, { label: string; cls: string }> = {
 };
 
 export function LeaveRequestsPage() {
-  const setData = (_fn: any) => {};
   const {
     leaveRequests: storeRequests,
     fetchLeaveRequests,
@@ -34,19 +35,22 @@ export function LeaveRequestsPage() {
     deleteLeaveRequest,
   } = useHrStore();
 
+  const { users, fetchUsers } = useUserStore();
+
   useEffect(() => {
     fetchLeaveRequests();
-  }, [fetchLeaveRequests]);
+    fetchUsers();
+  }, [fetchLeaveRequests, fetchUsers]);
 
   const data: LeaveItem[] = useMemo(() => {
     return storeRequests.map((r) => ({
       id: r.id,
-      userId: 'U001',
+      userId: r.employeeName || 'U001',
       userName: r.employeeName,
       startDate: r.startDate,
       endDate: r.endDate,
       days: r.totalDays,
-      leaveType: r.leaveType === 'ANNUAL' ? 'Nghỉ phép năm' : r.leaveType === 'SICK' ? 'Nghỉ ốm' : 'Việc riêng',
+      leaveType: r.leaveType === 'ANNUAL' ? 'Nghỉ phép năm' : r.leaveType === 'SICK' ? 'Nghỉ ốm' : r.leaveType === 'MATERNITY' ? 'Nghỉ thai sản' : 'Việc riêng',
       reason: r.reason,
       approvedBy: r.approvedBy || 'Chưa duyệt',
       status: r.status === 'APPROVED' ? 'ĐÃ_DUYỆT' : r.status === 'REJECTED' ? 'TỪ_CHỐI' : 'CHỜ_DUYỆT',
@@ -60,15 +64,61 @@ export function LeaveRequestsPage() {
   const [deleting, setDeleting] = useState<LeaveItem|null>(null);
 
   const filtered = data.filter(d=>{
-    const ms = d.userName.toLowerCase().includes(search.toLowerCase())||d.reason.toLowerCase().includes(search.toLowerCase());
+    const ms = (d.userName || '').toLowerCase().includes(search.toLowerCase())||(d.reason || '').toLowerCase().includes(search.toLowerCase());
     const mst = statusFilter==='Tất cả'||d.status===statusFilter;
     return ms&&mst;
   });
 
-  const openCreate = ()=>{ setForm({leaveType:'Nghỉ phép năm',status:'CHỜ_DUYỆT',days:1}); setIsModal(true); };
-  const handleSave=(e:React.FormEvent)=>{ e.preventDefault(); setData([{...form as LeaveItem,id:String(data.length+1)}, ...data]); setIsModal(false); };
-  const approve=(id:string)=>setData(data.map(d=>d.id===id?{...d,status:'ĐÃ_DUYỆT' as const,approvedBy:'Admin hệ thống'}:d));
-  const reject=(id:string)=>setData(data.map(d=>d.id===id?{...d,status:'TỪ_CHỐI' as const}:d));
+  const openCreate = () => {
+    const defaultUser = users[0];
+    const today = new Date().toISOString().split('T')[0];
+    setForm({
+      userName: defaultUser ? (defaultUser.fullName || defaultUser.email || (defaultUser as any).username) : '',
+      userId: defaultUser ? String(defaultUser.id) : '',
+      leaveType: 'Nghỉ phép năm',
+      startDate: today,
+      endDate: today,
+      status: 'CHỜ_DUYỆT',
+      days: 1,
+      reason: ''
+    });
+    setIsModal(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const lType = form.leaveType === 'Nghỉ ốm' ? 'SICK' : form.leaveType === 'Nghỉ thai sản' ? 'MATERNITY' : form.leaveType === 'Việc riêng' ? 'UNPAID' : 'ANNUAL';
+    await addLeaveRequest({
+      requestCode: `NP-${Date.now().toString().slice(-4)}`,
+      employeeName: form.userName || 'Nhân viên',
+      leaveType: lType as any,
+      startDate: form.startDate || new Date().toISOString().split('T')[0],
+      endDate: form.endDate || new Date().toISOString().split('T')[0],
+      totalDays: Number(form.days) || 1,
+      reason: form.reason || 'Nghỉ cá nhân',
+      status: 'PENDING',
+    } as any);
+
+    toast.success('Gửi đơn xin nghỉ phép thành công');
+    setIsModal(false);
+  };
+
+  const approve = async (id: string) => {
+    await updateLeaveRequest(id, { status: 'APPROVED', approvedBy: 'Admin quản lý' } as any);
+    toast.success('Đã duyệt đơn nghỉ phép');
+  };
+
+  const reject = async (id: string) => {
+    await updateLeaveRequest(id, { status: 'REJECTED' } as any);
+    toast.error('Đã từ chối đơn nghỉ phép');
+  };
+
+  const handleDelete = async () => {
+    if (!deleting) return;
+    await deleteLeaveRequest(deleting.id);
+    toast.success('Đã xóa đơn nghỉ phép');
+    setDeleting(null);
+  };
 
   const columns = useMemo<ColumnDef<LeaveItem>[]>(()=>[
     {accessorKey:'userName',header:'Nhân viên',cell:({row})=><div><p className="font-medium text-gray-900 dark:text-white">{row.original.userName}</p><p className="text-xs text-gray-400">{row.original.userId}</p></div>},
@@ -134,8 +184,38 @@ export function LeaveRequestsPage() {
 
       <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title="Tạo đơn xin nghỉ phép" width="max-w-lg">
         <form onSubmit={handleSave} className="space-y-4">
-          <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên nhân viên *</label>
-            <input required value={form.userName||''} onChange={e=>setForm({...form,userName:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên nhân viên *</label>
+            {users.length > 0 ? (
+              <select
+                required
+                value={form.userName || ''}
+                onChange={(e) => {
+                  const u = users.find(usr => (usr.fullName || usr.email || (usr as any).username) === e.target.value);
+                  setForm({
+                    ...form,
+                    userName: e.target.value,
+                    userId: u ? String(u.id) : '',
+                  });
+                }}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">-- Chọn nhân viên --</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.fullName || u.email || (u as any).username}>
+                    {u.fullName || u.email || (u as any).username} ({u.email || (u as any).username})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                required
+                value={form.userName || ''}
+                onChange={e => setForm({ ...form, userName: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              />
+            )}
+          </div>
           <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Loại nghỉ</label>
             <select value={form.leaveType||'Nghỉ phép năm'} onChange={e=>setForm({...form,leaveType:e.target.value as any})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500">
               <option>Nghỉ phép năm</option><option>Nghỉ ốm</option><option>Việc riêng</option><option>Nghỉ thai sản</option><option>Nghỉ tang</option>
@@ -160,7 +240,7 @@ export function LeaveRequestsPage() {
           <p className="text-sm text-gray-600 dark:text-gray-300">Bạn có chắc muốn xóa đơn xin nghỉ của <strong className="text-gray-900 dark:text-white">{deleting?.userName}</strong>?</p>
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button onClick={()=>setDeleting(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg text-sm">Quay lại</button>
-            <button onClick={()=>{setData(data.filter(d=>d.id!==deleting!.id));setDeleting(null);}} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg text-sm">Xác nhận xóa</button>
+            <button onClick={handleDelete} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg text-sm">Xác nhận xóa</button>
           </div>
         </div>
       </Modal>

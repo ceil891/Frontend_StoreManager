@@ -6,7 +6,7 @@ import type { InternalAxiosRequestConfig } from 'axios';
 // ---------------------------------------------------------------------------
 export const uninterceptedAuthClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1',
-  timeout: 15000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -53,6 +53,17 @@ export const clearApiCache = () => {
   inFlightRequests.clear();
 };
 
+/** Tự động xóa token, bắn event và chuyển hướng về trang /login khi phiên hết hạn */
+export const handleSessionExpired = (message = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.') => {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+  localStorage.removeItem('retailhub-auth');
+  window.dispatchEvent(new CustomEvent('auth:logout', { detail: { message } }));
+  if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+    window.location.replace('/login');
+  }
+};
+
 // ---------------------------------------------------------------------------
 // 4. REQUEST INTERCEPTOR (Tự động gắn Bearer Token & Quản lý Cache)
 // ---------------------------------------------------------------------------
@@ -96,7 +107,7 @@ const originalGet = axiosClient.get.bind(axiosClient);
   if (inFlightRequests.has(cacheKey)) {
     return inFlightRequests.get(cacheKey)!;
   }
-  const promise = originalGet<T, R, D>(url, config).finally(() => {
+  const promise = (originalGet as any)(url, config).finally(() => {
     inFlightRequests.delete(cacheKey);
   });
   inFlightRequests.set(cacheKey, promise);
@@ -156,8 +167,30 @@ axiosClient.interceptors.response.use(
       requestUrl.includes('/auth/forgot-password') ||
       requestUrl.includes('/auth/reset-password');
 
-    // Xử lý khi Token hết hạn (HTTP 401 Unauthorized)
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
+    const respData = error.response?.data as any;
+
+    // Xử lý khi bị Forbidden (HTTP 403)
+    if (error.response?.status === 403 && !isAuthEndpoint) {
+      const msg = respData?.message || 'Bạn không có quyền truy cập hoặc tài khoản đã bị vô hiệu hóa. Vui lòng đăng nhập lại.';
+      handleSessionExpired(msg);
+      return Promise.reject(error);
+    }
+
+    // Xử lý khi Token hết hạn hoặc Tài khoản bị vô hiệu hóa (HTTP 401 Unauthorized)
+    if (error.response?.status === 401 && !isAuthEndpoint) {
+      const respErrorCode = respData?.errorCode;
+      if (respErrorCode === 'ACCOUNT_DISABLED' || respErrorCode === 'ACCOUNT_LOCKED') {
+        const msg = respData?.message || 'Tài khoản của bạn đã bị vô hiệu hóa hoặc bị khóa. Vui lòng đăng nhập lại.';
+        handleSessionExpired(msg);
+        return Promise.reject(error);
+      }
+
+      // Nếu request này đã từng được retry một lần rồi mà vẫn bị 401 -> Token không hợp lệ -> Logout và về /login
+      if (originalRequest._retry) {
+        handleSessionExpired('Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.');
+        return Promise.reject(error);
+      }
+
       if (isRefreshing) {
         // [XỬ LÝ QUEUE REQUEST]: Đẩy các request đồng thời vào hàng chờ nhận Token mới
         return new Promise<string>((resolve, reject) => {
@@ -174,15 +207,16 @@ axiosClient.interceptors.response.use(
           });
       }
 
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (!refreshToken) {
+        handleSessionExpired('Phiên làm việc đã kết thúc. Vui lòng đăng nhập lại.');
+        return Promise.reject(error);
+      }
+
       originalRequest._retry = true;
       isRefreshing = true;
 
       try {
-        const refreshToken = localStorage.getItem('refresh_token');
-        if (!refreshToken) {
-          throw new Error('No refresh token available');
-        }
-
         // [DÙNG UNINTERCEPTED AXIOS INSTANCE]: Gọi trực tiếp API /auth/refresh thuần túy
         const response = await uninterceptedAuthClient.post('/auth/refresh', {
           refreshToken,
@@ -213,12 +247,11 @@ axiosClient.interceptors.response.use(
           originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         }
         return axiosClient(originalRequest);
-      } catch (refreshError) {
+      } catch (refreshError: any) {
         // Nếu refresh token thất bại, từ chối toàn bộ hàng chờ và yêu cầu đăng nhập lại
         processQueue(refreshError, null);
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        window.dispatchEvent(new CustomEvent('auth:logout'));
+        const reason = refreshError?.response?.data?.message || refreshError?.message || 'Phiên đăng nhập đã hết hạn hoặc tài khoản đã bị khóa.';
+        handleSessionExpired(reason);
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

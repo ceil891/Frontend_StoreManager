@@ -89,7 +89,7 @@ export function AIAssistant() {
     try {
       // Production webhook n8n hoặc từ file .env
       const aiApiUrl = import.meta.env.VITE_AI_API_URL || 'https://mucvan891.app.n8n.cloud/webhook/ric-qlbh-webhook';
-      const senderId = user?.id ? String(user.id) : (user?.username || 'user_001');
+      const senderId = user?.id ? String(user.id) : (user?.name || user?.email || 'user_001');
 
       // Gửi POST tới n8n webhook theo format quy định
       const response = await fetch(aiApiUrl, {
@@ -316,14 +316,20 @@ export function AIAssistant() {
                               type="button"
                               onClick={() => {
                                 const val = msg.parsed.val;
-                                if (val === 103) {
+                                if (val === 103 || val === 300 || val === 60 || val === 110) {
                                   navigate('/reports/sales');
                                 } else if (val === 102) {
                                   navigate('/reports/inventory');
-                                } else if (val === 100 || val === 101 || val === 104) {
+                                } else if (val === 200 || val === 70) {
+                                  navigate('/inventory/products');
+                                } else if (val === 100 || val === 101 || val === 104 || val === 105 || val === 106 || val === 107) {
                                   navigate('/reports/finance');
                                 } else if (val === 61 || val === 120 || val === 121) {
                                   navigate('/reports/crm');
+                                } else if (val === 400) {
+                                  navigate('/crm/campaigns');
+                                } else if (val === 62) {
+                                  navigate('/hr/employees');
                                 } else {
                                   navigate('/reports/sales');
                                 }

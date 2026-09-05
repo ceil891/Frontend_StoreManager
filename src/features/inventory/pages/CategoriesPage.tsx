@@ -11,6 +11,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type ProductCategory } from '../store/inventoryStore';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
+import { toast } from 'sonner';
 
 export function CategoriesPage() {
   const { categories: data, addCategory, updateCategory, deleteCategory, fetchCategories } = useInventoryStore();
@@ -64,7 +65,7 @@ export function CategoriesPage() {
       manager: '',
       inventoryGlCode: '',
       cogsGlCode: '',
-      taxClass: 'VAT_10',
+      taxClass: 'VAT_8',
     });
     setIsModalOpen(true);
   };
@@ -75,36 +76,49 @@ export function CategoriesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveCategory = (e: React.FormEvent) => {
+  const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCategory.code || !editingCategory.categoryName) return;
 
-    if (modalMode === 'create') {
-      const newCategory: Omit<ProductCategory, 'id'> = {
-        code: editingCategory.code,
-        categoryName: editingCategory.categoryName,
-        parentId: editingCategory.parentId || undefined,
-        department: editingCategory.department || 'General',
-        itemsCount: Number(editingCategory.itemsCount) || 0,
-        totalValuation: Number(editingCategory.totalValuation) || 0,
-        status: editingCategory.status as ProductCategory['status'] || 'ACTIVE',
-        description: editingCategory.description || '',
-        manager: editingCategory.manager || 'Admin',
-        inventoryGlCode: editingCategory.inventoryGlCode,
-        cogsGlCode: editingCategory.cogsGlCode,
-        taxClass: editingCategory.taxClass,
-      };
-      addCategory(newCategory);
-    } else if (editingCategory.id) {
-      updateCategory(editingCategory.id, editingCategory);
+    try {
+      if (modalMode === 'create') {
+        const newCategory: Omit<ProductCategory, 'id'> = {
+          code: editingCategory.code,
+          categoryName: editingCategory.categoryName,
+          parentId: editingCategory.parentId || undefined,
+          department: editingCategory.department || 'General',
+          itemsCount: Number(editingCategory.itemsCount) || 0,
+          totalValuation: Number(editingCategory.totalValuation) || 0,
+          status: editingCategory.status as ProductCategory['status'] || 'ACTIVE',
+          description: editingCategory.description || '',
+          manager: editingCategory.manager || 'Admin',
+          inventoryGlCode: editingCategory.inventoryGlCode,
+          cogsGlCode: editingCategory.cogsGlCode,
+          taxClass: editingCategory.taxClass || 'VAT_8',
+        };
+        await addCategory(newCategory);
+        toast.success('Đã thêm danh mục mới thành công!');
+      } else if (editingCategory.id) {
+        await updateCategory(editingCategory.id, editingCategory);
+        toast.success('Đã cập nhật danh mục thành công!');
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error('Lỗi khi lưu danh mục:', err);
+      toast.error('Không thể lưu danh mục: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
-    setIsModalOpen(false);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingCategory) return;
-    deleteCategory(deletingCategory.id);
-    setDeletingCategory(null);
+    try {
+      await deleteCategory(deletingCategory.id);
+      toast.success(`Đã xóa danh mục "${deletingCategory.categoryName}" thành công!`);
+      setDeletingCategory(null);
+    } catch (err: any) {
+      console.error('Lỗi khi xóa danh mục:', err);
+      toast.error('Không thể xóa danh mục: ' + (err?.response?.data?.message || err?.message || 'Danh mục đang có sản phẩm liên kết'));
+    }
   };
 
   const columns = useMemo<ColumnDef<ProductCategory>[]>(
@@ -431,12 +445,13 @@ export function CategoriesPage() {
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thuế suất VAT mặc định</label>
                 <select
-                  value={editingCategory.taxClass || 'VAT_10'}
+                  value={editingCategory.taxClass || 'VAT_8'}
                   onChange={(e) => setEditingCategory({ ...editingCategory, taxClass: e.target.value as ProductCategory['taxClass'] })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
                 >
-                  <option value="VAT_8">VAT 8% (Ưu đãi)</option>
-                  <option value="VAT_10">VAT 10% (Chuẩn)</option>
+                  <option value="VAT_8">VAT 8% (Ưu đãi / Chuẩn)</option>
+                  <option value="VAT_10">VAT 10% (Tiêu chuẩn cũ)</option>
+                  <option value="VAT_5">VAT 5% (Mặt hàng thiết yếu)</option>
                   <option value="EXEMPT">Miễn thuế VAT</option>
                 </select>
               </div>
@@ -511,6 +526,19 @@ export function CategoriesPage() {
                   onChange={(e) => setEditingCategory({ ...editingCategory, manager: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Thuế suất áp dụng (Tax Class)</label>
+                <select
+                  value={editingCategory.taxClass || 'VAT_8'}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, taxClass: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="VAT_8">VAT 8% (Ưu đãi / Chuẩn)</option>
+                  <option value="VAT_10">VAT 10% (Tiêu chuẩn cũ)</option>
+                  <option value="VAT_5">VAT 5% (Mặt hàng thiết yếu)</option>
+                  <option value="EXEMPT">Miễn thuế (EXEMPT)</option>
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mô tả quy tắc phân loại</label>

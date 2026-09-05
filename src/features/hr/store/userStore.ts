@@ -32,6 +32,10 @@ export interface SystemUserRecord {
   mfaEnabled: boolean;
   faceEnrolled?: boolean;
   notes?: string;
+  username?: string;
+  email?: string;
+  name?: string;
+  role?: string;
 }
 
 export type SystemUserInput = Omit<SystemUserRecord, 'id' | 'userCode' | 'lastLoginTimestamp' | 'authUserId'>;
@@ -47,6 +51,7 @@ interface UserStore {
   updateUser: (user: SystemUserRecord) => Promise<void>;
   updateUserRoleAndBranch: (userId: string, roleCode: string, branchId: string) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
+  resetPassword: (userId: string, newPassword: string) => Promise<void>;
 }
 
 export const useUserStore = create<UserStore>()((set) => ({
@@ -107,7 +112,7 @@ export const useUserStore = create<UserStore>()((set) => ({
           useAuthStore.setState({
             user: {
               ...currentAuthUser,
-              role: updatedSelf.assignedRole,
+              role: updatedSelf.assignedRole as any,
               branchId: updatedSelf.branchId,
               branchName: updatedSelf.branchLocation,
               branchLocation: updatedSelf.branchLocation,
@@ -129,6 +134,18 @@ export const useUserStore = create<UserStore>()((set) => ({
   },
 
 
+
+  resetPassword: async (userId: string, newPassword: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      await userService.resetPassword(userId, newPassword);
+      set({ isLoading: false });
+    } catch (err: any) {
+      console.error('Failed to reset password:', err);
+      set({ isLoading: false, error: err.message || 'Lỗi khi cấp lại mật khẩu' });
+      throw err;
+    }
+  },
 
   deleteUser: async (id) => {
     set({ isLoading: true, error: null });

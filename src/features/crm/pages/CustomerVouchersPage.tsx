@@ -25,8 +25,10 @@ import {
   Filter,
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
+import type { ColumnDef } from '@tanstack/react-table';
 import { Modal } from '@/shared/components/ui/Modal';
 import { Drawer } from '@/shared/components/ui/Drawer';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { toast } from 'sonner';
 import { useCrmStore } from '../store/crmStore';
 import type { CustomerVoucherRecord } from '../store/crmStore';
@@ -59,6 +61,10 @@ export function CustomerVouchersPage() {
     customers,
     fetchCustomers,
   } = useCrmStore();
+
+  const [deleteItem, setDeleteItem] = useState<CustomerVoucherRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [revokingItem, setRevokingItem] = useState<CustomerVoucherRecord | null>(null);
 
   const [isLoading, setIsLoading] = useState(false);
 
@@ -278,26 +284,43 @@ export function CustomerVouchersPage() {
   };
 
   // Handle Revoke / Cancel Voucher
-  const handleRevoke = async (item: CustomerVoucherRecord) => {
-    if (!confirm(`Bạn có chắc muốn thu hồi/hủy voucher ${item.voucherCode} của khách ${item.customerName}?`)) {
-      return;
-    }
+  const handleRevoke = (item: CustomerVoucherRecord) => {
+    setRevokingItem(item);
+  };
+
+  const handleConfirmRevoke = async () => {
+    if (!revokingItem) return;
     try {
-      await updateCustomerVoucher(item.id, { status: 'CANCELLED' });
-      toast.success(`Đã thu hồi voucher ${item.voucherCode}`);
+      await updateCustomerVoucher(revokingItem.id, { status: 'CANCELLED' });
+      toast.success(`Đã thu hồi voucher ${revokingItem.voucherCode}`);
+      setRevokingItem(null);
     } catch (err) {
       toast.error('Lỗi khi thu hồi voucher');
     }
   };
 
   // Handle Delete Voucher
-  const handleDelete = async (item: CustomerVoucherRecord) => {
-    if (!confirm(`Xóa vĩnh viễn voucher ${item.voucherCode} khỏi hệ thống?`)) return;
+  const handleDelete = (item: CustomerVoucherRecord) => {
+    setDeleteItem(item);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteItem) return;
+    if (deleteItem.status === 'ACTIVE') {
+      toast.error('Không thể xóa voucher đang khả dụng (ACTIVE)! Hãy thu hồi hoặc chuyển trạng thái trước khi xóa.');
+      setDeleteItem(null);
+      return;
+    }
     try {
-      await deleteCustomerVoucher(item.id);
-      toast.success(`Đã xóa voucher ${item.voucherCode}`);
-    } catch (err) {
-      toast.error('Lỗi khi xóa voucher');
+      setIsDeleting(true);
+      await deleteCustomerVoucher(deleteItem.id);
+      toast.success(`Đã xóa voucher ${deleteItem.voucherCode}`);
+      setDeleteItem(null);
+    } catch (err: any) {
+      console.error('Error deleting voucher:', err);
+      toast.error(err?.response?.data?.message || err?.message || 'Lỗi khi xóa voucher');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -1308,7 +1331,7 @@ export function CustomerVouchersPage() {
                     <p className="font-bold text-emerald-700 dark:text-emerald-300 text-sm">
                       {selectedProgramPolicy.discountType === 'PERCENT'
                         ? `Giảm ${selectedProgramPolicy.value}% ${selectedProgramPolicy.maxDiscount ? `(Tối đa ${formatCurrency(selectedProgramPolicy.maxDiscount)})` : ''}`
-                        : selectedProgramPolicy.discountType === 'FREE_SHIPPING'
+                        : (selectedProgramPolicy.discountType as string) === 'FREE_SHIPPING'
                         ? 'Miễn phí vận chuyển'
                         : `Giảm ${formatCurrency(selectedProgramPolicy.value)}`}
                     </p>
@@ -1546,6 +1569,25 @@ export function CustomerVouchersPage() {
           </form>
         )}
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deleteItem)}
+        onClose={() => setDeleteItem(null)}
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
+        title="Xác nhận xóa voucher của khách hàng"
+        description="Bạn có chắc chắn muốn xóa vĩnh viễn voucher này khỏi hệ thống không? Thao tác này không thể hoàn tác."
+        itemName={deleteItem ? `${deleteItem.voucherCode} (${deleteItem.customerName})` : ''}
+      />
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(revokingItem)}
+        onClose={() => setRevokingItem(null)}
+        onConfirm={handleConfirmRevoke}
+        title="Xác nhận thu hồi / hủy voucher"
+        description="Bạn có chắc chắn muốn thu hồi và hủy hiệu lực voucher này của khách hàng không?"
+        itemName={revokingItem ? `${revokingItem.voucherCode} (${revokingItem.customerName})` : ''}
+      />
     </>
   );
 }

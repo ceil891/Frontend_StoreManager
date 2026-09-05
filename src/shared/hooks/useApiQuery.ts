@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type UseQueryOptions, type UseMutationOptions } from '@tanstack/react-query';
 import { axiosClient } from '@/shared/lib/axiosClient';
 
 /**
@@ -39,7 +39,7 @@ export function useApiMutation<TData = any, TVariables = any>(
       // Invalidate active queries to refresh cached data seamlessly
       queryClient.invalidateQueries();
       if (options?.onSuccess) {
-        options.onSuccess(data, variables, context);
+        (options.onSuccess as any)(data, variables, context);
       }
     },
     ...options,

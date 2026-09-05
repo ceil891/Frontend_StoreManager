@@ -12,6 +12,7 @@ import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelec
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
+import { axiosClient } from '@/shared/lib/axiosClient';
 
 export function SuppliersPage() {
   const { suppliers: data, addSupplier, updateSupplier, deleteSupplier, fetchSuppliers, isLoadingSuppliers } = usePurchaseStore();
@@ -53,6 +54,60 @@ export function SuppliersPage() {
     item.category.toLowerCase().includes(search.toLowerCase())
   );
 
+  const [dynamicGroups, setDynamicGroups] = useState<{ id: any; code: string; name: string }[]>([]);
+  const [dynamicAreas, setDynamicAreas] = useState<{ id: any; code: string; name: string }[]>([]);
+
+  useEffect(() => {
+    const loadLookups = async () => {
+      try {
+        const [gRes, aRes] = await Promise.allSettled([
+          axiosClient.get('/crm/partner-groups'),
+          axiosClient.get('/partnerarea/areas?size=500')
+        ]);
+        if (gRes.status === 'fulfilled') {
+          const rawG = (gRes.value as any)?.data || (gRes.value as any) || [];
+          const listG = Array.isArray(rawG) ? rawG : (rawG.content || []);
+          if (listG.length > 0) {
+            setDynamicGroups(listG.map((g: any) => ({
+              id: g.id,
+              code: g.groupCode || `GRP-${g.id}`,
+              name: g.groupName || g.name || 'Nhóm NCC'
+            })));
+          }
+        }
+        if (aRes.status === 'fulfilled') {
+          const rawA = (aRes.value as any)?.data || (aRes.value as any) || [];
+          const listA = Array.isArray(rawA) ? rawA : (rawA.content || []);
+          if (listA.length > 0) {
+            setDynamicAreas(listA.map((a: any) => ({
+              id: a.id,
+              code: a.areaCode || `AREA-${a.id}`,
+              name: a.areaName || a.name || 'Khu vực'
+            })));
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load dynamic groups/areas:', err);
+      }
+    };
+    loadLookups();
+  }, []);
+
+  const parseAddressParts = (fullAddr?: string) => {
+    if (!fullAddr) return { province: '', district: '', ward: '', addressDetail: '' };
+    const parts = fullAddr.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length >= 4) {
+      const province = parts[parts.length - 1];
+      const district = parts[parts.length - 2];
+      const ward = parts[parts.length - 3];
+      const addressDetail = parts.slice(0, parts.length - 3).join(', ');
+      return { province, district, ward, addressDetail };
+    } else if (parts.length === 3) {
+      return { province: parts[2], district: parts[1], ward: '', addressDetail: parts[0] };
+    }
+    return { province: '', district: '', ward: '', addressDetail: fullAddr };
+  };
+
   const handleOpenCreate = () => {
     setModalMode('create');
     setIsAutoCode(true);
@@ -69,15 +124,48 @@ export function SuppliersPage() {
       paymentTerms: 'Net 30',
       activeOrdersCount: 0,
       status: 'ACTIVE',
-      notes: ''
-    });
+      notes: '',
+      province: '',
+      district: '',
+      ward: '',
+      addressDetail: '',
+    } as any);
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (supplier: SupplierRecord) => {
+  const handleOpenEdit = async (supplier: SupplierRecord) => {
     setModalMode('edit');
     setIsAutoCode(false);
-    setEditingSupplier(supplier);
+    
+    const parsedAddr = parseAddressParts(supplier.address);
+    let detailedSupplier = { ...supplier, ...parsedAddr };
+
+    try {
+      if (supplier.id && /^\d+$/.test(String(supplier.id))) {
+        const res: any = await axiosClient.get(`/partnerarea/suppliers/${supplier.id}`);
+        const d = res?.data || res;
+        if (d) {
+          const freshAddr = parseAddressParts(d.address || supplier.address);
+          detailedSupplier = {
+            ...detailedSupplier,
+            ...d,
+            groupId: d.groupId || supplier.groupId,
+            areaId: d.areaId || supplier.areaId,
+            paymentTerm: d.paymentTerm ?? supplier.paymentTerm,
+            creditLimit: d.creditLimit ?? supplier.creditLimit,
+            bankName: d.bankName ?? supplier.bankName,
+            bankAccount: d.bankAccount ?? supplier.bankAccount,
+            accountHolder: d.accountHolder ?? supplier.accountHolder,
+            notes: d.description || d.notes || supplier.notes,
+            ...freshAddr,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch full supplier details:', err);
+    }
+
+    setEditingSupplier(detailedSupplier as any);
     setIsModalOpen(true);
   };
 
@@ -143,8 +231,8 @@ export function SuppliersPage() {
           status: editingSupplier.status as any || 'ACTIVE',
           notes: editingSupplier.notes || editingSupplier.description || '',
           description: editingSupplier.description || editingSupplier.notes || '',
-          groupId: editingSupplier.groupId,
-          areaId: editingSupplier.areaId
+          groupId: editingSupplier.groupId ? String(editingSupplier.groupId) : undefined,
+          areaId: editingSupplier.areaId ? String(editingSupplier.areaId) : undefined
         };
         await addSupplier(newSupplier);
         toast.success('Đã thêm nhà cung cấp mới thành công');
@@ -159,8 +247,8 @@ export function SuppliersPage() {
           bankName: editingSupplier.bankName,
           bankAccount: editingSupplier.bankAccount,
           accountHolder: editingSupplier.accountHolder,
-          groupId: editingSupplier.groupId,
-          areaId: editingSupplier.areaId,
+          groupId: editingSupplier.groupId ? String(editingSupplier.groupId) : undefined,
+          areaId: editingSupplier.areaId ? String(editingSupplier.areaId) : undefined,
           notes: editingSupplier.notes || editingSupplier.description,
           description: editingSupplier.description || editingSupplier.notes
         });
@@ -188,8 +276,21 @@ export function SuppliersPage() {
       toast.success('Đã xóa nhà cung cấp');
       fetchSuppliers();
     } catch (err: any) {
-      console.error(err);
-      toast.error(err?.response?.data?.message || err?.message || 'Xóa nhà cung cấp thất bại');
+      console.error('Lỗi khi xóa nhà cung cấp:', err);
+      const isConstraint =
+        err?.response?.status === 409 ||
+        err?.response?.status === 500 ||
+        String(err?.message || '').toLowerCase().includes('foreign') ||
+        String(err?.response?.data?.message || '').toLowerCase().includes('constraint') ||
+        String(err?.response?.data?.message || '').toLowerCase().includes('cannot delete');
+      if (isConstraint) {
+        toast.error(
+          `❌ Không thể xóa đối tác "${deletingSupplier.supplierName}" do đã có lịch sử phát sinh Đơn mua hàng (PO) hoặc công nợ. Hệ thống đề xuất chuyển trạng thái sang "Ngừng giao dịch" thay vì xóa!`,
+          { duration: 6000 }
+        );
+      } else {
+        toast.error(err?.response?.data?.message || err?.message || 'Xóa nhà cung cấp thất bại');
+      }
     }
     setDeletingSupplier(null);
   };
@@ -618,12 +719,12 @@ export function SuppliersPage() {
                     iconType="building"
                     placeholder="Chọn nhóm NCC..."
                     value={editingSupplier.groupId}
-                    options={[
-                      { id: 'SUP-GRP-RAW', code: 'SUP-GRP-RAW', name: 'NCC Nguyên vật liệu thô', subtitle: 'Chiết khấu 10%' },
-                      { id: 'SUP-GRP-IMP', code: 'SUP-GRP-IMP', name: 'NCC Hàng nhập khẩu', subtitle: 'Thanh toán LC/Net30' },
-                      { id: 'SUP-GRP-LOCAL', code: 'SUP-GRP-LOCAL', name: 'NCC Đơn vị nội địa', subtitle: 'Giao hàng nhanh' },
+                    options={dynamicGroups.length > 0 ? dynamicGroups : [
+                      { id: '1', code: 'GRP-RAW', name: 'NCC Nguyên vật liệu thô', subtitle: 'Chiết khấu 10%' },
+                      { id: '2', code: 'GRP-IMP', name: 'NCC Hàng nhập khẩu', subtitle: 'Thanh toán LC/Net30' },
+                      { id: '3', code: 'GRP-LOCAL', name: 'NCC Đơn vị nội địa', subtitle: 'Giao hàng nhanh' },
                     ]}
-                    onChange={(val) => setEditingSupplier(prev => ({ ...prev, groupId: val }))}
+                    onChange={(val) => setEditingSupplier(prev => ({ ...prev, groupId: val ? String(val) : undefined }))}
                   />
                 </div>
                 <div>
@@ -633,12 +734,12 @@ export function SuppliersPage() {
                     iconType="location"
                     placeholder="Chọn khu vực..."
                     value={editingSupplier.areaId}
-                    options={[
-                      { id: 'AREA-MIEN-BAC', code: 'AREA-MB', name: 'Khu vực Miền Bắc (Hà Nội, Hải Phòng...)' },
-                      { id: 'AREA-MIEN-NAM', code: 'AREA-MN', name: 'Khu vực Miền Nam (TP.HCM, Cần Thơ...)' },
-                      { id: 'AREA-OVERSEAS', code: 'AREA-OS', name: 'Nhà cung cấp Quốc tế' },
+                    options={dynamicAreas.length > 0 ? dynamicAreas : [
+                      { id: '1', code: 'AREA-MB', name: 'Khu vực Miền Bắc (Hà Nội, Hải Phòng...)' },
+                      { id: '2', code: 'AREA-MN', name: 'Khu vực Miền Nam (TP.HCM, Cần Thơ...)' },
+                      { id: '3', code: 'AREA-MT', name: 'Khu vực Miền Trung (Đà Nẵng...)' },
                     ]}
-                    onChange={(val) => setEditingSupplier(prev => ({ ...prev, areaId: val }))}
+                    onChange={(val) => setEditingSupplier(prev => ({ ...prev, areaId: val ? String(val) : undefined }))}
                   />
                 </div>
               </div>

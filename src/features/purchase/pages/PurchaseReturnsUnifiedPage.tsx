@@ -189,7 +189,7 @@ export function PurchaseReturnsUnifiedPage() {
         `GRN-${rec.id}` === editingRTV.grnRefNumber
       );
       if (foundReceipt) {
-        const lines = foundReceipt.lines || foundReceipt.receiptLines || foundReceipt.items || [];
+        const lines = foundReceipt.lines || (foundReceipt as any).receiptLines || (foundReceipt as any).items || [];
         const unusedLine = lines.find((line: any) => !returnItems.some(item => item.sku === line.sku));
         const lineToUse = unusedLine || lines[0];
         if (lineToUse) {
@@ -245,7 +245,7 @@ export function PurchaseReturnsUnifiedPage() {
   // Convert store data to Unified format
   const data = useMemo<UnifiedReturnItem[]>(() => {
     return returnToSuppliers.map((r) => {
-      const rawLines = r.returnLines || (r as any).items || [];
+      const rawLines = (r as any).returnLines || (r as any).lines || (r as any).items || [];
       const parsedStatus = mapLegacyStatus(r.status as string);
       return {
         id: r.id,
@@ -357,8 +357,8 @@ export function PurchaseReturnsUnifiedPage() {
       return;
     }
 
-    if (!editingRTV.grnRefNumber || !editingRTV.grnRefNumber.startsWith('GRN-')) {
-      toast.error('Bắt buộc phải chọn một Phiếu nhập kho gốc tham chiếu (mã bắt đầu bằng GRN-)!');
+    if (!editingRTV.grnRefNumber?.trim()) {
+      toast.error('Bắt buộc phải chọn hoặc nhập Phiếu nhập kho gốc tham chiếu!');
       return;
     }
 
@@ -371,7 +371,7 @@ export function PurchaseReturnsUnifiedPage() {
     );
 
     if (foundReceipt) {
-      const lines = foundReceipt.lines || foundReceipt.receiptLines || foundReceipt.items || [];
+      const lines = foundReceipt.lines || (foundReceipt as any).receiptLines || (foundReceipt as any).items || [];
       const receivedQtys: Record<string, number> = {};
       lines.forEach((item: any) => {
         const sku = (item.sku || item.skuSnapshot || '').toUpperCase();

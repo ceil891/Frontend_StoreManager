@@ -1,5 +1,7 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import {
   Plus,
   Search,
@@ -17,6 +19,9 @@ import {
   XCircle,
   Lock,
   ShoppingBag,
+  Star,
+  CreditCard,
+  DollarSign,
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -24,6 +29,7 @@ import { axiosClient } from '@/shared/lib/axiosClient';
 import { extractPageContent } from '@/shared/lib/apiHelpers';
 import { toast } from 'sonner';
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
+import { usePurchaseStore } from '@/features/purchase/store/purchaseStore';
 
 export interface DeliveryLineItem {
   id: string;
@@ -46,6 +52,7 @@ export interface SupplierDeliveryRecord {
   supplierName: string;
   supplierCode?: string;
   branchName: string;
+  branchId?: number | string;
   expectedDate: string;
   actualDate?: string;
   receiver: string;
@@ -54,6 +61,9 @@ export interface SupplierDeliveryRecord {
   totalItems?: number;
   totalQuantity?: number;
   totalAmount?: number;
+  paidAmount?: number;
+  paymentStatus?: 'UNPAID' | 'PARTIAL' | 'PAID';
+  paymentMethod?: string;
   lines?: DeliveryLineItem[];
 }
 
@@ -68,6 +78,8 @@ export interface PurchaseOrderLookupItem {
   orderDate: string;
   totalAmount: number;
   status: string;
+  paymentStatus?: string;
+  advanceAmount?: number;
   lines: DeliveryLineItem[];
 }
 
@@ -81,6 +93,7 @@ export function SupplierDeliveriesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   
+  const navigate = useNavigate();
   // Loading & Error states
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -187,17 +200,30 @@ export function SupplierDeliveriesPage() {
           });
 
           const branchStr = po.destinationStore || po.branchName || po.branch?.branchName || po.branch?.name || 'Chi nhánh chính';
+          let poOverrides: Record<string, any> = {};
+          try {
+            const poSaved = localStorage.getItem('retailhub_po_payment_overrides');
+            if (poSaved) poOverrides = JSON.parse(poSaved);
+          } catch {}
+          const poCode = po.poNumber || po.poCode || `PO-2026-${String(po.id).padStart(5, '0')}`;
+          const poOv = poOverrides[String(po.id)] || poOverrides[poCode] || {};
+          const poStatus = poOv.status || po.status || 'APPROVED';
+          const poPayStatus = poOv.paymentStatus || po.paymentStatus || 'UNPAID';
+          const poAdvance = poOv.advanceAmount !== undefined ? Number(poOv.advanceAmount) : Number(po.advanceAmount || 0);
+
           return {
             id: Number(po.id),
-            poCode: po.poNumber || po.poCode || `PO-2026-${String(po.id).padStart(5, '0')}`,
+            poCode,
             supplierId: Number(po.supplierId || po.supplier?.id || 1),
             supplierName: po.supplierName || po.supplier?.name || 'Nhà cung cấp',
             supplierCode: po.supplierCode || po.supplier?.supplierCode || 'SUP-00125',
             branchId: Number(po.branchId || po.branch?.id || 1),
             branchName: branchStr,
             orderDate: po.orderDate ? String(po.orderDate).substring(0, 10) : new Date().toISOString().substring(0, 10),
-            totalAmount: Number(po.totalAmount || 19980000),
-            status: po.status || 'APPROVED',
+            totalAmount: Number(po.totalAmount || 0),
+            status: poStatus,
+            paymentStatus: poPayStatus,
+            advanceAmount: poAdvance,
             lines: parsedLines,
           };
         });
@@ -235,39 +261,59 @@ export function SupplierDeliveriesPage() {
           : String(item.status || '').toUpperCase();
 
         const status: SupplierDeliveryRecord['status'] =
-          statusStr === 'COMPLETED' || statusStr === 'COMPLETE' || statusStr === 'RECEIVED' || statusStr === 'DA_NHAN'
+          statusStr === 'COMPLETED' ||
+          statusStr === 'COMPLETE' ||
+          statusStr === 'RECEIVED' ||
+          statusStr === 'DA_NHAN' ||
+          statusStr === 'INSPECTED_ACCEPTED' ||
+          statusStr === 'PASSED'
             ? 'DA_NHAN'
             : statusStr === 'CANCELLED' || statusStr === 'DA_HUY'
               ? 'DA_HUY'
-              : statusStr === 'RECEIVING' || statusStr === 'DANG_NHAN'
+              : statusStr === 'RECEIVING' || statusStr === 'DANG_NHAN' || statusStr === 'PARTIAL_ACCEPTANCE'
                 ? 'DANG_NHAN'
                 : 'CHO_NHAN';
+
+        const totalAmount = Number(override?.totalAmount || item.totalAmount || 0);
+        const paidAmount = override?.paidAmount !== undefined
+          ? Number(override.paidAmount)
+          : (item.paidAmount !== undefined
+            ? Number(item.paidAmount)
+            : (status === 'DA_NHAN' ? totalAmount : 0));
+        let paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID' = override?.paymentStatus || item.paymentStatus;
+        if (!paymentStatus) {
+          paymentStatus = paidAmount >= totalAmount && totalAmount > 0 ? 'PAID' : (paidAmount > 0 ? 'PARTIAL' : 'UNPAID');
+        }
+        const paymentMethod = override?.paymentMethod || item.paymentMethod || 'Chuyển khoản';
 
         return {
           id: String(item.id),
           deliveryCode: item.receiptCode || item.deliveryCode || `GR-2026-${String(item.id).padStart(6, '0')}`,
           poCode: item.purchaseOrderCode || item.poNumber || item.poCode || 'PO-2026-00125',
           purchaseOrderId: item.purchaseOrderId || item.purchaseOrder?.id,
-          supplierName: item.supplierName || item.supplier?.name || 'Công Ty TNHH Nước Giải Khát Suntory PepsiCo',
-          supplierCode: item.supplierCode || 'SUP-00125',
-          branchName: override?.branchName || item.branchName || item.branch?.branchName || 'Kho Tổng Hà Nội',
+          supplierName: item.supplierName || item.supplier?.name || 'Nhà cung cấp',
+          supplierCode: item.supplierCode || 'SUP-001',
+          branchName: override?.branchName || item.branchName || item.branch?.branchName || 'Chi nhánh mặc định',
           expectedDate: item.receiptDate ? String(item.receiptDate).substring(0, 10) : (item.estDeliveryDate ? String(item.estDeliveryDate).substring(0, 10) : new Date().toISOString().substring(0, 10)),
           actualDate: status === 'DA_NHAN' ? (override?.actualDate || (item.actualDate ? String(item.actualDate).substring(0, 10) : new Date().toISOString().substring(0, 10))) : undefined,
-          receiver: override?.receiver || item.createdBy || item.orderedBy || item.inspectedBy || 'Nguyễn Văn Hùng (Thủ kho)',
+          receiver: override?.receiver || item.createdBy || item.orderedBy || item.inspectedBy || 'Thủ kho',
           status,
           notes: override?.notes || item.note || item.notes || 'Đợt nhận hàng theo đơn đặt hàng PO',
-          totalItems: Number(item.totalItems || (Array.isArray(item.receiptLines) ? item.receiptLines.length : 2)),
-          totalAmount: Number(override?.totalAmount || item.totalAmount || 19980000),
+          totalItems: Number(item.totalItems || (Array.isArray(item.receiptLines) ? item.receiptLines.length : 0)),
+          totalAmount,
+          paidAmount,
+          paymentStatus,
+          paymentMethod,
           lines: Array.isArray(item.receiptLines) ? item.receiptLines.map((l: any, idx: number) => ({
             id: String(l.id || idx + 1),
             productVariantId: Number(l.productVariantId || l.id || idx + 1),
             productName: l.productName || l.productNameSnapshot || `Sản phẩm ${idx + 1}`,
             sku: l.sku || l.skuSnapshot || `SKU-${idx + 1}`,
-            orderedQty: Number(l.quantity || 100),
-            receivedQty: status === 'DA_NHAN' ? Number(l.quantity || 100) : 0,
-            currentReceiveQty: Number(l.quantity || 100),
-            unitPrice: Number(l.unitCost || l.unitCostSnapshot || 50000),
-            subTotal: Number(l.subTotal || 5000000),
+            orderedQty: Number(l.quantity || 0),
+            receivedQty: status === 'DA_NHAN' ? Number(l.quantity || 0) : 0,
+            currentReceiveQty: Number(l.quantity || 0),
+            unitPrice: Number(l.unitCost || l.unitCostSnapshot || 0),
+            subTotal: Number(l.subTotal || 0),
           })) : undefined,
         };
       });
@@ -312,11 +358,66 @@ export function SupplierDeliveriesPage() {
     });
   }, [search, statusFilter, data]);
 
+  // Lọc danh sách PO có sẵn để tạo đợt nhận hàng:
+  // Chặn không cho phép chọn các PO đã nhận hàng, đã hoàn tất, hoặc đã có đợt nhận hàng trong hệ thống
+  const availablePurchaseOrders = useMemo(() => {
+    // 1. Tập hợp các mã PO đã có phiếu nhận hàng trong hệ thống (chưa bị hủy)
+    const existingDeliveryPoCodes = new Set(
+      data
+        .filter((d) => d.status !== 'DA_HUY' && d.status !== 'CANCELLED' && (modalMode === 'create' || String(d.id) !== String(editingItem.id)))
+        .map((d) => d.poCode?.trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    return purchaseOrders.filter((po) => {
+      const poCodeLower = po.poCode?.trim().toLowerCase() || '';
+      const st = String(po.status || '').toUpperCase();
+
+      // Kiểm tra trạng thái đã hoàn tất nhận hàng
+      const isDelivered =
+        st === 'DELIVERED' ||
+        st === 'RECEIVED' ||
+        st === 'DA_NHAN' ||
+        st === 'COMPLETED' ||
+        st === 'COMPLETE' ||
+        st === 'ĐÃ NHẬN HÀNG' ||
+        st === 'INSPECTED_ACCEPTED';
+
+      // Kiểm tra đã có phiếu nhận hàng (đơn nhập) nào được tạo trước đó chưa
+      const isAlreadyImported = existingDeliveryPoCodes.has(poCodeLower);
+
+      // Nếu đang ở chế độ chỉnh sửa đợt nhận hàng hiện tại thì cho phép giữ nguyên PO này
+      if (modalMode === 'edit' && poCodeLower === editingItem.poCode?.trim().toLowerCase()) {
+        return true;
+      }
+
+      // Đơn đã nhận đủ, hoặc đã có đợt nhận hàng trong hệ thống thì không cho tạo thêm đợt nhận mới
+      if (isDelivered || isAlreadyImported) {
+        return false;
+      }
+
+      // Loại bỏ đơn đã hủy
+      if (st === 'CANCELLED' || st === 'ĐÃ HỦY') {
+        return false;
+      }
+
+      return true;
+    });
+  }, [purchaseOrders, data, modalMode, editingItem.id, editingItem.poCode]);
+
   // Handle PO Selection in Form
   const handleSelectPo = (poVal: string) => {
     setSelectedPoId(poVal);
     const matchedPo = purchaseOrders.find((p) => p.poCode === poVal || String(p.id) === poVal || p.poCode.toLowerCase() === poVal.toLowerCase());
     if (matchedPo) {
+      const defaultPaid = matchedPo.paymentStatus === 'PAID' ? matchedPo.totalAmount : (matchedPo.advanceAmount || 0);
+      const defaultPayStatus: 'UNPAID' | 'PARTIAL' | 'PAID' =
+        matchedPo.paymentStatus === 'PAID'
+          ? 'PAID'
+          : matchedPo.paymentStatus === 'PARTIAL_ADVANCE' || defaultPaid > 0
+            ? 'PARTIAL'
+            : 'UNPAID';
+
       setEditingItem((prev) => ({
         ...prev,
         poCode: matchedPo.poCode,
@@ -325,6 +426,9 @@ export function SupplierDeliveriesPage() {
         supplierCode: matchedPo.supplierCode,
         branchId: matchedPo.branchId || prev.branchId,
         branchName: matchedPo.branchName || prev.branchName,
+        paidAmount: defaultPaid,
+        paymentStatus: defaultPayStatus,
+        paymentMethod: prev.paymentMethod || 'Chuyển khoản',
       }));
       setDeliveryLines(matchedPo.lines.map(l => ({ ...l })));
     } else {
@@ -333,6 +437,8 @@ export function SupplierDeliveriesPage() {
         poCode: '',
         supplierName: '',
         supplierCode: '',
+        paidAmount: 0,
+        paymentStatus: 'UNPAID',
       }));
       setDeliveryLines([]);
     }
@@ -394,6 +500,9 @@ export function SupplierDeliveriesPage() {
       receiver: 'Nguyễn Văn Hùng (Thủ kho - Chi nhánh chính)',
       status: 'CHO_NHAN',
       notes: '',
+      paidAmount: 0,
+      paymentStatus: 'UNPAID',
+      paymentMethod: 'Chuyển khoản',
     });
     setIsModalOpen(true);
   };
@@ -408,12 +517,23 @@ export function SupplierDeliveriesPage() {
     );
     const targetPoCode = matchedPo ? matchedPo.poCode : (item.poCode || '');
     setSelectedPoId(targetPoCode);
+
+    const isCompleted = item.status === 'DA_NHAN';
+    const initialPaid = item.paidAmount !== undefined
+      ? item.paidAmount
+      : (item.paymentStatus === 'PAID' || isCompleted ? (item.totalAmount || 0) : 0);
+    const initialPayStatus: 'UNPAID' | 'PARTIAL' | 'PAID' =
+      item.paymentStatus || (initialPaid >= (item.totalAmount || 0) && (item.totalAmount || 0) > 0 ? 'PAID' : (initialPaid > 0 ? 'PARTIAL' : 'UNPAID'));
+
     setEditingItem({
       ...item,
       purchaseOrderId: matchedPo ? matchedPo.id : item.purchaseOrderId,
       poCode: matchedPo ? matchedPo.poCode : item.poCode,
       supplierName: matchedPo ? matchedPo.supplierName : item.supplierName,
       supplierCode: matchedPo ? matchedPo.supplierCode : item.supplierCode,
+      paidAmount: initialPaid,
+      paymentStatus: initialPayStatus,
+      paymentMethod: item.paymentMethod || 'Chuyển khoản',
     });
     if (item.lines && item.lines.length > 0) {
       setDeliveryLines(item.lines);
@@ -437,6 +557,35 @@ export function SupplierDeliveriesPage() {
       return;
     }
 
+    // CHẶN TẠO TRÙNG ĐỢT NHẬN HÀNG KHI ĐƠN PO ĐÃ CÓ PHIẾU HOẶC ĐÃ HOÀN TẤT
+    if (modalMode === 'create') {
+      const poCodeTarget = editingItem.poCode?.trim().toLowerCase();
+      const existingImport = data.find(
+        (d) => d.poCode?.trim().toLowerCase() === poCodeTarget && d.status !== 'DA_HUY' && d.status !== 'CANCELLED'
+      );
+      if (existingImport) {
+        toast.error(`Đơn mua ${editingItem.poCode} đã có đợt nhận hàng (${existingImport.deliveryCode} - ${existingImport.status === 'DA_NHAN' ? 'Đã nhận đủ' : 'Đang xử lý'})! Không thể tạo thêm đợt nhận hàng trùng.`);
+        return;
+      }
+
+      const matchedPO = purchaseOrders.find((p) => p.poCode?.trim().toLowerCase() === poCodeTarget);
+      if (matchedPO) {
+        const st = String(matchedPO.status || '').toUpperCase();
+        if (
+          st === 'DELIVERED' ||
+          st === 'RECEIVED' ||
+          st === 'DA_NHAN' ||
+          st === 'COMPLETED' ||
+          st === 'COMPLETE' ||
+          st === 'ĐÃ NHẬN HÀNG' ||
+          st === 'INSPECTED_ACCEPTED'
+        ) {
+          toast.error(`Đơn mua ${editingItem.poCode} đã được nhận hàng hoàn tất trước đó! Không thể tạo thêm đợt nhận hàng.`);
+          return;
+        }
+      }
+    }
+
     if (formSummary.totalReceiveQty <= 0) {
       toast.error('Số lượng nhận lần này phải lớn hơn 0!');
       return;
@@ -457,6 +606,15 @@ export function SupplierDeliveriesPage() {
 
     const isCompleted = editingItem.status === 'DA_NHAN';
     const statusPayload = isCompleted ? 'COMPLETE' : editingItem.status === 'DA_HUY' ? 'CANCELLED' : editingItem.status === 'DANG_NHAN' ? 'RECEIVING' : 'PENDING';
+
+    const finalPaidAmount = Number(editingItem.paidAmount || 0);
+    const finalPaymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID' =
+      finalPaidAmount >= formSummary.totalAmount && formSummary.totalAmount > 0
+        ? 'PAID'
+        : finalPaidAmount > 0
+          ? 'PARTIAL'
+          : 'UNPAID';
+    const finalPaymentMethod = editingItem.paymentMethod || 'Chuyển khoản';
 
     const payload = {
       receiptCode: editingItem.deliveryCode,
@@ -485,6 +643,7 @@ export function SupplierDeliveriesPage() {
       id: String(editingItem.id || Date.now()),
       deliveryCode: editingItem.deliveryCode || `GR-${Date.now()}`,
       poCode: editingItem.poCode || '',
+      purchaseOrderId: editingItem.purchaseOrderId,
       supplierName: editingItem.supplierName || '',
       supplierCode: editingItem.supplierCode || '',
       branchId: finalBranchId,
@@ -497,34 +656,20 @@ export function SupplierDeliveriesPage() {
       totalItems: formSummary.activeLinesCount,
       totalQuantity: formSummary.totalReceiveQty,
       totalAmount: formSummary.totalAmount,
+      paidAmount: finalPaidAmount,
+      paymentStatus: finalPaymentStatus,
+      paymentMethod: finalPaymentMethod,
       lines: deliveryLines,
     };
 
-    // Save override locally for instant UI update & persistent storage
-    try {
-      const overrides = JSON.parse(localStorage.getItem('retailhub_supplier_deliveries_overrides') || '{}');
-      const overrideObj = {
-        status: editingItem.status,
-        branchName: finalBranchName,
-        actualDate: isCompleted ? new Date().toISOString().split('T')[0] : undefined,
-        totalAmount: formSummary.totalAmount,
-        notes: editingItem.notes,
-        receiver: editingItem.receiver,
-      };
-      if (editingItem.deliveryCode) overrides[editingItem.deliveryCode] = overrideObj;
-      if (editingItem.id) overrides[String(editingItem.id)] = overrideObj;
-      localStorage.setItem('retailhub_supplier_deliveries_overrides', JSON.stringify(overrides));
-    } catch {}
-
-    let apiSuccess = false;
     try {
       if (modalMode === 'create') {
         console.log('[SupplierDeliveries] CREATE payload:', JSON.stringify(payload, null, 2));
         const createRes = await axiosClient.post('/inventory/imports', payload);
         console.log('[SupplierDeliveries] CREATE response:', createRes);
         const createdId = (createRes as any)?.data?.id || (createRes as any)?.id;
-        apiSuccess = true;
         toast.success(`Tạo đợt nhận hàng ${editingItem.deliveryCode} thành công!`);
+
         // If status is "Đã nhận đủ", call /complete to trigger stock addition to branch
         if (isCompleted && createdId) {
           try {
@@ -539,7 +684,6 @@ export function SupplierDeliveriesPage() {
         if (editingItem.id && /^\d+$/.test(String(editingItem.id))) {
           console.log('[SupplierDeliveries] UPDATE payload:', JSON.stringify(payload, null, 2));
           await axiosClient.put(`/inventory/imports/${editingItem.id}`, payload);
-          apiSuccess = true;
           if (isCompleted) {
             try {
               await axiosClient.post(`/inventory/imports/${editingItem.id}/complete`);
@@ -549,44 +693,203 @@ export function SupplierDeliveriesPage() {
         }
         toast.success(`Cập nhật đợt nhận hàng ${editingItem.deliveryCode} thành công!`);
       }
+
+      // Save override locally for instant UI update & persistent storage
+      try {
+        const overrides = JSON.parse(localStorage.getItem('retailhub_supplier_deliveries_overrides') || '{}');
+        const overrideObj = {
+          status: editingItem.status,
+          branchName: finalBranchName,
+          actualDate: isCompleted ? new Date().toISOString().split('T')[0] : undefined,
+          totalAmount: formSummary.totalAmount,
+          paidAmount: finalPaidAmount,
+          paymentStatus: finalPaymentStatus,
+          paymentMethod: finalPaymentMethod,
+          notes: editingItem.notes,
+          receiver: editingItem.receiver,
+        };
+        if (editingItem.deliveryCode) overrides[editingItem.deliveryCode] = overrideObj;
+        if (editingItem.id) overrides[String(editingItem.id)] = overrideObj;
+        localStorage.setItem('retailhub_supplier_deliveries_overrides', JSON.stringify(overrides));
+      } catch {}
+
+      // TỰ ĐỘNG ĐỒNG BỘ TRẠNG THÁI SANG ĐƠN ĐẶT MUA PO SAU KHI NHẬP KHO THÀNH CÔNG
+      try {
+        const currentPOs = usePurchaseStore.getState().purchaseOrders;
+        const matchingPo = currentPOs.find(
+          (p) => p.poNumber === editingItem.poCode || String(p.id) === String(editingItem.purchaseOrderId)
+        );
+
+        const poPaymentStatus = finalPaidAmount >= formSummary.totalAmount && formSummary.totalAmount > 0
+          ? 'PAID'
+          : finalPaidAmount > 0
+            ? 'PARTIAL_ADVANCE'
+            : (matchingPo?.paymentStatus || 'UNPAID');
+
+        const poOverrideData = {
+          paymentStatus: poPaymentStatus,
+          advanceAmount: finalPaidAmount > 0 ? finalPaidAmount : matchingPo?.advanceAmount,
+          paidAmount: finalPaidAmount > 0 ? finalPaidAmount : matchingPo?.paidAmount,
+          status: isCompleted ? 'RECEIVED' : (matchingPo?.status || 'APPROVED'),
+        };
+
+        const poOverrides = JSON.parse(localStorage.getItem('retailhub_po_payment_overrides') || '{}');
+        if (editingItem.poCode) poOverrides[editingItem.poCode] = { ...poOverrides[editingItem.poCode], ...poOverrideData };
+        if (editingItem.purchaseOrderId) poOverrides[String(editingItem.purchaseOrderId)] = { ...poOverrides[String(editingItem.purchaseOrderId)], ...poOverrideData };
+        localStorage.setItem('retailhub_po_payment_overrides', JSON.stringify(poOverrides));
+
+        if (matchingPo) {
+          usePurchaseStore.getState().updatePurchaseOrder(matchingPo.id, {
+            paymentStatus: poPaymentStatus,
+            advanceAmount: poOverrideData.advanceAmount,
+            status: isCompleted ? 'RECEIVED' : matchingPo.status,
+          } as any).catch(() => {});
+        }
+
+        setPurchaseOrders((prev) => prev.map((p) => {
+          if (p.poCode === editingItem.poCode || String(p.id) === String(editingItem.purchaseOrderId)) {
+            return {
+              ...p,
+              status: isCompleted ? 'RECEIVED' : p.status,
+              paymentStatus: poPaymentStatus,
+              advanceAmount: poOverrideData.advanceAmount,
+            };
+          }
+          return p;
+        }));
+
+        if (isCompleted) {
+          toast.success(`Đã cập nhật trạng thái đơn mua ${editingItem.poCode || ''} thành "ĐÃ NHẬN HÀNG (RECEIVED)"`);
+        }
+      } catch (syncErr) {
+        console.warn('Lỗi khi đồng bộ trạng thái sang PO:', syncErr);
+      }
     } catch (err: any) {
       const errMsg = err?.response?.data?.message || err?.message || 'Lỗi không xác định';
       console.error('[SupplierDeliveries] API ERROR:', err?.response?.status, errMsg, err);
       toast.error(`Lỗi khi lưu đợt nhận hàng: ${errMsg}`);
+      return;
     } finally {
       setIsSubmitting(false);
     }
 
-    if (modalMode === 'create') {
-      try {
-        const stored = JSON.parse(localStorage.getItem('retailhub_created_deliveries') || '[]');
-        localStorage.setItem('retailhub_created_deliveries', JSON.stringify([newRecord, ...stored.filter((s: any) => s.deliveryCode !== newRecord.deliveryCode && s.id !== newRecord.id)]));
-      } catch {}
-      setData((prev) => [newRecord, ...prev.filter((p) => p.deliveryCode !== newRecord.deliveryCode && p.id !== newRecord.id)]);
-    } else {
-      try {
-        const stored = JSON.parse(localStorage.getItem('retailhub_created_deliveries') || '[]');
-        localStorage.setItem('retailhub_created_deliveries', JSON.stringify(stored.map((s: any) => (s.id === newRecord.id || s.deliveryCode === newRecord.deliveryCode ? newRecord : s))));
-      } catch {}
-      setData((prev) => prev.map((item) => (item.id === newRecord.id || item.deliveryCode === newRecord.deliveryCode ? newRecord : item)));
-    }
-
+    await fetchDeliveries();
     useInventoryStore.getState().fetchProducts();
     setIsModalOpen(false);
   };
 
+  const [deletingItem, setDeletingItem] = useState<SupplierDeliveryRecord | null>(null);
+  const [receivingItem, setReceivingItem] = useState<SupplierDeliveryRecord | null>(null);
+
   // Delete Delivery Record
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa đợt giao nhận hàng này?')) {
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    const id = deletingItem.id;
+    try {
+      if (/^\d+$/.test(String(id))) {
+        await axiosClient.delete(`/inventory/imports/${id}`);
+      }
       try {
         const stored = JSON.parse(localStorage.getItem('retailhub_created_deliveries') || '[]');
         localStorage.setItem('retailhub_created_deliveries', JSON.stringify(stored.filter((s: any) => s.id !== id && s.deliveryCode !== id)));
       } catch {}
       setData((prev) => prev.filter((i) => i.id !== id && i.deliveryCode !== id));
+      toast.success(`Đã xóa đợt nhận hàng "${deletingItem.deliveryCode}" thành công!`);
+      if (selected?.id === id) setSelected(null);
+      setDeletingItem(null);
+    } catch (err: any) {
+      console.error('API delete delivery failed:', err);
+      toast.error('Lỗi khi xóa đợt giao nhận: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
+    }
+  };
+
+  const handleConfirmReceive = async () => {
+    if (!receivingItem) return;
+    const rec = receivingItem;
+    const recId = rec.id;
+    try {
+      if (/^\d+$/.test(String(recId))) {
+        await axiosClient.post(`/inventory/imports/${recId}/complete`);
+      }
+
+      // Update local state
+      setData((prev) => prev.map((item) =>
+        item.id === recId || item.deliveryCode === rec.deliveryCode
+          ? { ...item, status: 'DA_NHAN' as const, actualDate: new Date().toISOString().split('T')[0] }
+          : item
+      ));
+
+      // Update overrides
       try {
-        await axiosClient.delete(`/inventory/imports/${id}`);
+        const overrides = JSON.parse(localStorage.getItem('retailhub_supplier_deliveries_overrides') || '{}');
+        const ov = { ...overrides[recId], status: 'DA_NHAN', actualDate: new Date().toISOString().split('T')[0] };
+        overrides[recId] = ov;
+        if (rec.deliveryCode) overrides[rec.deliveryCode] = ov;
+        localStorage.setItem('retailhub_supplier_deliveries_overrides', JSON.stringify(overrides));
       } catch {}
-      toast.success('Đã xóa đợt nhận hàng');
+
+      try {
+        const stored: any[] = JSON.parse(localStorage.getItem('retailhub_created_deliveries') || '[]');
+        localStorage.setItem('retailhub_created_deliveries', JSON.stringify(stored.map((s) =>
+          s.id === recId || s.deliveryCode === rec.deliveryCode
+            ? { ...s, status: 'DA_NHAN', actualDate: new Date().toISOString().split('T')[0] }
+            : s
+        )));
+      } catch {}
+
+      // Đồng bộ trạng thái nhận hàng & thanh toán sang Đơn mua PO
+      const recPaid = rec.paidAmount !== undefined ? rec.paidAmount : (rec.paymentStatus === 'PAID' ? (rec.totalAmount || 0) : 0);
+      const poPayStatus: 'UNPAID' | 'PARTIAL_ADVANCE' | 'PAID' =
+        rec.paymentStatus === 'PAID' || (recPaid >= (rec.totalAmount || 0) && (rec.totalAmount || 0) > 0)
+          ? 'PAID'
+          : recPaid > 0
+            ? 'PARTIAL_ADVANCE'
+            : 'UNPAID';
+
+      try {
+        const poOverrides = JSON.parse(localStorage.getItem('retailhub_po_payment_overrides') || '{}');
+        const poOvData = {
+          status: 'DELIVERED',
+          paymentStatus: poPayStatus,
+          advanceAmount: recPaid,
+          paidAmount: recPaid,
+        };
+        if (rec.poCode) poOverrides[rec.poCode] = { ...poOverrides[rec.poCode], ...poOvData };
+        if (rec.purchaseOrderId) poOverrides[String(rec.purchaseOrderId)] = { ...poOverrides[String(rec.purchaseOrderId)], ...poOvData };
+        localStorage.setItem('retailhub_po_payment_overrides', JSON.stringify(poOverrides));
+
+        const matchingPoInStore = usePurchaseStore.getState().purchaseOrders.find(
+          (p) => p.poNumber === rec.poCode || String(p.id) === String(rec.purchaseOrderId)
+        );
+        if (matchingPoInStore) {
+          usePurchaseStore.getState().updatePurchaseOrder(matchingPoInStore.id, {
+            status: 'DELIVERED',
+            paymentStatus: poPayStatus,
+            advanceAmount: recPaid,
+          } as any).catch(() => {});
+        }
+
+        setPurchaseOrders((prev) => prev.map((p) => {
+          if (p.poCode === rec.poCode || String(p.id) === String(rec.purchaseOrderId)) {
+            return {
+              ...p,
+              status: 'DELIVERED',
+              paymentStatus: poPayStatus,
+              advanceAmount: recPaid,
+            };
+          }
+          return p;
+        }));
+      } catch (syncErr) {
+        console.warn('Lỗi đồng bộ PO trong confirmReceive:', syncErr);
+      }
+
+      useInventoryStore.getState().fetchProducts();
+      toast.success(`Đã nhận hàng & cộng tồn kho cho chi nhánh "${rec.branchName}"!`);
+      setReceivingItem(null);
+    } catch (err: any) {
+      const errMsg = err?.response?.data?.message || err?.message || '';
+      toast.error(`Lỗi khi nhận hàng: ${errMsg}`);
     }
   };
 
@@ -648,6 +951,37 @@ export function SupplierDeliveriesPage() {
         },
       },
       {
+        accessorKey: 'paymentStatus',
+        header: 'Thanh toán',
+        cell: ({ row }) => {
+          const item = row.original;
+          const status = item.paymentStatus || (item.status === 'DA_NHAN' ? 'PAID' : 'UNPAID');
+          const paid = item.paidAmount !== undefined ? item.paidAmount : (status === 'PAID' ? (item.totalAmount || 0) : 0);
+          const total = item.totalAmount || 0;
+          const debt = Math.max(0, total - paid);
+
+          return (
+            <div className="space-y-0.5">
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${
+                status === 'PAID'
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                  : status === 'PARTIAL'
+                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
+                    : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+              }`}>
+                {status === 'PAID' ? 'Đã thanh toán đủ' : status === 'PARTIAL' ? 'Thanh toán thiếu' : 'Chưa thanh toán'}
+              </span>
+              {status === 'PARTIAL' && (
+                <div className="text-[10px] text-gray-500 font-mono leading-tight">
+                  <span>Đã trả: <strong className="text-blue-600">{new Intl.NumberFormat('vi-VN').format(paid)}đ</strong></span>
+                  <span className="block text-red-500 font-medium">Nợ: {new Intl.NumberFormat('vi-VN').format(debt)}đ</span>
+                </div>
+              )}
+            </div>
+          );
+        },
+      },
+      {
         accessorKey: 'status',
         header: 'Trạng thái',
         cell: (info) => {
@@ -688,43 +1022,7 @@ export function SupplierDeliveriesPage() {
           <div className="flex items-center gap-1">
             {(row.original.status === 'CHO_NHAN' || row.original.status === 'DANG_NHAN') && (
               <button
-                onClick={async () => {
-                  const rec = row.original;
-                  const recId = rec.id;
-                  if (!confirm(`Xác nhận nhận hàng cho đợt ${rec.deliveryCode}? Tồn kho sẽ được cộng vào chi nhánh "${rec.branchName}".`)) return;
-                  try {
-                    if (/^\d+$/.test(String(recId))) {
-                      await axiosClient.post(`/inventory/imports/${recId}/complete`);
-                    }
-                    // Update local state
-                    setData((prev) => prev.map((item) =>
-                      item.id === recId || item.deliveryCode === rec.deliveryCode
-                        ? { ...item, status: 'DA_NHAN' as const, actualDate: new Date().toISOString().split('T')[0] }
-                        : item
-                    ));
-                    // Update overrides
-                    try {
-                      const overrides = JSON.parse(localStorage.getItem('retailhub_supplier_deliveries_overrides') || '{}');
-                      const ov = { ...overrides[recId], status: 'DA_NHAN', actualDate: new Date().toISOString().split('T')[0] };
-                      overrides[recId] = ov;
-                      if (rec.deliveryCode) overrides[rec.deliveryCode] = ov;
-                      localStorage.setItem('retailhub_supplier_deliveries_overrides', JSON.stringify(overrides));
-                    } catch {}
-                    try {
-                      const stored: any[] = JSON.parse(localStorage.getItem('retailhub_created_deliveries') || '[]');
-                      localStorage.setItem('retailhub_created_deliveries', JSON.stringify(stored.map((s) =>
-                        s.id === recId || s.deliveryCode === rec.deliveryCode
-                          ? { ...s, status: 'DA_NHAN', actualDate: new Date().toISOString().split('T')[0] }
-                          : s
-                      )));
-                    } catch {}
-                    useInventoryStore.getState().fetchProducts();
-                    toast.success(`Đã nhận hàng & cộng tồn kho cho chi nhánh "${rec.branchName}"!`);
-                  } catch (err: any) {
-                    const errMsg = err?.response?.data?.message || err?.message || '';
-                    toast.error(`Lỗi khi nhận hàng: ${errMsg}`);
-                  }
-                }}
+                onClick={() => setReceivingItem(row.original)}
                 className="p-1.5 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
                 title="Nhận hàng & cộng tồn kho"
               >
@@ -746,7 +1044,7 @@ export function SupplierDeliveriesPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeletingItem(row.original)}
               className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               title="Xóa"
             >
@@ -870,6 +1168,40 @@ export function SupplierDeliveriesPage() {
               </div>
             </div>
 
+            {/* Thông tin thanh toán & công nợ đợt nhận hàng */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-emerald-50/60 dark:bg-emerald-950/20 p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
+              <div>
+                <span className="text-[11px] font-semibold text-gray-500 block uppercase">Tổng giá trị</span>
+                <span className="font-mono font-bold text-gray-900 dark:text-white text-sm">
+                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(selected.totalAmount || 0)}
+                </span>
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-gray-500 block uppercase">Thanh toán</span>
+                <span className={`font-bold px-2 py-0.5 rounded text-xs inline-block mt-0.5 ${
+                  selected.paymentStatus === 'PAID'
+                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                    : selected.paymentStatus === 'PARTIAL'
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
+                      : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                }`}>
+                  {selected.paymentStatus === 'PAID' ? 'Đã thanh toán đủ' : selected.paymentStatus === 'PARTIAL' ? 'Thanh toán thiếu' : 'Chưa thanh toán'}
+                </span>
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-gray-500 block uppercase">Đã thanh toán</span>
+                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(selected.paidAmount || (selected.paymentStatus === 'PAID' ? (selected.totalAmount || 0) : 0))}
+                </span>
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-gray-500 block uppercase">Hình thức</span>
+                <span className="font-semibold text-gray-700 dark:text-gray-300 text-xs block mt-0.5">
+                  {selected.paymentMethod || 'Chuyển khoản'}
+                </span>
+              </div>
+            </div>
+
             {selected.lines && selected.lines.length > 0 && (
               <div>
                 <h4 className="text-xs font-bold uppercase text-gray-400 tracking-wider mb-2">Danh sách mặt hàng nhận</h4>
@@ -909,6 +1241,21 @@ export function SupplierDeliveriesPage() {
                 <p className="text-gray-700 dark:text-gray-300">{selected.notes}</p>
               </div>
             )}
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => {
+                  const matchedPo = purchaseOrders.find(p => p.poCode === selected.poCode);
+                  const supId = matchedPo?.supplierId || (selected as any).supplierId;
+                  setSelected(null);
+                  navigate(`/purchase/evaluations?supplierId=${supId || ''}`);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+              >
+                <Star className="w-4 h-4" /> Đánh giá nhà cung cấp
+              </button>
+            </div>
           </div>
         )}
       </Modal>
@@ -951,17 +1298,25 @@ export function SupplierDeliveriesPage() {
                   required
                 >
                   <option value="">-- 🔍 Chọn đơn mua PO... --</option>
-                  {editingItem.poCode && !purchaseOrders.some((p) => p.poCode.toLowerCase() === editingItem.poCode?.toLowerCase()) && (
+                  {modalMode === 'edit' && editingItem.poCode && !availablePurchaseOrders.some((p) => p.poCode.toLowerCase() === editingItem.poCode?.toLowerCase()) && (
                     <option value={editingItem.poCode}>
                       {editingItem.poCode} - {editingItem.supplierName} ({editingItem.status === 'DA_NHAN' ? 'Đã nhận đủ' : 'Đơn hiện tại'})
                     </option>
                   )}
-                  {purchaseOrders.map((po) => (
+                  {availablePurchaseOrders.length === 0 && !editingItem.poCode && (
+                    <option value="" disabled>-- ⚠️ Không có đơn PO nào chờ nhận hàng --</option>
+                  )}
+                  {availablePurchaseOrders.map((po) => (
                     <option key={po.id || po.poCode} value={po.poCode}>
-                      {po.poCode} - {po.supplierName} ({po.status})
+                      {po.poCode} - {po.supplierName} ({po.status} | {po.paymentStatus === 'PAID' ? 'Đã TT đủ' : po.paymentStatus === 'PARTIAL_ADVANCE' ? 'Tạm ứng' : 'Chưa TT'})
                     </option>
                   ))}
                 </select>
+                {modalMode === 'create' && (
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
+                    * Chỉ hiển thị các đơn PO chưa có đợt nhận hàng và chưa hoàn tất
+                  </p>
+                )}
               </div>
 
               <div>
@@ -1138,7 +1493,158 @@ export function SupplierDeliveriesPage() {
             )}
           </div>
 
-          {/* PHẦN 3 — XÁC NHẬN & TỔNG KẾT */}
+          {/* PHẦN 3 — THANH TOÁN & CÔNG NỢ ĐỢT NHẬN HÀNG */}
+          <div className="space-y-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                <CreditCard className="w-4 h-4 text-emerald-600" />
+                Phần 3 — Ghi nhận thanh toán & Đồng bộ Đơn mua PO
+              </h3>
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Tự động cập nhật sang Đơn mua PO
+              </span>
+            </div>
+
+            {/* Radio / Lựa chọn nhanh thanh toán */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingItem((prev) => ({
+                    ...prev,
+                    paidAmount: 0,
+                    paymentStatus: 'UNPAID',
+                  }));
+                }}
+                className={`p-3 rounded-xl border text-left transition flex flex-col justify-between cursor-pointer ${
+                  (editingItem.paidAmount === 0 || editingItem.paymentStatus === 'UNPAID')
+                    ? 'border-amber-500 bg-amber-50/70 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 ring-2 ring-amber-400/50'
+                    : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase">1. Chưa thanh toán</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 font-semibold">Ghi nợ NCC</span>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1">Chưa trả tiền đợt này. Toàn bộ tiền hàng ghi nợ NCC.</p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const half = Math.round(formSummary.totalAmount * 0.5);
+                  setEditingItem((prev) => ({
+                    ...prev,
+                    paidAmount: prev.paidAmount && prev.paidAmount > 0 && prev.paidAmount < formSummary.totalAmount ? prev.paidAmount : half,
+                    paymentStatus: 'PARTIAL',
+                  }));
+                }}
+                className={`p-3 rounded-xl border text-left transition flex flex-col justify-between cursor-pointer ${
+                  editingItem.paymentStatus === 'PARTIAL' || (editingItem.paidAmount !== undefined && editingItem.paidAmount > 0 && editingItem.paidAmount < formSummary.totalAmount)
+                    ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-950/30 text-blue-900 dark:text-blue-200 ring-2 ring-blue-400/50'
+                    : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase">2. Thanh toán thiếu (1 phần)</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 font-semibold">Tạm ứng</span>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1">Trả 1 phần tiền hàng, phần còn lại ghi nhận công nợ.</p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingItem((prev) => ({
+                    ...prev,
+                    paidAmount: formSummary.totalAmount,
+                    paymentStatus: 'PAID',
+                  }));
+                }}
+                className={`p-3 rounded-xl border text-left transition flex flex-col justify-between cursor-pointer ${
+                  (editingItem.paymentStatus === 'PAID' || (editingItem.paidAmount !== undefined && editingItem.paidAmount >= formSummary.totalAmount && formSummary.totalAmount > 0))
+                    ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-400/50'
+                    : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase">3. Đã thanh toán đủ (100%)</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-semibold">Hoàn tất</span>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1">Thanh toán đủ 100% giá trị đợt nhận hàng, không còn dư nợ.</p>
+              </button>
+            </div>
+
+            {/* Input số tiền thực trả & Phương thức thanh toán */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 dark:bg-gray-900/40 p-3.5 rounded-xl border border-gray-200 dark:border-gray-700">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Số tiền đã thanh toán (₫) *
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={formSummary.totalAmount}
+                  value={editingItem.paidAmount ?? 0}
+                  onChange={(e) => {
+                    const val = Math.max(0, Number(e.target.value) || 0);
+                    const capped = Math.min(formSummary.totalAmount, val);
+                    const newStatus: 'UNPAID' | 'PARTIAL' | 'PAID' =
+                      capped >= formSummary.totalAmount && formSummary.totalAmount > 0
+                        ? 'PAID'
+                        : capped > 0
+                          ? 'PARTIAL'
+                          : 'UNPAID';
+                    setEditingItem((prev) => ({
+                      ...prev,
+                      paidAmount: capped,
+                      paymentStatus: newStatus,
+                    }));
+                  }}
+                  className="w-full p-2.5 border border-emerald-500 rounded-lg text-sm font-mono font-bold text-emerald-700 dark:text-emerald-300 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  placeholder="Nhập số tiền đã thanh toán..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Hình thức thanh toán
+                </label>
+                <select
+                  value={editingItem.paymentMethod || 'Chuyển khoản'}
+                  onChange={(e) => setEditingItem((prev) => ({ ...prev, paymentMethod: e.target.value }))}
+                  className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-medium bg-white dark:bg-gray-800 cursor-pointer"
+                >
+                  <option value="Chuyển khoản">Chuyển khoản ngân hàng (Ủy nhiệm chi)</option>
+                  <option value="Tiền mặt">Tiền mặt tại kho / quầy</option>
+                  <option value="Ví điện tử / Khác">Ví điện tử / Khác</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col justify-center">
+                <span className="text-[11px] text-gray-500 font-semibold uppercase">Tình trạng công nợ sau thanh toán</span>
+                <div className="mt-1 flex items-center justify-between text-xs font-mono font-bold">
+                  <span className="text-gray-600 dark:text-gray-400">Còn thiếu:</span>
+                  <span className={formSummary.totalAmount - (editingItem.paidAmount || 0) > 0 ? 'text-red-600 font-bold' : 'text-emerald-600 font-bold'}>
+                    {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(
+                      Math.max(0, formSummary.totalAmount - (editingItem.paidAmount || 0))
+                    )}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-[10px] text-gray-500">
+                  {editingItem.paymentStatus === 'PAID' ? (
+                    <span className="text-emerald-600 font-semibold">✓ Đã trả đủ 100% giá trị hàng</span>
+                  ) : editingItem.paymentStatus === 'PARTIAL' ? (
+                    <span className="text-blue-600 font-semibold">⚠ Thanh toán thiếu - Ghi nhận nợ NCC</span>
+                  ) : (
+                    <span className="text-amber-600 font-semibold">⚠ Chưa trả tiền - Công nợ toàn bộ</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* PHẦN 4 — XÁC NHẬN & TỔNG KẾT */}
           <div className="space-y-4 pt-2 border-t border-gray-200 dark:border-gray-700">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-emerald-50 dark:bg-emerald-900/20 p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
               <div>
@@ -1192,6 +1698,56 @@ export function SupplierDeliveriesPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Modal Xác nhận Nhận hàng */}
+      <Modal
+        isOpen={Boolean(receivingItem)}
+        onClose={() => setReceivingItem(null)}
+        title="Xác nhận nhận hàng & Nhập kho"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3.5 p-3.5 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800/60">
+            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 rounded-lg shrink-0">
+              <PackageCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-800 dark:text-gray-200 font-medium">
+                Xác nhận nhận hàng cho đợt <span className="font-bold text-emerald-700 dark:text-emerald-400">{receivingItem?.deliveryCode}</span>?
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Tồn kho các sản phẩm trong đợt giao này sẽ được tự động cộng vào chi nhánh "{receivingItem?.branchName}".
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setReceivingItem(null)}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmReceive}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <CheckCircle2 className="w-4 h-4" /> Xác nhận nhận hàng
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal Xác nhận Xóa đợt nhận hàng */}
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa đợt nhận hàng"
+        description="Bạn có chắc chắn muốn xóa đợt giao nhận hàng này khỏi hệ thống?"
+        itemName={deletingItem ? `${deletingItem.deliveryCode} (${deletingItem.poCode})` : undefined}
+      />
     </div>
   );
 }

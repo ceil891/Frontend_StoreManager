@@ -5,6 +5,7 @@ import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { useCrmStore } from '../store/crmStore';
+import { exportToCsv } from '@/shared/utils/exportCsv';
 
 interface LoyaltyPointHistoryItem {
   id: string;
@@ -12,6 +13,7 @@ interface LoyaltyPointHistoryItem {
   customerPhone: string;
   pointChange: number;
   transactionType: string;
+  typeKey: 'EARN' | 'REDEEM' | 'ADJUST';
   referenceCode: string;
   transactionDate: string;
   operatorName: string;
@@ -23,40 +25,86 @@ export function LoyaltyPointHistoryPage() {
   const {
     loyaltyHistories: storeHistories,
     fetchLoyaltyHistories,
+    customers,
+    fetchCustomers,
   } = useCrmStore();
 
   useEffect(() => {
     fetchLoyaltyHistories();
-  }, [fetchLoyaltyHistories]);
+    fetchCustomers();
+  }, [fetchLoyaltyHistories, fetchCustomers]);
 
   const data: LoyaltyPointHistoryItem[] = useMemo(() => {
-    return (storeHistories || []).map((h: any) => ({
-      id: h.code || h.id || `TX-${Math.random()}`,
-      customerName: h.customerName || h.name || 'Khách hàng',
-      customerPhone: h.customerPhone || h.phone || 'Chưa cập nhật',
-      pointChange: Number(h.pointsChange ?? h.pointChange ?? 0),
-      transactionType: h.transactionType || (h.actionType === 'EARN' ? 'Tích điểm bán hàng POS' : h.actionType === 'REDEEM' ? 'Tiêu điểm bán hàng POS' : 'Điều chỉnh hệ thống'),
-      referenceCode: h.refDocument || h.referenceOrder || `REF-${h.id}`,
-      transactionDate: h.date || h.createdAt || new Date().toISOString().split('T')[0],
-      operatorName: h.operatorName || 'Nhân viên thu ngân',
-      pointBalanceAfter: Number(h.balanceAfter ?? h.pointBalanceAfter ?? 0),
-      notes: h.notes || '',
-    }));
+    return (storeHistories || []).map((h: any) => {
+      const rawType = String(h.transactionType || h.actionType || '').toUpperCase();
+      let typeKey: 'EARN' | 'REDEEM' | 'ADJUST' = 'ADJUST';
+      let displayType = 'Điều chỉnh hệ thống';
+
+      if (rawType.includes('EARN') || rawType.includes('TÍCH')) {
+        typeKey = 'EARN';
+        displayType = 'Tích điểm đơn hàng';
+      } else if (rawType.includes('REDEEM') || rawType.includes('TIÊU') || rawType.includes('ĐỔI') || rawType.includes('QUÀ')) {
+        typeKey = 'REDEEM';
+        displayType = 'Đổi quà / voucher';
+      } else if (h.pointsChange && Number(h.pointsChange) > 0) {
+        typeKey = 'EARN';
+        displayType = 'Tích điểm đơn hàng';
+      } else if (h.pointsChange && Number(h.pointsChange) < 0) {
+        typeKey = 'REDEEM';
+        displayType = 'Đổi quà / voucher';
+      }
+
+      return {
+        id: h.code || h.id || `TX-${Math.random()}`,
+        customerName: h.customerName || h.name || 'Khách hàng',
+        customerPhone: h.customerPhone || h.phone || 'Chưa cập nhật',
+        pointChange: Number(h.pointsChange ?? h.pointChange ?? 0),
+        transactionType: displayType,
+        typeKey,
+        referenceCode: h.refDocument || h.referenceOrder || `REF-${h.id}`,
+        transactionDate: h.date || h.createdAt || new Date().toISOString().split('T')[0],
+        operatorName: h.operatorName || 'Nhân viên thu ngân',
+        pointBalanceAfter: Number(h.balanceAfter ?? h.pointBalanceAfter ?? 0),
+        notes: h.notes || '',
+      };
+    });
   }, [storeHistories]);
 
   const totalPoints = useMemo(() => {
+    if (customers && customers.length > 0) {
+      return customers.reduce((sum, c) => sum + (c.loyaltyPoints || 0), 0);
+    }
     if (data.length > 0) {
-      return data[0].pointBalanceAfter || 0;
+      return data.reduce((sum, d) => sum + Math.max(0, d.pointChange), 0);
     }
     return 0;
-  }, [data]);
+  }, [customers, data]);
 
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<string>('Tất cả');
+  const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [dateFilter, setDateFilter] = useState<'7days' | '30days' | 'thisMonth' | 'all'>('all');
   
   const [selectedItem, setSelectedItem] = useState<LoyaltyPointHistoryItem | null>(null);
+
+  const handleExportExcel = () => {
+    if (!filtered || filtered.length === 0) {
+      toast.error('Không có dữ liệu để xuất Excel');
+      return;
+    }
+    exportToCsv('Lich_su_tich_diem', filtered, [
+      { header: 'Mã giao dịch', accessor: (r) => r.id },
+      { header: 'Khách hàng', accessor: (r) => r.customerName },
+      { header: 'Số điện thoại', accessor: (r) => r.customerPhone },
+      { header: 'Điểm thay đổi', accessor: (r) => r.pointChange },
+      { header: 'Loại giao dịch', accessor: (r) => r.transactionType },
+      { header: 'Chứng từ gốc', accessor: (r) => r.referenceCode },
+      { header: 'Ngày giao dịch', accessor: (r) => r.transactionDate },
+      { header: 'Số dư sau', accessor: (r) => r.pointBalanceAfter },
+      { header: 'Ghi chú', accessor: (r) => r.notes || '' },
+    ]);
+    toast.success('Đã xuất file Excel lịch sử điểm thành công');
+  };
 
   const filtered = useMemo(() => {
     return data.filter((item) => {
@@ -65,7 +113,7 @@ export function LoyaltyPointHistoryPage() {
         item.customerName.toLowerCase().includes(search.toLowerCase()) ||
         item.customerPhone.toLowerCase().includes(search.toLowerCase()) ||
         item.referenceCode.toLowerCase().includes(search.toLowerCase());
-      const matchesType = typeFilter === 'Tất cả' || item.transactionType === typeFilter;
+      const matchesType = typeFilter === 'ALL' || item.typeKey === typeFilter;
       
       let matchesDate = true;
       if (item.transactionDate) {
@@ -201,7 +249,10 @@ export function LoyaltyPointHistoryPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm">
+            <button
+              onClick={handleExportExcel}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+            >
               <Download className="w-4 h-4" /> Xuất Excel
             </button>
           </div>
@@ -285,10 +336,10 @@ export function LoyaltyPointHistoryPage() {
                 onChange={(e) => setTypeFilter(e.target.value)}
                 className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white py-1.5 px-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
               >
-                <option value="Tất cả">Tất cả loại giao dịch</option>
-                <option value="TÍCH_ĐIỂM_ĐƠN_HÀNG">Tích điểm đơn hàng</option>
-                <option value="ĐỔI_QUÀ">Đổi quà / voucher</option>
-                <option value="ĐIỀU_CHỈNH_HỆ_THỐNG">Hệ thống điều chỉnh</option>
+                <option value="ALL">Tất cả loại giao dịch</option>
+                <option value="EARN">Tích điểm đơn hàng</option>
+                <option value="REDEEM">Đổi quà / voucher</option>
+                <option value="ADJUST">Hệ thống điều chỉnh</option>
               </select>
             </div>
           </div>

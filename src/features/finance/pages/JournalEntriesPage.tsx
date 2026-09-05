@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Save, Send, Trash2, AlertCircle } from 'lucide-react';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useFinanceStore, type JournalEntry, type JournalLine } from '../store/financeStore';
 import { toast } from 'sonner';
 
@@ -14,24 +15,88 @@ const ACCOUNT_OPTIONS = [
   { code: '642', name: 'Chi phí quản lý doanh nghiệp' },
 ];
 
-function toCurrency(value: number) {
-  return `${value.toLocaleString('vi-VN')} ₫`;
-}
+const toCurrency = (val: number) => (val || 0).toLocaleString('vi-VN') + ' ₫';
 
 export function JournalEntriesPage() {
-  const journalEntries = useFinanceStore((s) => s.journalEntries);
-  const updateJournalEntry = useFinanceStore((s) => s.updateJournalEntry);
+  const {
+    journalEntries,
+    fetchJournalEntries,
+    addJournalEntry,
+    updateJournalEntry,
+    deleteJournalEntry,
+  } = useFinanceStore();
+
   const [entry, setEntry] = useState<JournalEntry | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [isDeleteEntryModalOpen, setIsDeleteEntryModalOpen] = useState(false);
 
   useEffect(() => {
-    if (journalEntries[0]) setEntry(journalEntries[0]);
-  }, [journalEntries]);
+    if (fetchJournalEntries) fetchJournalEntries();
+  }, [fetchJournalEntries]);
 
-  const saveDraft = () => {
+  useEffect(() => {
+    if (!entry && journalEntries.length > 0) {
+      setEntry(journalEntries[0]);
+    }
+  }, [journalEntries, entry]);
+
+  const createNewEntry = () => {
+    const newId = `je_${Date.now()}`;
+    const newEntry: JournalEntry = {
+      id: newId,
+      branchId: '1',
+      code: `PKT-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`,
+      date: new Date().toISOString().split('T')[0],
+      reference: `REF-${Date.now().toString().slice(-4)}`,
+      description: 'Bút toán tổng hợp kế toán',
+      status: 'DRAFT',
+      lines: [
+        {
+          id: `line_1_${Date.now()}`,
+          accountCode: '111',
+          accountName: 'Tiền mặt',
+          description: 'Hạch toán Nợ',
+          debit: 0,
+          credit: 0,
+          entityId: '',
+          costCenter: '',
+          currency: 'VND',
+          exchangeRate: 1,
+          originalAmount: 0,
+        },
+        {
+          id: `line_2_${Date.now()}`,
+          accountCode: '511',
+          accountName: 'Doanh thu bán hàng',
+          description: 'Hạch toán Có',
+          debit: 0,
+          credit: 0,
+          entityId: '',
+          costCenter: '',
+          currency: 'VND',
+          exchangeRate: 1,
+          originalAmount: 0,
+        },
+      ],
+    };
+    setEntry(newEntry);
+    toast.info('Đã tạo mẫu chứng từ mới, vui lòng nhập định khoản');
+  };
+
+  const saveDraft = async () => {
     if (!entry) return;
-    updateJournalEntry(entry.id, entry);
-    toast.success('Đã lưu nháp bút toán thành công!');
+    try {
+      const exists = journalEntries.some(j => j.id === entry.id);
+      if (exists) {
+        await updateJournalEntry(entry.id, entry);
+      } else {
+        await addJournalEntry(entry);
+      }
+      toast.success('Đã lưu nháp bút toán thành công!');
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi lưu nháp bút toán: ' + (err?.message || 'Thất bại'));
+    }
   };
 
   const totals = useMemo(() => {
@@ -50,9 +115,9 @@ export function JournalEntriesPage() {
     setEntry((prev) => {
       if (!prev) return prev;
       return {
-      ...prev,
-      lines: prev.lines.map((line) => (line.id === lineId ? updater(line) : line)),
-    };
+        ...prev,
+        lines: prev.lines.map((line) => (line.id === lineId ? updater(line) : line)),
+      };
     });
   };
 
@@ -61,24 +126,24 @@ export function JournalEntriesPage() {
     setEntry((prev) => {
       if (!prev) return prev;
       return {
-      ...prev,
-      lines: [
-        ...prev.lines,
-        {
-          id: `line_${Date.now()}`,
-          accountCode: fallback.code,
-          accountName: fallback.name,
-          description: '',
-          debit: 0,
-          credit: 0,
-          entityId: '',
-          costCenter: '',
-          currency: 'VND',
-          exchangeRate: 1,
-          originalAmount: 0,
-        },
-      ],
-    };
+        ...prev,
+        lines: [
+          ...prev.lines,
+          {
+            id: `line_${Date.now()}_${Math.random()}`,
+            accountCode: fallback.code,
+            accountName: fallback.name,
+            description: '',
+            debit: 0,
+            credit: 0,
+            entityId: '',
+            costCenter: '',
+            currency: 'VND',
+            exchangeRate: 1,
+            originalAmount: 0,
+          },
+        ],
+      };
     });
   };
 
@@ -94,11 +159,36 @@ export function JournalEntriesPage() {
     setPendingDeleteId(null);
   };
 
-  const postEntry = () => {
+  const postEntry = async () => {
     if (!totals.isBalanced || !entry) return;
     const posted = { ...entry, status: 'POSTED' as const };
     setEntry(posted);
-    updateJournalEntry(entry.id, posted);
+    try {
+      const exists = journalEntries.some(j => j.id === entry.id);
+      if (exists) {
+        await updateJournalEntry(entry.id, posted);
+      } else {
+        await addJournalEntry(posted);
+      }
+      toast.success('Đã hạch toán bút toán vào sổ cái thành công!');
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi hạch toán: ' + (err?.message || 'Thất bại'));
+    }
+  };
+
+  const handleDeleteEntryConfirm = async () => {
+    if (!entry) return;
+    try {
+      await deleteJournalEntry(entry.id);
+      toast.success(`Đã xóa bút toán ${entry.code || entry.reference || ''} thành công!`);
+      setIsDeleteEntryModalOpen(false);
+      setEntry(null);
+      if (fetchJournalEntries) await fetchJournalEntries();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi xóa bút toán: ' + (err?.message || 'Thất bại'));
+    }
   };
 
   if (!entry) {
@@ -112,10 +202,50 @@ export function JournalEntriesPage() {
   return (
     <>
       <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="flex items-center gap-3 flex-1 min-w-[280px]">
+            <label className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide shrink-0">
+              Chọn chứng từ:
+            </label>
+            <select
+              value={entry.id}
+              onChange={(e) => {
+                const found = journalEntries.find(j => j.id === e.target.value);
+                if (found) setEntry(found);
+              }}
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
+            >
+              {journalEntries.map((j) => (
+                <option key={j.id} value={j.id}>
+                  {j.code} - {j.description} ({j.date}) [{j.status === 'POSTED' ? 'Đã hạch toán' : 'Nháp'}]
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            {entry && (
+              <button
+                type="button"
+                onClick={() => setIsDeleteEntryModalOpen(true)}
+                className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 dark:bg-red-950/30 dark:border-red-900 dark:text-red-400 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" /> Xóa bút toán
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={createNewEntry}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold shadow-md transition-all flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" /> + Tạo bút toán mới
+            </button>
+          </div>
+        </div>
+
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sổ nhật ký kế toán</h1>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Chi tiết chứng từ: {entry.code}</h1>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 Nhập bút toán nhiều dòng Nợ/Có, kiểm soát cân bằng tức thì trước khi hạch toán.
               </p>
@@ -378,6 +508,15 @@ export function JournalEntriesPage() {
           </div>
         </div>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={isDeleteEntryModalOpen}
+        onClose={() => setIsDeleteEntryModalOpen(false)}
+        onConfirm={handleDeleteEntryConfirm}
+        title="Xác nhận xóa bút toán"
+        description="Hành động này sẽ xóa bút toán và các định khoản liên quan trong sổ cái."
+        itemName={entry?.code || entry?.reference || ''}
+      />
     </>
   );
 }

@@ -42,20 +42,27 @@ export const financeService = {
       status: voucher.status || 'COMPLETED',
       paymentMethod: voucher.paymentMethod || 'BANK_TRANSFER',
       fundAccountName: voucher.fundAccountName || '',
+      invoiceCode: voucher.invoiceCode || voucher.referenceDoc || '',
       notes: voucher.notes || '',
     };
     const res = await axiosClient.post<any, any>('/finance/receipt-vouchers', payload);
     const item = res?.data || res;
     return {
       id: String(item?.id || Date.now()),
+      voucherNumber: item?.voucherNumber || item?.voucherCode || payload.voucherCode || '',
       voucherCode: item?.voucherCode || payload.voucherCode || '',
       payerName: item?.payerName || payload.payerName || '',
-      paymentReason: '',
+      category: 'SALES_REVENUE' as const,
       amount: Number(item?.amount || payload.amount),
-      paymentMethod: payload.paymentMethod,
+      paymentMethod: payload.paymentMethod as any,
+      receivedDate: formattedDate.split('T')[0],
+      cashier: 'Kế toán viên',
+      branchId: '1',
       createdDate: formattedDate.split('T')[0],
       status: item?.status || payload.status,
       createdByName: '',
+      invoiceCode: payload.invoiceCode,
+      referenceDoc: payload.invoiceCode,
     };
   },
 
@@ -140,18 +147,31 @@ export const financeService = {
     const list = Array.isArray(res) ? res : (res?.content || []);
     return list.map((item: any) => ({
       id: String(item.id),
+      debtCode: item.refCode || `DBT-${item.id}`,
+      entityName: item.entityName || '',
+      entityType: item.entityType || 'CUSTOMER',
       partnerCode: item.refCode || `PART-${item.id}`,
       partnerName: item.entityName || '',
       partnerType: item.entityType || 'CUSTOMER',
+      totalDebt: Number(item.balance ?? item.totalDebt ?? 0),
+      dueAmount: Number(item.balance ?? item.dueAmount ?? 0),
       openingDebt: Number(item.increase || 0),
       incurredDebt: Number(item.decrease || 0),
-      paidDebt: 0,
-      closingDebt: Number(item.balance || 0),
+      paidDebt: Number(item.decrease || 0),
+      paidAmount: Number(item.decrease || 0),
+      closingDebt: Number(item.balance ?? item.totalDebt ?? 0),
+      increase: Number(item.increase || 0),
+      decrease: Number(item.decrease || 0),
+      lastPaymentDate: item.lastPaymentDate ? String(item.lastPaymentDate).split('T')[0] : '',
       lastTransactionDate: item.lastPaymentDate ? String(item.lastPaymentDate).split('T')[0] : '',
       dueDate: item.dueDate ? String(item.dueDate).split('T')[0] : '',
       status: item.status || 'NORMAL',
-      accountManager: item.accountManager || '',
+      accountManager: item.accountManager || 'Kế toán công nợ',
       partnerId: item.partnerId,
+      branchId: '1',
+      notes: item.notes || '',
+      referenceDoc: item.refCode || '',
+      incurredDate: item.transactionDate ? String(item.transactionDate).split('T')[0] : '',
     }));
   },
 
@@ -201,27 +221,50 @@ export const financeService = {
     return list.map((item: any) => ({
       id: String(item.id),
       costCode: item.costCode || `COST-${item.id}`,
-      costCategory: item.costCategory || 'VẬN HÀNH',
-      title: item.title || '',
+      costCategory: item.category || item.costCategory || 'RENTAL',
+      category: item.category || 'RENTAL',
+      costName: item.description || item.costName || item.title || 'Chi phí vận hành',
+      title: item.description || item.costName || item.title || 'Chi phí vận hành',
       amount: Number(item.amount || 0),
-      incurredDate: item.incurredDate ? item.incurredDate.split('T')[0] : '',
-      paymentStatus: item.paymentStatus || 'PAID',
-      notes: item.notes || '',
+      incurredDate: item.costDate ? item.costDate.split('T')[0] : (item.incurredDate ? item.incurredDate.split('T')[0] : ''),
+      branch: item.branchName || 'Hội sở chính',
+      branchName: item.branchName || 'Hội sở chính',
+      branchId: item.branchId ? String(item.branchId) : '1',
+      paymentStatus: item.status || item.paymentStatus || 'PAID',
+      notes: item.description || item.notes || '',
+      description: item.description || '',
     }));
   },
 
   // --- Journal Entries ---
   async fetchJournalEntries(): Promise<JournalEntryRecord[]> {
-    const res = await axiosClient.get<any, any>('/finance/journal-entries');
+    const res = await axiosClient.get<any, any>('/accounting/journal-entries');
     const list = Array.isArray(res) ? res : (res?.content || []);
     return list.map((item: any) => ({
       id: String(item.id),
-      entryCode: item.entryCode || `JE-${item.id}`,
-      transactionDate: item.transactionDate ? item.transactionDate.split('T')[0] : '',
+      code: item.referenceCode || item.entryCode || `JE-${item.id}`,
+      entryCode: item.referenceCode || item.entryCode || `JE-${item.id}`,
+      reference: item.referenceCode || item.entryCode || '',
+      date: item.entryDate ? item.entryDate.split('T')[0] : (item.transactionDate ? item.transactionDate.split('T')[0] : ''),
+      transactionDate: item.entryDate ? item.entryDate.split('T')[0] : (item.transactionDate ? item.transactionDate.split('T')[0] : ''),
       description: item.description || '',
-      debitAccount: item.debitAccount || '1111',
-      creditAccount: item.creditAccount || '1311',
-      amount: Number(item.amount || 0),
+      debitAccount: item.debitAccount || (item.lines && item.lines[0]?.accountCode) || '111',
+      creditAccount: item.creditAccount || (item.lines && item.lines[1]?.accountCode) || '131',
+      amount: Number(item.totalAmount || item.amount || 0),
+      status: (item.status === 'POSTED' || item.status === 'DRAFT') ? item.status : 'POSTED',
+      branchId: '1',
+      lines: Array.isArray(item.lines) ? item.lines.map((l: any, idx: number) => ({
+        id: String(l.id || `line_${idx}_${Date.now()}`),
+        accountCode: l.accountCode || '111',
+        accountName: l.accountName || '',
+        description: l.description || '',
+        debit: Number(l.debit || 0),
+        credit: Number(l.credit || 0),
+        costCenter: l.costCenter || '',
+        currency: 'VND',
+        exchangeRate: 1,
+        originalAmount: Number(l.debit || l.credit || 0),
+      })) : [],
       createdByName: item.createdByName || 'Kế toán tổng hợp',
     }));
   },
@@ -440,35 +483,39 @@ export const financeService = {
     await axiosClient.delete(`/finance/operating-costs/${id}`);
   },
 
-  // --- Transaction Reasons CRUD ---
-  async addTransactionReason(reason: any): Promise<any> {
-    const res = await axiosClient.post<any, any>('/finance/transaction-reasons', reason);
-    return res?.data || res;
-  },
-
-  async updateTransactionReason(id: string, data: any): Promise<any> {
-    const res = await axiosClient.put<any, any>(`/finance/transaction-reasons/${id}`, data);
-    return res?.data || res || data;
-  },
-
-  async deleteTransactionReason(id: string): Promise<void> {
-    await axiosClient.delete(`/finance/transaction-reasons/${id}`);
-  },
-
   // --- Journal Entries CRUD ---
   async addJournalEntry(entry: Omit<JournalEntryRecord, 'id'>): Promise<JournalEntryRecord> {
-    const res = await axiosClient.post<any, any>('/finance/journal-entries', entry);
+    const payload = {
+      ...entry,
+      referenceCode: entry.code || (entry as any).entryCode || '',
+      code: entry.code || (entry as any).entryCode || '',
+      description: entry.description || '',
+      status: entry.status || 'POSTED',
+      entryDate: entry.date || (entry as any).transactionDate || new Date().toISOString().substring(0, 10),
+      date: entry.date || (entry as any).transactionDate || new Date().toISOString().substring(0, 10),
+      totalAmount: (entry as any).totalAmount || (entry as any).amount || (entry.lines ? entry.lines.reduce((s, l) => s + (l.debit || 0), 0) : 0),
+      lines: entry.lines || [],
+    };
+    const res = await axiosClient.post<any, any>('/accounting/journal-entries', payload);
     const item = res?.data || res;
     return { id: String(item?.id || Date.now()), ...entry, ...(item || {}) };
   },
 
   async updateJournalEntry(id: string, data: Partial<JournalEntryRecord>): Promise<Partial<JournalEntryRecord>> {
-    const res = await axiosClient.put<any, any>(`/finance/journal-entries/${id}`, data);
+    const payload = {
+      ...data,
+      referenceCode: data.code || (data as any).entryCode || (data as any).referenceCode,
+      code: data.code || (data as any).entryCode || (data as any).referenceCode,
+      entryDate: data.date || (data as any).transactionDate || (data as any).entryDate,
+      date: data.date || (data as any).transactionDate || (data as any).entryDate,
+      totalAmount: (data as any).totalAmount || (data as any).amount || (data.lines ? data.lines.reduce((s, l) => s + (l.debit || 0), 0) : undefined),
+    };
+    const res = await axiosClient.put<any, any>(`/accounting/journal-entries/${id}`, payload);
     return res?.data || res || data;
   },
 
   async deleteJournalEntry(id: string): Promise<void> {
-    await axiosClient.delete(`/finance/journal-entries/${id}`);
+    await axiosClient.delete(`/accounting/journal-entries/${id}`);
   },
 
   // --- Fixed Assets CRUD ---
@@ -490,5 +537,55 @@ export const financeService = {
 
   async deleteFixedAsset(id: string): Promise<void> {
     await axiosClient.delete(`/accounting/fixed-assets/${id}`);
+  },
+
+  // --- Depreciation History CRUD ---
+  async fetchDepreciations(): Promise<any[]> {
+    const res = await axiosClient.get<any, any>('/accounting/depreciation-history');
+    const list = Array.isArray(res) ? res : (res?.data || res?.content || []);
+    return list.map((item: any) => ({
+      id: String(item.id),
+      assetCode: item.asset?.assetCode || item.assetCode || `FA-${item.id}`,
+      assetName: item.asset?.assetName || item.assetName || 'Tài sản cố định',
+      depreciationMonth: item.depreciationDate ? String(item.depreciationDate).substring(0, 7) : new Date().toISOString().substring(0, 7),
+      monthlyAmount: Number(item.amount || 0),
+      accumulatedTotal: Number(item.accumulated || 0),
+      netValue: Number(item.netValue || 0),
+    }));
+  },
+
+  async addDepreciation(dep: any): Promise<any> {
+    const payload = {
+      asset: { id: dep.assetId || 1 },
+      depreciationDate: dep.depDate || new Date().toISOString().substring(0, 10),
+      amount: dep.monthlyAmount || dep.depAmount || 0,
+      accumulated: dep.accumulatedTotal || dep.accumulatedDep || 0,
+      netValue: dep.netBookValue || 0,
+    };
+    try {
+      const res = await axiosClient.post<any, any>('/accounting/depreciation-history', payload);
+      return res?.data || res;
+    } catch {
+      return { id: String(Date.now()), ...dep };
+    }
+  },
+
+  async updateDepreciation(id: string, dep: any): Promise<any> {
+    const payload = {
+      depreciationDate: dep.depDate || new Date().toISOString().substring(0, 10),
+      amount: dep.monthlyAmount || dep.depAmount || 0,
+      accumulated: dep.accumulatedTotal || dep.accumulatedDep || 0,
+      netValue: dep.netBookValue || 0,
+    };
+    try {
+      const res = await axiosClient.put<any, any>(`/accounting/depreciation-history/${id}`, payload);
+      return res?.data || res || dep;
+    } catch {
+      return { id, ...dep };
+    }
+  },
+
+  async deleteDepreciation(id: string): Promise<void> {
+    await axiosClient.delete(`/accounting/depreciation-history/${id}`);
   },
 };

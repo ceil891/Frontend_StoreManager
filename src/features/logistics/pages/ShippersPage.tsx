@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Truck, Star, Phone, Mail, MapPin, FileText, CheckCircle2, Trash2, Edit } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -81,89 +82,6 @@ export function ShippersPage() {
     fetchAreas();
   }, [fetchAreas]);
 
-  const defaultShipperList: ShipperPartnerRecord[] = [
-    {
-      id: '1',
-      partnerCode: 'SHP-001',
-      companyName: 'Nguyễn Văn Minh (Viettel Post)',
-      contactPerson: 'Nguyễn Văn Minh',
-      contactPhone: '0912345678',
-      contactEmail: 'minh.nguyen@viettelpost.vn',
-      serviceTier: 'EXPRESS_AIR',
-      baseRatePerKg: 15000,
-      activeFleetSize: 120,
-      averageDeliveryHours: 12,
-      slaComplianceRate: 99.2,
-      status: 'ACTIVE',
-      headquarters: 'TP. Hà Nội',
-      notes: 'Tài xế hỏa tốc Viettel Post'
-    },
-    {
-      id: '2',
-      partnerCode: 'SHP-002',
-      companyName: 'Trần Quốc Huy (GHTK)',
-      contactPerson: 'Trần Quốc Huy',
-      contactPhone: '0987654321',
-      contactEmail: 'huy.tran@ghtk.vn',
-      serviceTier: 'SAME_DAY_COURIER',
-      baseRatePerKg: 12000,
-      activeFleetSize: 85,
-      averageDeliveryHours: 24,
-      slaComplianceRate: 98.5,
-      status: 'ACTIVE',
-      headquarters: 'TP. Hồ Chí Minh',
-      notes: 'Tài xế giao hàng tiết kiệm'
-    },
-    {
-      id: '3',
-      partnerCode: 'SHP-003',
-      companyName: 'Lê Hoàng Nam (GHN)',
-      contactPerson: 'Lê Hoàng Nam',
-      contactPhone: '0905112233',
-      contactEmail: 'nam.le@ghn.vn',
-      serviceTier: 'SAME_DAY_COURIER',
-      baseRatePerKg: 14000,
-      activeFleetSize: 60,
-      averageDeliveryHours: 18,
-      slaComplianceRate: 97.9,
-      status: 'ACTIVE',
-      headquarters: 'TP. Đà Nẵng',
-      notes: 'Tài xế Giao Hàng Nhanh'
-    },
-    {
-      id: '4',
-      partnerCode: 'SHP-004',
-      companyName: 'Phạm Đức Anh (Shopee Express)',
-      contactPerson: 'Phạm Đức Anh',
-      contactPhone: '0933445566',
-      contactEmail: 'ducanh.pham@spx.vn',
-      serviceTier: 'STANDARD_GROUND',
-      baseRatePerKg: 11000,
-      activeFleetSize: 95,
-      averageDeliveryHours: 24,
-      slaComplianceRate: 98.1,
-      status: 'ACTIVE',
-      headquarters: 'TP. Hồ Chí Minh',
-      notes: 'Tài xế SPX'
-    },
-    {
-      id: '5',
-      partnerCode: 'SHP-005',
-      companyName: 'Vũ Thanh Sơn (GrabExpress)',
-      contactPerson: 'Vũ Thanh Sơn',
-      contactPhone: '0977889900',
-      contactEmail: 'son.vu@grab.com',
-      serviceTier: 'EXPRESS_AIR',
-      baseRatePerKg: 20000,
-      activeFleetSize: 200,
-      averageDeliveryHours: 2,
-      slaComplianceRate: 99.8,
-      status: 'ACTIVE',
-      headquarters: 'TP. Hà Nội',
-      notes: 'GrabExpress Hỏa tốc trong 2h'
-    },
-  ];
-
   const fetchShippers = async () => {
     setIsLoading(true);
     try {
@@ -190,14 +108,12 @@ export function ShippersPage() {
         saveShippersList(mapped);
       } else {
         const local = getSavedShippers();
-        const fallback = local.length > 0 ? local : defaultShipperList;
-        setData(fallback);
+        setData(local);
       }
     } catch (err) {
       console.error('Fetch shippers from backend failed:', err);
       const local = getSavedShippers();
-      const fallback = local.length > 0 ? local : defaultShipperList;
-      setData(fallback);
+      setData(local);
     } finally {
       setIsLoading(false);
     }
@@ -310,58 +226,35 @@ export function ShippersPage() {
         note: newRecord.notes
       };
 
-      const isNumericId = newRecord.id && /^\d+$/.test(String(newRecord.id));
       if (modalMode === 'create') {
         await axiosClient.post('/logistics/shippers', payload);
-      } else if (isNumericId) {
+        toast.success('Tạo đối tác giao hàng thành công!');
+      } else {
         await axiosClient.put(`/logistics/shippers/${newRecord.id}`, payload);
+        toast.success('Cập nhật đối tác thành công!');
       }
-    } catch (err) {
-      console.warn('API save shipper failed, applying local state update:', err);
+      await fetchShippers();
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error('API save shipper failed:', err);
+      toast.error('Lỗi khi lưu đối tác giao hàng: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
-
-    if (modalMode === 'create') {
-      setData(prev => {
-        const next = [newRecord, ...prev];
-        saveShippersList(next);
-        return next;
-      });
-      toast.success('Tạo đối tác giao hàng thành công!');
-    } else {
-      setData(prev => {
-        const next = prev.map(item => item.id === newRecord.id ? newRecord : item);
-        saveShippersList(next);
-        return next;
-      });
-      toast.success('Cập nhật đối tác thành công!');
-    }
-
-    setIsModalOpen(false);
   };
 
-  const handleDelete = async (id: string) => {
-    const target = data.find(item => item.id === id);
-    if (target && target.status === 'ACTIVE') {
-      toast.error('Không thể xóa đối tác đang hoạt động! Vui lòng chuyển trạng thái sang Tạm dừng/Chấm dứt hợp đồng trước khi xóa.');
-      return;
-    }
+  const [deletingItem, setDeletingItem] = useState<ShipperPartnerRecord | null>(null);
 
-    if (confirm('Bạn có chắc chắn muốn xóa đối tác này?')) {
-      const isNumericId = /^\d+$/.test(String(id));
-      if (isNumericId) {
-        try {
-          await axiosClient.delete(`/logistics/shippers/${id}`);
-        } catch (err) {
-          console.warn('API delete shipper failed, applying local state update:', err);
-        }
-      }
-      setData(prev => {
-        const next = prev.filter(item => item.id !== id);
-        saveShippersList(next);
-        return next;
-      });
-      toast.success('Đã xóa đối tác thành công!');
-      setSelectedShipper(null);
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    const id = deletingItem.id;
+    try {
+      await axiosClient.delete(`/logistics/shippers/${id}`);
+      toast.success(`Đã xóa đối tác "${deletingItem.companyName}" thành công!`);
+      if (selectedShipper?.id === id) setSelectedShipper(null);
+      setDeletingItem(null);
+      await fetchShippers();
+    } catch (err: any) {
+      console.error('API delete shipper failed:', err);
+      toast.error('Lỗi khi xóa đối tác từ máy chủ: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
   };
 
@@ -460,7 +353,14 @@ export function ShippersPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); handleDelete(row.original.id); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (row.original.status === 'ACTIVE') {
+                  toast.error('Không thể xóa đối tác đang hoạt động! Vui lòng chuyển trạng thái sang Tạm dừng/Chấm dứt hợp đồng trước khi xóa.');
+                  return;
+                }
+                setDeletingItem(row.original);
+              }}
               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
               title="Xóa"
             >
@@ -781,6 +681,14 @@ export function ShippersPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa đối tác giao hàng"
+        description={`Bạn có chắc chắn muốn xóa đối tác giao hàng "${deletingItem?.companyName}" (${deletingItem?.partnerCode}) không?`}
+      />
     </>
   );
 }

@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Box, CheckSquare, Square } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -163,17 +164,19 @@ export function ShippingOrderBatchesPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    setSelected(null); // Ensure detail modal does NOT open when deleting (TC-SHIP-16)
-    if (confirm('Bạn có chắc chắn muốn xóa lô đơn hàng vận chuyển này?')) {
-      try {
-        await axiosClient.delete(`/logistics/batches/${id}`);
-        toast.success('Đã xóa lô gom đơn thành công!');
-        fetchBatches();
-      } catch (err: any) {
-        console.error(err);
-        toast.error('Lỗi vi phạm ràng buộc dữ liệu backend khi xóa lô đơn.');
-      }
+  const [deletingBatch, setDeletingBatch] = useState<BatchRecord | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingBatch) return;
+    try {
+      await axiosClient.delete(`/logistics/batches/${deletingBatch.id}`);
+      toast.success(`Đã xóa lô gom đơn "${deletingBatch.batchCode}" thành công!`);
+      if (selected?.id === deletingBatch.id) setSelected(null);
+      setDeletingBatch(null);
+      fetchBatches();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi vi phạm ràng buộc dữ liệu backend khi xóa lô đơn: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
   };
 
@@ -251,7 +254,7 @@ export function ShippingOrderBatchesPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); handleDelete(row.original.id); }}
+              onClick={(e) => { e.stopPropagation(); setDeletingBatch(row.original); }}
               className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               title="Xóa"
             >
@@ -493,6 +496,15 @@ export function ShippingOrderBatchesPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingBatch)}
+        onClose={() => setDeletingBatch(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa lô gom đơn vận chuyển"
+        description="Bạn có chắc chắn muốn xóa lô gom đơn này không? Thao tác này không thể hoàn tác."
+        itemName={deletingBatch ? `${deletingBatch.batchCode} (Đối tác: ${deletingBatch.carrierName})` : undefined}
+      />
     </div>
   );
 }

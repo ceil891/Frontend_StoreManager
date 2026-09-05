@@ -23,6 +23,7 @@ export interface CustomerProfile {
   groupId?: string;
   areaId?: string;
   notes?: string;
+  isCreditBlocked?: boolean;
 }
 
 export interface LoyaltyTierConfig {
@@ -59,6 +60,7 @@ export interface CustomerVoucherRecord {
   customerName: string;
   customerPhone: string;
   customerCode?: string;
+  customerId?: string | number;
   voucherCode: string;
   programId?: string;
   programName?: string;
@@ -193,7 +195,7 @@ interface CRMState {
   error: string | null;
 
   fetchCustomers: () => Promise<void>;
-  addCustomer: (customer: CustomerInput) => Promise<void>;
+  addCustomer: (customer: CustomerInput) => Promise<CustomerProfile>;
   updateCustomer: (id: string, data: Partial<CustomerProfile>) => Promise<void>;
   deleteCustomer: (id: string) => Promise<void>;
 
@@ -249,7 +251,25 @@ interface CRMState {
 
   fetchTicketMessages: (ticketId?: string) => Promise<void>;
   addTicketMessage: (item: Omit<TicketMessageRecord, 'id'>) => Promise<void>;
+
+  blockedCreditCustomerIds: string[];
+  toggleBlockCredit: (customerId: string) => boolean;
+  isCustomerCreditBlocked: (customerId: string) => boolean;
 }
+
+const getSavedBlockedCredit = (): string[] => {
+  try {
+    const saved = localStorage.getItem('retailhub_blocked_credit_customers');
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return [];
+};
+
+const saveBlockedCredit = (ids: string[]) => {
+  try {
+    localStorage.setItem('retailhub_blocked_credit_customers', JSON.stringify(ids));
+  } catch {}
+};
 
 const getSavedLocalCustomers = (): CustomerProfile[] => {
   try {
@@ -273,7 +293,7 @@ export const DEFAULT_MOCK_TICKETS: SupportTicketRecord[] = [];
 
 export const DEFAULT_MOCK_TICKET_MESSAGES: TicketMessageRecord[] = [];
 
-export const useCrmStore = create<CRMState>()((set) => ({
+export const useCrmStore = create<CRMState>()((set, get) => ({
   customers: [],
   loyaltyTiers: [],
   vouchers: [],
@@ -289,6 +309,45 @@ export const useCrmStore = create<CRMState>()((set) => ({
   isLoadingCustomers: false,
   isLoading: false,
   error: null,
+
+  blockedCreditCustomerIds: getSavedBlockedCredit(),
+
+  toggleBlockCredit: (customerId: string) => {
+    let nowBlocked = false;
+    set((state) => {
+      const targetCustomer = state.customers.find((c) => String(c.id) === String(customerId));
+      const currentlyBlocked = targetCustomer?.isCreditBlocked ?? state.blockedCreditCustomerIds.includes(String(customerId));
+      nowBlocked = !currentlyBlocked;
+
+      const nextIds = nowBlocked
+        ? Array.from(new Set([...state.blockedCreditCustomerIds, String(customerId)]))
+        : state.blockedCreditCustomerIds.filter((id) => id !== String(customerId));
+      saveBlockedCredit(nextIds);
+
+      const updatedCustomers = state.customers.map((c) =>
+        String(c.id) === String(customerId) ? { ...c, isCreditBlocked: nowBlocked } : c
+      );
+
+      // Async sync to backend API
+      crmService.toggleCustomerCreditBlock(String(customerId), nowBlocked).catch((err) => {
+        console.warn('Failed to sync credit block to backend API:', err);
+      });
+
+      return {
+        blockedCreditCustomerIds: nextIds,
+        customers: updatedCustomers,
+      };
+    });
+    return nowBlocked;
+  },
+
+  isCustomerCreditBlocked: (customerId: string) => {
+    const cust = get().customers.find((c) => String(c.id) === String(customerId));
+    if (cust && cust.isCreditBlocked !== undefined) {
+      return Boolean(cust.isCreditBlocked);
+    }
+    return get().blockedCreditCustomerIds.includes(String(customerId));
+  },
 
   fetchCustomers: async () => {
     set({ isLoadingCustomers: true, isLoading: true, error: null });
@@ -306,70 +365,45 @@ export const useCrmStore = create<CRMState>()((set) => ({
 
   addCustomer: async (customer) => {
     set({ isLoading: true, error: null });
-    let created: CustomerProfile;
     try {
-      created = await crmService.addCustomer(customer);
+      const created = await crmService.addCustomer(customer);
+      set((state) => ({
+        customers: [created, ...state.customers.filter(c => c.id !== created.id)],
+        isLoading: false,
+      }));
+      return created;
     } catch (e: any) {
-      console.warn('API add customer failed, fallback local add:', e);
-      created = {
-        id: String(Date.now()),
-        customerCode: customer.customerCode || `CUST-${Math.floor(10000 + Math.random() * 90000)}`,
-        name: customer.name,
-        phone: customer.phone,
-        email: customer.email,
-        address: customer.address,
-        avatarUrl: customer.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-        loyaltyTier: customer.loyaltyTier || 'BRONZE',
-        loyaltyPoints: customer.loyaltyPoints || 0,
-        lifetimeSpent: customer.lifetimeSpent || 0,
-        registeredDate: customer.registeredDate || new Date().toISOString().split('T')[0],
-        lastActive: new Date().toISOString().split('T')[0],
-        status: customer.status || 'ACTIVE',
-        notes: customer.notes,
-        taxCode: customer.taxCode,
-        gender: customer.gender,
-        dateOfBirth: customer.dateOfBirth,
-        creditLimit: customer.creditLimit,
-        groupId: customer.groupId,
-        areaId: customer.areaId,
-      };
+      set({ isLoading: false, error: e.message || 'Lỗi khi thêm khách hàng' });
+      throw e;
     }
-    set((state) => {
-      const next = [created, ...state.customers];
-      saveLocalCustomers(next);
-      return { customers: next, isLoading: false };
-    });
   },
 
   updateCustomer: async (id, data) => {
     set({ isLoading: true, error: null });
     try {
-      await crmService.updateCustomer(id, data);
+      const updated = await crmService.updateCustomer(id, data);
+      set((state) => ({
+        customers: state.customers.map((c) => (c.id === id ? { ...c, ...updated } : c)),
+        isLoading: false,
+      }));
     } catch (e: any) {
-      console.warn('API update customer failed, applying local update:', e);
+      set({ isLoading: false, error: e.message || 'Lỗi khi cập nhật khách hàng' });
+      throw e;
     }
-    set((state) => {
-      const target = state.customers.find((c) => c.id === id);
-      const merged = target ? { ...target, ...data } : (data as CustomerProfile);
-      const others = state.customers.filter((c) => c.id !== id);
-      const next = [merged, ...others];
-      saveLocalCustomers(next);
-      return { customers: next, isLoading: false };
-    });
   },
 
   deleteCustomer: async (id) => {
     set({ isLoading: true, error: null });
     try {
       await crmService.deleteCustomer(id);
+      set((state) => ({
+        customers: state.customers.filter((c) => c.id !== id),
+        isLoading: false,
+      }));
     } catch (e: any) {
-      console.warn('API delete customer failed, applying local delete:', e);
+      set({ isLoading: false, error: e.message || 'Lỗi khi xóa khách hàng' });
+      throw e;
     }
-    set((state) => {
-      const next = state.customers.filter((c) => c.id !== id);
-      saveLocalCustomers(next);
-      return { customers: next, isLoading: false };
-    });
   },
 
   fetchVouchers: async () => {
@@ -421,8 +455,9 @@ export const useCrmStore = create<CRMState>()((set) => ({
       await crmService.deleteVoucher(id);
       set((state) => ({ vouchers: state.vouchers.filter((v) => v.id !== id), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ vouchers: state.vouchers.filter((v) => v.id !== id), isLoading: false }));
+      console.error('Failed to delete voucher:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa' });
+      throw e;
     }
   },
 
@@ -484,8 +519,9 @@ export const useCrmStore = create<CRMState>()((set) => ({
       await crmService.deleteCustomerVoucher(id);
       set((state) => ({ customerVouchers: state.customerVouchers.filter((cv) => cv.id !== id), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ customerVouchers: state.customerVouchers.filter((cv) => cv.id !== id), isLoading: false }));
+      console.error('Failed to delete customer voucher:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa' });
+      throw e;
     }
   },
 
@@ -567,7 +603,7 @@ export const useCrmStore = create<CRMState>()((set) => ({
       const updated = await crmService.updateFeedback(id, data);
       set((state) => {
         const target = state.feedbacks.find((f) => f.id === id);
-        const merged = target ? { ...target, ...updated } : (updated as CustomerFeedbackRecord);
+        const merged = target ? { ...target, ...updated } : (updated as FeedbackRecord);
         const others = state.feedbacks.filter((f) => f.id !== id);
         return {
           feedbacks: [merged, ...others],
@@ -587,8 +623,9 @@ export const useCrmStore = create<CRMState>()((set) => ({
       await crmService.deleteFeedback(id);
       set((state) => ({ feedbacks: state.feedbacks.filter((f) => f.id !== id), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ feedbacks: state.feedbacks.filter((f) => f.id !== id), isLoading: false }));
+      console.error('Failed to delete feedback:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa phản hồi' });
+      throw e;
     }
   },
 
@@ -756,8 +793,9 @@ export const useCrmStore = create<CRMState>()((set) => ({
       await crmService.deleteMarketingCampaign(id);
       set((state) => ({ marketingCampaigns: state.marketingCampaigns.filter((mc) => mc.id !== id), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ marketingCampaigns: state.marketingCampaigns.filter((mc) => mc.id !== id), isLoading: false }));
+      console.error('Failed to delete marketing campaign:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa chiến dịch' });
+      throw e;
     }
   },
 
@@ -815,8 +853,9 @@ export const useCrmStore = create<CRMState>()((set) => ({
       await crmService.deleteLoyaltyTier(id);
       set((state) => ({ loyaltyTiers: state.loyaltyTiers.filter((t) => String(t.id) !== String(id)), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ loyaltyTiers: state.loyaltyTiers.filter((t) => String(t.id) !== String(id)), isLoading: false }));
+      console.error('Failed to delete loyalty tier:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa hạng thành viên' });
+      throw e;
     }
   },
 
@@ -870,8 +909,9 @@ export const useCrmStore = create<CRMState>()((set) => ({
       await crmService.deletePartnerGroup(id);
       set((state) => ({ partnerGroups: state.partnerGroups.filter((pg) => pg.id !== id), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ partnerGroups: state.partnerGroups.filter((pg) => pg.id !== id), isLoading: false }));
+      console.error('Failed to delete partner group:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa nhóm đối tác' });
+      throw e;
     }
   },
 
@@ -925,8 +965,9 @@ export const useCrmStore = create<CRMState>()((set) => ({
       await crmService.deleteProductWarranty(id);
       set((state) => ({ productWarranties: state.productWarranties.filter((pw) => pw.id !== id), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ productWarranties: state.productWarranties.filter((pw) => pw.id !== id), isLoading: false }));
+      console.error('Failed to delete product warranty:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa chính sách bảo hành' });
+      throw e;
     }
   },
 
@@ -980,8 +1021,9 @@ export const useCrmStore = create<CRMState>()((set) => ({
       await crmService.deleteWarrantyClaim(id);
       set((state) => ({ warrantyClaims: state.warrantyClaims.filter((wc) => wc.id !== id), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ warrantyClaims: state.warrantyClaims.filter((wc) => wc.id !== id), isLoading: false }));
+      console.error('Failed to delete warranty claim:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa yêu cầu bảo hành' });
+      throw e;
     }
   },
 
@@ -1034,8 +1076,9 @@ export const useCrmStore = create<CRMState>()((set) => ({
       await crmService.deleteSupportTicket(id);
       set((state) => ({ supportTickets: state.supportTickets.filter((st) => st.id !== id), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ supportTickets: state.supportTickets.filter((st) => st.id !== id), isLoading: false }));
+      console.error('Failed to delete support ticket:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa phiếu hỗ trợ' });
+      throw e;
     }
   },
 

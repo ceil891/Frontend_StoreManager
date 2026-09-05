@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Eye, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { axiosClient } from '@/shared/lib/axiosClient';
@@ -18,26 +19,7 @@ export interface ShippingNoteRecord {
 
 const STORAGE_KEY = 'retailhub_shipping_notes_data';
 
-const DEFAULT_NOTES: ShippingNoteRecord[] = [
-  {
-    id: '1',
-    noteCode: 'NOTE-001',
-    orderCode: 'SO-88101',
-    shipperName: 'Nguyễn Văn Minh (Viettel Post)',
-    noteType: 'GIAO_LAI',
-    content: 'Khách hàng hẹn giao lại vào buổi chiều sau 17h.',
-    createdAt: '2026-08-01 10:15'
-  },
-  {
-    id: '2',
-    noteCode: 'NOTE-002',
-    orderCode: 'SO-88102',
-    shipperName: 'Trần Quốc Huy (GHTK)',
-    noteType: 'ĐỔI_ĐỊA_CHỈ',
-    content: 'Đổi địa chỉ giao sang số 45 Lê Lợi, Q1.',
-    createdAt: '2026-08-01 11:30'
-  }
-];
+const DEFAULT_NOTES: ShippingNoteRecord[] = [];
 
 const getSavedNotes = (): ShippingNoteRecord[] => {
   try {
@@ -64,6 +46,7 @@ export function ShippingNotesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<ShippingNoteRecord>>({});
+  const [deletingItem, setDeletingItem] = useState<ShippingNoteRecord | null>(null);
 
   const fetchNotes = useCallback(async () => {
     try {
@@ -164,20 +147,21 @@ export function ShippingNotesPage() {
     setIsModalOpen(false);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa ghi chú này?')) {
-      try {
-        await axiosClient.delete(`/logistics/delivery-notes/${id}`);
-      } catch (err) {
-        console.warn('API delete delivery-note failed, applying local state update:', err);
-      }
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await axiosClient.delete(`/logistics/delivery-notes/${deletingItem.id}`);
       setData(prev => {
-        const next = prev.filter(item => item.id !== id);
+        const next = prev.filter(item => item.id !== deletingItem.id);
         saveNotesList(next);
         return next;
       });
-      toast.success('Đã xóa ghi chú thành công!');
-      setSelectedNote(null);
+      toast.success(`Đã xóa ghi chú ${deletingItem.noteCode} thành công!`);
+      if (selectedNote?.id === deletingItem.id) setSelectedNote(null);
+      setDeletingItem(null);
+    } catch (err: any) {
+      console.error('API delete delivery-note failed:', err);
+      toast.error('Lỗi khi xóa ghi chú: ' + (err?.response?.data?.message || err?.message || 'Không thể xóa'));
     }
   };
 
@@ -242,7 +226,7 @@ export function ShippingNotesPage() {
             <button onClick={() => handleOpenEdit(row.original)} className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors" title="Chỉnh sửa">
               <Edit className="w-4 h-4" />
             </button>
-            <button onClick={() => handleDelete(row.original.id)} className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors" title="Xóa">
+            <button onClick={() => setDeletingItem(row.original)} className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors" title="Xóa">
               <Trash2 className="w-4 h-4" />
             </button>
           </div>
@@ -391,6 +375,14 @@ export function ShippingNotesPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa ghi chú vận chuyển"
+        description={`Bạn có chắc chắn muốn xóa ghi chú "${deletingItem?.noteCode}" của đơn hàng "${deletingItem?.orderCode}" không?`}
+      />
     </div>
   );
 }

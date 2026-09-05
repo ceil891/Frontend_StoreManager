@@ -83,11 +83,11 @@ export const SearchInput = React.forwardRef<SearchInputRef, SearchInputProps>(
     }[size];
 
     return (
-      <div className={cn('relative flex items-center', containerClassName)}>
+      <div className={cn('relative flex items-center w-full', containerClassName)}>
         {/* Search Icon */}
         <div
           className={cn(
-            'absolute inset-y-0 left-0 flex items-center pointer-events-none text-gray-400 dark:text-gray-500 transition-colors',
+            'absolute inset-y-0 left-0 flex items-center pointer-events-none text-gray-400 dark:text-gray-500 transition-colors z-10',
             iconPlStyle
           )}
         >

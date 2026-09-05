@@ -7,6 +7,7 @@ import { useSalesStore, formatMoney } from '@/features/sales/store/salesStore';
 import { useCrmStore } from '@/features/crm/store/crmStore';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { useAuthStore } from '@/features/auth/store/authStore';
 
 export interface QuoteSurveyRecord {
   id: string;
@@ -40,6 +41,7 @@ export function SaleOffersPage() {
   const customers = useCrmStore((s) => s.customers);
   const fetchCustomers = useCrmStore((s) => s.fetchCustomers);
   const navigate = useNavigate();
+  const currentUser = useAuthStore((s) => s.user);
 
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -121,12 +123,12 @@ export function SaleOffersPage() {
 
     setEditingItem({
       surveyCode: `KS-${new Date().getFullYear()}${(new Date().getMonth()+1).toString().padStart(2,'0')}${new Date().getDate().toString().padStart(2,'0')}-${Math.floor(1000 + Math.random() * 9000)}`,
-      customerId: firstCust ? String(firstCust.id) : '1',
-      customerName: firstCust?.name || 'Nguyễn Văn A',
-      contactPerson: (firstCust as any)?.contactPerson || firstCust?.name || 'Nguyễn Văn A',
-      contactPhone: firstCust?.phone || '0987654321',
-      contactEmail: firstCust?.email || 'nguyenvana@gmail.com',
-      salespersonName: 'Nguyễn Văn A (Sales)',
+      customerId: firstCust ? String(firstCust.id) : '',
+      customerName: firstCust?.name || '',
+      contactPerson: (firstCust as any)?.contactPerson || firstCust?.name || '',
+      contactPhone: firstCust?.phone || '',
+      contactEmail: firstCust?.email || '',
+      salespersonName: currentUser?.fullName || currentUser?.name || 'Nhân viên phụ trách',
       surveyDate: today,
       responseDeadline: nextWeek,
       requestedProducts: '',

@@ -2,7 +2,8 @@ import { useMemo, useState, useEffect } from 'react';
 import { 
   Plus, Download, Search, Eye, Clock, Wallet, Receipt, 
   AlertCircle, CheckCircle2, ShieldCheck, Printer, Edit, Trash2, 
-  Fingerprint, Sparkles, UserCheck, AlertTriangle, Loader2
+  Fingerprint, Sparkles, UserCheck, AlertTriangle, Loader2,
+  Calculator, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -28,6 +29,8 @@ interface PosSessionRecord {
   totalGrossRevenueVnd: number;
   status: 'IN_PROGRESS' | 'PENDING_AUDIT_VERIFICATION' | 'CLOSED_VERIFIED' | 'DISCREPANCY_FLAGGED';
   supervisorSignoff?: string;
+  branchId?: number | string;
+  orders?: any[];
 }
 
 const fmtVnd = (n: number) => n.toLocaleString('vi-VN') + '₫';
@@ -41,7 +44,17 @@ const statusBadgeStyles = {
   DISCREPANCY_FLAGGED: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200',
 };
 
+const statusMap: Record<string, string> = {
+  IN_PROGRESS: 'Đang mở',
+  CLOSED_VERIFIED: 'Đã đóng (Khớp)',
+  PENDING_AUDIT_VERIFICATION: 'Chờ kiểm toán',
+  DISCREPANCY_FLAGGED: 'Lệch tiền',
+};
+
 import { usePosSessionStore } from '../store/posSessionStore';
+import { useSalesStore } from '@/features/sales/store/salesStore';
+import { useAuthStore } from '@/features/auth/store/authStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 
 export function PosSessionsPage() {
   const {
@@ -53,32 +66,101 @@ export function PosSessionsPage() {
     deleteSession,
   } = usePosSessionStore();
 
+  const { saleOrders, fetchSaleOrders } = useSalesStore();
+  const { branches, fetchBranches } = useBranchStore();
+
   const [deletingSession, setDeletingSession] = useState<PosSessionRecord | null>(null);
+
+  // Cashiers from API
+  const currentUser = useAuthStore((s) => s.user);
+  const [cashiers, setCashiers] = useState<Array<{ id: number; username: string; fullName: string; roleName: string; branchId: number | null; branchName: string | null }>>([]);
+  const [newBranchId, setNewBranchId] = useState<string>('');
 
   useEffect(() => {
     fetchSessions();
-  }, [fetchSessions]);
+    fetchSaleOrders();
+    fetchBranches();
+    axiosClient.get<any, any>('/pos/cashiers').then((res: any) => {
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      setCashiers(list);
+      // Default to current logged-in user
+      if (list.length > 0 && currentUser) {
+        const match = list.find((c: any) => String(c.id) === String(currentUser.id) || c.username === currentUser.name);
+        if (match) {
+          setNewCashierName(match.fullName || match.username);
+        }
+      }
+    }).catch(() => {});
+  }, [fetchSessions, fetchSaleOrders, fetchBranches, currentUser]);
+
+  useEffect(() => {
+    if (branches.length > 0 && !newBranchId) {
+      const userBranch = currentUser?.branchId ? String(currentUser.branchId) : String(branches[0].id);
+      setNewBranchId(userBranch);
+    }
+  }, [branches, currentUser, newBranchId]);
 
   const data: PosSessionRecord[] = useMemo(() => {
-    return storeSessions.map((s) => ({
-      id: s.id,
-      sessionCode: s.sessionCode,
-      terminalId: s.terminalCode,
-      cashierName: s.cashierName,
-      openedTimestamp: s.openingTime,
-      closedTimestamp: s.closingTime,
-      openingCashFloatVnd: s.openingCash,
-      expectedClosingCashVnd: s.expectedCash,
-      actualClosingCashVnd: s.actualCash,
-      cashDiscrepancyVnd: s.cashDifference,
-      totalTransactionsCount: 25,
-      totalGrossRevenueVnd: s.expectedCash - s.openingCash,
-      status: s.status === 'OPEN' ? 'IN_PROGRESS' : 'CLOSED_VERIFIED',
-      supervisorSignoff: 'Lê Quản lý',
-    }));
-  }, [storeSessions]);
+    return storeSessions.map((s) => {
+      // Tìm các đơn hàng thuộc ca POS này
+      const sessionOrders = (saleOrders || []).filter((o) => {
+        // 1. Khớp chính xác posSessionId
+        if ((o as any).posSessionId && String((o as any).posSessionId) === String(s.id)) return true;
+        // 2. Khớp theo shiftId hoặc sessionCode
+        if (o.shiftId && (o.shiftId === s.sessionCode || o.shiftId === s.id)) return true;
+        // 3. Khớp theo khoảng thời gian mở ca
+        if (s.openingTime) {
+          const rawDate = (o as any).orderDate || o.date;
+          if (rawDate) {
+            const oTime = new Date(rawDate).getTime();
+            const start = new Date(s.openingTime).getTime();
+            const end = s.closingTime ? new Date(s.closingTime).getTime() : Date.now();
+            if (oTime >= start - 900000 && oTime <= end + 900000) {
+              if (!s.branchId || !o.branchId || String(s.branchId) === String(o.branchId)) {
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      });
 
-  const setData = (_fn: any) => {};
+      const fallbackRevenue = sessionOrders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+
+      const orderCount = s.totalOrders !== undefined && s.totalOrders > 0
+        ? s.totalOrders
+        : sessionOrders.length;
+
+      const grossRevenue = s.totalRevenue !== undefined && s.totalRevenue > 0
+        ? s.totalRevenue
+        : fallbackRevenue;
+
+      const expectedCash = s.expectedCash && s.expectedCash > s.openingCash
+        ? s.expectedCash
+        : (s.openingCash + grossRevenue);
+
+      return {
+        id: s.id,
+        sessionCode: s.sessionCode,
+        terminalId: s.terminalCode,
+        cashierName: s.cashierName,
+        openedTimestamp: s.openingTime,
+        closedTimestamp: s.closingTime,
+        openingCashFloatVnd: s.openingCash,
+        expectedClosingCashVnd: expectedCash,
+        actualClosingCashVnd: s.actualCash,
+        cashDiscrepancyVnd: s.cashDifference,
+        totalTransactionsCount: orderCount,
+        totalGrossRevenueVnd: grossRevenue,
+        status: s.status === 'OPEN' ? 'IN_PROGRESS' : 'CLOSED_VERIFIED',
+        supervisorSignoff: 'Lê Quản lý',
+        branchId: s.branchId,
+        orders: sessionOrders,
+      };
+    });
+  }, [storeSessions, saleOrders]);
+
+
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -98,10 +180,37 @@ export function PosSessionsPage() {
   const [isCloseShiftModalOpen, setIsCloseShiftModalOpen] = useState(false);
   const [actualClosingCashInput, setActualClosingCashInput] = useState('');
 
+  // Cash Denominations Calculator for Close Shift
+  const CASH_DENOMINATIONS = useMemo(() => [
+    { value: 500000, label: '500.000₫' },
+    { value: 200000, label: '200.000₫' },
+    { value: 100000, label: '100.000₫' },
+    { value: 50000, label: '50.000₫' },
+    { value: 20000, label: '20.000₫' },
+    { value: 10000, label: '10.000₫' },
+    { value: 5000, label: '5.000₫' },
+    { value: 2000, label: '2.000₫' },
+    { value: 1000, label: '1.000₫' },
+  ], []);
+  const [showDenomCalculator, setShowDenomCalculator] = useState(false);
+  const [denominations, setDenominations] = useState<Record<number, number>>({});
+
+  const handleDenomChange = (val: number, count: number) => {
+    const updated = { ...denominations, [val]: Math.max(0, count) };
+    setDenominations(updated);
+    const sum = CASH_DENOMINATIONS.reduce((acc, d) => acc + d.value * (updated[d.value] || 0), 0);
+    setActualClosingCashInput(String(sum));
+  };
+
+  const handleResetDenom = () => {
+    setDenominations({});
+    setActualClosingCashInput('0');
+  };
+
   // Create Session Modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newTerminalId, setNewTerminalId] = useState('TERM-01-MAIN');
-  const [newCashierName, setNewCashierName] = useState('Trần Văn Hùng');
+  const [newCashierName, setNewCashierName] = useState('');
   const [newOpeningCash, setNewOpeningCash] = useState('2000000');
 
   // Edit Session Modal state
@@ -142,31 +251,28 @@ export function PosSessionsPage() {
     }, 1500);
   };
 
-  const handleConfirmSignoff = () => {
+  const handleConfirmSignoff = async () => {
     if (!selectedSession) return;
     
-    setData(prev => 
-      prev.map(item => {
-        if (item.id === selectedSession.id) {
-          return {
-            ...item,
-            status: 'CLOSED_VERIFIED',
-            supervisorSignoff: supervisorName,
-            // Audit adjustment: clear any pending flags
-          };
-        }
-        return item;
-      })
-    );
-    
-    setIsBiometricModalOpen(false);
-    toast.success(`Đã phê duyệt chênh lệch cho phiên ${selectedSession.sessionCode} bởi ${supervisorName}! Trạng thái chuyển thành ĐÃ ĐÓNG (KHỚP)`);
+    try {
+      await updateSession(selectedSession.id, {
+        status: 'CLOSED_VERIFIED',
+        supervisorSignoff: supervisorName,
+      } as any);
+      setIsBiometricModalOpen(false);
+      toast.success(`Đã phê duyệt chênh lệch cho phiên ${selectedSession.sessionCode} bởi ${supervisorName}! Trạng thái chuyển thành ĐÃ ĐÓNG (KHỚP)`);
+    } catch (err) {
+      console.error('Error updating session:', err);
+      toast.error('Lỗi khi phê duyệt chênh lệch ca!');
+    }
   };
 
   // 2. Close Shift handlers
   const handleOpenCloseShift = () => {
     if (!selectedSession) return;
     setActualClosingCashInput(String(selectedSession.expectedClosingCashVnd));
+    setShowDenomCalculator(false);
+    setDenominations({});
     setIsCloseShiftModalOpen(true);
   };
 
@@ -201,6 +307,10 @@ export function PosSessionsPage() {
     const nextSessionNum = String(currentDaySessions.length + 1).padStart(2, '0');
     const sessionCode = `SESS-${todayStr}-${nextSessionNum}`;
     
+    const selectedCashier = cashiers.find(c => c.fullName === newCashierName);
+    const resolvedUserId = selectedCashier ? selectedCashier.id : (currentUser?.id ? Number(currentUser.id) : 1);
+    const resolvedBranchId = newBranchId ? Number(newBranchId) : (selectedCashier?.branchId || (currentUser as any)?.branchId || 1);
+
     try {
       await addSession({
         sessionCode,
@@ -212,6 +322,8 @@ export function PosSessionsPage() {
         actualCash: 0,
         cashDifference: 0,
         status: 'OPEN',
+        userId: resolvedUserId,
+        branchId: resolvedBranchId,
       });
       setIsCreateModalOpen(false);
       toast.success(`Đã mở thành công ca làm việc mới: ${sessionCode} tại quầy ${newTerminalId}!`);
@@ -339,31 +451,56 @@ export function PosSessionsPage() {
       {
         id: 'actions',
         header: 'Thao tác',
-        cell: ({ row }) => (
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={(e) => { e.stopPropagation(); setSelectedSessionId(row.original.id); }}
-              title="Xem chi tiết"
-              className="p-2 text-gray-500 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors border border-transparent hover:border-primary/20 dark:text-gray-400"
-            >
-              <Eye className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
-              title="Chỉnh sửa"
-              className="p-2 text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors border border-transparent hover:border-blue-500/20 dark:text-gray-400"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); setDeletingSession(row.original); }}
-              title="Xóa ca làm việc"
-              className="p-2 text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors border border-transparent hover:border-red-500/20 dark:text-gray-400"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const session = row.original;
+          const isClosed = session.status !== 'IN_PROGRESS';
+          const hasTransactions = session.totalTransactionsCount > 0 || session.totalGrossRevenueVnd > 0;
+          const canDelete = !isClosed && !hasTransactions;
+
+          return (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={(e) => { e.stopPropagation(); setSelectedSessionId(session.id); }}
+                title="Xem chi tiết ca"
+                className="p-2 text-gray-500 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors border border-transparent hover:border-primary/20 dark:text-gray-400"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
+
+              {!isClosed && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleOpenEdit(session); }}
+                  title="Chỉnh sửa ca đang mở"
+                  className="p-2 text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors border border-transparent hover:border-blue-500/20 dark:text-gray-400"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+              )}
+
+              {canDelete ? (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setDeletingSession(session); }}
+                  title="Hủy ca rỗng mở nhầm (chưa có đơn hàng/doanh thu)"
+                  className="p-2 text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors border border-transparent hover:border-red-500/20 dark:text-gray-400"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  disabled
+                  title={
+                    isClosed
+                      ? 'Ca đã chốt/đóng sổ, tuyệt đối không được xóa để lưu vết kiểm toán và đối soát sổ quỹ'
+                      : 'Ca đã phát sinh đơn hàng bán lẻ, không được phép xóa (hãy đóng ca)'
+                  }
+                  className="p-2 text-gray-300 dark:text-gray-600 cursor-not-allowed rounded-lg"
+                >
+                  <Trash2 className="w-4 h-4 opacity-40" />
+                </button>
+              )}
+            </div>
+          );
+        },
       },
     ],
     [storeSessions]
@@ -557,6 +694,48 @@ export function PosSessionsPage() {
               )}
             </div>
 
+            {/* Danh sách hóa đơn bán hàng thuộc ca */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase flex items-center gap-1.5">
+                  <Receipt className="w-4 h-4 text-primary" /> Hóa đơn bán hàng trong ca ({selectedSession.orders?.length || 0})
+                </span>
+                <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                  {fmtVnd(selectedSession.totalGrossRevenueVnd)}
+                </span>
+              </div>
+
+              {selectedSession.orders && selectedSession.orders.length > 0 ? (
+                <div className="max-h-52 overflow-y-auto rounded-xl border border-gray-250 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-gray-900/50 shadow-xs">
+                  {selectedSession.orders.map((ord: any) => (
+                    <div key={ord.id || ord.code} className="p-3 flex items-center justify-between text-xs hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-primary">{ord.code || ord.orderCode}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 font-semibold">
+                            {ord.paymentMethod || 'Tiền mặt'}
+                          </span>
+                        </div>
+                        <p className="text-gray-400 text-[11px] mt-0.5">
+                          {ord.customerName || 'Khách vãng lai'} • {ord.date || ord.orderDate}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-mono font-black text-gray-900 dark:text-white block">
+                          {fmtVnd(Number(ord.totalAmount || ord.finalAmount || 0))}
+                        </span>
+                        <span className="text-[10px] text-emerald-600 font-medium">Đã thanh toán</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl border border-dashed border-gray-200 dark:border-gray-800 text-center text-gray-400 text-xs">
+                  Chưa có hóa đơn nào được ghi nhận trong ca này
+                </div>
+              )}
+            </div>
+
             {/* Shift Context Action Drawer Footer */}
             <div className="pt-6 border-t border-gray-200 dark:border-gray-850 flex gap-3">
               {selectedSession.status === 'IN_PROGRESS' ? (
@@ -711,6 +890,69 @@ export function PosSessionsPage() {
             />
           </div>
 
+          {/* Cash Denominations Calculator Accordion */}
+          <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-gray-50/50 dark:bg-gray-900/50">
+            <button
+              type="button"
+              onClick={() => setShowDenomCalculator(!showDenomCalculator)}
+              className="w-full px-4 py-2.5 flex items-center justify-between text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/60 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Calculator className="w-4 h-4 text-primary" />
+                <span>Bảng đếm tiền theo mệnh giá (500k, 200k, 100k...)</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-primary text-[11px]">
+                <span>{showDenomCalculator ? 'Thu gọn' : 'Mở bảng đếm'}</span>
+                {showDenomCalculator ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </div>
+            </button>
+
+            {showDenomCalculator && (
+              <div className="p-3 border-t border-gray-200 dark:border-gray-700 space-y-3 bg-white dark:bg-gray-900">
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-gray-500">Nhập số tờ của từng mệnh giá tiền trong két:</span>
+                  <button
+                    type="button"
+                    onClick={handleResetDenom}
+                    className="text-red-500 hover:text-red-600 font-semibold"
+                  >
+                    Xóa tất cả
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {CASH_DENOMINATIONS.map((d) => {
+                    const count = denominations[d.value] || 0;
+                    const subtotal = d.value * count;
+                    return (
+                      <div key={d.value} className="p-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800/60">
+                        <div className="flex justify-between text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1">
+                          <span>{d.label}</span>
+                          <span className="text-gray-400 font-mono text-[10px]">
+                            {subtotal > 0 ? (subtotal >= 1000000 ? `${(subtotal/1000000).toFixed(1)}M` : `${(subtotal/1000).toFixed(0)}k`) : ''}
+                          </span>
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          value={count || ''}
+                          onChange={(e) => handleDenomChange(d.value, parseInt(e.target.value, 10) || 0)}
+                          placeholder="0 tờ"
+                          className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-xs font-mono font-bold text-center focus:ring-1 focus:ring-primary outline-none"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-800 text-xs">
+                  <span className="font-semibold text-gray-600 dark:text-gray-400">Tổng đếm từ các mệnh giá:</span>
+                  <span className="font-mono font-bold text-primary text-sm">
+                    {fmtVnd(CASH_DENOMINATIONS.reduce((acc, d) => acc + d.value * (denominations[d.value] || 0), 0))}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Real-time calculated discrepancy indicator */}
           {actualClosingCashInput !== '' && selectedSession && (() => {
             const val = parseInt(actualClosingCashInput, 10) || 0;
@@ -759,6 +1001,25 @@ export function PosSessionsPage() {
       >
         <form onSubmit={handleCreateSession} className="space-y-4">
           <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Chi nhánh bán hàng</label>
+            <select
+              value={newBranchId}
+              onChange={(e) => setNewBranchId(e.target.value)}
+              className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm"
+            >
+              {branches.length > 0 ? (
+                branches.map((b) => (
+                  <option key={b.id} value={String(b.id)}>
+                    {b.name} ({b.branchCode || `CN-${b.id}`})
+                  </option>
+                ))
+              ) : (
+                <option value="1">Chi nhánh mặc định</option>
+              )}
+            </select>
+          </div>
+
+          <div>
             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Mã quầy thu ngân</label>
             <select
               value={newTerminalId}
@@ -779,10 +1040,15 @@ export function PosSessionsPage() {
               onChange={(e) => setNewCashierName(e.target.value)}
               className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm"
             >
-              <option value="Trần Văn Hùng">Trần Văn Hùng (Quản trị viên)</option>
-              <option value="Nguyễn Văn an">Nguyễn Văn An (Nhân viên ca sáng)</option>
-              <option value="Trần thị Bích">Trần Thị Bích (Nhân viên ca tối)</option>
-              <option value="Phạm minh châu">Phạm Minh Châu (Nhân viên bán thời gian)</option>
+              {cashiers.length > 0 ? (
+                cashiers.map((c) => (
+                  <option key={c.id} value={c.fullName}>
+                    {c.fullName} ({c.roleName || 'Thu ngân'})
+                  </option>
+                ))
+              ) : (
+                <option value={currentUser?.name || 'Thu ngân'}>{currentUser?.name || 'Thu ngân'} (Đang đăng nhập)</option>
+              )}
             </select>
           </div>
 
@@ -955,15 +1221,16 @@ export function PosSessionsPage() {
           if (!deletingSession) return;
           try {
             await deleteSession(deletingSession.id);
-            toast.success(`Đã xóa ca làm việc ${deletingSession.sessionCode} thành công!`);
-          } catch (e) {
-            toast.error('Lỗi khi xóa ca làm việc.');
+            toast.success(`Đã hủy phiên làm việc mở nhầm ${deletingSession.sessionCode} thành công!`);
+          } catch (e: any) {
+            const errorMsg = e?.response?.data?.message || 'Lỗi khi hủy ca làm việc. Ca đã có giao dịch hoặc đã chốt sổ!';
+            toast.error(errorMsg);
           } finally {
             setDeletingSession(null);
           }
         }}
-        title="Xác nhận xóa ca làm việc"
-        description="Bạn có chắc chắn muốn xóa phiên làm việc này không? Dữ liệu đối soát ca sẽ bị loại bỏ khỏi danh sách."
+        title="Xác nhận hủy ca làm việc mở nhầm"
+        description="Lưu ý: Chỉ những ca rỗng chưa có bất kỳ đơn hàng hoặc doanh thu nào mới được phép hủy để đảm bảo tính toàn vẹn dữ liệu sổ quỹ và kiểm toán."
         itemName={deletingSession?.sessionCode}
       />
     </>

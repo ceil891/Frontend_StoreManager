@@ -46,7 +46,7 @@ export const useAreaStore = create<AreaState>()(
         try {
           const data = await axiosClient.get<any, unknown>('/partnerarea/areas?size=500');
           const list = extractPageContent<any>(data);
-          if (Array.isArray(list) && list.length > 0) {
+          if (Array.isArray(list)) {
             const mapped = list.map((item: any) => ({
               id: String(item.id),
               areaCode: item.code || `AREA-${item.id}`,
@@ -58,14 +58,7 @@ export const useAreaStore = create<AreaState>()(
               createdAt: item.createdAt ? item.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
               description: item.description || ''
             }));
-            const currentLocal = get().areas || [];
-            const merged = [...mapped];
-            currentLocal.forEach(loc => {
-              if (!merged.some(m => String(m.id) === String(loc.id) || m.areaCode === loc.areaCode)) {
-                merged.push(loc);
-              }
-            });
-            set({ areas: merged, isLoading: false });
+            set({ areas: mapped.length > 0 ? mapped : (get().areas.length > 0 ? get().areas : DEFAULT_AREAS), isLoading: false });
           } else {
             set({ isLoading: false });
           }
@@ -76,74 +69,78 @@ export const useAreaStore = create<AreaState>()(
       },
 
       createArea: async (data) => {
-        const tempId = String(Date.now());
-        const newRecord: AreaItem = {
-          id: tempId,
-          areaCode: data.areaCode || `AREA-${tempId.slice(-4)}`,
-          name: data.name || '',
-          level: data.level || 'TỈNH_THÀNH',
-          parentId: data.parentId || null,
-          parentName: data.parentName || undefined,
-          status: data.status || 'KÍCH_HOẠT',
-          createdAt: new Date().toISOString().split('T')[0],
-          description: data.description || '',
+        const payload = {
+          code: data.areaCode,
+          name: data.name,
+          type: data.level === 'TỈNH_THÀNH' ? 'PROVINCE' : data.level === 'QUẬN_HUYỆN' ? 'DISTRICT' : 'WARD',
+          parentId: data.parentId ? Number(data.parentId) : null,
+          description: data.description,
+          isActive: data.status === 'KÍCH_HOẠT'
         };
-        set((state) => ({ areas: [newRecord, ...state.areas] }));
-
         try {
-          const payload = {
-            code: data.areaCode,
-            name: data.name,
-            type: data.level === 'TỈNH_THÀNH' ? 'PROVINCE' : data.level === 'QUẬN_HUYỆN' ? 'DISTRICT' : 'WARD',
-            parentId: data.parentId ? Number(data.parentId) : null,
-            description: data.description,
-            isActive: data.status === 'KÍCH_HOẠT'
-          };
           await axiosClient.post('/partnerarea/areas', payload);
           await get().fetchAreas();
         } catch (err) {
-          console.error('Failed to create area on API, kept in local state', err);
+          console.error('Failed to create area on API', err);
+          // Fallback local save if offline
+          const tempId = String(Date.now());
+          const newRecord: AreaItem = {
+            id: tempId,
+            areaCode: data.areaCode || `AREA-${tempId.slice(-4)}`,
+            name: data.name || '',
+            level: data.level || 'TỈNH_THÀNH',
+            parentId: data.parentId || null,
+            parentName: data.parentName || undefined,
+            status: data.status || 'KÍCH_HOẠT',
+            createdAt: new Date().toISOString().split('T')[0],
+            description: data.description || '',
+          };
+          set((state) => ({ areas: [newRecord, ...state.areas] }));
+          throw err;
         }
       },
 
       updateArea: async (id, data) => {
-        set((state) => ({
-          areas: state.areas.map((a) => (a.id === id ? { ...a, ...data } : a)),
-        }));
+        const payload = {
+          code: data.areaCode,
+          name: data.name,
+          type: data.level === 'TỈNH_THÀNH' ? 'PROVINCE' : data.level === 'QUẬN_HUYỆN' ? 'DISTRICT' : 'WARD',
+          parentId: data.parentId ? Number(data.parentId) : null,
+          description: data.description,
+          isActive: data.status === 'KÍCH_HOẠT'
+        };
         try {
-          const payload = {
-            code: data.areaCode,
-            name: data.name,
-            type: data.level === 'TỈNH_THÀNH' ? 'PROVINCE' : data.level === 'QUẬN_HUYỆN' ? 'DISTRICT' : 'WARD',
-            parentId: data.parentId ? Number(data.parentId) : null,
-            description: data.description,
-            isActive: data.status === 'KÍCH_HOẠT'
-          };
           await axiosClient.put(`/partnerarea/areas/${id}`, payload);
+          set((state) => ({
+            areas: state.areas.map((a) => (a.id === id ? { ...a, ...data } : a)),
+          }));
         } catch (err) {
           console.error('Failed to update area on API', err);
+          throw err;
         }
       },
 
       deleteArea: async (id) => {
-        set((state) => ({
-          areas: state.areas.filter((a) => a.id !== id),
-        }));
         try {
           await axiosClient.delete(`/partnerarea/areas/${id}`);
+          set((state) => ({
+            areas: state.areas.filter((a) => a.id !== id),
+          }));
         } catch (err) {
           console.error('Failed to delete area on API', err);
+          throw err;
         }
       },
 
       toggleStatus: async (id) => {
-        set((state) => ({
-          areas: state.areas.map((a) => (a.id === id ? { ...a, status: a.status === 'KÍCH_HOẠT' ? 'KHOÁ' : 'KÍCH_HOẠT' } : a)),
-        }));
         try {
           await axiosClient.patch(`/partnerarea/areas/${id}/status`);
+          set((state) => ({
+            areas: state.areas.map((a) => (a.id === id ? { ...a, status: a.status === 'KÍCH_HOẠT' ? 'KHOÁ' : 'KÍCH_HOẠT' } : a)),
+          }));
         } catch (err) {
           console.error('Failed to toggle area status on API', err);
+          throw err;
         }
       },
     }),

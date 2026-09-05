@@ -1,11 +1,14 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Calendar, CheckSquare, AlertCircle, Download } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, Calendar, CheckSquare, AlertCircle, Download, Lock } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-
-
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
+import { useAuthStore } from '@/features/auth/store/authStore';
+import { axiosClient } from '@/shared/lib/axiosClient';
+import { toast } from 'sonner';
 
 interface AdjustmentRecord {
   id: string;
@@ -20,14 +23,26 @@ interface AdjustmentRecord {
 }
 
 export function InventoryAdjustmentsPage() {
-  const { inventoryChecks: data, fetchInventoryChecks, addInventoryCheck, updateInventoryCheck, deleteInventoryCheck } = useInventoryStore();
+  const {
+    inventoryChecks: data,
+    fetchInventoryChecks,
+    addInventoryCheck,
+    updateInventoryCheck,
+    deleteInventoryCheck,
+    products,
+    fetchProducts,
+  } = useInventoryStore();
+  const currentBranch = useBranchStore((s) => s.currentBranch);
+  const currentUser = useAuthStore((s) => s.user);
 
   useEffect(() => {
     fetchInventoryChecks();
-  }, [fetchInventoryChecks]);
+    fetchProducts();
+  }, [fetchInventoryChecks, fetchProducts]);
 
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<any>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<any>({});
@@ -49,7 +64,8 @@ export function InventoryAdjustmentsPage() {
     setEditingItem({
       checkCode: `IADJ-2026-${Date.now().toString().slice(-4)}`,
       checkDate: new Date().toISOString().split('T')[0],
-      checkedBy: '',
+      checkedBy: currentUser?.fullName || currentUser?.name || '',
+      branchId: currentBranch?.id ? Number(currentBranch.id) : 1,
       netVariance: 0,
       discrepancyCount: 0,
       status: 'DRAFT',
@@ -66,26 +82,66 @@ export function InventoryAdjustmentsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.checkCode || !editingItem.checkedBy) return;
+    if (!editingItem.checkCode || !editingItem.checkedBy) {
+      toast.error('Vui lòng nhập đầy đủ mã điều chỉnh và người lập phiếu');
+      return;
+    }
 
     const payload = {
       checkCode: editingItem.checkCode,
-      branchId: 1,
+      branchId: editingItem.branchId || (currentBranch?.id ? Number(currentBranch.id) : 1),
       checkDate: editingItem.checkDate || new Date().toISOString().split('T')[0],
       notes: editingItem.notes || '',
     };
 
-    if (modalMode === 'create') {
-      await addInventoryCheck(payload);
-    } else if (editingItem.id) {
-      await updateInventoryCheck(editingItem.id, { notes: editingItem.notes });
+    try {
+      if (modalMode === 'create') {
+        await addInventoryCheck(payload);
+        if (editingItem.productId && editingItem.actualQty !== undefined && editingItem.actualQty !== '') {
+          try {
+            await axiosClient.post('/inventories/adjust', {
+              branchId: payload.branchId,
+              productId: Number(editingItem.productId),
+              actualQty: Number(editingItem.actualQty),
+              reason: editingItem.notes || 'Điều chỉnh cân đối kho',
+            });
+            toast.success('Đã cân đối số lượng tồn qua API /inventories/adjust thành công!');
+          } catch (adjErr: any) {
+            console.warn('Lỗi khi gọi API adjust:', adjErr);
+            toast.warning('Tạo phiếu thành công nhưng cập nhật cân đối tồn gặp cảnh báo: ' + (adjErr?.response?.data?.message || 'Không thể đồng bộ số lượng tức thì'));
+          }
+        } else {
+          toast.success('Tạo phiếu điều chỉnh thành công!');
+        }
+      } else if (editingItem.id) {
+        await updateInventoryCheck(editingItem.id, { notes: editingItem.notes });
+        toast.success('Cập nhật phiếu điều chỉnh thành công!');
+      }
+      setIsModalOpen(false);
+      fetchInventoryChecks();
+      fetchProducts();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Không thể lưu phiếu điều chỉnh: ' + (err?.response?.data?.message || err?.message || ''));
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = async (id: string) => {
-    await deleteInventoryCheck(id);
-    if (selected?.id === id) setSelected(null);
+  const handleDelete = (id: string) => {
+    setDeletingId(id);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingId) return;
+    try {
+      await deleteInventoryCheck(deletingId);
+      toast.success('Xóa phiếu điều chỉnh thành công!');
+      if (selected?.id === deletingId) setSelected(null);
+    } catch (err) {
+      console.error(err);
+      toast.error('Không thể xóa phiếu điều chỉnh');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const columns = useMemo<ColumnDef<any>[]>(
@@ -113,7 +169,22 @@ export function InventoryAdjustmentsPage() {
       {
         accessorKey: 'netVariance',
         header: 'Chênh lệch',
-        cell: (info) => <span className="font-mono text-emerald-600 font-bold">{info.getValue() as number}</span>,
+        cell: (info) => {
+          const val = (info.getValue() as number) || 0;
+          return (
+            <span
+              className={`font-mono font-bold ${
+                val > 0
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : val < 0
+                  ? 'text-red-600 dark:text-red-400'
+                  : 'text-gray-500'
+              }`}
+            >
+              {val > 0 ? `+${val}` : val}
+            </span>
+          );
+        },
       },
       {
         accessorKey: 'discrepancyCount',
@@ -149,20 +220,28 @@ export function InventoryAdjustmentsPage() {
             >
               <Eye className="w-4 h-4" />
             </button>
-            <button
-              onClick={() => handleOpenEdit(row.original)}
-              className="p-1 text-gray-500 hover:text-blue-600 rounded"
-              title="Sửa"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(row.original.id)}
-              className="p-1 text-gray-500 hover:text-red-600 rounded"
-              title="Xóa"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {row.original.status === 'COMPLETED' ? (
+              <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 font-medium px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">
+                <Lock className="w-3 h-3 text-gray-400" /> Đã ghi sổ
+              </span>
+            ) : (
+              <>
+                <button
+                  onClick={() => handleOpenEdit(row.original)}
+                  className="p-1 text-gray-500 hover:text-blue-600 rounded"
+                  title="Sửa"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(row.original.id)}
+                  className="p-1 text-gray-500 hover:text-red-600 rounded"
+                  title="Xóa"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
           </div>
         ),
       },
@@ -319,6 +398,33 @@ export function InventoryAdjustmentsPage() {
               />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Mặt hàng cần cân đối tồn</label>
+              <select
+                value={editingItem.productId || ''}
+                onChange={(e) => setEditingItem({ ...editingItem, productId: e.target.value })}
+                className="w-full p-2 border rounded text-xs"
+              >
+                <option value="">-- Chọn mặt hàng (Tùy chọn) --</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.sku})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Số lượng thực tế sau kiểm đếm</label>
+              <input
+                type="number"
+                value={editingItem.actualQty !== undefined ? editingItem.actualQty : ''}
+                onChange={(e) => setEditingItem({ ...editingItem, actualQty: e.target.value })}
+                className="w-full p-2 border rounded font-mono text-xs"
+                placeholder="VD: 50"
+              />
+            </div>
+          </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Trạng thái đồng bộ *</label>
             <select
@@ -356,6 +462,14 @@ export function InventoryAdjustmentsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingId)}
+        onClose={() => setDeletingId(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa phiếu điều chỉnh"
+        description="Bạn có chắc chắn muốn xóa phiếu điều chỉnh tồn kho này không? Hành động này không thể hoàn tác."
+      />
     </div>
   );
 }

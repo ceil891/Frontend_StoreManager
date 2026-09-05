@@ -222,7 +222,7 @@ export function ReturnsListsPage() {
       reason: editingRequest.reason || 'Yêu cầu trả hàng',
       requestedRefundMethod: editingRequest.requestedRefundMethod || 'CASH',
       status: (editingRequest.status as any) || 'PENDING',
-      handlerName: editingRequest.handlerName || currentUser?.name || currentUser?.username || 'Nhân viên hệ thống',
+      handlerName: editingRequest.handlerName || currentUser?.name || currentUser?.email || 'Nhân viên hệ thống',
       notes: editingRequest.notes || '',
       requestedQty: qty,
       returnedQty: 0,
@@ -710,7 +710,7 @@ export function ReturnsListsPage() {
                         toast.warning(`Số lượng trả không thể vượt quá số lượng đã mua (${maxAvailable})`);
                       }
                       const foundItem = selectedOrderItems.find((it: any) => (it.productName || it.name) === editingRequest.selectedProduct) || selectedOrderItems[0];
-                      const itemPrice = Number(foundItem?.price || foundItem?.unitPrice || 0);
+                      const itemPrice = Number((foundItem as any)?.price || foundItem?.unitPrice || 0);
 
                       setEditingRequest({
                         ...editingRequest,
@@ -872,13 +872,13 @@ export function ReturnsListsPage() {
               <div>
                 <label className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Người tiếp nhận *</label>
                 <select
-                  value={editingRequest.handlerName || currentUser?.name || currentUser?.username || ''}
+                  value={editingRequest.handlerName || currentUser?.name || currentUser?.email || ''}
                   onChange={(e) => setEditingRequest({ ...editingRequest, handlerName: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 font-medium"
                 >
                   {currentUser && (
-                    <option value={currentUser.name || currentUser.username}>
-                      {currentUser.name || currentUser.username}
+                    <option value={currentUser.name || currentUser.email}>
+                      {currentUser.name || currentUser.email}
                     </option>
                   )}
                   {users.map((u) => (

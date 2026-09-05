@@ -1,11 +1,13 @@
-import { lazy, Suspense } from 'react';
-import { createBrowserRouter, RouterProvider, Link, useRouteError } from 'react-router';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { createBrowserRouter, RouterProvider, Link, useRouteError, useNavigate } from 'react-router';
 import { PrivateRoute } from './PrivateRoute';
 import { RoleGuard } from './RoleGuard';
 import { LegacyRedirect } from './LegacyRedirect';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { MainLayout } from '@/layouts/MainLayout';
-import { Home, ShieldAlert, FileQuestion } from 'lucide-react';
+import { Home, ShieldAlert, FileQuestion, LogIn } from 'lucide-react';
+import { toast } from 'sonner';
+import { useAuthStore } from '@/features/auth/store/authStore';
 
 // ── Suspense Fallback ─────────────────────────────────────────
 function PageLoader() {
@@ -120,6 +122,8 @@ const PurchaseReturnsTabbedPage = lz(() => import('@/features/purchase/pages/Pur
 const VouchersTabbedPage = lz(() => import('@/features/finance/pages/VouchersTabbedPage'), 'VouchersTabbedPage');
 const DebtLedgerPage = lz(() => import('@/features/finance/pages/DebtLedgerPage'), 'DebtLedgerPage');
 const FinanceFundCashTabbedPage = lz(() => import('@/features/finance/pages/FinanceFundCashTabbedPage'), 'FinanceFundCashTabbedPage');
+const FinanceAccountingTabbedPage = lz(() => import('@/features/finance/pages/FinanceAccountingTabbedPage'), 'FinanceAccountingTabbedPage');
+const FixedAssetsTabbedPage = lz(() => import('@/features/finance/pages/FixedAssetsTabbedPage'), 'FixedAssetsTabbedPage');
 
 // 7. CRM Containers
 const CrmCustomersTabbedPage = lz(() => import('@/features/crm/pages/CrmCustomersTabbedPage'), 'CrmCustomersTabbedPage');
@@ -134,6 +138,11 @@ const LogisticsPartnersPage = lz(() => import('@/features/logistics/pages/Logist
 const LogisticsOrdersTabbedPage = lz(() => import('@/features/logistics/pages/LogisticsOrdersTabbedPage'), 'LogisticsOrdersTabbedPage');
 const LogisticsDeliveriesTabbedPage = lz(() => import('@/features/logistics/pages/LogisticsDeliveriesTabbedPage'), 'LogisticsDeliveriesTabbedPage');
 
+// 8.1 Omnichannel Containers
+const SalesChannelsPage = lz(() => import('@/features/omnichannel/pages/SalesChannelsPage'), 'SalesChannelsPage');
+const ChannelProductMappingPage = lz(() => import('@/features/omnichannel/pages/ChannelProductMappingPage'), 'ChannelProductMappingPage');
+const WebhookLogsPage = lz(() => import('@/features/omnichannel/pages/WebhookLogsPage'), 'WebhookLogsPage');
+
 // 9. Reports
 const SalesReportPage = lz(() => import('@/features/reports/pages/SalesReportPage'), 'SalesReportPage');
 const InventoryReportPage = lz(() => import('@/features/reports/pages/InventoryReportPage'), 'InventoryReportPage');
@@ -143,6 +152,8 @@ const CrmReportPage = lz(() => import('@/features/reports/pages/CrmReportPage'),
 // 10. HR Containers
 const HrEmployeesTabbedPage = lz(() => import('@/features/hr/pages/HrEmployeesTabbedPage'), 'HrEmployeesTabbedPage');
 const HrRolesPermissionsTabbedPage = lz(() => import('@/features/hr/pages/HrRolesPermissionsTabbedPage'), 'HrRolesPermissionsTabbedPage');
+const TimekeepingTabbedPage = lz(() => import('@/features/hr/pages/TimekeepingTabbedPage'), 'TimekeepingTabbedPage');
+const PayrollPage = lz(() => import('@/features/hr/pages/PayrollPage'), 'PayrollPage');
 
 // 11. System Containers
 const SystemOrganizationTabbedPage = lz(() => import('@/features/system/pages/SystemOrganizationTabbedPage'), 'SystemOrganizationTabbedPage');
@@ -156,6 +167,77 @@ function protect(element: React.ReactNode, permission?: string) {
     element: <RoleGuard requiredPermission={permission} />,
     children: [{ index: true, element: <L>{element}</L> }],
   };
+}
+
+// ── Forbidden 403 Page ─────────────────────────────────────────
+function ForbiddenPage() {
+  const navigate = useNavigate();
+  const logout = useAuthStore((s) => s.logout);
+  const [countdown, setCountdown] = useState(5);
+
+  useEffect(() => {
+    toast.error('Bạn cần đăng nhập lại hoặc tài khoản không có quyền truy cập.');
+  }, []);
+
+  useEffect(() => {
+    if (countdown <= 0) {
+      logout().then(() => {
+        navigate('/login', { replace: true });
+      });
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setCountdown((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [countdown, logout, navigate]);
+
+  const handleLoginAgain = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
+
+  return (
+    <div className="flex h-screen items-center justify-center bg-gray-50 dark:bg-gray-950 px-4">
+      <div className="text-center max-w-md w-full bg-white dark:bg-gray-900 p-8 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800">
+        <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-2xl flex items-center justify-center mx-auto mb-6">
+          <ShieldAlert className="w-10 h-10 text-red-600 dark:text-red-400" />
+        </div>
+
+        <h1 className="text-2xl font-black text-gray-900 dark:text-white mb-2">
+          Truy cập bị từ chối (403)
+        </h1>
+
+        <p className="text-sm text-gray-600 dark:text-gray-300 mb-3 leading-relaxed">
+          Tài khoản của bạn đã bị vô hiệu hóa hoặc không có quyền truy cập vào trang này.
+        </p>
+        <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold mb-6">
+          Bạn cần đăng nhập bằng tài khoản hợp lệ để tiếp tục. Tự động quay lại trang đăng nhập sau{' '}
+          <span className="font-bold text-base">{countdown}s</span>...
+        </p>
+
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <button
+            onClick={handleLoginAgain}
+            className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-all cursor-pointer active:scale-95"
+          >
+            <LogIn className="w-4 h-4" />
+            Đăng nhập lại ngay
+          </button>
+
+          <Link
+            to="/"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-semibold rounded-xl transition-colors"
+          >
+            <Home className="w-4 h-4" />
+            Về trang chủ
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Router ────────────────────────────────────────────────────
@@ -203,7 +285,6 @@ const router = createBrowserRouter([
           { path: 'sales/online', element: <LegacyRedirect targetCanonical="/sales/orders" defaultTab="online" /> },
           { path: 'sales/quotes', element: <LegacyRedirect targetCanonical="/sales/orders" defaultTab="quotes" /> },
           { path: 'sales/offers', element: <LegacyRedirect targetCanonical="/sales/orders" defaultTab="offers" /> },
-          { path: 'sales/market-orders', element: <LegacyRedirect targetCanonical="/sales/orders" defaultTab="market" /> },
           { path: 'sales/invoices-list', element: <LegacyRedirect targetCanonical="/sales/invoices" defaultTab="retail" /> },
           { path: 'sales/invoice-lists', element: <LegacyRedirect targetCanonical="/sales/invoices" defaultTab="list" /> },
           { path: 'sales/returns-list', element: <LegacyRedirect targetCanonical="/sales/returns" defaultTab="requests" /> },
@@ -275,15 +356,21 @@ const router = createBrowserRouter([
           { path: 'finance/vouchers', ...protect(<VouchersTabbedPage />, 'finance:receipt:view') },
           { path: 'finance/debts', ...protect(<DebtLedgerPage />, 'finance:debt:view') },
           { path: 'finance/fund-cash', ...protect(<FinanceFundCashTabbedPage />, 'finance:bank:view') },
+          { path: 'finance/accounting', ...protect(<FinanceAccountingTabbedPage />, 'finance:journal:view') },
+          { path: 'finance/fixed-assets', ...protect(<FixedAssetsTabbedPage />, 'finance:fixed-asset:view') },
 
           // Finance Legacy Redirects
           { path: 'finance/receipts', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="receipts" /> },
           { path: 'finance/payments', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="payments" /> },
           { path: 'finance/costs', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="costs" /> },
           { path: 'finance/operating-costs', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="costs" /> },
-          { path: 'finance/cost-centers', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="costs" /> },
+          { path: 'finance/cost-centers', element: <LegacyRedirect targetCanonical="/finance/accounting" defaultTab="cost-centers" /> },
           { path: 'finance/banks', element: <LegacyRedirect targetCanonical="/finance/fund-cash" defaultTab="banks" /> },
           { path: 'finance/fund-balances', element: <LegacyRedirect targetCanonical="/finance/fund-cash" defaultTab="balances" /> },
+          { path: 'finance/journal-entries', element: <LegacyRedirect targetCanonical="/finance/accounting" defaultTab="journal" /> },
+          { path: 'finance/chart-of-accounts', element: <LegacyRedirect targetCanonical="/finance/accounting" defaultTab="coa" /> },
+          { path: 'finance/tax-duties', element: <LegacyRedirect targetCanonical="/finance/accounting" defaultTab="tax" /> },
+          { path: 'finance/depreciation', element: <LegacyRedirect targetCanonical="/finance/fixed-assets" defaultTab="depreciation" /> },
 
           // ── 6. CRM Canonical Routes (6 Routes) ───────────────────
           { path: 'crm/customers', ...protect(<CrmCustomersTabbedPage />, 'crm:customer:view') },
@@ -310,6 +397,11 @@ const router = createBrowserRouter([
           { path: 'logistics/orders', ...protect(<LogisticsOrdersTabbedPage />, 'logistics:order:view') },
           { path: 'logistics/deliveries', ...protect(<LogisticsDeliveriesTabbedPage />, 'logistics:shipment:view') },
 
+          // ── 7.1 Omnichannel Canonical Routes ───────────────────────
+          { path: 'omnichannel/channels', ...protect(<SalesChannelsPage />, 'omnichannel:channel:view') },
+          { path: 'omnichannel/mapping', ...protect(<ChannelProductMappingPage />, 'omnichannel:mapping:view') },
+          { path: 'omnichannel/webhooks', ...protect(<WebhookLogsPage />, 'omnichannel:webhook:view') },
+
           // Logistics Legacy Redirects
           { path: 'logistics/shippers', element: <LegacyRedirect targetCanonical="/logistics/partners" defaultTab="shippers" /> },
           { path: 'logistics/carriers', element: <LegacyRedirect targetCanonical="/logistics/partners" defaultTab="carriers" /> },
@@ -330,11 +422,18 @@ const router = createBrowserRouter([
           // ── 9. HR Canonical Routes ────────────────────────────────
           { path: 'hr/employees', ...protect(<HrEmployeesTabbedPage />, 'system:user:view') },
           { path: 'hr/roles-permissions', ...protect(<HrRolesPermissionsTabbedPage />, 'system:role:view') },
+          { path: 'hr/timekeeping', ...protect(<TimekeepingTabbedPage />, 'hrm:attendance:view') },
+          { path: 'hr/payroll', ...protect(<PayrollPage />, 'finance:payroll:view') },
 
           // HR Legacy Redirects
           { path: 'hr/users', element: <LegacyRedirect targetCanonical="/hr/employees" defaultTab="users" /> },
           { path: 'hr/departments', element: <LegacyRedirect targetCanonical="/hr/employees" defaultTab="departments" /> },
           { path: 'hr/positions', element: <LegacyRedirect targetCanonical="/hr/employees" defaultTab="positions" /> },
+          { path: 'hr/contracts', element: <LegacyRedirect targetCanonical="/hr/employees" defaultTab="contracts" /> },
+          { path: 'hr/attendance', element: <LegacyRedirect targetCanonical="/hr/timekeeping" defaultTab="attendance" /> },
+          { path: 'hr/leave-requests', element: <LegacyRedirect targetCanonical="/hr/timekeeping" defaultTab="leave-requests" /> },
+          { path: 'hr/shift-swaps', element: <LegacyRedirect targetCanonical="/hr/timekeeping" defaultTab="shift-swaps" /> },
+          { path: 'hr/kpis', element: <LegacyRedirect targetCanonical="/hr/employees" defaultTab="kpis" /> },
           { path: 'hr/logs', element: <LegacyRedirect targetCanonical="/hr/employees" defaultTab="logs" /> },
           { path: 'hr/roles', element: <LegacyRedirect targetCanonical="/hr/roles-permissions" defaultTab="roles" /> },
 
@@ -356,26 +455,7 @@ const router = createBrowserRouter([
 
   {
     path: '/403',
-    element: (
-      <div className="flex h-screen items-center justify-center bg-gray-50 dark:bg-gray-950 px-4">
-        <div className="text-center max-w-md">
-          <div className="w-24 h-24 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
-            <ShieldAlert className="w-12 h-12 text-red-600 dark:text-red-400" />
-          </div>
-          <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-2">Truy cập bị từ chối</h1>
-          <p className="text-gray-500 dark:text-gray-400 mb-8 leading-relaxed">
-            Bạn không có quyền (Permission) để truy cập vào trang này. Vui lòng liên hệ Quản trị viên để được cấp quyền.
-          </p>
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-sm transition-colors"
-          >
-            <Home className="w-5 h-5" />
-            Về trang chủ
-          </Link>
-        </div>
-      </div>
-    ),
+    element: <ForbiddenPage />,
   },
   {
     path: '*',

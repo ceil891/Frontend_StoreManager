@@ -418,7 +418,7 @@ export function PositionsPage() {
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
                 selectedPos.status === 'OPEN_HIRING' ? 'bg-emerald-200 text-emerald-900' :
-                selectedPos.status === 'FROZEN' ? 'bg-amber-200 text-amber-900' :
+                (selectedPos.status as string) === 'FROZEN' || selectedPos.status === 'FROZEN_BUDGET' ? 'bg-amber-200 text-amber-900' :
                 'bg-blue-200 text-blue-900'
               }`}>
                 {(selectedPos.status || '').replace(/_/g, ' ')}

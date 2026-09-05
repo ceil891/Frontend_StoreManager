@@ -62,7 +62,7 @@ export function PurchasePaymentsPage() {
     fetchUsers();
   }, [fetchUsers]);
 
-  const loggedInUser = currentUser?.fullName || currentUser?.name || currentUser?.username || 'Nhân viên kế toán';
+  const loggedInUser = currentUser?.name || currentUser?.email || 'Nhân viên kế toán';
 
   const [data, setData] = useState<PurchasePaymentRecord[]>([]);
   const [search, setSearch] = useState('');
@@ -91,7 +91,10 @@ export function PurchasePaymentsPage() {
         const approvedList = list.filter((item: any) => 
           item.status === 'APPROVED' || 
           item.status === 'DELIVERED' || 
+          item.status === 'RECEIVED' || 
+          item.status === 'DA_NHAN' || 
           item.status === 'COMPLETED' || 
+          item.status === 'DISPATCHED' || 
           item.status === 'DISPATCHED/IN_TRANSIT'
         );
         const mapped: InvoiceLookup[] = approvedList.map((item: any, idx: number) => {
@@ -176,65 +179,21 @@ export function PurchasePaymentsPage() {
         return {
           id: String(item.id),
           paymentCode: item.voucherCode || `PAY-PUR-${Date.now().toString().slice(-4)}`,
-          invoiceCode: item.invoiceCode || `PO-2026-7394416`,
-          supplierName: item.receiverName || item.payerName || 'Công ty Coca Cola Việt Nam',
+          invoiceCode: item.invoiceCode || (item.invoiceId ? `INV-${item.invoiceId}` : '—'),
+          supplierName: item.receiverName || item.payerName || 'Nhà cung cấp',
           paymentMethod: (item.paymentMethod as any) || 'CHUYEN_KHOAN',
-          fundAccountName: item.fundAccountName || 'Techcombank - 1902838392 (Công ty StoreManager)',
+          fundAccountName: item.fundAccountName || 'Tài khoản công ty',
           paymentDate: item.voucherDate ? String(item.voucherDate).substring(0, 10) : new Date().toISOString().split('T')[0],
-          amount: Number(item.amount || 270000),
-          remainingInvoiceDebt: 270000,
+          amount: Number(item.amount || 0),
+          remainingInvoiceDebt: Number(item.remainingDebt || item.amount || 0),
           handler: item.handler || loggedInUser,
           status,
-          notes: item.reason || item.notes || 'Thanh toán tiền hàng theo hợp đồng',
-          attachmentName: item.attachmentUrl ? 'Ủy_Nhiệm_Chi_VCB.pdf' : undefined,
+          notes: item.reason || item.notes || '',
+          attachmentName: item.attachmentUrl ? 'Chung_tu_dinh_kem.pdf' : undefined,
         };
       });
 
-      const defaultMocks: PurchasePaymentRecord[] = [
-        {
-          id: '1',
-          paymentCode: 'PAY-PUR-9012',
-          invoiceCode: 'PO-2026-7394416',
-          supplierName: 'Công ty Coca Cola Việt Nam',
-          paymentMethod: 'CHUYEN_KHOAN',
-          fundAccountName: 'Techcombank - 1902838392 (Công ty StoreManager)',
-          paymentDate: new Date().toISOString().split('T')[0],
-          amount: 270000,
-          remainingInvoiceDebt: 270000,
-          handler: loggedInUser,
-          status: 'DA_THANH_TOAN',
-          notes: 'Thanh toán đợt 1 hóa đơn đồ uống',
-          attachmentName: 'UNC_Techcombank_9012.pdf'
-        },
-        {
-          id: '2',
-          paymentCode: 'PAY-PUR-9013',
-          invoiceCode: 'PO-2026-6756535',
-          supplierName: 'Công ty Coca Cola Việt Nam',
-          paymentMethod: 'CHUYEN_KHOAN',
-          fundAccountName: 'Vietcombank - 0918273645 (TK Thanh toán NCC)',
-          paymentDate: new Date().toISOString().split('T')[0],
-          amount: 135000,
-          remainingInvoiceDebt: 270000,
-          handler: loggedInUser,
-          status: 'CHO_DUYET',
-          notes: 'Chi tiền tạm ứng 50% đơn hàng',
-        }
-      ];
-
-      // Merge backend items, local storage creations/updates, and fallback mocks
-      const map = new Map<string, PurchasePaymentRecord>();
-
-      // 1. Add base mocks or backend mapped items
-      const baseItems = mapped.length > 0 ? mapped : defaultMocks;
-      baseItems.forEach(i => map.set(i.id, i));
-
-      // 2. Override with localSaved (which has new creations and status edits)
-      localSaved.forEach(i => map.set(i.id, i));
-
-      const mergedList = Array.from(map.values()).sort((a, b) => Number(b.id) - Number(a.id));
-      setData(mergedList);
-      saveLocalPayments(mergedList);
+      setData(mapped);
     } catch (err) {
       console.error(err);
       toast.error('Không thể tải danh sách phiếu chi');
@@ -425,10 +384,7 @@ export function PurchasePaymentsPage() {
         handler: payment.handler,
       });
 
-      // 1. Update local state & persist
-      const nextList = data.map(d => d.id === payment.id ? updated : d);
-      setData(nextList);
-      saveLocalPayments(nextList);
+      await fetchPayments();
       if (selected?.id === payment.id) {
         setSelected(updated);
       }
@@ -462,14 +418,14 @@ export function PurchasePaymentsPage() {
   const handleDeleteConfirm = async () => {
     if (!deletingPayment) return;
     try {
-      await axiosClient.delete(`/finance/payment-vouchers/${deletingPayment.id}`).catch(() => {});
+      await axiosClient.delete(`/finance/payment-vouchers/${deletingPayment.id}`);
       const nextList = data.filter(d => d.id !== deletingPayment.id);
       setData(nextList);
       saveLocalPayments(nextList);
       toast.success('Đã xóa phiếu chi');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Xóa phiếu chi thất bại');
+      toast.error('Xóa phiếu chi thất bại: ' + (err?.response?.data?.message || err?.message || ''));
     } finally {
       setDeletingPayment(null);
     }

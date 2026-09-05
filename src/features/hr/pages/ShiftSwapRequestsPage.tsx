@@ -58,7 +58,7 @@ export function ShiftSwapRequestsPage() {
   // Derived user options
   const userOptions = useMemo(() => {
     if (users && users.length > 0) {
-      return users.map((u) => u.fullName || u.username);
+      return users.map((u) => u.fullName || u.email || (u as any).username);
     }
     return ['Nguyễn Văn Hưng', 'Trần Thị Mai', 'Lưu Hữu Phước', 'Lê Hoàng Nam', 'Phạm Minh Tuấn'];
   }, [users]);

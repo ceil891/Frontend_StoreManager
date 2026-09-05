@@ -1,25 +1,43 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Filter, Eye, CreditCard, Percent, Smartphone, Globe, RefreshCcw, Edit, Trash2 } from 'lucide-react';
+import { Plus, Download, Search, Filter, Eye, CreditCard, Percent, Smartphone, Globe, RefreshCcw, Edit, Trash2, Wallet } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePosConfigStore, type PaymentMethodRecord } from '../store/posConfigStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
 
-const typeBadgeStyles = {
+const typeBadgeStyles: Record<string, string> = {
   CREDIT_CARD_GATEWAY: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200',
   QR_EWALLET: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200',
+  E_WALLET: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200',
   BANK_TRANSFER_QR: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200',
+  BANK_TRANSFER: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200',
   CASH_DRAWER: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200',
+  CASH: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200',
   BUY_NOW_PAY_LATER: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-red-200',
+  CUSTOM: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-200',
 };
 
 const typeMap: Record<string, string> = {
-  CREDIT_CARD_GATEWAY: 'Cổng thẻ tín dụng',
-  QR_EWALLET: 'Ví điện tử & QR',
-  BANK_TRANSFER_QR: 'Chuyển khoản QR',
-  CASH_DRAWER: 'Hộp tiền mặt',
+  CREDIT_CARD_GATEWAY: 'Cổng thẻ / Trực tuyến',
+  CARD: 'Cổng thẻ / Trực tuyến',
+  QR_EWALLET: 'Ví điện tử (MoMo / ZaloPay / ShopeePay)',
+  E_WALLET: 'Ví điện tử (MoMo / ZaloPay / ShopeePay)',
+  BANK_TRANSFER_QR: 'Chuyển khoản VietQR',
+  BANK_TRANSFER: 'Chuyển khoản VietQR',
+  CASH_DRAWER: 'Tiền mặt (Cash / COD / Tại quầy)',
+  CASH: 'Tiền mặt (Cash / COD / Tại quầy)',
   BUY_NOW_PAY_LATER: 'Mua trước trả sau (BNPL)',
+  CUSTOM: 'Tự cấu hình / Khác',
+};
+
+export const normalizeProviderType = (t?: string): string => {
+  if (!t) return 'CASH_DRAWER';
+  if (t === 'E_WALLET' || t === 'QR_EWALLET') return 'QR_EWALLET';
+  if (t === 'BANK_TRANSFER' || t === 'BANK_TRANSFER_QR') return 'BANK_TRANSFER_QR';
+  if (t === 'CASH' || t === 'CASH_DRAWER') return 'CASH_DRAWER';
+  if (t === 'CARD' || t === 'CREDIT_CARD_GATEWAY') return 'CREDIT_CARD_GATEWAY';
+  return t;
 };
 
 const settlementMap: Record<string, string> = {
@@ -56,7 +74,7 @@ export function PaymentMethodsPage() {
     setEditingMethod({
       methodCode: `PM-${Math.floor(1000 + Math.random() * 9000)}`,
       methodName: '',
-      providerType: 'CASH',
+      providerType: 'CASH_DRAWER',
       processingFeePct: 0,
       fixedFeeUsd: 0,
       settlementTime: 'INSTANT',
@@ -97,14 +115,16 @@ export function PaymentMethodsPage() {
       const newMethod: Omit<PaymentMethodRecord, 'id'> = {
         methodCode: editingMethod.methodCode,
         methodName: editingMethod.methodName,
-        providerType: editingMethod.providerType as any || 'CASH',
+        providerType: normalizeProviderType(editingMethod.providerType) as any,
         processingFeePct: Number(editingMethod.processingFeePct) || 0,
         fixedFeeUsd: Number(editingMethod.fixedFeeUsd) || 0,
         settlementTime: editingMethod.settlementTime as any || 'INSTANT',
         totalVolumeUsd: Number(editingMethod.totalVolumeUsd) || 0,
         supportedCurrencies: editingMethod.supportedCurrencies || ['VND'],
         status: editingMethod.status as any || 'ACTIVE',
-        configuredGateways: editingMethod.configuredGateways || '',
+        configuredGateways: (normalizeProviderType(editingMethod.providerType) === 'CASH_DRAWER')
+          ? (editingMethod.configuredGateways || 'TIỀN MẶT TRỰC TIẾP')
+          : (editingMethod.configuredGateways || ''),
         sortOrder: Number(editingMethod.sortOrder) || 0,
         currency: editingMethod.currency || 'VND',
         logoUrl: editingMethod.logoUrl || '',
@@ -156,11 +176,34 @@ export function PaymentMethodsPage() {
         accessorKey: 'providerType',
         header: 'Loại hình',
         cell: (info) => {
-          const t = info.getValue() as keyof typeof typeBadgeStyles;
+          const raw = (info.getValue() as string) || '';
+          const norm = normalizeProviderType(raw);
           return (
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${typeBadgeStyles[t]}`}>
-              {typeMap[t] || t}
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${typeBadgeStyles[norm] || typeBadgeStyles[raw] || typeBadgeStyles.CUSTOM}`}>
+              {typeMap[norm] || typeMap[raw] || raw}
             </span>
+          );
+        },
+      },
+      {
+        id: 'scope',
+        header: 'Phạm vi chi nhánh',
+        cell: ({ row }) => {
+          const isAll = row.original.applyToAllBranches !== false;
+          const count = row.original.branchIds?.length || 0;
+          return (
+            <div className="flex flex-col gap-0.5 text-xs">
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-md font-medium text-[11px] w-fit ${
+                isAll 
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800' 
+                  : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+              }`}>
+                {isAll ? 'Toàn bộ chi nhánh' : `${count} chi nhánh`}
+              </span>
+              {row.original.allowOnline && (
+                <span className="text-[10px] text-gray-500 dark:text-gray-400">🌐 Bán online</span>
+              )}
+            </div>
           );
         },
       },
@@ -350,8 +393,17 @@ export function PaymentMethodsPage() {
 
               <div className="flex justify-between items-center pt-2 text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Loại kênh thanh toán:</span>
-                <span className={`inline-block text-xs px-2.5 py-0.5 rounded-full font-bold border ${typeBadgeStyles[selectedMethod.providerType]}`}>
-                  {typeMap[selectedMethod.providerType] || selectedMethod.providerType}
+                <span className={`inline-block text-xs px-2.5 py-0.5 rounded-full font-bold border ${typeBadgeStyles[normalizeProviderType(selectedMethod.providerType)] || typeBadgeStyles.CUSTOM}`}>
+                  {typeMap[normalizeProviderType(selectedMethod.providerType)] || selectedMethod.providerType}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center pt-2 text-sm border-t border-gray-200 dark:border-gray-700">
+                <span className="text-gray-500 dark:text-gray-400">Chi nhánh áp dụng:</span>
+                <span className="font-semibold text-gray-800 dark:text-gray-200 text-xs">
+                  {selectedMethod.applyToAllBranches !== false
+                    ? 'Toàn bộ chi nhánh (Mặc định)'
+                    : `${selectedMethod.branchIds?.length || 0} chi nhánh được chỉ định`}
                 </span>
               </div>
 
@@ -414,16 +466,26 @@ export function PaymentMethodsPage() {
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Loại hình *</label>
               <select
-                value={editingMethod.providerType || (data.some(d => d.providerType === 'CASH' || d.methodCode === 'CASH') ? 'BANK_TRANSFER' : 'CASH')}
-                onChange={(e) => setEditingMethod({ ...editingMethod, providerType: e.target.value as any })}
+                value={normalizeProviderType(editingMethod.providerType)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setEditingMethod({
+                    ...editingMethod,
+                    providerType: val as any,
+                    settlementTime: (val === 'CASH_DRAWER' || val === 'CASH') ? 'INSTANT' : (editingMethod.settlementTime || 'INSTANT'),
+                    processingFeePct: (val === 'CASH_DRAWER' || val === 'CASH') ? 0 : editingMethod.processingFeePct,
+                    fixedFeeUsd: (val === 'CASH_DRAWER' || val === 'CASH') ? 0 : editingMethod.fixedFeeUsd,
+                  });
+                }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
                 required
               >
-                {(!data.some(d => (d.providerType === 'CASH' || d.methodCode === 'CASH') && d.id !== editingMethod.id) || modalMode === 'edit') && (
-                  <option value="CASH">Tiền mặt</option>
-                )}
-                <option value="BANK_TRANSFER">Chuyển khoản ngân hàng / VietQR</option>
-                <option value="GATEWAY">Cổng thanh toán tự động</option>
+                <option value="CASH_DRAWER">Tiền mặt (Cash / COD / Tại quầy)</option>
+                <option value="BANK_TRANSFER_QR">Chuyển khoản ngân hàng / VietQR</option>
+                <option value="QR_EWALLET">Ví điện tử (MoMo / ZaloPay / ShopeePay)</option>
+                <option value="CREDIT_CARD_GATEWAY">Cổng thanh toán thẻ / Online (VNPAY, OnePay, Thẻ tín dụng)</option>
+                <option value="BUY_NOW_PAY_LATER">Mua trước trả sau (BNPL)</option>
+                <option value="CUSTOM">Tự cấu hình / Khác</option>
               </select>
             </div>
             <div>
@@ -511,8 +573,20 @@ export function PaymentMethodsPage() {
             />
           </div>
 
+          {/* Conditional Section: CASH / COD info */}
+          {normalizeProviderType(editingMethod.providerType) === 'CASH_DRAWER' && (
+            <div className="p-4 bg-amber-50/70 dark:bg-amber-950/25 border border-amber-200/70 dark:border-amber-800/40 rounded-xl space-y-1.5">
+              <p className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Wallet className="w-4 h-4 text-amber-600" /> Thanh toán trực tiếp (Tiền mặt / COD)
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+                Phương thức này áp dụng thu tiền mặt trực tiếp tại quầy thu ngân POS hoặc thu hộ khi giao hàng tận nơi (COD). Hệ thống tự động ghi nhận thanh toán thành công tức thời mà không cần cấu hình kết nối API cổng thanh toán.
+              </p>
+            </div>
+          )}
+
           {/* Conditional Section: BANK_TRANSFER (VietQR Account info) */}
-          {editingMethod.providerType === 'BANK_TRANSFER' && (
+          {normalizeProviderType(editingMethod.providerType) === 'BANK_TRANSFER_QR' && (
             <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-800/30 rounded-xl space-y-3">
               <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">Thông tin nhận tiền VietQR</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -574,10 +648,10 @@ export function PaymentMethodsPage() {
             </div>
           )}
 
-          {/* Conditional Section: GATEWAY (Momo, VNPay, Stripe...) */}
-          {editingMethod.providerType === 'GATEWAY' && (
-            <div className="p-4 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-800/30 rounded-xl space-y-3">
-              <p className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider">Cấu hình kết nối API cổng thanh toán</p>
+          {/* Conditional Section: GATEWAY / EWALLET (Momo, VNPay, Stripe...) */}
+          {(normalizeProviderType(editingMethod.providerType) === 'CREDIT_CARD_GATEWAY' || normalizeProviderType(editingMethod.providerType) === 'QR_EWALLET') && (
+            <div className="p-4 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200/50 dark:border-purple-800/30 rounded-xl space-y-3">
+              <p className="text-xs font-bold text-purple-800 dark:text-purple-300 uppercase tracking-wider">Cấu hình kết nối API ví điện tử & cổng thanh toán</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-semibold text-gray-500 mb-1">Merchant ID *</label>

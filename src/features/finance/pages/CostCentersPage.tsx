@@ -1,58 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Edit, Trash, Info } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
-
-const columns = [
-  {
-    header: 'Mã trung tâm',
-    accessorKey: 'id',
-    cell: ({ row }: any) => (
-      <div className="flex items-center space-x-2">
-        <Info size={16} className="text-gray-500" />
-        <span>{row.original.id}</span>
-      </div>
-    ),
-  },
-  { header: 'Tên trung tâm chi phí', accessorKey: 'name' },
-  { header: 'Mô tả', accessorKey: 'description' },
-  { header: 'Chi nhánh quản lý', accessorKey: 'branch' },
-  {
-    header: 'Trạng thái',
-    accessorKey: 'isActive',
-    cell: ({ row }: any) => (
-      <span
-        className={`px-2 py-1 rounded-full text-xs font-medium ${row.original.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
-      >
-        {row.original.isActive ? 'HOẠT ĐỘNG' : 'NGỪNG HOẠT ĐỘNG'}
-      </span>
-    ),
-  },
-  {
-    header: 'Thao tác',
-    id: 'actions',
-    cell: ({ row }: any) => (
-      <div className="flex space-x-2">
-        <button
-          onClick={() => row.original && row.original.onEdit(row.original)}
-          className="p-1 text-blue-600 hover:text-blue-800"
-          title="Chỉnh sửa"
-        >
-          <Edit size={16} />
-        </button>
-        <button
-          onClick={() => row.original && row.original.onDelete(row.original.id)}
-          className="p-1 text-red-600 hover:text-red-800"
-          title="Xóa"
-        >
-          <Trash size={16} />
-        </button>
-      </div>
-    ),
-  },
-];
 
 const CostCentersPage: React.FC = () => {
   const [data, setData] = useState<any[]>([]);
@@ -61,6 +13,8 @@ const CostCentersPage: React.FC = () => {
   const [isModalOpen, setModalOpen] = useState(false);
   const [isEditMode, setEditMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [deleteItem, setDeleteItem] = useState<any>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchCostCenters = useCallback(async () => {
     try {
@@ -68,11 +22,11 @@ const CostCentersPage: React.FC = () => {
       const res = await axiosClient.get('/accounting/cost-centers');
       const list = (res as any).content || res || [];
       const mapped = (Array.isArray(list) ? list : []).map((item: any) => ({
-        dbId: item.id, // Lưu ID thực tế của database để gọi PUT/DELETE
+        dbId: item.id,
         id: item.centerCode || `CC-${item.id}`,
         name: item.centerName || '',
         description: item.description || item.note || '',
-        branch: 'Chi nhánh mặc định', // backend CostCenter chưa có branch, lưu tạm
+        branch: 'Chi nhánh mặc định',
         isActive: item.isDeleted !== true,
       }));
       setData(mapped);
@@ -88,48 +42,92 @@ const CostCentersPage: React.FC = () => {
     fetchCostCenters();
   }, [fetchCostCenters]);
 
-  // Xử lý mở Drawer chi tiết
   const handleRowClick = (item: any) => {
     setSelectedItem(item);
     setDrawerOpen(true);
   };
 
-  // Mở Modal thêm mới
   const handleAddNew = () => {
     setSelectedItem({ id: '', name: '', description: '', branch: '', isActive: true });
     setEditMode(false);
     setModalOpen(true);
   };
 
-  // Mở Modal chỉnh sửa
   const handleEdit = (item: any) => {
     setSelectedItem(item);
     setEditMode(true);
     setModalOpen(true);
   };
 
-  // Xóa
-  const handleDelete = async (id: string) => {
-    const item = data.find(c => c.id === id);
-    if (!item) return;
-
-    if (confirm('Bạn có chắc muốn xóa trung tâm chi phí này?')) {
-      try {
-        await axiosClient.delete(`/accounting/cost-centers/${item.dbId}`);
-        toast.success('Xóa trung tâm chi phí thành công');
-        await fetchCostCenters();
-      } catch (err) {
-        console.error('Lỗi khi xóa trung tâm chi phí:', err);
-        toast.error('Không thể xóa trung tâm chi phí');
-      }
+  const handleConfirmDelete = async () => {
+    if (!deleteItem) return;
+    try {
+      setIsDeleting(true);
+      await axiosClient.delete(`/accounting/cost-centers/${deleteItem.dbId}`);
+      toast.success('Xóa trung tâm chi phí thành công');
+      setDeleteItem(null);
+      await fetchCostCenters();
+    } catch (err) {
+      console.error('Lỗi khi xóa trung tâm chi phí:', err);
+      toast.error('Không thể xóa trung tâm chi phí');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  // Lưu (thêm hoặc cập nhật)
+  const columns = useMemo(() => [
+    {
+      header: 'Mã trung tâm',
+      accessorKey: 'id',
+      cell: ({ row }: any) => (
+        <div className="flex items-center space-x-2">
+          <Info size={16} className="text-gray-500" />
+          <span>{row.original.id}</span>
+        </div>
+      ),
+    },
+    { header: 'Tên trung tâm chi phí', accessorKey: 'name' },
+    { header: 'Mô tả', accessorKey: 'description' },
+    { header: 'Chi nhánh quản lý', accessorKey: 'branch' },
+    {
+      header: 'Trạng thái',
+      accessorKey: 'isActive',
+      cell: ({ row }: any) => (
+        <span
+          className={`px-2 py-1 rounded-full text-xs font-medium ${row.original.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
+        >
+          {row.original.isActive ? 'HOẠT ĐỘNG' : 'NGỪNG HOẠT ĐỘNG'}
+        </span>
+      ),
+    },
+    {
+      header: 'Thao tác',
+      id: 'actions',
+      cell: ({ row }: any) => (
+        <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => handleEdit(row.original)}
+            className="p-1 text-blue-600 hover:text-blue-800 cursor-pointer"
+            title="Chỉnh sửa"
+          >
+            <Edit size={16} />
+          </button>
+          <button
+            onClick={() => setDeleteItem(row.original)}
+            className="p-1 text-red-600 hover:text-red-800 cursor-pointer"
+            title="Xóa"
+          >
+            <Trash size={16} />
+          </button>
+        </div>
+      ),
+    },
+  ], []);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem.id || !selectedItem.name) {
-      alert('Vui lòng nhập đầy đủ Mã và Tên trung tâm');
+      toast.warning('Vui lòng nhập đầy đủ Mã và Tên trung tâm');
       return;
     }
 
@@ -160,11 +158,10 @@ const CostCentersPage: React.FC = () => {
     }
   };
 
-  // Gắn các hàm thao tác vào mỗi dòng để ReusableDataTable có thể gọi
   const enrichedData = data.map(item => ({
     ...item,
     onEdit: handleEdit,
-    onDelete: handleDelete,
+    onDelete: (target: any) => setDeleteItem(target),
     onRowClick: () => handleRowClick(item),
   }));
 
@@ -263,6 +260,16 @@ const CostCentersPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deleteItem)}
+        onClose={() => setDeleteItem(null)}
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
+        title="Xác nhận xóa trung tâm chi phí"
+        description="Bạn có chắc chắn muốn xóa trung tâm chi phí này không? Thao tác này không thể hoàn tác."
+        itemName={deleteItem ? `${deleteItem.id} - ${deleteItem.name}` : ''}
+      />
     </div>
   );
 };

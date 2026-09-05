@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, FileText, UserCheck, Download, AlertTriangle, CheckCircle2, ShieldAlert, ArrowRight, Upload } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { useLocation, useNavigate } from 'react-router';
@@ -49,6 +50,24 @@ export function DeliveryNotesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<DeliveryNoteRecord>>({});
+
+  const [deleteTarget, setDeleteTarget] = useState<DeliveryNoteRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await axiosClient.delete(`/wms/delivery-notes/${deleteTarget.id}`);
+      setData((prev) => prev.filter((d) => d.id !== deleteTarget.id));
+      toast.success(`Đã xóa biên bản bàn giao ${deleteTarget.noteCode}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Lỗi khi xóa biên bản bàn giao trên hệ thống.');
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
 
   const fetchNotes = async () => {
     setIsLoading(true);
@@ -318,9 +337,16 @@ export function DeliveryNotesPage() {
             <button
               onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
               title="Chỉnh sửa biên bản"
-              className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 rounded-lg transition-colors"
+              className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
             >
               <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setDeleteTarget(row.original); }}
+              title="Xóa biên bản bàn giao"
+              className="p-1.5 text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         ),
@@ -732,6 +758,17 @@ export function DeliveryNotesPage() {
           </div>
         </Modal>
       )}
+
+      {/* Modal xác nhận xóa biên bản bàn giao */}
+      <ConfirmDeleteModal
+        isOpen={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
+        title="Xóa biên bản bàn giao"
+        itemName={deleteTarget?.noteCode}
+        description="Hành động này sẽ xóa vĩnh viễn biên bản bàn giao khỏi hệ thống. Bạn có chắc chắn muốn tiếp tục?"
+      />
     </div>
   );
 }

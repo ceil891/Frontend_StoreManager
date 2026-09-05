@@ -12,6 +12,9 @@ import {
   VARIANCE_REASON_LABELS,
   type InventoryCheckRecord,
 } from '../store/inventoryStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
+import { useAuthStore } from '@/features/auth/store/authStore';
+import { toast } from 'sonner';
 
 const EMPTY_CHECK: Omit<InventoryCheckRecord, 'id'> = {
   checkCode: '',
@@ -36,6 +39,15 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
 const fmtVND = (n: number) =>
   (n < 0 ? '-' : n > 0 ? '+' : '') + Math.abs(n).toLocaleString('vi-VN') + 'đ';
 
+export interface FormCheckLine {
+  productId: number;
+  sku: string;
+  productName: string;
+  expectedQty: number;
+  actualQty: number;
+  reason: string;
+}
+
 export function InventoryCheckPage() {
   const {
     inventoryChecks: audits,
@@ -44,7 +56,9 @@ export function InventoryCheckPage() {
     updateInventoryCheck,
     deleteInventoryCheck,
     startInventoryCheck,
-    completeInventoryCheck
+    completeInventoryCheck,
+    products,
+    fetchProducts,
   } = useInventoryStore();
 
   const [search, setSearch] = useState('');
@@ -57,11 +71,13 @@ export function InventoryCheckPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingAudit, setEditingAudit] = useState<Partial<InventoryCheckRecord>>(EMPTY_CHECK);
+  const [editingLines, setEditingLines] = useState<FormCheckLine[]>([]);
   const [deletingAudit, setDeletingAudit] = useState<InventoryCheckRecord | null>(null);
 
   useEffect(() => {
     fetchInventoryChecks();
-  }, [fetchInventoryChecks]);
+    fetchProducts();
+  }, [fetchInventoryChecks, fetchProducts]);
 
   // Filter
   const filtered = audits.filter(a => {
@@ -71,45 +87,87 @@ export function InventoryCheckPage() {
     return matchSearch && matchStatus;
   });
 
+  const { branches, currentBranch } = useBranchStore();
+  const currentUser = useAuthStore((s) => s.user);
+
   // CRUD
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingAudit({
       ...EMPTY_CHECK,
       checkCode: `CHK-${new Date().getFullYear()}-${Math.floor(500 + Math.random() * 500)}`,
+      branchId: currentBranch ? String(currentBranch.id) : (branches[0] ? String(branches[0].id) : '1'),
+      branchName: currentBranch ? currentBranch.branchName : (branches[0] ? branches[0].branchName : 'Chi nhánh chính'),
+      checkedBy: currentUser?.fullName || currentUser?.name || 'Nhân viên kho',
     });
+    setEditingLines([]);
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (a: InventoryCheckRecord) => {
     setModalMode('edit');
     setEditingAudit({ ...a });
+    setEditingLines(
+      a.lines && a.lines.length > 0
+        ? a.lines.map((l) => ({
+            productId: l.productId || 0,
+            sku: l.sku || '',
+            productName: l.productName || '',
+            expectedQty: l.expectedQty ?? 0,
+            actualQty: l.actualQty ?? 0,
+            reason: l.reason || '',
+          }))
+        : []
+    );
     setIsModalOpen(true);
   };
 
   const resolveBranchId = (name?: string): number => {
-    if (!name) return 1;
-    const lower = name.toLowerCase();
-    if (lower.includes('quận 2') || lower.includes('q2') || lower.includes('cn2')) return 2;
-    if (lower.includes('quận 3') || lower.includes('q3') || lower.includes('cn3')) return 3;
-    return 1;
+    if (!name) return currentBranch?.id ? Number(currentBranch.id) : 1;
+    const match = branches.find(
+      (b) => b.branchName.toLowerCase() === name.toLowerCase() || String(b.id) === name
+    );
+    if (match) return Number(match.id);
+    return currentBranch?.id ? Number(currentBranch.id) : 1;
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingAudit.checkCode || !editingAudit.branchName) return;
+    if (!editingAudit.checkCode || !editingAudit.branchName) {
+      toast.error('Vui lòng nhập mã kiểm kê và chọn chi nhánh');
+      return;
+    }
+
+    const checkLines = editingLines.map((line) => ({
+      productId: line.productId,
+      sku: line.sku,
+      productName: line.productName,
+      systemQty: Number(line.expectedQty || 0),
+      actualQty: Number(line.actualQty || 0),
+      diffQty: Number(line.actualQty || 0) - Number(line.expectedQty || 0),
+      reason: line.reason || 'Kiểm kê',
+    }));
+
     const payload = {
       checkCode: editingAudit.checkCode,
       branchId: resolveBranchId(editingAudit.branchName),
       checkDate: editingAudit.checkDate || new Date().toISOString().slice(0, 10),
       notes: editingAudit.notes || '',
+      checkLines,
     };
-    if (modalMode === 'create') {
-      await addInventoryCheck(payload);
-    } else if (editingAudit.id) {
-      await updateInventoryCheck(editingAudit.id, { notes: payload.notes });
+    try {
+      if (modalMode === 'create') {
+        await addInventoryCheck(payload);
+        toast.success('Tạo đợt kiểm kê thành công!');
+      } else if (editingAudit.id) {
+        await updateInventoryCheck(editingAudit.id, payload);
+        toast.success('Cập nhật đợt kiểm kê thành công!');
+      }
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error(err);
+      toast.error('Không thể lưu đợt kiểm kê');
     }
-    setIsModalOpen(false);
   };
 
   const handleStart = async (id: string) => {
@@ -408,30 +466,31 @@ export function InventoryCheckPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-mono">
-                        {((selectedAudit as any).lines && (selectedAudit as any).lines.length > 0
-                          ? (selectedAudit as any).lines
-                          : [
-                              { sku: 'VNM-MILK-1L', productName: 'Sữa tươi Vinamilk 1L', expectedQty: 100, actualQty: 95, reason: 'Hao hụt vận chuyển' },
-                              { sku: 'COKE-320ML', productName: 'Nước ngọt Coca Cola 320ml', expectedQty: 50, actualQty: 50, reason: 'Số liệu khớp' },
-                              { sku: 'OREO-248G', productName: 'Bánh quy Oreo 248g', expectedQty: 20, actualQty: 22, reason: 'Dư đợt nhập bổ sung' },
-                            ]
-                        ).map((item: any, idx: number) => {
-                          const diff = (item.actualQty ?? 0) - (item.expectedQty ?? 0);
-                          return (
-                            <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                              <td className="px-3 py-2.5 font-sans font-medium">
-                                <p className="font-bold text-gray-900 dark:text-white">{item.productName || item.sku}</p>
-                                <span className="text-[10px] text-gray-400 font-mono">{item.sku}</span>
-                              </td>
-                              <td className="px-3 py-2.5 text-center font-bold">{item.expectedQty ?? 0}</td>
-                              <td className="px-3 py-2.5 text-center font-bold text-blue-600 dark:text-blue-400">{item.actualQty ?? 0}</td>
-                              <td className={`px-3 py-2.5 text-center font-bold ${diff < 0 ? 'text-red-600 dark:text-red-400' : diff > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
-                                {diff > 0 ? `+${diff}` : diff}
-                              </td>
-                              <td className="px-3 py-2.5 font-sans text-gray-500 italic text-[11px]">{item.reason || 'Khớp'}</td>
-                            </tr>
-                          );
-                        })}
+                        {(!selectedAudit?.lines || selectedAudit.lines.length === 0) ? (
+                          <tr>
+                            <td colSpan={5} className="px-3 py-6 text-center text-gray-400 dark:text-gray-500 italic">
+                              Chưa có dữ liệu sản phẩm trong đợt kiểm kê này.
+                            </td>
+                          </tr>
+                        ) : (
+                          selectedAudit.lines.map((item: any, idx: number) => {
+                            const diff = (item.actualQty ?? 0) - (item.expectedQty ?? 0);
+                            return (
+                              <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                <td className="px-3 py-2.5 font-sans font-medium">
+                                  <p className="font-bold text-gray-900 dark:text-white">{item.productName || item.sku || 'Sản phẩm'}</p>
+                                  <span className="text-[10px] text-gray-400 font-mono">{item.sku}</span>
+                                </td>
+                                <td className="px-3 py-2.5 text-center font-bold">{item.expectedQty ?? 0}</td>
+                                <td className="px-3 py-2.5 text-center font-bold text-blue-600 dark:text-blue-400">{item.actualQty ?? 0}</td>
+                                <td className={`px-3 py-2.5 text-center font-bold ${diff < 0 ? 'text-red-600 dark:text-red-400' : diff > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
+                                  {diff > 0 ? `+${diff}` : diff}
+                                </td>
+                                <td className="px-3 py-2.5 font-sans text-gray-500 italic text-[11px]">{item.reason || 'Khớp'}</td>
+                              </tr>
+                            );
+                          })
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -445,7 +504,7 @@ export function InventoryCheckPage() {
       {/* Modal: Tạo / Sửa */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}
         title={modalMode === 'create' ? 'Lên lịch Kiểm kê mới' : `Chỉnh sửa: ${editingAudit.checkCode}`}
-        width="max-w-xl">
+        width="max-w-3xl">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -461,9 +520,28 @@ export function InventoryCheckPage() {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Chi nhánh / Kho kiểm *</label>
-            <input required type="text" value={editingAudit.branchName || ''} onChange={e => setEditingAudit({ ...editingAudit, branchName: e.target.value })}
-              placeholder="VD: Chi nhánh Quận 1, Chi nhánh Quận 2..."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500" />
+            {branches && branches.length > 0 ? (
+              <select
+                value={editingAudit.branchId || (branches[0] ? String(branches[0].id) : '')}
+                onChange={(e) => {
+                  const selectedBranch = branches.find(b => String(b.id) === e.target.value);
+                  setEditingAudit({
+                    ...editingAudit,
+                    branchId: e.target.value,
+                    branchName: selectedBranch ? selectedBranch.branchName : e.target.value,
+                  });
+                }}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              >
+                {branches.map(b => (
+                  <option key={b.id} value={String(b.id)}>{b.branchName}</option>
+                ))}
+              </select>
+            ) : (
+              <input required type="text" value={editingAudit.branchName || ''} onChange={e => setEditingAudit({ ...editingAudit, branchName: e.target.value })}
+                placeholder="VD: Chi nhánh Quận 1, Chi nhánh Quận 2..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500" />
+            )}
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Ghi chú</label>
@@ -471,6 +549,142 @@ export function InventoryCheckPage() {
               placeholder="Phạm vi kiểm kê, ghi chú đặc biệt..."
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 resize-none" />
           </div>
+
+          {/* Danh sách sản phẩm kiểm kê */}
+          <div className="space-y-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                Danh sách mặt hàng kiểm kê ({editingLines.length})
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  const available = products.find(p => !editingLines.some(l => Number(l.productId) === Number(p.id)));
+                  const prod = available || products[0];
+                  if (prod) {
+                    const sysQty = prod.stockQuantity ?? (prod as any).stock ?? (prod as any).onHand ?? 0;
+                    setEditingLines([
+                      ...editingLines,
+                      {
+                        productId: Number(prod.id),
+                        sku: prod.sku || '',
+                        productName: prod.name || '',
+                        expectedQty: Number(sysQty),
+                        actualQty: Number(sysQty),
+                        reason: '',
+                      }
+                    ]);
+                  } else {
+                    toast.info('Không tìm thấy sản phẩm trong danh mục');
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800"
+              >
+                <Plus className="w-3.5 h-3.5" /> Thêm sản phẩm
+              </button>
+            </div>
+
+            {editingLines.length === 0 ? (
+              <p className="text-xs text-gray-400 italic py-3 text-center border border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
+                Chưa có mặt hàng nào. Nhấn "+ Thêm sản phẩm" để thêm mặt hàng cần kiểm kê.
+              </p>
+            ) : (
+              <div className="max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 uppercase text-[10px]">
+                    <tr>
+                      <th className="px-2.5 py-2">Sản phẩm</th>
+                      <th className="px-2.5 py-2 text-center w-20">Tồn HT</th>
+                      <th className="px-2.5 py-2 text-center w-24">Tồn TT</th>
+                      <th className="px-2.5 py-2 text-center w-20">Lệch</th>
+                      <th className="px-2.5 py-2">Lý do</th>
+                      <th className="px-1 py-2 w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {editingLines.map((line, idx) => {
+                      const diff = line.actualQty - line.expectedQty;
+                      return (
+                        <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/40">
+                          <td className="px-2.5 py-1.5">
+                            <select
+                              value={line.productId}
+                              onChange={(e) => {
+                                const selectedProd = products.find(p => Number(p.id) === Number(e.target.value));
+                                if (selectedProd) {
+                                  const sysQty = selectedProd.stockQuantity ?? (selectedProd as any).stock ?? (selectedProd as any).onHand ?? 0;
+                                  const updated = [...editingLines];
+                                  updated[idx] = {
+                                    ...updated[idx],
+                                    productId: Number(selectedProd.id),
+                                    sku: selectedProd.sku || '',
+                                    productName: selectedProd.name || '',
+                                    expectedQty: Number(sysQty),
+                                    actualQty: Number(sysQty),
+                                  };
+                                  setEditingLines(updated);
+                                }
+                              }}
+                              className="w-full max-w-[200px] text-xs p-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 truncate"
+                            >
+                              {products.map(p => (
+                                <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-2.5 py-1.5 text-center font-bold font-mono">
+                            {line.expectedQty}
+                          </td>
+                          <td className="px-2.5 py-1.5 text-center">
+                            <input
+                              type="number"
+                              min="0"
+                              value={line.actualQty}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                const updated = [...editingLines];
+                                updated[idx] = { ...updated[idx], actualQty: val };
+                                setEditingLines(updated);
+                              }}
+                              className="w-20 px-1.5 py-1 text-center font-mono font-bold text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900"
+                            />
+                          </td>
+                          <td className={`px-2.5 py-1.5 text-center font-mono font-bold ${diff < 0 ? 'text-red-500' : diff > 0 ? 'text-emerald-500' : 'text-gray-400'}`}>
+                            {diff > 0 ? `+${diff}` : diff}
+                          </td>
+                          <td className="px-2.5 py-1.5">
+                            <input
+                              type="text"
+                              placeholder="Lý do..."
+                              value={line.reason}
+                              onChange={(e) => {
+                                const updated = [...editingLines];
+                                updated[idx] = { ...updated[idx], reason: e.target.value };
+                                setEditingLines(updated);
+                              }}
+                              className="w-full text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900"
+                            />
+                          </td>
+                          <td className="px-1 py-1.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingLines(editingLines.filter((_, i) => i !== idx));
+                              }}
+                              className="text-gray-400 hover:text-red-500"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           <div className="flex justify-end gap-3 pt-4">
             <button type="button" onClick={() => setIsModalOpen(false)}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 font-medium rounded-lg text-sm">
