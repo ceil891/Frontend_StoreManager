@@ -19,13 +19,16 @@ export interface User {
   branchId?: string | null;
   branchCode?: string | null;
   branchName?: string | null;
+  branchLocation?: string | null;
+  fullName?: string;
   avatar: string;
   /** Danh sách permissionCode thực từ backend (được load sau khi login) */
   permissions: string[];
 }
 
 export interface LoginCredentials {
-  email: string;
+  username?: string;
+  email?: string;
   password: string;
 }
 

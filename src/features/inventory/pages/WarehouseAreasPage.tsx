@@ -1,4 +1,5 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
 import { 
   Plus, Search, Eye, Edit, Trash2, Grid, Package, CheckCircle2, 
@@ -236,14 +237,17 @@ export function WarehouseAreasPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Cảnh báo: Việc xóa dãy kệ có thể làm mất định vị các ô kệ (Bins) bên trong. Bạn chắc chắn dỡ bỏ kệ hàng này?')) {
-      try {
-        await deleteRack(id);
-        toast.success('Đã dỡ bỏ kệ hàng và giải phóng vị trí.');
-      } catch (err) {
-        toast.error('Dỡ bỏ kệ hàng thất bại.');
-      }
+  const [deletingItem, setDeletingItem] = useState<RackRecord | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await deleteRack(deletingItem.id);
+      toast.success(`Đã dỡ bỏ kệ hàng "${deletingItem.rackName || deletingItem.rackCode}" và giải phóng vị trí.`);
+      if (selected?.id === deletingItem.id) setSelected(null);
+      setDeletingItem(null);
+    } catch (err: any) {
+      toast.error('Dỡ bỏ kệ hàng thất bại: ' + (err?.message || 'Không thể xóa'));
     }
   };
 
@@ -318,7 +322,7 @@ export function WarehouseAreasPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeletingItem(row.original)}
               className="p-1 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
               title="Xóa kệ"
             >
@@ -855,6 +859,14 @@ export function WarehouseAreasPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận dỡ bỏ kệ hàng"
+        description={`Cảnh báo: Việc xóa dãy kệ có thể làm mất định vị các ô kệ (Bins) bên trong. Bạn có chắc chắn muốn dỡ bỏ kệ hàng "${deletingItem?.rackName || deletingItem?.rackCode}" không?`}
+      />
     </div>
   );
 }

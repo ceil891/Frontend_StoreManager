@@ -19,6 +19,7 @@ const tabs = [
   { id: 'transfers-list', label: 'Bảng kê chuyển kho', icon: ClipboardCheck, permission: 'inventory:transfer-list:view' },
   { id: 'adjustments', label: 'Điều chỉnh kho', icon: Sliders, permission: 'inventory:adjustment:view' },
   { id: 'checks', label: 'Kiểm kê kho', icon: CheckSquare, permission: 'inventory:check:view' },
+  { id: 'returns', label: 'Trả hàng NCC', icon: CornerUpLeft, permission: 'inventory:return:view' },
   { id: 'cancel', label: 'Xuất hủy', icon: Trash2, permission: 'inventory:cancel:view' },
 ] as const;
 
@@ -103,6 +104,11 @@ export function InventoryOperationsTabbedPage() {
         {activeTab === 'checks' && (
           <RoleGuard requiredPermission="inventory:check:view">
             <InventoryCheckPage />
+          </RoleGuard>
+        )}
+        {activeTab === 'returns' && (
+          <RoleGuard requiredPermission="inventory:return:view">
+            <ReturnToSupplierPage />
           </RoleGuard>
         )}
         {activeTab === 'cancel' && (

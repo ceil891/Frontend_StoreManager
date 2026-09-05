@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, FileText, Tag, Layers, CheckCircle2, XCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -49,13 +50,7 @@ export function ProductVariantsPage() {
     fetchStoreProducts();
   }, [fetchStoreProducts]);
 
-  const defaultParentProducts = [
-    { id: '1', name: 'Áo thun polo nam basic', productCode: 'POLO-MEN-01' },
-    { id: '2', name: 'Quần jean slimfit nam', productCode: 'JEAN-MEN-02' },
-    { id: '3', name: 'Điện thoại iPhone 15 Pro Max', productCode: 'IP15PM' },
-    { id: '4', name: 'Smart TV Samsung QLED 4K 65 inch', productCode: 'SS-TV-65QLED' },
-    { id: '5', name: 'Giày sneaker running pro', productCode: 'RUN-PRO-01' },
-  ];
+  const defaultParentProducts: any[] = [];
 
   const allParentProducts = useMemo(() => {
     const list: any[] = [];
@@ -85,37 +80,9 @@ export function ProductVariantsPage() {
     return list;
   }, [storeProducts, productsList]);
 
-  const defaultAttributes = [
-    { id: '1', name: 'Kích thước (Size)', code: 'SIZE' },
-    { id: '2', name: 'Màu sắc (Color)', code: 'COLOR' },
-    { id: '3', name: 'Đơn vị tính (Unit)', code: 'UNIT' },
-    { id: '4', name: 'Chất liệu (Material)', code: 'MATERIAL' },
-  ];
+  const defaultAttributes: any[] = [];
 
-  const defaultAttributeValues: Record<string, Array<{ id: string; value: string }>> = {
-    '1': [
-      { id: '101', value: 'Size S' },
-      { id: '102', value: 'Size M' },
-      { id: '103', value: 'Size L' },
-      { id: '104', value: 'Size XL' },
-    ],
-    '2': [
-      { id: '201', value: 'Đỏ' },
-      { id: '202', value: 'Xanh navy' },
-      { id: '203', value: 'Đen' },
-      { id: '204', value: 'Trắng' },
-    ],
-    '3': [
-      { id: '301', value: 'Cái' },
-      { id: '302', value: 'Hộp' },
-      { id: '303', value: 'Thùng' },
-    ],
-    '4': [
-      { id: '401', value: '100% Cotton' },
-      { id: '402', value: 'Polyester' },
-      { id: '403', value: 'Vải khaki' },
-    ],
-  };
+  const defaultAttributeValues: Record<string, Array<{ id: string; value: string }>> = {};
 
   const loadCreationData = async () => {
     try {
@@ -130,7 +97,7 @@ export function ProductVariantsPage() {
       const latestUnits = useInventoryStore.getState().unitsList;
 
       const [prodsRes, attrsRes] = await Promise.allSettled([
-        axiosClient.get('/catalog/products?size=200'),
+        axiosClient.get('/products?size=200'),
         axiosClient.get('/attributes?size=200')
       ]);
 
@@ -389,22 +356,24 @@ export function ProductVariantsPage() {
       toast.success('Cập nhật biến thể thành công!');
       setIsModalOpen(false);
       fetchVariants();
-    } catch {
-      toast.success('Đã lưu thay đổi biến thể!');
-      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error('Failed to update variant:', err);
+      toast.error(err?.response?.data?.message || err?.message || 'Lỗi khi cập nhật biến thể!');
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (confirm('Bạn có chắc chắn muốn xóa biến thể này khỏi hệ thống?')) {
-      try {
-        await axiosClient.delete(`/catalog/variants/${id}`);
-        toast.success('Đã xóa biến thể thành công!');
-        fetchVariants();
-      } catch {
-        setData(prev => prev.filter(item => item.id !== id));
-        toast.success('Đã xóa biến thể thành công!');
-      }
+  const [deletingVariant, setDeletingVariant] = useState<VariantItem | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingVariant) return;
+    try {
+      await axiosClient.delete(`/catalog/variants/${deletingVariant.id}`);
+      toast.success(`Đã xóa biến thể "${deletingVariant.variantCode}" thành công!`);
+      setDeletingVariant(null);
+      fetchVariants();
+    } catch (err: any) {
+      console.error('Failed to delete variant:', err);
+      toast.error(err?.response?.data?.message || err?.message || 'Lỗi khi xóa biến thể!');
     }
   };
 
@@ -531,7 +500,7 @@ export function ProductVariantsPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(info.row.original.id)}
+              onClick={() => setDeletingVariant(info.row.original)}
               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               title="Xóa biến thể"
             >
@@ -800,6 +769,15 @@ export function ProductVariantsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingVariant)}
+        onClose={() => setDeletingVariant(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa biến thể sản phẩm"
+        description="Bạn có chắc chắn muốn xóa biến thể này khỏi hệ thống không? Thao tác này không thể hoàn tác."
+        itemName={deletingVariant ? `${deletingVariant.variantCode} - ${deletingVariant.sku}` : undefined}
+      />
     </div>
   );
 }

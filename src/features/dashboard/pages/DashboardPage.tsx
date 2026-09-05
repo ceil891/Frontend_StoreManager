@@ -53,7 +53,7 @@ export function DashboardPage() {
   }, [saleOrders]);
 
   const totalRevenue = useMemo(() => {
-    return paidOrders.reduce((sum, o) => sum + (o.finalAmount || o.totalAmount || 0), 0);
+    return paidOrders.reduce((sum, o) => sum + ((o as any).finalAmount || o.totalAmount || 0), 0);
   }, [paidOrders]);
 
   const kpis = useMemo(() => {
@@ -120,7 +120,7 @@ export function DashboardPage() {
     saleOrders.forEach((o) => {
       const dateKey = o.date ? o.date.slice(0, 10) : 'Hôm nay';
       const existing = map.get(dateKey) || { total: 0, orders: 0 };
-      existing.total += (o.finalAmount || o.totalAmount || 0);
+      existing.total += ((o as any).finalAmount || o.totalAmount || 0);
       existing.orders += 1;
       map.set(dateKey, existing);
     });
@@ -136,7 +136,7 @@ export function DashboardPage() {
   const categoryData = useMemo(() => {
     if (products.length === 0) {
       return categories.map((c, i) => ({
-        name: c.name || c.categoryName || 'Danh mục',
+        name: c.categoryName || (c as any).name || 'Danh mục',
         value: 1,
         color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
       }));
@@ -144,8 +144,8 @@ export function DashboardPage() {
 
     const counts = new Map<string, number>();
     products.forEach((p) => {
-      const cat = p.categoryName || p.category || 'Khác';
-      counts.set(cat, (counts.get(cat) || 0) + (p.basePrice || p.price || 1000000));
+      const cat = (p as any).categoryName || p.category || 'Khác';
+      counts.set(cat, (counts.get(cat) || 0) + ((p as any).basePrice || p.price || 1000000));
     });
 
     return Array.from(counts.entries()).map(([name, val], idx) => ({
@@ -165,7 +165,7 @@ export function DashboardPage() {
       id: o.id || o.code,
       type: 'SALE',
       text: `Đơn hàng ${o.code} - ${o.customerName || 'Khách lẻ'}`,
-      meta: `${(o.finalAmount || o.totalAmount || 0).toLocaleString('vi-VN')}đ • ${o.origin || 'POS'}`,
+      meta: `${((o as any).finalAmount || o.totalAmount || 0).toLocaleString('vi-VN')}đ • ${o.origin || 'POS'}`,
       time: o.date ? o.date.slice(11, 16) || o.date.slice(0, 10) : 'Vừa xong',
     }));
   }, [saleOrders]);

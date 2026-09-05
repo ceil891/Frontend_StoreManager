@@ -1,6 +1,7 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Download, Search, Eye, Calendar, User, ClipboardList, Briefcase, FileText, CheckCircle2, Clock, XCircle, ChevronRight, Trash2 } from 'lucide-react';
+import { Plus, Download, Search, Eye, Calendar, User, ClipboardList, Briefcase, FileText, CheckCircle2, Clock, XCircle, ChevronRight, Trash2, Edit, Send, ShoppingCart } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 
 
@@ -8,6 +9,9 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/features/auth/store/authStore';
+import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
+import { usePurchaseStore } from '@/features/purchase/store/purchaseStore';
 
 interface PurchaseRequestItem {
   id: string;
@@ -17,24 +21,29 @@ interface PurchaseRequestItem {
   reason: string;
   estimatedTotal: number;
   proposedBy: string;
-  status: 'CHỜ_DUYỆT' | 'ĐÃ_CHUYỂN_PO' | 'TỪ_CHỐI';
+  status: 'CHỜ_DUYỆT' | 'ĐÃ_DUYỆT' | 'ĐÃ_CHUYỂN_PO' | 'TỪ_CHỐI';
   notes?: string;
+  branchId?: number;
   itemsList?: { itemName: string; qty: number; unit: string; estimatedPrice: number }[];
 }
 
 export function PurchaseRequestsPage() {
+  const { products, fetchProducts } = useInventoryStore();
+  const { branches, fetchBranches } = useBranchStore();
+  const { suppliers, fetchSuppliers } = usePurchaseStore();
   const [data, setData] = useState<PurchaseRequestItem[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
   const [selectedItem, setSelectedItem] = useState<PurchaseRequestItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<PurchaseRequestItem>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [convertModalItem, setConvertModalItem] = useState<PurchaseRequestItem | null>(null);
+  const [convertSupplierId, setConvertSupplierId] = useState<string>('');
 
   // RFQ Product Line Items State
-  const [rfqItems, setRfqItems] = useState<{ id: string; itemName: string; qty: number; unit: string; estimatedPrice: number }[]>([
-    { id: '1', itemName: 'Máy in hóa đơn nhiệt Xprinter Q200', qty: 2, unit: 'Cái', estimatedPrice: 1850000 }
-  ]);
+  const [rfqItems, setRfqItems] = useState<{ id: string; productId?: number; itemName: string; qty: number; unit: string; estimatedPrice: number }[]>([]);
 
   const updateRfqItemsAndTotal = (newItems: typeof rfqItems) => {
     setRfqItems(newItems);
@@ -43,16 +52,28 @@ export function PurchaseRequestsPage() {
   };
 
   const handleAddRfqItem = () => {
-    const newItem = { id: Date.now().toString(), itemName: 'Thiết bị / Vật tư mới', qty: 1, unit: 'Cái', estimatedPrice: 500000 };
+    const p = products[0];
+    const newItem = {
+      id: Date.now().toString(),
+      productId: p ? Number(p.id) : undefined,
+      itemName: p?.name || '',
+      qty: 1,
+      unit: 'Cái',
+      estimatedPrice: p ? Number(p.costPrice || p.price || 0) : 0,
+    };
     updateRfqItemsAndTotal([...rfqItems, newItem]);
   };
 
   const handleRemoveRfqItem = (id: string) => {
+    if (rfqItems.length <= 1) {
+      toast.warning('Yêu cầu mua hàng phải có ít nhất 1 mặt hàng');
+      return;
+    }
     updateRfqItemsAndTotal(rfqItems.filter(i => i.id !== id));
   };
 
-  const handleUpdateRfqItem = (id: string, field: string, value: any) => {
-    const updated = rfqItems.map(item => item.id === id ? { ...item, [field]: value } : item);
+  const handleUpdateRfqItem = (id: string, field: string, val: any) => {
+    const updated = rfqItems.map(i => i.id === id ? { ...i, [field]: val } : i);
     updateRfqItemsAndTotal(updated);
   };
 
@@ -65,10 +86,28 @@ export function PurchaseRequestsPage() {
         const statusMap: Record<string, PurchaseRequestItem['status']> = {
           DRAFT: 'CHỜ_DUYỆT',
           PENDING_APPROVAL: 'CHỜ_DUYỆT',
-          APPROVED: 'ĐÃ_CHUYỂN_PO',
+          APPROVED: 'ĐÃ_DUYỆT',
+          CONVERTED: 'ĐÃ_CHUYỂN_PO',
           COMPLETED: 'ĐÃ_CHUYỂN_PO',
           REJECTED: 'TỪ_CHỐI',
         };
+        const rawItems = item.items || item.details || item.itemsList || [];
+        const itemsList = Array.isArray(rawItems) && rawItems.length > 0
+          ? rawItems.map((ri: any) => ({
+              itemName: ri.itemName || ri.productName || ri.name || 'Thiết bị / Vật tư',
+              qty: Number(ri.qty || ri.quantity || 1),
+              unit: ri.unit || 'Cái',
+              estimatedPrice: Number(ri.estimatedPrice || ri.unitPrice || (item.estimatedTotal ? Math.round(item.estimatedTotal / (ri.quantity || 1)) : 0))
+            }))
+          : [
+              {
+                itemName: item.reason || 'Thiết bị / Hàng hóa đề xuất',
+                qty: 1,
+                unit: 'Gói/Bộ',
+                estimatedPrice: item.estimatedTotal || 0,
+              }
+            ];
+
         return {
           id: String(item.id),
           requestCode: item.requestCode || '',
@@ -79,6 +118,7 @@ export function PurchaseRequestsPage() {
           proposedBy: item.proposedBy || item.createdBy || '',
           status: statusMap[item.status] || 'CHỜ_DUYỆT',
           notes: item.notes || '',
+          itemsList,
         };
       });
       setData(mapped);
@@ -92,7 +132,59 @@ export function PurchaseRequestsPage() {
 
   useEffect(() => {
     fetchRequests();
-  }, []);
+    fetchProducts();
+    fetchBranches();
+    fetchSuppliers();
+  }, [fetchProducts, fetchBranches, fetchSuppliers]);
+
+  const handleSubmitRequest = async (id: string) => {
+    try {
+      await axiosClient.post(`/purchase/requests/${id}/submit`);
+      toast.success('Gửi duyệt yêu cầu mua hàng thành công!');
+      fetchRequests();
+      setSelectedItem(null);
+    } catch (err: any) {
+      toast.error('Lỗi khi gửi duyệt: ' + (err?.response?.data?.message || err?.message || ''));
+    }
+  };
+
+  const handleApproveRequest = async (id: string) => {
+    try {
+      await axiosClient.post(`/purchase/requests/${id}/approve`);
+      toast.success('Đã phê duyệt yêu cầu mua hàng!');
+      fetchRequests();
+      setSelectedItem(null);
+    } catch (err: any) {
+      toast.error('Lỗi khi phê duyệt: ' + (err?.response?.data?.message || err?.message || ''));
+    }
+  };
+
+  const handleRejectRequest = async (id: string) => {
+    try {
+      await axiosClient.post(`/purchase/requests/${id}/reject`);
+      toast.success('Đã từ chối yêu cầu mua hàng!');
+      fetchRequests();
+      setSelectedItem(null);
+    } catch (err: any) {
+      toast.error('Lỗi khi từ chối: ' + (err?.response?.data?.message || err?.message || ''));
+    }
+  };
+
+  const handleConvertToOrder = async () => {
+    if (!convertModalItem || !convertSupplierId) {
+      toast.error('Vui lòng chọn nhà cung cấp để tạo đơn mua hàng (PO)!');
+      return;
+    }
+    try {
+      await axiosClient.post(`/purchase/requests/${convertModalItem.id}/convert-to-order?supplierId=${convertSupplierId}`);
+      toast.success('Đã chuyển đổi yêu cầu mua hàng thành đơn mua hàng (PO) thành công!');
+      setConvertModalItem(null);
+      setSelectedItem(null);
+      fetchRequests();
+    } catch (err: any) {
+      toast.error('Lỗi khi chuyển thành PO: ' + (err?.response?.data?.message || err?.message || ''));
+    }
+  };
 
   const filtered = data.filter((item) => {
     const matchesSearch =
@@ -105,17 +197,70 @@ export function PurchaseRequestsPage() {
   });
 
   const handleOpenCreate = () => {
+    setModalMode('create');
     const user = useAuthStore.getState().user;
+    const p = products[0];
     setEditingItem({
       requestCode: `PR-2026-00${data.length + 1}`,
       requestDate: new Date().toISOString().split('T')[0],
       department: 'Bộ phận Kho vận',
       reason: '',
-      estimatedTotal: 0,
-      proposedBy: user?.name || user?.fullName || '',
+      estimatedTotal: p ? Number(p.price || 100000) : 100000,
+      proposedBy: user?.name || user?.email || '',
       status: 'CHỜ_DUYỆT',
       notes: '',
     });
+    setRfqItems([
+      {
+        id: '1',
+        productId: p ? Number(p.id) : 1,
+        itemName: p?.name || 'Sản phẩm đề xuất',
+        qty: 1,
+        unit: 'Cái',
+        estimatedPrice: p ? Number(p.price || 100000) : 100000,
+      }
+    ]);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: PurchaseRequestItem) => {
+    setModalMode('edit');
+    setEditingItem({
+      id: item.id,
+      requestCode: item.requestCode,
+      requestDate: item.requestDate ? item.requestDate.split('T')[0] : new Date().toISOString().split('T')[0],
+      department: item.department || 'Bộ phận Kho vận',
+      reason: item.reason || '',
+      estimatedTotal: item.estimatedTotal || 0,
+      proposedBy: item.proposedBy || '',
+      status: item.status || 'CHỜ_DUYỆT',
+      notes: item.notes || '',
+    });
+    if (item.itemsList && item.itemsList.length > 0) {
+      setRfqItems(item.itemsList.map((it, idx) => {
+        const prod = products.find(p => p.name === it.itemName);
+        return {
+          id: String(idx + 1),
+          productId: prod ? Number(prod.id) : (products[0] ? Number(products[0].id) : 1),
+          itemName: it.itemName,
+          qty: it.qty,
+          unit: it.unit || 'Cái',
+          estimatedPrice: it.estimatedPrice,
+        };
+      }));
+    } else {
+      const p = products[0];
+      setRfqItems([
+        {
+          id: '1',
+          productId: p ? Number(p.id) : 1,
+          itemName: item.reason || 'Thiết bị / Hàng hóa đề xuất',
+          qty: 1,
+          unit: 'Gói/Bộ',
+          estimatedPrice: item.estimatedTotal || 0,
+        }
+      ]);
+    }
     setIsModalOpen(true);
   };
 
@@ -129,21 +274,67 @@ export function PurchaseRequestsPage() {
         'ĐÃ_CHUYỂN_PO': 'APPROVED',
         'TỪ_CHỐI': 'REJECTED',
       };
+
+      const branchId = (editingItem as any).branchId ? Number((editingItem as any).branchId) : (branches[0] ? Number(branches[0].id) : 1);
+      const details = rfqItems.length > 0
+        ? rfqItems.map((it) => {
+            const matched = products.find(p => String(p.id) === String(it.productId) || p.name.toLowerCase() === it.itemName.toLowerCase() || p.sku.toLowerCase() === it.itemName.toLowerCase());
+            const resolvedId = it.productId || (matched ? Number(matched.id) : (products[0] ? Number(products[0].id) : 1));
+            return {
+              productId: resolvedId,
+              quantity: Number(it.qty || 1),
+              estimatedPrice: Number(it.estimatedPrice || 0),
+            };
+          })
+        : [
+            {
+              productId: products[0] ? Number(products[0].id) : 1,
+              quantity: 1,
+              estimatedPrice: Number(editingItem.estimatedTotal || 0),
+            }
+          ];
+
+      const rawDate = editingItem.requestDate || new Date().toISOString().split('T')[0];
+      const requestDate = rawDate.includes('T') ? rawDate : `${rawDate}T00:00:00`;
+
       const payload = {
         requestCode: editingItem.requestCode || `PR-2026-00${data.length + 1}`,
-        requestDate: editingItem.requestDate || new Date().toISOString().split('T')[0],
+        requestDate,
         reason: editingItem.reason,
-        estimatedTotal: Number(editingItem.estimatedTotal),
         status: statusMap[editingItem.status || 'CHỜ_DUYỆT'] || 'PENDING_APPROVAL',
-        notes: editingItem.notes || '',
+        branchId,
+        note: editingItem.notes || '',
+        details,
       };
-      await axiosClient.post('/purchase/requests', payload);
-      toast.success('Tạo yêu cầu mua hàng thành công');
+
+      if (modalMode === 'edit' && editingItem.id) {
+        await axiosClient.put(`/purchase/requests/${editingItem.id}`, payload);
+        toast.success('Cập nhật yêu cầu mua hàng thành công');
+      } else {
+        await axiosClient.post('/purchase/requests', payload);
+        toast.success('Tạo yêu cầu mua hàng thành công');
+      }
       await fetchRequests();
       setIsModalOpen(false);
-    } catch (err) {
-      console.error('Lỗi tạo yêu cầu mua hàng:', err);
-      toast.error('Không thể tạo yêu cầu mua hàng');
+    } catch (err: any) {
+      console.error('Lỗi lưu yêu cầu mua hàng:', err);
+      toast.error('Không thể lưu yêu cầu mua hàng: ' + (err?.response?.data?.message || err?.message || 'Lỗi dữ liệu'));
+    }
+  };
+
+  const [deletingItem, setDeletingItem] = useState<PurchaseRequestItem | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await axiosClient.delete(`/purchase/requests/${deletingItem.id}`);
+      toast.success(`Đã xóa yêu cầu mua hàng "${deletingItem.requestCode}" thành công!`);
+      if (selectedItem?.id === deletingItem.id) setSelectedItem(null);
+      setDeletingItem(null);
+      fetchRequests();
+    } catch (err: any) {
+      console.error('Lỗi khi xóa yêu cầu mua hàng:', err);
+      toast.error('Lỗi khi xóa yêu cầu mua hàng: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
   };
 
@@ -235,6 +426,20 @@ export function PurchaseRequestsPage() {
               title="Xem chi tiết"
             >
               <Eye className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleOpenEdit(row.original)}
+              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors shrink-0"
+              title="Chỉnh sửa yêu cầu"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setDeletingItem(row.original)}
+              className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors shrink-0"
+              title="Xóa yêu cầu"
+            >
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         ),
@@ -394,6 +599,47 @@ export function PurchaseRequestsPage() {
                 </div>
               </div>
             )}
+
+            {/* Workflow Action Buttons */}
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex flex-wrap gap-2 justify-end">
+              {selectedItem.status === 'CHỜ_DUYỆT' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleSubmitRequest(selectedItem.id)}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-xs flex items-center gap-1.5 transition-colors"
+                  >
+                    <Send className="w-3.5 h-3.5" /> Gửi duyệt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApproveRequest(selectedItem.id)}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-xs flex items-center gap-1.5 transition-colors"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Phê duyệt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRejectRequest(selectedItem.id)}
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg text-xs flex items-center gap-1.5 transition-colors"
+                  >
+                    <XCircle className="w-3.5 h-3.5" /> Từ chối
+                  </button>
+                </>
+              )}
+              {selectedItem.status === 'ĐÃ_CHUYỂN_PO' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConvertModalItem(selectedItem);
+                    setConvertSupplierId(suppliers[0] ? String(suppliers[0].id) : '1');
+                  }}
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg text-xs flex items-center gap-1.5 transition-colors"
+                >
+                  <ShoppingCart className="w-3.5 h-3.5" /> Chuyển thành Đơn mua (PO)
+                </button>
+              )}
+            </div>
           </div>
         )}
       </Modal>
@@ -401,7 +647,7 @@ export function PurchaseRequestsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="📑 Tạo phiếu gửi yêu cầu báo giá RFQ / Yêu cầu mua hàng"
+        title={modalMode === 'edit' ? '✏️ Chỉnh sửa yêu cầu mua hàng' : '📑 Tạo phiếu gửi yêu cầu báo giá RFQ / Yêu cầu mua hàng'}
         width="max-w-3xl"
       >
         <form onSubmit={handleSave} className="space-y-4 text-xs">
@@ -496,14 +742,35 @@ export function PurchaseRequestsPage() {
                   {rfqItems.map((item) => (
                     <tr key={item.id}>
                       <td className="p-2">
-                        <input
-                          type="text"
-                          list="suggested-products"
-                          value={item.itemName}
-                          onChange={(e) => handleUpdateRfqItem(item.id, 'itemName', e.target.value)}
-                          className="w-full p-1.5 border rounded bg-white dark:bg-gray-900 text-xs placeholder:text-gray-400 placeholder:italic"
-                          placeholder="Gõ hoặc chọn thiết bị..."
-                        />
+                        {products.length > 0 ? (
+                          <select
+                            value={(item as any).productId ? String((item as any).productId) : ''}
+                            onChange={(e) => {
+                              const pid = e.target.value;
+                              const p = products.find(prod => String(prod.id) === pid);
+                              if (p) {
+                                handleUpdateRfqItem(item.id, 'productId', Number(p.id));
+                                handleUpdateRfqItem(item.id, 'itemName', p.name);
+                                handleUpdateRfqItem(item.id, 'estimatedPrice', Number(p.costPrice || p.price || 0));
+                              }
+                            }}
+                            className="w-full p-1.5 border rounded bg-white dark:bg-gray-900 text-xs font-medium"
+                          >
+                            <option value="">-- Chọn sản phẩm --</option>
+                            {products.map(p => (
+                              <option key={p.id} value={p.id}>{p.sku} - {p.name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            list="suggested-products"
+                            value={item.itemName}
+                            onChange={(e) => handleUpdateRfqItem(item.id, 'itemName', e.target.value)}
+                            className="w-full p-1.5 border rounded bg-white dark:bg-gray-900 text-xs placeholder:text-gray-400 placeholder:italic"
+                            placeholder="Gõ hoặc chọn thiết bị..."
+                          />
+                        )}
                       </td>
                       <td className="p-2">
                         <input
@@ -604,10 +871,60 @@ export function PurchaseRequestsPage() {
               type="submit"
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              Tạo phiếu đề xuất
+              {modalMode === 'edit' ? 'Lưu thay đổi' : 'Tạo phiếu đề xuất'}
             </button>
           </div>
         </form>
+      </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa yêu cầu mua hàng"
+        description="Bạn có chắc chắn muốn xóa yêu cầu mua hàng này khỏi hệ thống không?"
+        itemName={deletingItem ? `${deletingItem.requestCode} (${deletingItem.department})` : undefined}
+      />
+
+      <Modal
+        isOpen={Boolean(convertModalItem)}
+        onClose={() => setConvertModalItem(null)}
+        title={`Chuyển yêu cầu ${convertModalItem?.requestCode} thành Đơn Mua Hàng (PO)`}
+        width="max-w-md"
+      >
+        <div className="space-y-4 text-xs">
+          <p className="text-gray-600 dark:text-gray-300">
+            Vui lòng chọn nhà cung cấp để hệ thống tự động sinh Đơn mua hàng (PO) từ các mặt hàng được duyệt:
+          </p>
+          <div>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Nhà cung cấp *</label>
+            <select
+              value={convertSupplierId}
+              onChange={(e) => setConvertSupplierId(e.target.value)}
+              className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+            >
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>{s.supplierName} ({s.code || s.id})</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <button
+              type="button"
+              onClick={() => setConvertModalItem(null)}
+              className="px-4 py-2 border rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              onClick={handleConvertToOrder}
+              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 font-bold"
+            >
+              Tạo Đơn PO Ngay
+            </button>
+          </div>
+        </div>
       </Modal>
     </>
   );

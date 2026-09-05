@@ -33,6 +33,9 @@ import {
   Sliders,
   LifeBuoy,
   AlertTriangle,
+  BookOpen,
+  Calendar,
+  FileSpreadsheet,
 } from 'lucide-react';
 import type { RoleType } from '@/features/auth/types';
 
@@ -103,6 +106,8 @@ export const NAV_GROUPS: NavGroup[] = [
     group: 'Kế toán & tài chính',
     items: [
       { name: 'Phiếu thu / chi', href: '/finance/vouchers', icon: DollarSign, permission: 'finance:receipt:view' },
+      { name: 'Sổ nhật ký & COA', href: '/finance/accounting', icon: BookOpen, permission: 'finance:accounting:view' },
+      { name: 'Tài sản cố định', href: '/finance/fixed-assets', icon: FileSpreadsheet, permission: 'finance:asset:view' },
       { name: 'Sổ nợ & công nợ', href: '/finance/debts', icon: Activity, permission: 'finance:debt:view' },
       { name: 'Ngân hàng & quỹ tiền', href: '/finance/fund-cash', icon: CreditCard, permission: 'finance:bank:view' },
     ],
@@ -138,6 +143,8 @@ export const NAV_GROUPS: NavGroup[] = [
     group: 'Nhân sự & phân quyền',
     items: [
       { name: 'Hồ sơ nhân sự', href: '/hr/employees', icon: UserCheck, permission: 'system:user:view' },
+      { name: 'Chấm công & Nghỉ phép', href: '/hr/timekeeping', icon: Calendar, permission: 'hr:timekeeping:view' },
+      { name: 'Quản lý Bảng lương', href: '/hr/payroll', icon: DollarSign, permission: 'finance:payroll:view' },
       { name: 'Vai trò & phân quyền', href: '/hr/roles-permissions', icon: Shield, permission: 'system:role:view' },
     ],
   },

@@ -52,6 +52,16 @@ export function SystemErrorLogPage() {
     fetchSystemErrorLogs();
   }, [fetchSystemErrorLogs]);
 
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [search, setSearch] = useState('');
+  const [searchField, setSearchField] = useState<SearchField>('all');
+  const [selectedError, setSelectedError] = useState<SystemErrorLogRecord | null>(null);
+  const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
+
+  // Filter states
+  const [severityFilter, setSeverityFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
   const data: SystemErrorLogRecord[] = useMemo(() => {
     return storeLogs.map((l) => ({
       id: l.id,
@@ -63,18 +73,9 @@ export function SystemErrorLogPage() {
       errorMessage: `${l.serviceName}: ${l.errorMessage}`,
       stackTraceSnippet: l.stackTrace,
       nodeHostname: 'server-node-01',
-      resolved: false,
+      resolved: resolvedIds.has(l.id),
     }));
-  }, [storeLogs]);
-
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [search, setSearch] = useState('');
-  const [searchField, setSearchField] = useState<SearchField>('all');
-  const [selectedError, setSelectedError] = useState<SystemErrorLogRecord | null>(null);
-
-  // Filter states
-  const [severityFilter, setSeverityFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  }, [storeLogs, resolvedIds]);
 
   const filtered = data.filter((item) => {
     // 1. Text search
@@ -143,14 +144,28 @@ export function SystemErrorLogPage() {
     const isResolved = !error.resolved;
     const timestamp = isResolved ? new Date().toISOString().replace('T', ' ').substring(0, 19) : undefined;
     
-    // TODO: update store
-    // setData(prev => prev.map(item => item.id === error.id ? { ... } : item));
+    // Update resolved state using resolvedIds set
+    setResolvedIds((prev) => {
+      const next = new Set(prev);
+      if (isResolved) {
+        next.add(error.id);
+      } else {
+        next.delete(error.id);
+      }
+      return next;
+    });
 
     setSelectedError(prev => prev && prev.id === error.id ? {
       ...prev,
       resolved: isResolved,
       resolvedTimestamp: timestamp
-    } : null);
+    } : prev);
+
+    if (isResolved) {
+      toast.success(`Đã đánh dấu lỗi ${error.errorHash} là ĐÃ XỬ LÝ`);
+    } else {
+      toast.info(`Đã đánh dấu lỗi ${error.errorHash} là CHƯA XỬ LÝ`);
+    }
   };
 
   const handleExportCSV = () => {
@@ -268,7 +283,7 @@ export function SystemErrorLogPage() {
               <Download className="w-4 h-4" /> Xuất nhật ký sự cố (Dumps)
             </button>
             <button 
-              onClick={() => alert('Đã gửi xung nhịp khẩn cấp (Heartbeat pulse) tới cụm máy chủ Redis/Database!')}
+              onClick={() => toast.success('Đã gửi xung nhịp khẩn cấp (Heartbeat pulse) tới cụm máy chủ Redis/Database!')}
               className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-semibold shadow-sm whitespace-nowrap shrink-0"
             >
               <Plus className="w-4 h-4" /> Gửi kiểm tra nhịp cụm (Heartbeat)
@@ -451,7 +466,7 @@ export function SystemErrorLogPage() {
                 )}
               </button>
               <button 
-                onClick={() => alert(`Kết nối SSH tới máy chủ ${selectedError.nodeHostname} thành công! Đang thiết lập đường truyền shell bảo mật...`)}
+                onClick={() => toast.info(`Kết nối SSH tới máy chủ ${selectedError.nodeHostname} thành công! Đang thiết lập đường truyền shell bảo mật...`)}
                 className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
               >
                 <Terminal className="w-4 h-4 inline mr-1" /> Mở SSH Core Shell

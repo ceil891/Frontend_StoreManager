@@ -1,6 +1,7 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Download, Search, Eye, Calendar, FileCheck, Landmark, ShieldAlert, Award, FileText, CheckCircle2, Clock, XCircle, UserCheck } from 'lucide-react';
+import { Plus, Download, Search, Eye, Edit, Calendar, FileCheck, Landmark, ShieldAlert, Award, FileText, CheckCircle2, Clock, XCircle, UserCheck, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 
 
@@ -41,6 +42,7 @@ export function SupplierContractsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
   const [selectedItem, setSelectedItem] = useState<SupplierContractItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<SupplierContractItem>>({});
   const [isLoading, setIsLoading] = useState(false);
 
@@ -71,7 +73,7 @@ export function SupplierContractsPage() {
         return {
           id: String(item.id),
           contractNumber: item.contractCode || '',
-          supplierName: item.supplier?.name || '',
+          supplierName: item.supplierName || item.supplier?.name || '',
           signingDate: item.signedDate || item.startDate || '',
           expirationDate: item.endDate || '',
           maxDebtLimit: item.maxDebtLimit || 0,
@@ -106,9 +108,10 @@ export function SupplierContractsPage() {
   });
 
   const handleOpenCreate = () => {
+    setModalMode('create');
     setEditingItem({
       contractNumber: `HD-NCC-2026-0${data.length + 1}`,
-      supplierName: suppliersList[0]?.name || '',
+      supplierName: '',
       signingDate: new Date().toISOString().split('T')[0],
       expirationDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
       maxDebtLimit: 100000000,
@@ -118,6 +121,12 @@ export function SupplierContractsPage() {
       contractVal: 0,
       appendixText: ''
     });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: SupplierContractItem) => {
+    setModalMode('edit');
+    setEditingItem(item);
     setIsModalOpen(true);
   };
 
@@ -179,14 +188,35 @@ export function SupplierContractsPage() {
         contractType: 'SUPPLIER_CONTRACT',
         note: editingItem.appendixText || '',
       };
-      await axiosClient.post('/purchase/contracts', payload);
-      toast.success('Tạo hợp đồng nhà cung cấp thành công');
+      if (modalMode === 'create') {
+        await axiosClient.post('/purchase/contracts', payload);
+        toast.success('Tạo hợp đồng nhà cung cấp thành công');
+      } else if (editingItem.id) {
+        await axiosClient.put(`/purchase/contracts/${editingItem.id}`, payload);
+        toast.success('Cập nhật hợp đồng nhà cung cấp thành công');
+      }
       await fetchContracts();
       setIsModalOpen(false);
     } catch (err: any) {
-      console.error('Lỗi tạo hợp đồng:', err);
-      const errorMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Có lỗi xảy ra khi tạo hợp đồng!';
-      toast.error(`Lỗi tạo hợp đồng: ${errorMsg}`);
+      console.error('Lỗi lưu hợp đồng:', err);
+      const errorMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Có lỗi xảy ra khi lưu hợp đồng!';
+      toast.error(`Lỗi lưu hợp đồng: ${errorMsg}`);
+    }
+  };
+
+  const [deletingItem, setDeletingItem] = useState<SupplierContractItem | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await axiosClient.delete(`/purchase/contracts/${deletingItem.id}`);
+      toast.success(`Đã xóa hợp đồng nhà cung cấp "${deletingItem.contractNumber}" thành công!`);
+      if (selectedItem?.id === deletingItem.id) setSelectedItem(null);
+      setDeletingItem(null);
+      fetchContracts();
+    } catch (err: any) {
+      console.error('Lỗi khi xóa hợp đồng:', err);
+      toast.error('Lỗi khi xóa hợp đồng: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
   };
 
@@ -273,6 +303,20 @@ export function SupplierContractsPage() {
               title="Xem chi tiết hợp đồng"
             >
               <Eye className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleOpenEdit(row.original)}
+              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors shrink-0"
+              title="Chỉnh sửa hợp đồng"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setDeletingItem(row.original)}
+              className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors shrink-0"
+              title="Xóa hợp đồng"
+            >
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         ),
@@ -502,6 +546,7 @@ export function SupplierContractsPage() {
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày hết hạn hợp đồng *</label>
               <input
                 type="date"
+                min={editingItem.signingDate || undefined}
                 value={editingItem.expirationDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, expirationDate: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
@@ -586,6 +631,15 @@ export function SupplierContractsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa hợp đồng nhà cung cấp"
+        description="Bạn có chắc chắn muốn xóa hợp đồng nhà cung cấp này không? Thao tác này không thể hoàn tác."
+        itemName={deletingItem ? `${deletingItem.contractNumber} (${deletingItem.supplierName})` : undefined}
+      />
     </>
   );
 }

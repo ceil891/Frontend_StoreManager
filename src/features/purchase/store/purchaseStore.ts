@@ -37,12 +37,16 @@ export interface PurchaseOrderItem {
   orderDate: string;
   estDeliveryDate: string;
   totalCost: number;
-  status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED';
+  status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'DISPATCHED' | 'DELIVERED' | 'RECEIVED' | 'COMPLETED' | 'CANCELLED' | string;
   paymentStatus: 'UNPAID' | 'PARTIAL_ADVANCE' | 'PAID';
   orderedBy: string;
   itemsCount: number;
   notes?: string;
   poLines?: any[];
+  shippingFee?: number;
+  paymentTerms?: string;
+  advanceAmount?: number;
+  paidAmount?: number;
 }
 
 export interface PurchaseOrderRecord {
@@ -174,25 +178,27 @@ export const usePurchaseStore = create<PurchaseState>()((set) => ({
       }));
     } catch (err: any) {
       console.error('Failed to delete supplier:', err);
-      set((state) => ({
-        suppliers: state.suppliers.filter((s) => s.id !== id),
-        isLoading: false,
-      }));
+      set({ isLoading: false, error: err.message || 'Lỗi khi xóa nhà cung cấp' });
+      throw err;
     }
   },
 
   toggleSupplierStatus: async (id) => {
     set({ isLoading: true, error: null });
+    const currentSupplier = usePurchaseStore.getState().suppliers.find((s) => s.id === id);
+    const newStatus = currentSupplier?.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
     try {
+      await purchaseService.updateSupplier(id, { status: newStatus });
       set((state) => ({
         suppliers: state.suppliers.map((s) =>
-          s.id === id ? { ...s, status: s.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' } : s
+          s.id === id ? { ...s, status: newStatus } : s
         ),
         isLoading: false,
       }));
     } catch (err: any) {
       console.error('Failed to toggle supplier status:', err);
-      set({ isLoading: false });
+      set({ isLoading: false, error: err.message || 'Lỗi khi đổi trạng thái nhà cung cấp' });
+      throw err;
     }
   },
 
@@ -243,7 +249,7 @@ export const usePurchaseStore = create<PurchaseState>()((set) => ({
   updatePurchaseOrderStatus: async (id, status) => {
     set({ isLoading: true, error: null });
     try {
-      await purchaseService.updatePurchaseOrder(id, { status });
+      await purchaseService.updatePurchaseOrder(id, { status: status as any });
       set((state) => {
         const target = state.purchaseOrders.find((p) => p.id === id);
         if (!target) return { isLoading: false };
@@ -255,8 +261,9 @@ export const usePurchaseStore = create<PurchaseState>()((set) => ({
         };
       });
     } catch (e: any) {
-      console.error(e);
-      set({ isLoading: false });
+      console.error('Failed to update PO status:', e);
+      set({ isLoading: false, error: e.message || 'Lỗi khi cập nhật trạng thái đơn mua hàng' });
+      throw e;
     }
   },
 
@@ -269,11 +276,9 @@ export const usePurchaseStore = create<PurchaseState>()((set) => ({
         isLoading: false,
       }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({
-        purchaseOrders: state.purchaseOrders.filter((p) => p.id !== id),
-        isLoading: false,
-      }));
+      console.error('Failed to delete purchase order:', e);
+      set({ isLoading: false, error: e.message || 'Lỗi khi xóa đơn mua hàng' });
+      throw e;
     }
   },
 }));

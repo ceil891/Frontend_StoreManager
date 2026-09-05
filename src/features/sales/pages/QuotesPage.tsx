@@ -6,11 +6,12 @@ import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
   Plus, Download, Search, Filter, Eye, FileText, User, Calendar,
-  CheckCircle2, Edit, Trash2, ArrowRight, ShieldCheck, Truck, CreditCard, Clock, FileDown, Send
+  CheckCircle2, Edit, Trash2, ArrowRight, ShieldCheck, Truck, CreditCard, Clock, FileDown, Send, AlertCircle, Layers
 } from 'lucide-react';
 import { useSalesStore, type QuoteItem, formatMoney } from '../store/salesStore';
 import { resolveCustomerName } from '../store/salesHelpers';
 import { useCrmStore } from '@/features/crm/store/crmStore';
+import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { OrderLinesEditor, sumOrderLines } from '@/shared/components/sales/OrderLinesEditor';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
@@ -18,18 +19,24 @@ import { CreateButton, SecondaryButton } from '@/shared/components/ui/Button';
 import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { salesService } from '../services/salesService';
 import { toast } from 'sonner';
+import { useAuthStore } from '@/features/auth/store/authStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 
 export function QuotesPage() {
+  const currentUser = useAuthStore((s) => s.user);
+  const currentBranch = useBranchStore((s) => s.currentBranch);
   const { quotes: data, addQuote, updateQuote, deleteQuote, fetchQuotes } = useSalesStore();
   const customers = useCrmStore((s) => s.customers);
   const fetchCustomers = useCrmStore((s) => s.fetchCustomers);
+  const products = useInventoryStore((s) => s.products);
+  const fetchProducts = useInventoryStore((s) => s.fetchProducts);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       try {
-        await Promise.all([fetchQuotes(), fetchCustomers()]);
+        await Promise.all([fetchQuotes(), fetchCustomers(), fetchProducts()]);
       } catch (err) {
         console.error(err);
         toast.error('Không thể tải danh sách báo giá');
@@ -38,7 +45,7 @@ export function QuotesPage() {
       }
     };
     load();
-  }, [fetchQuotes, fetchCustomers]);
+  }, [fetchQuotes, fetchCustomers, fetchProducts]);
 
   const canManage = usePermission('sales:quotes:manage');
   const [search, setSearch] = useState('');
@@ -84,8 +91,8 @@ export function QuotesPage() {
       totalAmount: 0,
       validUntil: nextMonth.toISOString().split('T')[0],
       status: 'DRAFT',
-      salesRep: 'Nguyễn Văn A (Sales)',
-      warehouseName: 'Kho Tổng (Hồ Chí Minh)',
+      salesRep: currentUser?.fullName || currentUser?.name || 'Nhân viên kinh doanh',
+      warehouseName: currentBranch?.branchName || 'Kho Chi Nhánh',
       itemsCount: 0,
       orderLines: [],
       notes: '',
@@ -95,33 +102,61 @@ export function QuotesPage() {
 
   const calculateQuoteTotals = (quote: Partial<QuoteItem>) => {
     const lines = quote.orderLines ?? [];
-    const subTotal = sumOrderLines(lines);
+    let rawSubTotal = 0;
+    let sumLineDiscounts = 0;
+    let sumLineTaxes = 0;
+
+    lines.forEach((line) => {
+      const qty = Number(line.quantity) || 0;
+      const price = Number(line.unitPrice) || 0;
+      const raw = qty * price;
+      rawSubTotal += raw;
+
+      let ld = 0;
+      if (line.discountType === 'PERCENT' && line.discountValue) {
+        ld = (raw * line.discountValue) / 100;
+      } else if (line.discountValue) {
+        ld = Number(line.discountValue);
+      } else if (line.discountAmount) {
+        ld = Number(line.discountAmount);
+      }
+      sumLineDiscounts += ld;
+
+      if (line.taxRate) {
+        sumLineTaxes += ((raw - ld) * line.taxRate) / 100;
+      }
+    });
+
+    const netSubTotal = Math.max(0, rawSubTotal - sumLineDiscounts);
     
-    let discountAmount = 0;
+    let headerDiscount = 0;
     if (quote.discountType === 'PERCENT' && quote.discountValue) {
-      discountAmount = (subTotal * quote.discountValue) / 100;
+      headerDiscount = (netSubTotal * quote.discountValue) / 100;
     } else if (quote.discountValue) {
-      discountAmount = Number(quote.discountValue);
+      headerDiscount = Number(quote.discountValue);
     } else if (quote.discountAmount) {
-      discountAmount = Number(quote.discountAmount);
+      headerDiscount = Number(quote.discountAmount);
     }
 
     const shippingFee = Number(quote.shippingFee) || 0;
 
-    let taxAmount = Number(quote.taxAmount) || 0;
+    let headerTax = 0;
     if (quote.taxRate && quote.taxRate > 0) {
-      const taxable = Math.max(0, subTotal - discountAmount);
-      taxAmount = (taxable * quote.taxRate) / 100;
+      const taxable = Math.max(0, netSubTotal - headerDiscount);
+      headerTax = (taxable * quote.taxRate) / 100;
+    } else if (quote.taxAmount) {
+      headerTax = Number(quote.taxAmount);
     }
 
-    // Formula: total = subTotal - discount + shippingFee + tax
-    const totalAmount = Math.max(0, subTotal - discountAmount + shippingFee + taxAmount);
+    const totalTaxAmount = Math.round((sumLineTaxes + headerTax) * 100) / 100;
+    const totalDiscount = Math.round((sumLineDiscounts + headerDiscount) * 100) / 100;
+    const totalAmount = Math.max(0, Math.round((netSubTotal - headerDiscount + shippingFee + totalTaxAmount) * 100) / 100);
 
     return {
-      subTotal,
-      discountAmount,
+      subTotal: Math.round(rawSubTotal * 100) / 100,
+      discountAmount: totalDiscount,
       shippingFee,
-      taxAmount,
+      taxAmount: totalTaxAmount,
       totalAmount,
       itemsCount: lines.length,
     };
@@ -173,6 +208,33 @@ export function QuotesPage() {
   };
 
   const handleConvertToOrder = async (quote: QuoteItem) => {
+    if (quote.validUntil && new Date(quote.validUntil) < new Date(new Date().setHours(0, 0, 0, 0))) {
+      toast.error(`Báo giá ${quote.code} đã hết hạn hiệu lực (${quote.validUntil})! Vui lòng gia hạn hoặc tạo bản sửa đổi (Rev ${quote.revision + 1}).`);
+      return;
+    }
+
+    // Pre-conversion stock check
+    if (quote.orderLines && quote.orderLines.length > 0 && products.length > 0) {
+      const shortages: string[] = [];
+      quote.orderLines.forEach((line) => {
+        const prod = products.find(
+          (p) => String(p.id) === String(line.productId) || p.sku === line.sku || p.name === line.productName
+        );
+        if (prod && !(prod as any).allowNegativeStock) {
+          const avail = Number((prod as any).stock ?? prod.onHand ?? 0);
+          if (line.quantity > avail) {
+            shortages.push(`"${line.productName}" (Cần: ${line.quantity}, Khả dụng: ${avail})`);
+          }
+        }
+      });
+      if (shortages.length > 0) {
+        toast.warning(
+          `Cảnh báo tồn kho: Các mặt hàng sau không đủ số lượng tồn: ${shortages.join('; ')}. Đơn hàng vẫn được tạo nhưng cần nhập kho bổ sung!`,
+          { duration: 6000 }
+        );
+      }
+    }
+
     try {
       await salesService.convertQuoteToOrder(quote.id);
       toast.success(`Đã chuyển báo giá ${quote.code} thành Đơn Bán Hàng thành công!`);
@@ -182,6 +244,29 @@ export function QuotesPage() {
       console.error(err);
       toast.error('Không thể chuyển báo giá thành đơn bán hàng.');
     }
+  };
+
+  const handleCreateRevision = (quote: QuoteItem) => {
+    setModalMode('create');
+    setActiveTab('info');
+    const nextMonth = new Date();
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    const nextRev = (Number(quote.revision) || 1) + 1;
+    const baseCode = quote.code.replace(/-R\d+$/, '');
+
+    setEditingQuote({
+      ...quote,
+      id: undefined,
+      code: `${baseCode}-R${nextRev}`,
+      revision: nextRev,
+      status: 'DRAFT',
+      issueDate: new Date().toISOString().split('T')[0],
+      validUntil: nextMonth.toISOString().split('T')[0],
+      orderLines: quote.orderLines ? JSON.parse(JSON.stringify(quote.orderLines)) : [],
+    });
+    setIsModalOpen(true);
+    setSelectedQuote(null);
+    toast.info(`Đang tạo bản sửa đổi Rev ${nextRev} từ báo giá ${quote.code}`);
   };
 
   const handleDownloadPdf = async (quoteId: string) => {
@@ -284,7 +369,22 @@ export function QuotesPage() {
       {
         accessorKey: 'validUntil',
         header: 'Hiệu lực đến',
-        cell: (info) => <span className="text-gray-500 text-sm">{info.getValue() as string}</span>,
+        cell: (info) => {
+          const dateStr = info.getValue() as string;
+          const isExpired = dateStr && new Date(dateStr) < new Date(new Date().setHours(0, 0, 0, 0));
+          return (
+            <div>
+              <span className={`text-sm ${isExpired ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-gray-500'}`}>
+                {dateStr || 'N/A'}
+              </span>
+              {isExpired && (
+                <p className="text-[10px] text-red-500 font-bold flex items-center gap-0.5 mt-0.5">
+                  ⚠ Hết hạn hiệu lực
+                </p>
+              )}
+            </div>
+          );
+        },
       },
       {
         accessorKey: 'status',
@@ -341,6 +441,15 @@ export function QuotesPage() {
                 className="p-1.5 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors shrink-0"
               >
                 <Edit className="w-4 h-4" />
+              </button>
+            )}
+            {canManage && (
+              <button
+                onClick={(e) => { e.stopPropagation(); handleCreateRevision(row.original); }}
+                title="Tạo bản sửa đổi mới (Clone Revision)"
+                className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors shrink-0"
+              >
+                <Layers className="w-4 h-4" />
               </button>
             )}
             {canManage && (
@@ -527,17 +636,44 @@ export function QuotesPage() {
               </div>
             )}
 
+            {/* Expiration warning banner */}
+            {selectedQuote.validUntil && new Date(selectedQuote.validUntil) < new Date(new Date().setHours(0, 0, 0, 0)) && (
+              <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl flex items-center gap-2 text-red-700 dark:text-red-300 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span><strong>Báo giá đã hết hiệu lực:</strong> Báo giá này đã quá hạn ({selectedQuote.validUntil}). Không thể chuyển thành Đơn Bán Hàng. Vui lòng tạo bản sửa đổi (Rev {selectedQuote.revision + 1}).</span>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex flex-col sm:flex-row gap-3">
               {selectedQuote.status === 'ACCEPTED' && (
-                <button
-                  type="button"
-                  onClick={() => handleConvertToOrder(selectedQuote)}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow transition-all text-sm"
-                >
-                  <CheckCircle2 className="w-4 h-4" /> Tạo đơn hàng từ báo giá
-                </button>
+                (() => {
+                  const isExpired = !!(selectedQuote.validUntil && new Date(selectedQuote.validUntil) < new Date(new Date().setHours(0, 0, 0, 0)));
+                  return (
+                    <button
+                      type="button"
+                      disabled={isExpired}
+                      onClick={() => handleConvertToOrder(selectedQuote)}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 font-bold rounded-xl shadow transition-all text-sm ${
+                        isExpired
+                          ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed shadow-none'
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      }`}
+                      title={isExpired ? 'Báo giá đã hết hạn hiệu lực' : 'Tạo đơn hàng từ báo giá'}
+                    >
+                      <CheckCircle2 className="w-4 h-4" /> {isExpired ? 'Đã hết hạn hiệu lực' : 'Tạo đơn hàng từ báo giá'}
+                    </button>
+                  );
+                })()
               )}
+              <button
+                type="button"
+                onClick={() => handleCreateRevision(selectedQuote)}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 font-bold rounded-xl border border-amber-300 dark:border-amber-700 transition-all text-sm cursor-pointer"
+                title="Tạo bản sửa đổi mới từ báo giá này"
+              >
+                <Layers className="w-4 h-4" /> Bản sửa đổi (Rev {Number(selectedQuote.revision || 1) + 1})
+              </button>
               <button
                 type="button"
                 onClick={() => handleMarkAsSent(selectedQuote)}

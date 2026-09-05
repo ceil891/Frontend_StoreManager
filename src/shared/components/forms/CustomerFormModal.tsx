@@ -34,7 +34,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
     reset,
     formState: { errors },
   } = useForm<CustomerFormValues>({
-    resolver: zodResolver(customerFormSchema),
+    resolver: zodResolver(customerFormSchema) as any,
     mode: 'onBlur',
     reValidateMode: 'onChange',
     defaultValues: {
@@ -71,7 +71,7 @@ export const CustomerFormModal: React.FC<CustomerFormModalProps> = ({
       title="👤 Thêm Mới Khách Hàng (Validation Zod + HookForm)"
       width="max-w-2xl"
     >
-      <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-4 text-xs" noValidate>
+      <form onSubmit={handleSubmit(onFormSubmit as any)} className="space-y-4 text-xs" noValidate>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* 1. Họ và Tên */}
           <FormField

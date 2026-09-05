@@ -10,6 +10,7 @@ import { exportToCsv } from '@/shared/utils/exportCsv';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
+import { toast } from 'sonner';
 
 const categoryMap: Record<string, string> = {
   RENTAL: 'Thuê mặt bằng',
@@ -78,34 +79,50 @@ export function OperatingCostsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveCost = (e: React.FormEvent) => {
+  const handleSaveCost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingCost.costCode || !editingCost.costName) return;
-
-    if (modalMode === 'create') {
-      addOperatingCost({
-        costCode: editingCost.costCode || `OPC-2024-${Math.floor(500 + Math.random() * 500)}`,
-        costName: editingCost.costName || 'Chi phí vận hành',
-        category: editingCost.category || 'RENTAL',
-        amount: Number(editingCost.amount) || 0,
-        incurredDate: editingCost.incurredDate || new Date().toISOString().substring(0, 10),
-        branch: editingCost.branch || 'Hội sở chính',
-        branchId: editingCost.branchId || 'BR-001',
-        paymentStatus: editingCost.paymentStatus || 'PENDING',
-        assignedBudget: editingCost.assignedBudget || 'Ngân sách vận hành',
-        authorizedBy: editingCost.authorizedBy || 'Super Admin',
-        description: editingCost.description,
-      });
-    } else if (editingCost.id) {
-      updateOperatingCost(editingCost.id, editingCost);
+    if (!editingCost.costCode || !editingCost.costName) {
+      toast.error('Vui lòng nhập đầy đủ mã và tên chi phí');
+      return;
     }
-    setIsModalOpen(false);
+
+    try {
+      if (modalMode === 'create') {
+        await addOperatingCost({
+          costCode: editingCost.costCode || `OPC-2024-${Math.floor(500 + Math.random() * 500)}`,
+          costName: editingCost.costName || 'Chi phí vận hành',
+          category: editingCost.category || 'RENTAL',
+          amount: Number(editingCost.amount) || 0,
+          incurredDate: editingCost.incurredDate || new Date().toISOString().substring(0, 10),
+          branch: editingCost.branch || 'Hội sở chính',
+          branchId: editingCost.branchId || 'BR-001',
+          paymentStatus: editingCost.paymentStatus || 'PENDING',
+          assignedBudget: editingCost.assignedBudget || 'Ngân sách vận hành',
+          authorizedBy: editingCost.authorizedBy || 'Super Admin',
+          description: editingCost.description,
+        });
+        toast.success('Thêm mới chi phí vận hành thành công!');
+      } else if (editingCost.id) {
+        await updateOperatingCost(editingCost.id, editingCost);
+        toast.success('Cập nhật chi phí vận hành thành công!');
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi lưu chi phí: ' + (err?.message || 'Thất bại'));
+    }
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingCost) return;
-    deleteOperatingCost(deletingCost.id);
-    setDeletingCost(null);
+    try {
+      await deleteOperatingCost(deletingCost.id);
+      toast.success('Xóa khoản chi phí thành công!');
+      setDeletingCost(null);
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi xóa chi phí: ' + (err?.message || 'Thất bại'));
+    }
   };
 
   const columns = useMemo<ColumnDef<OperatingCost>[]>(

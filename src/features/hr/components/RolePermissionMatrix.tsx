@@ -65,7 +65,7 @@ export function RolePermissionMatrix({
   };
 
   const filteredModules = useMemo(() => {
-    let modules = MODULE_GROUPS;
+    let modules: readonly any[] = MODULE_GROUPS;
     if (activeModule) {
       const found = MODULE_GROUPS.filter(g => g.key === activeModule);
       if (found.length > 0) modules = found;

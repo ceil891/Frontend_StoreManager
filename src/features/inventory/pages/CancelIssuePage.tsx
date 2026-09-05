@@ -1,10 +1,11 @@
 import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Eye, AlertCircle, Building2, Calendar, FileText, CheckCircle2, Edit, Trash2, X, User, ImageIcon, RefreshCw } from 'lucide-react';
+import { Plus, Download, Search, Eye, AlertCircle, Building2, Calendar, FileText, CheckCircle2, Edit, Trash2, X, User, ImageIcon, RefreshCw, Ban } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import { exportToCsv } from '@/shared/utils/exportCsv';
 import { useInventoryStore, type CancelIssueRecord } from '../store/inventoryStore';
+import { toast } from 'sonner';
 
 export function CancelIssuePage() {
   const {
@@ -14,6 +15,8 @@ export function CancelIssuePage() {
     addCancelIssue,
     updateCancelIssue,
     deleteCancelIssue,
+    approveCancelIssue,
+    rejectCancelIssue,
     products,
   } = useInventoryStore();
 
@@ -112,9 +115,35 @@ export function CancelIssuePage() {
       }
       setIsFormOpen(false);
     } catch (err: any) {
-      setSaveError(err?.response?.data?.message || 'Có lỗi xảy ra. Vui lòng thử lại.');
+      console.error('Failed to save cancel issue:', err);
+      setSaveError(err?.response?.data?.message || err?.message || 'Có lỗi xảy ra khi lưu phiếu hủy hàng');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleApprove = async (id: string) => {
+    try {
+      await approveCancelIssue(id);
+      toast.success('Đã duyệt phiếu hủy hàng và trừ tồn kho thành công!');
+      if (selectedIssue && selectedIssue.id === id) {
+        setSelectedIssue((prev) => prev ? { ...prev, status: 'APPROVED' } : null);
+      }
+    } catch (err) {
+      toast.error('Lỗi khi duyệt phiếu hủy hàng');
+    }
+  };
+
+  const handleReject = async (id: string) => {
+    const reason = window.prompt('Nhập lý do từ chối phiếu hủy:') || 'Từ chối duyệt';
+    try {
+      await rejectCancelIssue(id, reason);
+      toast.success('Đã từ chối phiếu hủy hàng!');
+      if (selectedIssue && selectedIssue.id === id) {
+        setSelectedIssue((prev) => prev ? { ...prev, status: 'REJECTED' } : null);
+      }
+    } catch (err) {
+      toast.error('Lỗi khi từ chối phiếu hủy hàng');
     }
   };
 
@@ -195,6 +224,24 @@ export function CancelIssuePage() {
         header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
+            {row.original.status === 'PENDING_APPROVAL' && (
+              <>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleApprove(row.original.id); }}
+                  title="Duyệt phiếu hủy"
+                  className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleReject(row.original.id); }}
+                  title="Từ chối"
+                  className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
+                >
+                  <Ban className="w-4 h-4" />
+                </button>
+              </>
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); setSelectedIssue(row.original); }}
               title="Xem chi tiết"
@@ -398,7 +445,27 @@ export function CancelIssuePage() {
               </div>
             )}
 
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex gap-2">
+                {selectedIssue.status === 'PENDING_APPROVAL' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleApprove(selectedIssue.id)}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <CheckCircle2 className="w-4 h-4" /> Duyệt phiếu hủy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleReject(selectedIssue.id)}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <Ban className="w-4 h-4" /> Từ chối
+                    </button>
+                  </>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setSelectedIssue(null)}

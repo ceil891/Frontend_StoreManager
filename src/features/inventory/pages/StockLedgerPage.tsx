@@ -4,9 +4,13 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type StockLedgerEntry } from '../store/inventoryStore';
+import { useAuthStore } from '@/features/auth/store/authStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 
 export function StockLedgerPage() {
   const { stockLedger: data, addStockLedgerEntry, updateStockLedgerEntry, deleteStockLedgerEntry, products, fetchStockLedger, fetchProducts } = useInventoryStore();
+  const currentUser = useAuthStore((s) => s.user);
+  const currentBranch = useBranchStore((s) => s.currentBranch);
 
   useEffect(() => {
     fetchStockLedger();
@@ -28,18 +32,21 @@ export function StockLedgerPage() {
   const filtered = data.filter((item) => {
     // 1. Text search
     let matchesSearch = true;
-    const q = search.toLowerCase();
-    if (q) {
-      matchesSearch = (
-        item.productName.toLowerCase().includes(q) ||
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      matchesSearch =
         item.transactionCode.toLowerCase().includes(q) ||
         item.sku.toLowerCase().includes(q) ||
-        item.location.toLowerCase().includes(q)
-      );
+        item.productName.toLowerCase().includes(q) ||
+        item.loggedBy.toLowerCase().includes(q) ||
+        (item.referenceDoc ? item.referenceDoc.toLowerCase().includes(q) : false);
     }
 
     // 2. Type filter
-    const matchesType = typeFilter === 'all' || item.type === typeFilter;
+    let matchesType = true;
+    if (typeFilter !== 'all') {
+      matchesType = item.type === typeFilter;
+    }
 
     return matchesSearch && matchesType;
   });
@@ -56,8 +63,8 @@ export function StockLedgerPage() {
       unitPrice: firstProduct?.price || 0,
       totalValuation: (firstProduct?.price || 0) * 10,
       runningBalance: (firstProduct?.onHand || 0) + 10,
-      location: firstProduct?.location || 'Kho quận 1',
-      loggedBy: 'Nguyễn minh châu',
+      location: currentBranch?.branchName || firstProduct?.location || 'Kho Chi Nhánh',
+      loggedBy: currentUser?.fullName || currentUser?.name || 'Thủ kho',
       referenceDoc: `REF-${Math.floor(1000 + Math.random() * 9000)}`,
       notes: ''
     });

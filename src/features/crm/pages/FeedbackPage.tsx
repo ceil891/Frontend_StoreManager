@@ -4,6 +4,7 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
+import { axiosClient } from '@/shared/lib/axiosClient';
 import { useCrmStore } from '../store/crmStore';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
@@ -16,7 +17,7 @@ interface CustomerFeedbackRecord {
   customerEmail: string;
   storeLocation: string;
   rating: number; // 1 to 5
-  category: 'PRODUCT_QUALITY' | 'STAFF_SERVICE' | 'STORE_AMBIENCE' | 'CHECKOUT_SPEED' | 'PRICING' | 'GENERAL';
+  category: string;
   title: string;
   comments: string;
   sentiment: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
@@ -25,8 +26,8 @@ interface CustomerFeedbackRecord {
   assignedManager?: string;
   resolutionNotes?: string;
   orderRef?: string;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
-  channel: 'STORE' | 'HOTLINE' | 'WEBSITE' | 'SOCIAL_MEDIA';
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  channel?: 'STORE' | 'HOTLINE' | 'WEBSITE' | 'SOCIAL_MEDIA';
   dueDate?: string;
 }
 
@@ -149,6 +150,9 @@ export function FeedbackPage() {
     if (!editingFeedback.title || !editingFeedback.customerName) return;
 
     const payload = {
+      customerName: editingFeedback.customerName || '',
+      customerPhone: editingFeedback.customerPhone || '',
+      customerEmail: editingFeedback.customerEmail || '',
       rating: editingFeedback.rating || 5,
       comment: editingFeedback.comments || '',
       title: editingFeedback.title || '',
@@ -165,7 +169,7 @@ export function FeedbackPage() {
         toast.success('Cập nhật phản hồi thành công!');
       }
       setIsModalOpen(false);
-      fetchFeedback();
+      fetchFeedbacks();
     } catch (err) {
       console.error('Error saving feedback:', err);
       toast.error('Không thể lưu thông tin phản hồi!');
@@ -175,9 +179,8 @@ export function FeedbackPage() {
   const handleDeleteConfirm = async () => {
     if (!deletingFeedback) return;
     try {
-      await axiosClient.delete(`/crm/feedback/${deletingFeedback.id}`);
+      await deleteFeedback(deletingFeedback.id);
       toast.success(`Đã xóa phiếu phản hồi ${deletingFeedback.feedbackRef}`);
-      setData((prev) => prev.filter((item) => item.id !== deletingFeedback.id));
     } catch (err) {
       console.error('Error deleting feedback:', err);
       toast.error('Không thể xóa phản hồi trên máy chủ');

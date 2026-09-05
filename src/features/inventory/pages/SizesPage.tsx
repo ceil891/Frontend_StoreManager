@@ -1,4 +1,4 @@
-﻿import { Modal } from '@/shared/components/ui/Modal';
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Eye, Edit, Trash2, Search, Ruler, Loader2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
@@ -97,9 +97,14 @@ export function SizesPage() {
       setDeletingSize(null);
       return;
     }
-    await deleteSize(deletingSize.id);
-    toast.success(`Đã xóa kích thước "${deletingSize.sizeName}" thành công!`);
-    setDeletingSize(null);
+    try {
+      await deleteSize(deletingSize.id);
+      toast.success(`Đã xóa kích thước "${deletingSize.sizeName}" thành công!`);
+      setDeletingSize(null);
+    } catch (err: any) {
+      console.error('Lỗi khi xóa kích thước:', err);
+      toast.error('Không thể xóa kích thước: ' + (err?.response?.data?.message || err?.message || 'Kích thước đang được sản phẩm/biến thể sử dụng'));
+    }
   };
 
   const columns = useMemo<ColumnDef<SizeRecord>[]>(

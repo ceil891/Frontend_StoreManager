@@ -3,11 +3,13 @@ import {
   Search, ScanBarcode, UserPlus, CreditCard, Trash2, Plus, Minus, X,
   ArrowLeft, Image as ImageIcon, Gift, Smartphone, Landmark, Banknote,
   CheckCircle2, ShoppingCart as ShoppingCartIcon, Tag, ChevronDown, Clock,
-  type LucideIcon, Loader2, RefreshCw, Layers
+  type LucideIcon, Loader2, RefreshCw, Layers, Printer, ShieldAlert, Keyboard,
+  Percent, FileText, PauseCircle, Calculator, QrCode, Wallet, Receipt
 } from 'lucide-react';
 import { usePosCartStore } from '../store/posCartStore';
 import type { PosProduct } from '../store/posCartStore';
-import { usePosConfigStore } from '../store/posConfigStore';
+import { usePosConfigStore, type PaymentMethodRecord } from '../store/posConfigStore';
+import { usePosSessionStore } from '../store/posSessionStore';
 import { Modal } from '@/shared/components/ui/Modal';
 import { PrintInvoiceModal, type PrintInvoiceData } from '@/shared/components/ui/PrintInvoiceModal';
 import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
@@ -37,15 +39,19 @@ const VOUCHERS: Record<string, { type: 'PERCENT' | 'FLAT'; value: number; minOrd
 
 type DisplayPayment = { id: string; label: string; icon: LucideIcon; isCash: boolean };
 
-function iconForProvider(t: PaymentMethodRecord['providerType']): LucideIcon {
+function iconForProvider(t?: string): LucideIcon {
   switch (t) {
     case 'CASH_DRAWER':
+    case 'CASH':
       return Banknote;
     case 'CREDIT_CARD_GATEWAY':
+    case 'CARD':
       return CreditCard;
     case 'BANK_TRANSFER_QR':
+    case 'BANK_TRANSFER':
       return Landmark;
     case 'QR_EWALLET':
+    case 'E_WALLET':
       return Smartphone;
     case 'BUY_NOW_PAY_LATER':
       return CreditCard;
@@ -107,6 +113,11 @@ export function PosTerminalPage() {
     setUsedPoints,
     cashGiven,
     setCashGiven,
+    orderDiscountType,
+    orderDiscountValue,
+    orderNote,
+    setOrderDiscount,
+    setOrderNote,
   } = usePosCartStore();
 
   const selectedPaymentId = usePosCartStore((s) => s.selectedPaymentId);
@@ -115,7 +126,7 @@ export function PosTerminalPage() {
   const fetchPaymentMethods = usePosConfigStore((s) => s.fetchPaymentMethods);
   const addSaleOrder = useSalesStore((s) => s.addSaleOrder);
   const { products, fetchProducts, categories, fetchCategories, combos, fetchCombos } = useInventoryStore();
-  const { customers, fetchCustomers, addCustomer } = useCrmStore();
+  const { customers, fetchCustomers, addCustomer, isCustomerCreditBlocked } = useCrmStore();
   const { branches, fetchBranches } = useBranchStore();
 
   const [isSyncing, setIsSyncing] = useState(false);
@@ -173,11 +184,29 @@ export function PosTerminalPage() {
     };
   }, [branches, user, selectedPosBranchId]);
 
+  // POS Sessions link
+  const sessions = usePosSessionStore((s) => s.sessions);
+  const fetchSessions = usePosSessionStore((s) => s.fetchSessions);
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
+  const activeSession = useMemo(() => {
+    // 1. Ưu tiên ca OPEN của chi nhánh đang chọn
+    const branchMatch = sessions.find(
+      (s) => s.status === 'OPEN' && s.branchId && String(s.branchId) === String(activeBranchId)
+    );
+    if (branchMatch) return branchMatch;
+
+    // 2. Fallback: Ca OPEN không phân định chi nhánh hoặc ca mở mới nhất
+    return sessions.find((s) => s.status === 'OPEN') || null;
+  }, [sessions, activeBranchId]);
+
   // Branch stock mapping for POS
   const [branchStockMap, setBranchStockMap] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!activeBranchId) return;
+    fetchPaymentMethods(activeBranchId);
     axiosClient.get<any, any>(`/inventories/branches/${activeBranchId}/inventory`)
       .then((res) => {
         const list: any[] = Array.isArray(res) ? res : (res?.data || res?.content || res || []);
@@ -213,12 +242,18 @@ export function PosTerminalPage() {
     const singleList = (products || [])
       .filter((p) => p.status !== 'INACTIVE' && (p as any).isActive !== false)
       .map((p) => {
-        const cat = (categories || []).find((c) => c.categoryName === p.category);
-        const tc = (cat?.taxClass || 'VAT_8') as string;
-        let rate = 0.08;
-        if (tc === 'VAT_5') rate = 0.05;
-        else if (tc === 'VAT_10') rate = 0.10;
-        else if (tc === 'EXEMPT') rate = 0.00;
+        const cat = (categories || []).find((c) => 
+          (c.categoryName && p.category && c.categoryName.trim().toLowerCase() === p.category.trim().toLowerCase()) ||
+          (p.categoryId && String(c.id) === String(p.categoryId))
+        );
+        const tc = ((p as any).taxClass || cat?.taxClass || 'VAT_8') as string;
+        let rate = (p as any).vatRate !== undefined ? Number((p as any).vatRate) : 0.08;
+        if ((p as any).vatRate === undefined) {
+          if (tc === 'VAT_0' || tc === 'EXEMPT') rate = 0.00;
+          else if (tc === 'VAT_5') rate = 0.05;
+          else if (tc === 'VAT_8') rate = 0.08;
+          else if (tc === 'VAT_10') rate = 0.10;
+        }
         const barcode = p.barcodes && p.barcodes.length > 0 ? p.barcodes[0] : (p.sku || String(p.id));
 
         let branchSpecificStock = 0;
@@ -230,13 +265,8 @@ export function PosTerminalPage() {
           branchSpecificStock = Number(p.branchStocks[activeBranchId]);
         } else if (p.onHand !== undefined && Number(p.onHand) > 0) {
           branchSpecificStock = Number(p.onHand);
-        } else {
-          branchSpecificStock = 0;
         }
-
-        const pKey = String(p.id);
-        const deducted = (posDeductionsMap[pKey] ?? (p.sku ? posDeductionsMap[p.sku] : 0) ?? 0);
-        const stock = Math.max(0, branchSpecificStock - deducted);
+        const stock = Math.max(0, branchSpecificStock);
 
         return {
           id: String(p.id),
@@ -338,15 +368,42 @@ export function PosTerminalPage() {
   }, [categories, productsList]);
 
   const displayPayments = useMemo<DisplayPayment[]>(() => {
-    const active = paymentMethodsFromConfig.filter((m) => m.status === 'ACTIVE');
-    if (active.length === 0) return FALLBACK_PAYMENTS;
+    // 1. Lọc phương thức thanh toán ACTIVE và áp dụng cho chi nhánh hiện tại
+    const active = paymentMethodsFromConfig.filter((m) => {
+      if (m.status !== 'ACTIVE') return false;
+      // Nếu phương thức cấu hình riêng theo chi nhánh (applyToAllBranches = false)
+      if (m.applyToAllBranches === false) {
+        if (!m.branchIds || m.branchIds.length === 0) return false;
+        return m.branchIds.some((bId) => String(bId) === String(activeBranchId));
+      }
+      return true;
+    });
+
+    // 2. Safeguard chống quên cấu hình cho chi nhánh mới:
+    // Nếu chi nhánh này chưa được cấu hình phương thức nào, tự động fallback về Tiền mặt
+    // để thu ngân vẫn thu tiền và xuất hóa đơn được, không bao giờ bị nghẽn thanh toán!
+    if (active.length === 0) {
+      const cashMethod = paymentMethodsFromConfig.find(
+        (m) => m.providerType === 'CASH_DRAWER' || (m.providerType as any) === 'CASH'
+      );
+      if (cashMethod) {
+        return [{
+          id: String(cashMethod.id),
+          label: cashMethod.methodName,
+          icon: iconForProvider(cashMethod.providerType),
+          isCash: true,
+        }];
+      }
+      return FALLBACK_PAYMENTS;
+    }
+
     return active.map((m) => ({
       id: String(m.id),
-      label: m.methodName.length > 40 ? `${m.methodName.slice(0, 38)}…` : m.methodName,
+      label: m.methodName,
       icon: iconForProvider(m.providerType),
-      isCash: m.providerType === 'CASH_DRAWER',
+      isCash: m.providerType === 'CASH_DRAWER' || (m.providerType as any) === 'CASH',
     }));
-  }, [paymentMethodsFromConfig]);
+  }, [paymentMethodsFromConfig, activeBranchId]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('Tất cả');
@@ -372,9 +429,8 @@ export function PosTerminalPage() {
     e.preventDefault();
     if (isSubmittingQuickCustomer) return;
     setIsSubmittingQuickCustomer(true);
-    try {
-      const cleanName = newCustomerName.trim();
-      const cleanPhone = newCustomerPhoneInput.trim().replace(/\s+/g, '');
+    const cleanName = newCustomerName.trim();
+    const cleanPhone = newCustomerPhoneInput.trim().replace(/\s+/g, '');
 
     if (!cleanName) {
       toast.error('Vui lòng nhập Họ & Tên khách hàng!');
@@ -417,7 +473,7 @@ export function PosTerminalPage() {
     };
 
     try {
-      await addCustomer({
+      const saved = await addCustomer({
         customerCode: customerId,
         name: cleanName,
         phone: cleanPhone,
@@ -434,22 +490,27 @@ export function PosTerminalPage() {
         avatarUrl: '',
       });
       await fetchCustomers();
+      const actualId = (saved && saved.id) ? String(saved.id) : customerId;
+      setActiveCustomer({
+        id: actualId,
+        name: saved?.name || cleanName,
+        phone: saved?.phone || cleanPhone,
+        points: saved?.loyaltyPoints || 0,
+      });
+      setUsedPoints(0);
+      setIsQuickCustomerOpen(false);
+      toast.success(`Đã tạo thành công khách hàng "${saved?.name || cleanName}" & lưu vào CRM hệ thống!`);
+      // Reset form
+      setNewCustomerName('');
+      setNewCustomerShortName('');
+      setNewCustomerPhoneInput('');
+      setNewCustomerEmail('');
+      setNewCustomerTaxCode('');
+      setNewCustomerNotes('');
+      setNewCustomerAddress({ province: '', district: '', ward: '', addressDetail: '' });
     } catch (err) {
       console.error('Failed to persist customer to CRM backend:', err);
-    }
-
-    setActiveCustomer(newCust);
-    setUsedPoints(0);
-    setIsQuickCustomerOpen(false);
-    toast.success(`Đã tạo thành công khách hàng "${newCust.name}" & lưu vào CRM hệ thống!`);
-    // Reset form
-    setNewCustomerName('');
-    setNewCustomerShortName('');
-    setNewCustomerPhoneInput('');
-    setNewCustomerEmail('');
-    setNewCustomerTaxCode('');
-    setNewCustomerNotes('');
-    setNewCustomerAddress({ province: '', district: '', ward: '', addressDetail: '' });
+      toast.error('Không thể lưu khách hàng vào hệ thống.');
     } finally {
       setIsSubmittingQuickCustomer(false);
     }
@@ -500,18 +561,17 @@ export function PosTerminalPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Keyboard shortcuts (F2 to focus search box)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F2') {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-        searchInputRef.current?.select();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  // POS Shortcuts state
+  const [isShortcutsGuideOpen, setIsShortcutsGuideOpen] = useState(false);
+
+  // Order Discount Modal State
+  const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+  const [tempDiscountType, setTempDiscountType] = useState<'PERCENT' | 'FLAT'>('PERCENT');
+  const [tempDiscountValue, setTempDiscountValue] = useState<string>('');
+
+  // Order Note Modal State
+  const [isOrderNoteModalOpen, setIsOrderNoteModalOpen] = useState(false);
+  const [tempOrderNote, setTempOrderNote] = useState<string>('');
 
   const getShift = (date: Date) => {
     const hour = date.getHours();
@@ -521,11 +581,27 @@ export function PosTerminalPage() {
   };
 
   useEffect(() => {
-    const ids = displayPayments.map((d) => d.id);
-    setSelectedPaymentId((prev) => (ids.includes(prev) ? prev : ids[0] ?? FALLBACK_PAYMENTS[0].id));
+    const ids = displayPayments.map((d) => String(d?.id ?? ''));
+    const currId = usePosCartStore.getState().selectedPaymentId;
+    if (!ids.includes(String(currId))) {
+      setSelectedPaymentId(displayPayments[0]?.id ?? FALLBACK_PAYMENTS[0].id);
+    }
   }, [displayPayments]);
 
-  const selectedPayment = displayPayments.find((d) => d.id === selectedPaymentId) ?? displayPayments[0];
+  useEffect(() => {
+    if (activeCustomer && isCustomerCreditBlocked(activeCustomer.id)) {
+      const curr = displayPayments.find(p => String(p.id) === String(selectedPaymentId));
+      if (curr && (curr.label.toLowerCase().includes('nợ') || curr.label.toLowerCase().includes('debt'))) {
+        const cashPay = displayPayments.find(p => p.isCash) || displayPayments[0];
+        if (cashPay) {
+          setSelectedPaymentId(cashPay.id);
+          toast.warning(`Khách hàng "${activeCustomer.name}" đang bị TẠM KHÓA MUA NỢ! Đã chuyển về phương thức "${cashPay.label}".`);
+        }
+      }
+    }
+  }, [activeCustomer, isCustomerCreditBlocked, displayPayments, selectedPaymentId, setSelectedPaymentId]);
+
+  const selectedPayment = displayPayments.find((d) => String(d?.id) === String(selectedPaymentId)) ?? displayPayments[0];
   const isCashPayment = selectedPayment?.isCash ?? true;
 
   const stockById = useMemo(() => {
@@ -536,10 +612,75 @@ export function PosTerminalPage() {
 
   const getStock = (id: string) => stockById.get(id) ?? 0;
 
-  const handleAddProduct = (product: (PosProduct & { stock: number })) => {
+  const [variantPickerProduct, setVariantPickerProduct] = useState<(PosProduct & { stock: number }) | null>(null);
+  const [productVariants, setProductVariants] = useState<any[]>([]);
+  const [isLoadingVariants, setIsLoadingVariants] = useState(false);
+
+  const handleAddProduct = async (product: (PosProduct & { stock: number })) => {
+    if (product.category === 'Combo / Gói sản phẩm') {
+      const inCart = items.find((i) => i.id === product.id)?.quantity ?? 0;
+      if (inCart >= product.stock) return;
+      addItem(product);
+      return;
+    }
+
+    try {
+      setIsLoadingVariants(true);
+      const res = await axiosClient.get<any, any>(`/catalog/variants?productId=${product.id}`);
+      const vList: any[] = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+      if (vList && vList.length > 1) {
+        setVariantPickerProduct(product);
+        setProductVariants(vList);
+        return;
+      } else if (vList && vList.length === 1) {
+        const v = vList[0];
+        const vId = String(v.id);
+        const cartId = `${product.id}_var_${vId}`;
+        const inCart = items.find((i) => i.id === cartId || i.id === product.id)?.quantity ?? 0;
+        if (inCart >= product.stock) return;
+        addItem({
+          ...product,
+          id: cartId,
+          productVariantId: v.id,
+          price: v.price && Number(v.price) > 0 ? Number(v.price) : product.price,
+          sku: v.sku || product.sku,
+          variantName: v.variantDescription || v.variantCode || v.sku,
+        });
+        return;
+      }
+    } catch {
+      // fallback if API has issue
+    } finally {
+      setIsLoadingVariants(false);
+    }
+
     const inCart = items.find((i) => i.id === product.id)?.quantity ?? 0;
     if (inCart >= product.stock) return;
     addItem(product);
+  };
+
+  const handleSelectVariant = (variant: any) => {
+    if (!variantPickerProduct) return;
+    const vId = String(variant.id);
+    const cartItemId = `${variantPickerProduct.id}_var_${vId}`;
+    const inCart = items.find((i) => i.id === cartItemId)?.quantity ?? 0;
+    const maxStock = variant.stock !== undefined ? Number(variant.stock) : variantPickerProduct.stock;
+    if (inCart >= maxStock) {
+      toast.warning('Số lượng trong giỏ đã đạt giới hạn tồn kho của biến thể này');
+      return;
+    }
+    const variantDesc = variant.variantDescription || variant.variantCode || variant.sku || 'Biến thể';
+    addItem({
+      ...variantPickerProduct,
+      id: cartItemId,
+      productVariantId: variant.id,
+      name: `${variantPickerProduct.name} (${variantDesc})`,
+      price: variant.price && Number(variant.price) > 0 ? Number(variant.price) : variantPickerProduct.price,
+      sku: variant.sku || variantPickerProduct.sku,
+      variantName: variantDesc,
+    });
+    setVariantPickerProduct(null);
+    setProductVariants([]);
   };
 
   const handleInc = (id: string) => {
@@ -567,8 +708,8 @@ export function PosTerminalPage() {
       const matchCat = activeCategory === 'Tất cả' || p.category === activeCategory;
       const matchQ =
         !q ||
-        p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q) ||
+        (p.name && p.name.toLowerCase().includes(q)) ||
+        (p.sku && p.sku.toLowerCase().includes(q)) ||
         (p.barcode && p.barcode.toLowerCase().includes(q));
       return matchCat && matchQ;
     });
@@ -580,9 +721,9 @@ export function PosTerminalPage() {
     const q = customerPhone.trim().toLowerCase();
     if (!q) return;
     const found = customers.find(c =>
-      c.phone.includes(q) ||
-      (c.customerCode && c.customerCode.toLowerCase().includes(q)) ||
-      (c.name && c.name.toLowerCase().includes(q))
+      (c.phone && String(c.phone).includes(q)) ||
+      (c.customerCode && String(c.customerCode).toLowerCase().includes(q)) ||
+      (c.name && String(c.name).toLowerCase().includes(q))
     );
     if (found) {
       setActiveCustomer({
@@ -716,7 +857,16 @@ export function PosTerminalPage() {
       : appliedVoucher.value;
   }
   voucherDiscount = Math.min(voucherDiscount, subtotal);
-  const taxableAmount = Math.max(0, subtotal - voucherDiscount - pointsDiscount);
+
+  // Chiết khấu đơn hàng (% hoặc số tiền trực tiếp)
+  let orderDiscountAmount = 0;
+  if (orderDiscountValue > 0) {
+    orderDiscountAmount = orderDiscountType === 'PERCENT'
+      ? Math.round(subtotal * (orderDiscountValue / 100))
+      : Math.min(orderDiscountValue, subtotal);
+  }
+  const totalDiscount = voucherDiscount + pointsDiscount + orderDiscountAmount;
+  const taxableAmount = Math.max(0, subtotal - totalDiscount);
   
   // Calculate VAT dynamically based on each item's tax rate
   const vatAmount = items.reduce((acc, item) => {
@@ -753,8 +903,17 @@ export function PosTerminalPage() {
   const cashGivenNum = parseFloat(cashGiven.replace(/\./g, '')) || 0;
   const changeAmount = Math.max(0, cashGivenNum - totalAmountToPay);
 
+  // Danh sách mệnh giá tờ tiền Polymer Việt Nam chuẩn
+  const polymerDenominations = useMemo(() => {
+    const base = [50000, 100000, 200000, 500000];
+    if (totalAmountToPay > 500000) {
+      return [...base, 1000000, 2000000];
+    }
+    return base;
+  }, [totalAmountToPay]);
+
   // ── Confirm payment ──────────────────────────────────────────────────────────
-  const handleConfirmPayment = () => {
+  const handleConfirmPayment = (directImmediate = false, withPrint = true) => {
     try {
       const user = useAuthStore.getState().user;
       const pay = displayPayments.find((d) => String(d?.id ?? '') === String(selectedPaymentId ?? ''));
@@ -784,19 +943,22 @@ export function PosTerminalPage() {
         ? activeCustomer.name
         : `${cashierName} (Khách vãng lai)`;
 
+      const effectiveCashGiven = cashGivenNum > 0 ? cashGivenNum : totalAmountToPay;
+      const effectiveChange = Math.max(0, effectiveCashGiven - totalAmountToPay);
+
       const performOrderCreation = async () => {
         try {
           await addSaleOrder({
             code,
             orderCode: code,
             orderDate: new Date().toISOString(),
-            customerId: Number(activeCustomer?.id) || 1,
+            customerId: activeCustomer?.id && !isNaN(Number(activeCustomer.id)) ? Number(activeCustomer.id) : null,
             branchId: Number(branchId) || 1,
             customerName: customerDisplayName,
             date: dateStr,
             subTotal: Math.round(subtotal),
             taxAmount: Math.round(vatAmount),
-            discountAmount: Math.round(voucherDiscount + pointsDiscount),
+            discountAmount: Math.round(voucherDiscount + pointsDiscount + orderDiscountAmount),
             totalAmount: Math.round(totalAmountToPay),
             status: 'COMPLETED',
             paymentStatus: 'PAID',
@@ -809,14 +971,26 @@ export function PosTerminalPage() {
             currency: 'VND',
             itemsSummary,
             orderLines,
-            details: items.map(i => ({
-              productVariantId: Number(i.id) || 1,
-              quantity: Number(i.quantity) || 1,
-              unitPriceSnapshot: Number(i.price) || 0
-            })),
-            amountTendered: isCashPayment ? Math.round(cashGivenNum) : Math.round(totalAmountToPay),
-            changeAmount: isCashPayment ? Math.round(changeAmount) : 0,
-            shiftId: deriveShiftId(now),
+            note: orderNote || undefined,
+            details: items.map(i => {
+              const p = productsList.find((x) => x.id === i.id);
+              const itemRate = p?.taxRate ?? 0.08;
+              const itemSubtotal = (i.price * i.quantity) - (i.discount || 0);
+              const discountRatio = subtotal > 0 ? taxableAmount / subtotal : 1;
+              const itemTax = Math.round(itemSubtotal * discountRatio * itemRate);
+              return {
+                productVariantId: (i as any).productVariantId ? Number((i as any).productVariantId) : (i.id.includes('_var_') ? Number(i.id.split('_var_')[1]) : (Number(i.id) || 1)),
+                quantity: Number(i.quantity) || 1,
+                unitPriceSnapshot: Number(i.price) || 0,
+                taxRate: itemRate,
+                taxAmount: itemTax,
+                discountAmount: Number(i.discount) || 0,
+              };
+            }),
+            amountTendered: isCashPayment ? Math.round(effectiveCashGiven) : Math.round(totalAmountToPay),
+            changeAmount: isCashPayment ? Math.round(effectiveChange) : 0,
+            shiftId: activeSession ? activeSession.sessionCode : deriveShiftId(now),
+            posSessionId: activeSession ? Number(activeSession.id) : null,
             promoCodeApplied: appliedVoucher?.code,
             paymentMethodId: selectedPaymentConfig ? Number(selectedPaymentConfig.id) : null,
             paymentMethodCode: selectedPaymentConfig ? selectedPaymentConfig.methodCode : null,
@@ -927,32 +1101,45 @@ export function PosTerminalPage() {
             createdByName: cashierName,
             subTotal: Math.round(subtotal),
             taxAmount: Math.round(vatAmount),
-            discountAmount: Math.round(voucherDiscount + pointsDiscount),
+            discountAmount: Math.round(voucherDiscount + pointsDiscount + orderDiscountAmount),
             totalAmount: Math.round(totalAmountToPay),
-            items: items.map((i) => ({
-              sku: String(i.sku || i.id),
-              name: i.name,
-              quantity: i.quantity,
-              price: i.price,
-              total: Math.round(i.quantity * i.price),
-            })),
+            notes: orderNote || undefined,
+            items: items.map((i) => {
+              const p = productsList.find((x) => x.id === i.id);
+              const itemRate = p?.taxRate ?? 0.08;
+              const itemSubtotal = (i.price * i.quantity) - (i.discount || 0);
+              const discountRatio = subtotal > 0 ? taxableAmount / subtotal : 1;
+              const itemTax = Math.round(itemSubtotal * discountRatio * itemRate);
+              return {
+                sku: String(i.sku || i.id),
+                name: i.name,
+                unit: (i as any).unit || 'Cái',
+                quantity: i.quantity,
+                price: i.price,
+                discount: i.discount,
+                taxRate: itemRate,
+                taxAmount: itemTax,
+                total: Math.round(i.quantity * i.price - (i.discount || 0)),
+              };
+            }),
           };
 
           setCompletedPrintInvoice(printInvoicePayload);
-          setPaymentState('success');
-
-          setTimeout(() => {
+          setPaymentState(directImmediate ? 'idle' : 'success');
+          toast.success(`Thanh toán thành công đơn hàng ${code}!`);
+          if (withPrint) {
+            setIsPrintInvoiceOpen(true);
+          }
+          if (directImmediate) {
             if (tabs.length > 1) {
               closeTab(activeTabId);
             } else {
               clearCart();
             }
             setVoucherError('');
-            setPaymentState('idle');
             setIsPaymentOpen(false);
             setCurrentOrderCode('');
-            toast.success(`Thanh toán thành công đơn hàng ${code}!`);
-          }, 1000);
+          }
         } catch (err: any) {
           console.error('Lỗi khi thực hiện lưu đơn hàng POS:', err);
           toast.error(err?.message || 'Có lỗi xảy ra khi tạo đơn hàng');
@@ -961,9 +1148,13 @@ export function PosTerminalPage() {
       };
 
       onCompleteRef.current = performOrderCreation;
-      setPaymentState('processing');
-      if (isCashPayment) {
-        paymentTimerRef.current = setTimeout(performOrderCreation, 1200);
+      if (directImmediate) {
+        performOrderCreation();
+      } else {
+        setPaymentState('processing');
+        if (isCashPayment) {
+          paymentTimerRef.current = setTimeout(performOrderCreation, 1200);
+        }
       }
     } catch (globalErr: any) {
       console.error('Crash Handler POS Checkout:', globalErr);
@@ -972,31 +1163,169 @@ export function PosTerminalPage() {
     }
   };
 
-  // ── Quick cash buttons ────────────────────────────────────────────────────────
-  const QUICK_CASH = [50000, 100000, 200000, 500000];
+  const handleDirectCashCheckout = (withPrint = true) => {
+    if (items.length === 0) {
+      toast.warning('Giỏ hàng đang trống! Vui lòng chọn sản phẩm trước.');
+      return;
+    }
+
+    if (isCashPayment) {
+      if (!cashGiven || cashGivenNum === 0) {
+        setCashGiven(totalAmountToPay.toLocaleString('vi-VN'));
+      } else if (cashGivenNum < totalAmountToPay) {
+        toast.warning(`Khách đưa chưa đủ tiền mặt! Còn thiếu ${fmt(totalAmountToPay - cashGivenNum)}.`);
+        return;
+      }
+    }
+
+    handleConfirmPayment(true, withPrint);
+  };
+
+  const handlePrePrintBill = () => {
+    if (items.length === 0) {
+      toast.warning('Giỏ hàng đang trống, không thể in tạm tính!');
+      return;
+    }
+    const user = useAuthStore.getState().user;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
+    const cashierName = user?.name || 'Thu ngân POS';
+    const customerDisplayName = activeCustomer ? activeCustomer.name : 'Khách vãng lai';
+
+    const printInvoicePayload: PrintInvoiceData = {
+      documentTitle: 'PHIẾU TẠM TÍNH (Chưa thanh toán)',
+      code,
+      date: dateStr,
+      customerOrSupplierName: customerDisplayName,
+      phone: activeCustomer?.phone || 'N/A',
+      branchName: activeBranchName || 'Chi nhánh POS RetailHub',
+      createdByName: cashierName,
+      subTotal: Math.round(subtotal),
+      taxAmount: Math.round(vatAmount),
+      discountAmount: Math.round(voucherDiscount + pointsDiscount + orderDiscountAmount),
+      totalAmount: Math.round(totalAmountToPay),
+      notes: orderNote ? `Ghi chú: ${orderNote}` : 'Quý khách vui lòng kiểm tra kỹ số lượng & giá tiền trước khi thanh toán.',
+      items: items.map((i) => {
+        const p = productsList.find((x) => x.id === i.id);
+        const itemRate = p?.taxRate ?? 0.08;
+        const itemSubtotal = (i.price * i.quantity) - (i.discount || 0);
+        const discountRatio = subtotal > 0 ? taxableAmount / subtotal : 1;
+        const itemTax = Math.round(itemSubtotal * discountRatio * itemRate);
+        return {
+          sku: String(i.sku || i.id),
+          name: i.name,
+          unit: (i as any).unit || 'Cái',
+          quantity: i.quantity,
+          price: i.price,
+          discount: i.discount,
+          taxRate: itemRate,
+          taxAmount: itemTax,
+          total: Math.round(i.quantity * i.price - (i.discount || 0)),
+        };
+      }),
+    };
+
+    setCompletedPrintInvoice(printInvoicePayload);
+    setIsPrintInvoiceOpen(true);
+  };
+
+  // Enhanced Keyboard shortcuts (F1/F2: search, F3: customer, F4: discount, F6: note, F7: pre-print, F8: QR/modal, F9: checkout & print, Esc: close)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F1' || e.key === 'F2') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      } else if (e.key === 'F3') {
+        e.preventDefault();
+        setIsQuickCustomerOpen(true);
+      } else if (e.key === 'F4') {
+        e.preventDefault();
+        setTempDiscountType(orderDiscountType);
+        setTempDiscountValue(orderDiscountValue > 0 ? String(orderDiscountValue) : '');
+        setIsDiscountModalOpen(true);
+      } else if (e.key === 'F6') {
+        e.preventDefault();
+        setTempOrderNote(orderNote);
+        setIsOrderNoteModalOpen(true);
+      } else if (e.key === 'F7') {
+        e.preventDefault();
+        handlePrePrintBill();
+      } else if (e.key === 'F8') {
+        e.preventDefault();
+        if (items.length > 0) {
+          const now = new Date();
+          const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
+          setCurrentOrderCode(code);
+          setIsPaymentOpen(true);
+        } else {
+          toast.warning('Giỏ hàng đang trống! Vui lòng chọn sản phẩm trước.');
+        }
+      } else if (e.key === 'F9') {
+        e.preventDefault();
+        if (isPaymentOpen && paymentState === 'idle') {
+          handleConfirmPayment(false, true);
+        } else if (!isPaymentOpen && items.length > 0) {
+          if (isCashPayment) {
+            handleDirectCashCheckout(true);
+          } else {
+            const now = new Date();
+            const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
+            setCurrentOrderCode(code);
+            setIsPaymentOpen(true);
+          }
+        }
+      } else if (e.key === 'Escape') {
+        if (isShortcutsGuideOpen) {
+          setIsShortcutsGuideOpen(false);
+        } else if (isDiscountModalOpen) {
+          setIsDiscountModalOpen(false);
+        } else if (isOrderNoteModalOpen) {
+          setIsOrderNoteModalOpen(false);
+        } else if (isPaymentOpen && paymentState === 'idle') {
+          setIsPaymentOpen(false);
+        } else if (isQuickCustomerOpen) {
+          setIsQuickCustomerOpen(false);
+        } else {
+          searchInputRef.current?.blur();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    items.length, isPaymentOpen, paymentState, isShortcutsGuideOpen,
+    isQuickCustomerOpen, isDiscountModalOpen, isOrderNoteModalOpen,
+    isCashPayment, cashGiven, cashGivenNum, totalAmountToPay, orderDiscountType,
+    orderDiscountValue, orderNote
+  ]);
+
+
 
   return (
     <div className="flex h-screen bg-gray-100 dark:bg-gray-900 overflow-hidden font-sans">
 
       {/* ═══ LEFT PANEL: Products ═══ */}
-      <div className="flex flex-col w-[68%] h-full">
+      <div className="flex flex-col w-[64%] h-full">
         {/* Header */}
         <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 justify-between shrink-0 gap-4">
           <div className="flex items-center gap-3 shrink-0">
-            <Link to="/" className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors">
+            <Link to="/" className="h-9 w-9 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors shrink-0">
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center shrink-0 shadow-xs">
                 <ShoppingCartIcon className="w-4 h-4 text-white" />
               </div>
-              <h1 className="text-lg font-black text-gray-900 dark:text-white tracking-tight hidden sm:block">RetailHub POS</h1>
+              <h1 className="text-base font-black text-gray-900 dark:text-white tracking-tight hidden sm:block">RetailHub POS</h1>
             </div>
           </div>
 
           {/* Search bar */}
           <div className="flex-1 max-w-lg">
-            <div className="relative">
+            <div className="relative flex items-center">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="h-4 w-4 text-gray-400" />
               </div>
@@ -1006,16 +1335,40 @@ export function PosTerminalPage() {
                 placeholder="Nhập tên sản phẩm, SKU hoặc quét Barcode..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="block w-full pl-9 pr-16 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all shadow-sm"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && searchQuery.trim()) {
+                    e.preventDefault();
+                    const q = searchQuery.trim().toLowerCase();
+                    const matched = filteredProducts.find(
+                      p => (p.barcode && p.barcode.toLowerCase() === q) || (p.sku && p.sku.toLowerCase() === q)
+                    ) || filteredProducts[0];
+                    if (matched) {
+                      handleAddProduct(matched);
+                      setSearchQuery('');
+                    }
+                  }
+                }}
+                className="h-9 block w-full pl-9 pr-16 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-xs transition-all shadow-xs outline-none"
               />
               <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center gap-1.5 pointer-events-none">
                 <span className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono font-bold bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 rounded border border-gray-300 dark:border-gray-500">
-                  F2
+                  F1/F2
                 </span>
                 <ScanBarcode className="h-4 w-4 text-emerald-600 dark:text-emerald-400 animate-pulse" />
               </div>
             </div>
           </div>
+
+          {/* Shortcuts Cheatsheet Button */}
+          <button
+            type="button"
+            onClick={() => setIsShortcutsGuideOpen(true)}
+            title="Xem danh sách phím tắt thu ngân"
+            className="h-9 flex items-center gap-1.5 px-3 text-xs font-bold rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600 transition-all shrink-0 cursor-pointer shadow-xs"
+          >
+            <Keyboard className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Phím tắt</span>
+          </button>
 
           {/* Sync Data Button */}
           <button
@@ -1023,49 +1376,68 @@ export function PosTerminalPage() {
             onClick={handleSyncPosData}
             disabled={isSyncing}
             title="Đồng bộ lại danh mục sản phẩm & combo từ máy chủ"
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-all shadow-xs shrink-0 cursor-pointer"
+            className="h-9 flex items-center gap-1.5 px-3 text-xs font-bold rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-all shadow-xs shrink-0 cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">{isSyncing ? 'Đang tải...' : 'Đồng bộ dữ liệu'}</span>
+            <span className="hidden sm:inline">{isSyncing ? 'Đang tải...' : 'Đồng bộ'}</span>
           </button>
 
-          <div className="text-right shrink-0 hidden lg:flex flex-col items-end">
-            <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-0.5">
-              <Clock className="w-3.5 h-3.5" />
-              <span>{currentTime.toLocaleDateString('vi-VN')} {currentTime.toLocaleTimeString('vi-VN')}</span>
+          {/* Right Header Info: Chi nhánh, Ca làm việc, Đồng hồ thời gian thực — Thẳng hàng 100% */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Chi nhánh POS Dropdown */}
+            <div className="h-9 flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 px-2.5 rounded-xl text-xs font-bold shadow-xs">
+              <span className="hidden sm:inline">💻 POS 01 •</span>
+              {canChangeBranch ? (
+                <select
+                  value={activeBranchId || ''}
+                  onChange={(e) => {
+                    setSelectedPosBranchId(e.target.value);
+                    const bName = branches.find(b => String(b.id) === e.target.value)?.name || e.target.value;
+                    toast.info(`Đã chuyển kho POS sang: ${bName}`);
+                  }}
+                  className="bg-transparent font-bold outline-none cursor-pointer text-indigo-900 dark:text-indigo-200 text-xs"
+                >
+                  {branches.length > 0 ? (
+                    branches.map((b) => (
+                      <option key={b.id} value={String(b.id)} className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                        {b.name} ({b.branchCode || `CN-${b.id}`})
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">Chi nhánh chính RetailHub</option>
+                  )}
+                </select>
+              ) : (
+                <span className="font-bold text-indigo-900 dark:text-indigo-200 text-xs">
+                  {activeBranchName}
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-lg text-[11px] font-bold shadow-xs">
-                <span className="hidden sm:inline">💻 POS 01 •</span>
-                {canChangeBranch ? (
-                  <select
-                    value={activeBranchId || ''}
-                    onChange={(e) => {
-                      setSelectedPosBranchId(e.target.value);
-                      const bName = branches.find(b => String(b.id) === e.target.value)?.name || e.target.value;
-                      toast.info(`Đã chuyển kho POS sang: ${bName}`);
-                    }}
-                    className="bg-transparent font-bold outline-none cursor-pointer text-indigo-900 dark:text-indigo-200"
-                  >
-                    {branches.length > 0 ? (
-                      branches.map((b) => (
-                        <option key={b.id} value={String(b.id)} className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
-                          {b.name} ({b.branchCode || `CN-${b.id}`})
-                        </option>
-                      ))
-                    ) : (
-                      <option value="">-- Chưa có chi nhánh --</option>
-                    )}
-                  </select>
-                ) : (
-                  <span className="font-bold text-indigo-900 dark:text-indigo-200">
-                    {activeBranchName}
-                  </span>
-                )}
+
+            {/* Ca làm việc Badge */}
+            {activeSession ? (
+              <div 
+                title={`Mã ca: ${activeSession.sessionCode} • Quầy: ${activeSession.terminalCode} • Tiền quỹ đầu ca: ${fmt(activeSession.openingCash)}`}
+                className="h-9 px-2.5 flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 rounded-xl border border-emerald-200 dark:border-emerald-800 whitespace-nowrap shadow-xs"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>{activeSession.sessionCode}</span>
               </div>
-              <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded border border-emerald-100 dark:border-emerald-800">
-                {getShift(currentTime)}
-              </p>
+            ) : (
+              <Link
+                to="/pos/sessions"
+                title="Chưa có ca làm việc nào đang mở! Bấm để chuyển tới trang Quản lý ca để mở ca"
+                className="h-9 px-2.5 flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/50 rounded-xl border border-amber-300 dark:border-amber-800 whitespace-nowrap shadow-xs transition-colors"
+              >
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                <span>Chưa mở ca</span>
+              </Link>
+            )}
+
+            {/* Đồng hồ thời gian thực */}
+            <div className="h-9 px-2.5 hidden lg:flex items-center gap-1.5 text-xs font-mono font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/60 rounded-xl border border-gray-200 dark:border-gray-600 whitespace-nowrap shadow-xs">
+              <Clock className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+              <span>{currentTime.toLocaleDateString('vi-VN')} {currentTime.toLocaleTimeString('vi-VN')}</span>
             </div>
           </div>
         </header>
@@ -1157,11 +1529,12 @@ export function PosTerminalPage() {
       </div>
 
       {/* ═══ RIGHT PANEL: Cart & Customer ═══ */}
-      <div className="flex flex-col w-[32%] h-full bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700">
+      <div className="flex flex-col w-[36%] h-full bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700">
         {/* Multi-Tab Order Holding Bar (Lưu tạm đơn bán dở) */}
         <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 overflow-x-auto shrink-0">
           {tabs.map((t) => {
             const isActive = t.id === activeTabId;
+            const isHeld = !isActive && t.items.length > 0;
             return (
               <div
                 key={t.id}
@@ -1174,15 +1547,23 @@ export function PosTerminalPage() {
                 }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all select-none ${
                   isActive
-                    ? 'bg-emerald-600 text-white shadow-sm'
+                    ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/20'
+                    : isHeld
+                    ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border-2 border-amber-400 dark:border-amber-600 hover:bg-amber-100 dark:hover:bg-amber-900/50'
                     : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'
                 }`}
+                title={isHeld ? `Đơn "${t.name}" đang tạm giữ (${t.items.length} món). Click để mở lại thanh toán!` : `Chuyển sang ${t.name}`}
               >
+                {isHeld && <span className="text-[11px]">⏸️</span>}
                 <span>{t.name}</span>
                 {t.items.length > 0 && (
                   <span
                     className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                      isActive ? 'bg-white text-emerald-700' : 'bg-emerald-100 text-emerald-800'
+                      isActive
+                        ? 'bg-white text-emerald-700'
+                        : isHeld
+                        ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100 font-bold'
+                        : 'bg-emerald-100 text-emerald-800'
                     }`}
                   >
                     {t.items.length}
@@ -1200,7 +1581,7 @@ export function PosTerminalPage() {
                       closeTab(t.id);
                     }}
                     className="opacity-60 hover:opacity-100 p-0.5 rounded hover:bg-black/10 transition-opacity"
-                    title="Hủy đơn tạm này"
+                    title="Đóng / Hủy đơn này"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -1217,10 +1598,30 @@ export function PosTerminalPage() {
               }
               createTab();
             }}
-            className="flex items-center gap-1 px-2 py-1 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 border border-emerald-300 dark:border-emerald-800 rounded-lg text-xs font-bold whitespace-nowrap transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 border border-emerald-300 dark:border-emerald-800 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer"
             title="⚡ Mở giỏ/đơn bán dở mới"
           >
             <Plus className="w-3.5 h-3.5" /> Mở đơn
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (items.length === 0) {
+                toast.info('Giỏ hàng hiện tại đang trống, không có món để giữ.');
+                return;
+              }
+              const currentTab = tabs.find(t => t.id === activeTabId);
+              const currentName = currentTab?.name || 'Đơn hiện tại';
+              createTab();
+              toast.success(
+                `Đã tạm giữ "${currentName}" (${items.length} món)! Đơn mới đã mở sẵn để tiếp khách. Khi khách cũ quay lại, bạn chỉ cần bấm vào tab [${currentName}] để thanh toán tiếp.`,
+                { duration: 6000 }
+              );
+            }}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 hover:bg-amber-100 border border-amber-300 dark:border-amber-800 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer"
+            title="Tạm giữ giỏ hàng hiện tại và tự động mở đơn mới để tiếp khách sau"
+          >
+            <PauseCircle className="w-3.5 h-3.5" /> Giữ đơn
           </button>
         </div>
 
@@ -1268,6 +1669,13 @@ export function PosTerminalPage() {
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
+
+              {isCustomerCreditBlocked(activeCustomer.id) && (
+                <div className="mb-2 p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg flex items-center gap-1.5 text-xs text-rose-700 dark:text-rose-300 font-bold">
+                  <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>Khách hàng đang bị TẠM KHÓA MUA NỢ do cảnh báo công nợ!</span>
+                </div>
+              )}
               <div className="space-y-1.5 mt-1.5">
                 <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
                   <span className="flex items-center gap-1">
@@ -1355,7 +1763,18 @@ export function PosTerminalPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start gap-1 mb-1">
-                  <h4 className="text-xs font-semibold text-gray-900 dark:text-white truncate">{item.name}</h4>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <h4 className="text-xs font-semibold text-gray-900 dark:text-white truncate">{item.name}</h4>
+                    {(() => {
+                      const prod = productsList.find(x => x.id === item.id);
+                      const taxPct = Math.round((prod?.taxRate ?? 0.08) * 100);
+                      return (
+                        <span className="text-[10px] font-mono px-1 py-0.2 bg-gray-200/80 dark:bg-gray-700/80 text-gray-600 dark:text-gray-300 rounded shrink-0" title={`Thuế suất VAT của sản phẩm: ${taxPct}%`}>
+                          VAT {taxPct}%
+                        </span>
+                      );
+                    })()}
+                  </div>
                   <button onClick={() => removeItem(item.id)} className="text-gray-400 hover:text-red-500 transition-colors shrink-0">
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -1396,93 +1815,406 @@ export function PosTerminalPage() {
           ))}
         </div>
 
-        {/* Payment Summary */}
-        <div className="p-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shrink-0">
-          {/* Voucher input */}
-          <div className="mb-3 pb-3 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex gap-1.5">
+        {/* ═══ CASHIER ACTION TOOLBAR ═══ */}
+        <div className="px-3 py-2 bg-slate-100 dark:bg-slate-900 border-t border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-1.5 shrink-0 select-none">
+          {/* Chiết khấu / Giảm giá */}
+          <button
+            type="button"
+            onClick={() => {
+              setTempDiscountType(orderDiscountType);
+              setTempDiscountValue(orderDiscountValue > 0 ? String(orderDiscountValue) : '');
+              setIsDiscountModalOpen(true);
+            }}
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+              orderDiscountValue > 0
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:text-emerald-600'
+            }`}
+            title="Phím tắt: F4 — Chiết khấu đơn hàng"
+          >
+            <Percent className="w-3.5 h-3.5" />
+            <span className="truncate">
+              {orderDiscountValue > 0 ? (orderDiscountType === 'PERCENT' ? `-${orderDiscountValue}%` : `-${fmt(orderDiscountValue)}`) : '% Giảm giá (F4)'}
+            </span>
+          </button>
+
+          {/* Ghi chú đơn */}
+          <button
+            type="button"
+            onClick={() => {
+              setTempOrderNote(orderNote);
+              setIsOrderNoteModalOpen(true);
+            }}
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+              orderNote.trim().length > 0
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:text-blue-600'
+            }`}
+            title="Phím tắt: F6 — Ghi chú đơn hàng"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span className="truncate">{orderNote.trim().length > 0 ? 'Có ghi chú' : 'Ghi chú (F6)'}</span>
+          </button>
+
+          {/* In tạm tính */}
+          <button
+            type="button"
+            onClick={handlePrePrintBill}
+            disabled={items.length === 0}
+            className="flex-1 py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+            title="Phím tắt: F7 — In phiếu tạm tính cho khách xem"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Tạm tính (F7)</span>
+          </button>
+
+          {/* Xóa giỏ */}
+          <button
+            type="button"
+            onClick={() => {
+              if (items.length === 0) return;
+              clearCart();
+              setAppliedVoucher(null);
+              setVoucherError('');
+              setUsedPoints(0);
+              setOrderDiscount('PERCENT', 0);
+              setOrderNote('');
+              toast.info('Đã xóa toàn bộ giỏ hàng');
+            }}
+            disabled={items.length === 0}
+            className="p-1.5 bg-white dark:bg-gray-800 text-gray-400 hover:text-red-500 border border-gray-200 dark:border-gray-700 hover:border-red-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            title="Xóa giỏ hàng"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* ═══ PAYMENT METHODS SELECTOR DIRECT ON SIDEBAR ═══ */}
+        <div className="p-2.5 pb-2 bg-gray-50/90 dark:bg-gray-850 border-b border-gray-200 dark:border-gray-700 shrink-0 select-none">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              Phương thức thanh toán
+            </span>
+            {selectedPayment && (
+              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                {selectedPayment.label}
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {displayPayments.map((m) => {
+              const Icon = m.icon;
+              const isDebtMethod = m.id.toLowerCase().includes('debt') || m.id.toLowerCase().includes('no') || m.label.toLowerCase().includes('nợ') || m.label.toLowerCase().includes('công nợ');
+              const isBlocked = !!(activeCustomer && isCustomerCreditBlocked(activeCustomer.id) && isDebtMethod);
+              const isSelected = selectedPaymentId === m.id;
+
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  disabled={isBlocked}
+                  onClick={() => {
+                    if (isBlocked) {
+                      toast.error(`Khách hàng "${activeCustomer?.name}" đang bị TẠM KHÓA MUA NỢ!`);
+                      return;
+                    }
+                    setSelectedPaymentId(m.id);
+                  }}
+                  className={`flex items-center gap-2 py-2 px-2 rounded-xl border text-left transition-all cursor-pointer min-h-[46px] ${
+                    isBlocked
+                      ? 'opacity-40 bg-gray-100 dark:bg-gray-800 border-gray-200 text-gray-400 cursor-not-allowed'
+                      : isSelected
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500/20 font-bold shadow-xs'
+                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                  title={isBlocked ? 'Khách hàng bị khóa nợ' : m.label}
+                >
+                  <Icon className={`w-4 h-4 shrink-0 ${isSelected ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500'}`} />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[11px] leading-tight font-semibold line-clamp-2 break-words whitespace-normal block">
+                      {m.label}
+                    </span>
+                    {isBlocked && (
+                      <span className="text-[9px] text-red-500 font-bold leading-none block mt-0.5">Khóa nợ</span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ═══ PAYMENT DETAIL / CASH CALCULATOR ═══ */}
+        {isCashPayment ? (
+          <div className="p-2.5 bg-emerald-50/40 dark:bg-emerald-950/20 border-b border-emerald-100 dark:border-emerald-900/40 shrink-0 space-y-2">
+            {/* Input tiền khách đưa */}
+            <div className="flex items-center gap-1.5">
               <div className="relative flex-1">
-                <Tag className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <Calculator className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
-                  type="text" placeholder="Nhập mã voucher..."
-                  value={voucherCode} onChange={e => setVoucherCode(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleApplyVoucher()}
-                  className="w-full pl-8 pr-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Khách đưa tiền mặt..."
+                  value={cashGiven}
+                  onChange={e => {
+                    const digits = e.target.value.replace(/\D/g, '');
+                    setCashGiven(digits === '' ? '' : parseInt(digits, 10).toLocaleString('vi-VN'));
+                  }}
+                  className="w-full pl-8 pr-2.5 py-1.5 border border-emerald-300 dark:border-emerald-800 rounded-lg text-xs font-mono font-bold bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
               </div>
-              <button onClick={handleApplyVoucher}
-                className="px-3 py-1.5 bg-gray-800 dark:bg-gray-700 hover:bg-gray-700 text-white rounded-lg text-xs font-semibold transition-colors">
-                Áp dụng
+              <button
+                type="button"
+                onClick={() => setCashGiven(totalAmountToPay.toLocaleString('vi-VN'))}
+                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
+                title="Khách đưa vừa đúng số tiền đơn hàng"
+              >
+                ✓ Đủ tiền
               </button>
+              {cashGivenNum > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setCashGiven('')}
+                  className="px-2 py-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950/50 dark:hover:text-red-400 text-gray-600 dark:text-gray-300 rounded-lg text-xs font-bold transition-colors shrink-0 cursor-pointer"
+                  title="Xóa số tiền đã nhập"
+                >
+                  ✕ Xóa
+                </button>
+              )}
             </div>
-            {voucherError && <p className="text-[10px] text-red-500 mt-1 font-semibold">{voucherError}</p>}
-            {appliedVoucher && (
-              <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-lg px-2 py-1 mt-1.5 text-xs">
-                <span className="font-bold text-emerald-700 dark:text-emerald-300">
-                  🏷️ {appliedVoucher.code} — {appliedVoucher.type === 'PERCENT' ? `-${appliedVoucher.value}%` : `-${fmt(appliedVoucher.value)}`}
+
+            {/* Dãy nút mệnh giá tiền Polymer chuẩn */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[10px] text-gray-500 font-semibold px-0.5">
+                <span>Mệnh giá tờ tiền Polymer:</span>
+                {cashGivenNum > 0 && (
+                  <span className="font-mono text-emerald-600 font-bold">
+                    Đã chọn: {fmt(cashGivenNum)}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-4 gap-1">
+                {[50000, 100000, 200000, 500000].map((amt) => {
+                  const isMatch = cashGivenNum === amt;
+                  return (
+                    <button
+                      key={`polymer-${amt}`}
+                      type="button"
+                      onClick={() => setCashGiven(amt.toLocaleString('vi-VN'))}
+                      className={`py-1.5 px-1 text-xs font-mono font-bold rounded-lg border text-center transition-all cursor-pointer ${
+                        isMatch
+                          ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-500/30 shadow-xs'
+                          : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-gray-750'
+                      }`}
+                      title={`Khách đưa tờ ${amt.toLocaleString('vi-VN')} ₫`}
+                    >
+                      {amt.toLocaleString('vi-VN')}
+                    </button>
+                  );
+                })}
+              </div>
+              {totalAmountToPay > 500000 && (
+                <div className="grid grid-cols-2 gap-1 pt-0.5">
+                  {[1000000, 2000000].map((amt) => {
+                    const isMatch = cashGivenNum === amt;
+                    return (
+                      <button
+                        key={`polymer-lg-${amt}`}
+                        type="button"
+                        onClick={() => setCashGiven(amt.toLocaleString('vi-VN'))}
+                        className={`py-1 px-1.5 text-xs font-mono font-bold rounded-lg border text-center transition-all cursor-pointer ${
+                          isMatch
+                            ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-500/30 shadow-xs'
+                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-gray-750'
+                        }`}
+                        title={`Khách đưa ${amt.toLocaleString('vi-VN')} ₫`}
+                      >
+                        {amt.toLocaleString('vi-VN')} ₫
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Khung Tiền thối lại / Còn thiếu */}
+            {cashGivenNum > 0 && (
+              <div className={`flex items-center justify-between px-3 py-1.5 rounded-lg border text-xs ${
+                cashGivenNum >= totalAmountToPay
+                  ? 'bg-emerald-100 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-100 font-bold'
+                  : 'bg-amber-100 dark:bg-amber-950/60 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-100 font-bold'
+              }`}>
+                <span>{cashGivenNum >= totalAmountToPay ? '💵 Tiền thừa thối khách:' : '⚠️ Khách đưa chưa đủ:'}</span>
+                <span className="text-sm font-black font-mono">
+                  {cashGivenNum >= totalAmountToPay ? fmt(changeAmount) : fmt(totalAmountToPay - cashGivenNum)}
                 </span>
-                <button onClick={() => { setAppliedVoucher(null); setVoucherError(''); }}
-                  className="text-gray-400 hover:text-red-500 font-bold ml-2">✕</button>
               </div>
             )}
           </div>
+        ) : selectedPayment?.id.toLowerCase().includes('qr') || (selectedPaymentConfig?.providerType as string) === 'BANK_TRANSFER' ? (
+          <div className="p-2.5 bg-blue-50/60 dark:bg-blue-950/20 border-b border-blue-100 dark:border-blue-900/40 shrink-0 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <QrCode className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              <div>
+                <p className="text-xs font-bold text-gray-900 dark:text-white">Chuyển khoản VietQR</p>
+                <p className="text-[10px] text-gray-500">Mã QR động tự động điền số tiền</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const now = new Date();
+                const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
+                setCurrentOrderCode(code);
+                setIsPaymentOpen(true);
+              }}
+              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+            >
+              Mở mã QR (F8)
+            </button>
+          </div>
+        ) : (
+          <div className="p-2 bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-800 shrink-0 text-center text-xs text-gray-500 font-medium">
+            Sẵn sàng ghi nhận thanh toán qua <span className="font-bold text-gray-800 dark:text-gray-200">{selectedPayment?.label}</span>
+          </div>
+        )}
 
-          {/* Totals */}
-          <div className="space-y-1.5 text-xs mb-3">
+        {/* ═══ PAYMENT SUMMARY & TOTALS ═══ */}
+        <div className="p-3 bg-gray-50 dark:bg-gray-800 shrink-0 space-y-2">
+          {/* Voucher input */}
+          <div className="flex gap-1.5">
+            <div className="relative flex-1">
+              <Tag className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <input
+                type="text" placeholder="Nhập mã voucher..."
+                value={voucherCode} onChange={e => setVoucherCode(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleApplyVoucher()}
+                className="w-full pl-8 pr-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none"
+              />
+            </div>
+            <button onClick={handleApplyVoucher}
+              className="px-3 py-1.5 bg-gray-800 dark:bg-gray-700 hover:bg-gray-700 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer">
+              Áp dụng
+            </button>
+          </div>
+          {voucherError && <p className="text-[10px] text-red-500 font-semibold">{voucherError}</p>}
+          {appliedVoucher && (
+            <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-lg px-2 py-1 text-xs">
+              <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                🏷️ {appliedVoucher.code} — {appliedVoucher.type === 'PERCENT' ? `-${appliedVoucher.value}%` : `-${fmt(appliedVoucher.value)}`}
+              </span>
+              <button onClick={() => { setAppliedVoucher(null); setVoucherError(''); }}
+                className="text-gray-400 hover:text-red-500 font-bold ml-2">✕</button>
+            </div>
+          )}
+
+          {/* Totals Breakdown */}
+          <div className="space-y-1 text-xs pt-1 border-t border-gray-200 dark:border-gray-700">
             <div className="flex justify-between text-gray-500 dark:text-gray-400">
               <span>Tạm tính ({items.reduce((s, i) => s + i.quantity, 0)} sản phẩm)</span>
-              <span>{fmt(subtotal)}</span>
+              <span className="font-mono">{fmt(subtotal)}</span>
             </div>
+            {orderDiscountAmount > 0 && (
+              <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+                <span>Chiết khấu đơn ({orderDiscountType === 'PERCENT' ? `${orderDiscountValue}%` : 'VNĐ'})</span>
+                <span className="font-mono">-{fmt(orderDiscountAmount)}</span>
+              </div>
+            )}
             {voucherDiscount > 0 && (
               <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
                 <span>Giảm (Voucher)</span>
-                <span>-{fmt(voucherDiscount)}</span>
+                <span className="font-mono">-{fmt(voucherDiscount)}</span>
               </div>
             )}
             {pointsDiscount > 0 && (
               <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
                 <span>Giảm (Điểm thưởng)</span>
-                <span>-{fmt(pointsDiscount)}</span>
+                <span className="font-mono">-{fmt(pointsDiscount)}</span>
               </div>
             )}
             <div className="flex justify-between text-gray-500 dark:text-gray-400">
-              <span>Thuế VAT (8%)</span>
-              <span>{fmt(vatAmount)}</span>
+              <span>Thuế VAT ({taxableAmount > 0 ? Math.round((vatAmount / taxableAmount) * 100) : 8}%)</span>
+              <span className="font-mono">{fmt(vatAmount)}</span>
             </div>
-            <div className="flex justify-between items-baseline pt-2.5 mt-2 border-t-2 border-dashed border-gray-200 dark:border-gray-700">
+            {paymentFee > 0 && (
+              <div className="flex justify-between text-amber-600 dark:text-amber-400 font-semibold">
+                <span>Phí thanh toán ({selectedPaymentConfig?.methodName})</span>
+                <span className="font-mono">+{fmt(paymentFee)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-baseline pt-2 mt-1 border-t-2 border-dashed border-gray-200 dark:border-gray-700">
               <span className="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">TỔNG CỘNG</span>
-              <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">{fmt(totalAmount)}</span>
+              <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">{fmt(totalAmountToPay)}</span>
             </div>
             {activeCustomer && (
-              <div className="flex justify-between items-center text-xs text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800/60 mt-1">
-                <span className="flex items-center gap-1">🎁 Tích điểm đơn này:</span>
+              <div className="flex justify-between items-center text-xs text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800/60 mt-1">
+                <span className="flex items-center gap-1">🎁 Tích điểm:</span>
                 <span className="font-mono text-emerald-600 dark:text-emerald-400 font-black">+{Math.floor((totalAmount / (loyaltyConfig?.earnRateAmount || 10000)) * (activeCustomer?.membershipRank === 'Thành viên Vàng' ? 1.5 : activeCustomer?.membershipRank === 'Thành viên Bạc' ? 1.2 : 1.0))} điểm</span>
               </div>
             )}
           </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => { clearCart(); setAppliedVoucher(null); setVoucherError(''); setUsedPoints(0); }}
-              disabled={items.length === 0}
-              className="p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-xl hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Xóa giỏ hàng"
-            >
-              <Trash2 className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => {
-                const now = new Date();
-                const code = `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
-                setCurrentOrderCode(code);
-                setIsPaymentOpen(true);
-              }}
-              disabled={items.length === 0}
-              className="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-emerald-600/30"
-            >
-              <CreditCard className="w-5 h-5" />
-              THANH TOÁN {fmt(totalAmount)}
-            </button>
+          {/* Primary Action Buttons */}
+          <div className="flex gap-2 pt-1">
+            {isCashPayment ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const now = new Date();
+                    const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
+                    setCurrentOrderCode(code);
+                    setIsPaymentOpen(true);
+                  }}
+                  disabled={items.length === 0}
+                  className="px-3.5 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 font-bold text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
+                  title="Mở bảng thanh toán chi tiết (F8)"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>F8</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDirectCashCheckout(true)}
+                  disabled={items.length === 0}
+                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-emerald-600/30 cursor-pointer"
+                  title="Thanh toán tiền mặt & in hóa đơn ngay lập tức (F9)"
+                >
+                  <Printer className="w-4 h-4" />
+                  THANH TOÁN & IN (F9)
+                </button>
+              </>
+            ) : selectedPayment?.id.toLowerCase().includes('qr') || (selectedPaymentConfig?.providerType as string) === 'BANK_TRANSFER' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const now = new Date();
+                  const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
+                  setCurrentOrderCode(code);
+                  setIsPaymentOpen(true);
+                }}
+                disabled={items.length === 0}
+                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-blue-600/30 cursor-pointer"
+              >
+                <QrCode className="w-5 h-5" />
+                HIỂN THỊ MÃ QR THANH TOÁN (F8)
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  const now = new Date();
+                  const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
+                  setCurrentOrderCode(code);
+                  setIsPaymentOpen(true);
+                }}
+                disabled={items.length === 0}
+                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-emerald-600/30 cursor-pointer"
+              >
+                <CheckCircle2 className="w-5 h-5" />
+                XÁC NHẬN THANH TOÁN (F8)
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1549,18 +2281,46 @@ export function PosTerminalPage() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl animate-scaleIn flex flex-col max-h-[90vh]">
             {paymentState === 'success' ? (
               /* SUCCESS SCREEN */
-              <div className="flex flex-col items-center justify-center p-10 gap-4">
-                <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
-                  <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+              <div className="flex flex-col items-center justify-center p-8 gap-4">
+                <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+                  <CheckCircle2 className="w-9 h-9 text-emerald-500" />
                 </div>
-                <h2 className="text-2xl font-black text-gray-900 dark:text-white">Thanh toán thành công!</h2>
-                <p className="text-gray-500 dark:text-gray-400 text-sm text-center">Đơn hàng đã được xác nhận. Cảm ơn quý khách!</p>
+                <h2 className="text-xl font-black text-gray-900 dark:text-white">Thanh toán thành công!</h2>
+                <p className="text-gray-500 dark:text-gray-400 text-xs text-center">Đơn hàng {currentOrderCode} đã được ghi nhận vào hệ thống.</p>
                 {isCashPayment && cashGivenNum > 0 && (
-                  <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-900 rounded-xl p-4 text-center w-full">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Tiền thối lại</p>
-                    <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{fmt(changeAmount)}</p>
+                  <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-900 rounded-xl p-3 text-center w-full">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">Tiền thối lại</p>
+                    <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{fmt(changeAmount)}</p>
                   </div>
                 )}
+                <div className="flex gap-3 w-full pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPrintInvoiceOpen(true);
+                    }}
+                    className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-2"
+                  >
+                    <Printer className="w-4 h-4" /> 🖨️ In hóa đơn bán lẻ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (tabs.length > 1) {
+                        closeTab(activeTabId);
+                      } else {
+                        clearCart();
+                      }
+                      setVoucherError('');
+                      setPaymentState('idle');
+                      setIsPaymentOpen(false);
+                      setCurrentOrderCode('');
+                    }}
+                    className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-2"
+                  >
+                    ✓ Tạo đơn mới
+                  </button>
+                </div>
               </div>
             ) : paymentState === 'processing' ? (
               /* PROCESSING/QR WAITING SCREEN */
@@ -1580,20 +2340,35 @@ export function PosTerminalPage() {
                     </div>
 
                     <div className="relative border-2 border-dashed border-gray-250 dark:border-gray-700 p-2 bg-white rounded-2xl shadow-sm w-60 h-60 flex items-center justify-center overflow-hidden shrink-0">
-                      {selectedPaymentConfig?.providerType === 'BANK_TRANSFER' ? (
-                        <img
-                          src={`https://img.vietqr.io/image/${selectedPaymentConfig.bankName}-${selectedPaymentConfig.bankAccount}-compact2.png?amount=${totalAmountToPay}&addInfo=${encodeURIComponent((selectedPaymentConfig.transferSyntax || 'POS {order_code}').replace('{order_code}', currentOrderCode))}&accountName=${encodeURIComponent(selectedPaymentConfig.bankAccountName || '')}`}
-                          alt="VietQR Payment"
-                          className="w-full h-full object-contain"
-                        />
-                      ) : (
+                      {(selectedPaymentConfig?.providerType as string) === 'BANK_TRANSFER' ? (() => {
+                        const rawBank = ((selectedPaymentConfig as any)?.bankCode || selectedPaymentConfig?.bankName || 'MB').trim();
+                        const upper = rawBank.toUpperCase();
+                        let cleanCode = 'MB';
+                        if (upper.includes('MBBANK') || upper.includes('QUÂN ĐỘI') || upper.startsWith('MB')) cleanCode = 'MB';
+                        else if (upper.includes('VIETCOMBANK') || upper.startsWith('VCB')) cleanCode = 'VCB';
+                        else if (upper.includes('TECHCOMBANK') || upper.startsWith('TCB')) cleanCode = 'TCB';
+                        else if (upper.includes('VIETINBANK') || upper.startsWith('CTG') || upper.startsWith('ICB')) cleanCode = 'ICB';
+                        else if (upper.includes('BIDV')) cleanCode = 'BIDV';
+                        else if (upper.includes('ACB')) cleanCode = 'ACB';
+                        else if (upper.includes('TPBANK') || upper.startsWith('TPB')) cleanCode = 'TPB';
+                        else if (upper.includes('VPBANK') || upper.startsWith('VPB')) cleanCode = 'VPB';
+                        else cleanCode = rawBank.split(' ')[0].replace(/[^A-Za-z0-9]/g, '') || 'MB';
+
+                        return (
+                          <img
+                            src={`https://img.vietqr.io/image/${cleanCode}-${selectedPaymentConfig.bankAccount}-compact2.png?amount=${totalAmountToPay}&addInfo=${encodeURIComponent((selectedPaymentConfig.transferSyntax || 'POS {order_code}').replace('{order_code}', currentOrderCode))}&accountName=${encodeURIComponent(selectedPaymentConfig.bankAccountName || '')}`}
+                            alt="VietQR Payment"
+                            className="w-full h-full object-contain"
+                          />
+                        );
+                      })() : (
                         <svg className="w-full h-full text-emerald-600" viewBox="0 0 100 100">
                           <path d="M10 25 V10 H25 M75 10 H90 V25 M90 75 V90 H75 M25 90 H10 V75" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
                           {String(selectedPayment?.id || '').toLowerCase().includes('ewallet') ||
                            String(selectedPayment?.id || '').toLowerCase().includes('transfer') ||
                            String(selectedPayment?.id || '').toLowerCase().includes('qr') ||
-                           selectedPaymentConfig?.providerType === 'GATEWAY' ||
-                           selectedPaymentConfig?.providerType === 'BANK_TRANSFER' ? (
+                           (selectedPaymentConfig?.providerType as string) === 'GATEWAY' ||
+                           (selectedPaymentConfig?.providerType as string) === 'BANK_TRANSFER' ? (
                             <>
                               <rect x="20" y="20" width="15" height="15" fill="currentColor" />
                               <rect x="65" y="20" width="15" height="15" fill="currentColor" />
@@ -1663,19 +2438,37 @@ export function PosTerminalPage() {
                   <div className="grid grid-cols-2 gap-2 mb-4">
                     {displayPayments.map((m) => {
                       const Icon = m.icon;
+                      const isDebtMethod = m.id.toLowerCase().includes('debt') || m.id.toLowerCase().includes('no') || m.label.toLowerCase().includes('nợ') || m.label.toLowerCase().includes('công nợ');
+                      const isBlocked = !!(activeCustomer && isCustomerCreditBlocked(activeCustomer.id) && isDebtMethod);
+
                       return (
                         <button
                           key={m.id}
                           type="button"
-                          onClick={() => setSelectedPaymentId(m.id)}
+                          disabled={isBlocked}
+                          onClick={() => {
+                            if (isBlocked) {
+                              toast.error(`Khách hàng "${activeCustomer?.name}" đang bị TẠM KHÓA MUA NỢ! Vui lòng chọn Tiền mặt hoặc Chuyển khoản.`);
+                              return;
+                            }
+                            setSelectedPaymentId(m.id);
+                          }}
                           className={`flex items-center gap-2.5 p-3 rounded-xl border text-sm font-semibold transition-colors ${
-                            selectedPaymentId === m.id
+                            isBlocked
+                              ? 'opacity-40 bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 cursor-not-allowed'
+                              : selectedPaymentId === m.id
                               ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
                               : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:bg-gray-650'
                           }`}
+                          title={isBlocked ? 'Khách hàng bị khóa quyền mua nợ' : m.label}
                         >
                           <Icon className="w-4 h-4 shrink-0" />
-                          <span className="text-xs leading-tight text-left">{m.label}</span>
+                          <div className="flex flex-col text-left flex-1 min-w-0">
+                            <span className="text-xs leading-tight font-semibold line-clamp-2 break-words whitespace-normal">{m.label}</span>
+                            {isBlocked && (
+                              <span className="text-[9px] text-red-500 font-bold uppercase mt-0.5">Bị khóa nợ</span>
+                            )}
+                          </div>
                         </button>
                       );
                     })}
@@ -1684,7 +2477,18 @@ export function PosTerminalPage() {
                   {/* Cash input */}
                   {isCashPayment && (
                     <div className="mb-4">
-                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Tiền khách đưa</label>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Tiền khách đưa</label>
+                        {cashGivenNum > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setCashGiven('')}
+                            className="text-xs text-red-500 hover:underline font-semibold cursor-pointer"
+                          >
+                            ✕ Xóa
+                          </button>
+                        )}
+                      </div>
                       <input
                         type="text"
                         inputMode="numeric"
@@ -1696,21 +2500,57 @@ export function PosTerminalPage() {
                         placeholder="Nhập số tiền..."
                         className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xl font-black focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
                       />
-                      <div className="flex gap-2 mt-2">
-                        {QUICK_CASH.map(q => (
+                      <div className="space-y-1.5 mt-2">
+                        <div className="flex items-center justify-between text-xs text-gray-500 font-semibold">
+                          <span>Mệnh giá Polymer chuẩn:</span>
                           <button
-                            key={q}
                             type="button"
-                            onClick={() => {
-                              const currentNum = cashGivenNum || 0;
-                              const newTotal = currentNum + q;
-                              setCashGiven(newTotal.toLocaleString('vi-VN'));
-                            }}
-                            className="flex-1 py-1.5 text-xs font-semibold bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-650 rounded-lg text-gray-700 dark:text-gray-300 transition-colors"
+                            onClick={() => setCashGiven(totalAmountToPay.toLocaleString('vi-VN'))}
+                            className="text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer"
                           >
-                            + {fmt(q)}
+                            ✓ Khách đưa đủ tiền
                           </button>
-                        ))}
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {[50000, 100000, 200000, 500000].map(amt => {
+                            const isSelected = cashGivenNum === amt;
+                            return (
+                              <button
+                                key={`modal-polymer-${amt}`}
+                                type="button"
+                                onClick={() => setCashGiven(amt.toLocaleString('vi-VN'))}
+                                className={`py-2 px-1 text-xs font-mono font-bold rounded-lg border text-center transition-all cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-500/30'
+                                    : 'bg-gray-100 dark:bg-gray-700 hover:bg-emerald-50 hover:text-emerald-700 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-600'
+                                }`}
+                              >
+                                {amt.toLocaleString('vi-VN')}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {totalAmountToPay > 500000 && (
+                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            {[1000000, 2000000].map(amt => {
+                              const isSelected = cashGivenNum === amt;
+                              return (
+                                <button
+                                  key={`modal-polymer-lg-${amt}`}
+                                  type="button"
+                                  onClick={() => setCashGiven(amt.toLocaleString('vi-VN'))}
+                                  className={`py-1.5 px-2 text-xs font-mono font-bold rounded-lg border text-center transition-all cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-500/30'
+                                      : 'bg-gray-100 dark:bg-gray-700 hover:bg-emerald-50 hover:text-emerald-700 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-600'
+                                  }`}
+                                >
+                                  {amt.toLocaleString('vi-VN')} ₫
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                       {cashGivenNum >= totalAmountToPay && cashGivenNum > 0 && (
                         <div className="mt-2 flex justify-between items-center bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 rounded-lg px-3 py-2">
@@ -1728,7 +2568,7 @@ export function PosTerminalPage() {
                     Quay lại
                   </button>
                   <button
-                    onClick={handleConfirmPayment}
+                    onClick={() => handleConfirmPayment()}
                     disabled={isCashPayment && cashGivenNum < totalAmountToPay}
                     className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-sm transition-colors shadow disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -1747,6 +2587,352 @@ export function PosTerminalPage() {
         onClose={() => setIsPrintInvoiceOpen(false)}
         data={completedPrintInvoice}
       />
+
+      {/* ORDER DISCOUNT MODAL (F4) */}
+      <Modal
+        isOpen={isDiscountModalOpen}
+        onClose={() => setIsDiscountModalOpen(false)}
+        title="🏷️ Chiết khấu / Giảm giá đơn hàng (F4)"
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
+            <button
+              type="button"
+              onClick={() => {
+                setTempDiscountType('PERCENT');
+                setTempDiscountValue('');
+              }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                tempDiscountType === 'PERCENT'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+              }`}
+            >
+              % Theo phần trăm
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTempDiscountType('FLAT');
+                setTempDiscountValue('');
+              }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                tempDiscountType === 'FLAT'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+              }`}
+            >
+              VNĐ Số tiền mặt
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+              Giá trị giảm ({tempDiscountType === 'PERCENT' ? '%' : 'VNĐ'})
+            </label>
+            <input
+              type="text"
+              autoFocus
+              inputMode="numeric"
+              placeholder={tempDiscountType === 'PERCENT' ? 'Ví dụ: 10' : 'Ví dụ: 50.000'}
+              value={tempDiscountValue}
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, '');
+                if (tempDiscountType === 'PERCENT') {
+                  const num = parseInt(digits, 10) || 0;
+                  setTempDiscountValue(digits === '' ? '' : String(Math.min(100, num)));
+                } else {
+                  setTempDiscountValue(digits === '' ? '' : parseInt(digits, 10).toLocaleString('vi-VN'));
+                }
+              }}
+              className="w-full px-4 py-2.5 border-2 border-emerald-300 dark:border-emerald-700 rounded-xl bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-lg font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
+            />
+          </div>
+
+          {/* Quick presets */}
+          <div className="space-y-1.5">
+            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Gợi ý nhanh</span>
+            <div className="flex flex-wrap gap-1.5">
+              {tempDiscountType === 'PERCENT' ? (
+                [5, 10, 15, 20, 30].map((pct) => (
+                  <button
+                    key={pct}
+                    type="button"
+                    onClick={() => setTempDiscountValue(String(pct))}
+                    className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-emerald-50 hover:text-emerald-700 text-gray-800 dark:text-gray-200 text-xs font-bold rounded-lg border border-gray-200 dark:border-gray-700 transition-colors cursor-pointer"
+                  >
+                    {pct}%
+                  </button>
+                ))
+              ) : (
+                [20000, 50000, 100000, 200000, 500000].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setTempDiscountValue(amt.toLocaleString('vi-VN'))}
+                    className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-emerald-50 hover:text-emerald-700 text-gray-800 dark:text-gray-200 text-xs font-bold rounded-lg border border-gray-200 dark:border-gray-700 transition-colors cursor-pointer"
+                  >
+                    {fmt(amt)}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Preview */}
+          <div className="bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5 text-xs">
+            <div className="flex justify-between text-gray-500">
+              <span>Tạm tính đơn hàng:</span>
+              <span className="font-mono">{fmt(subtotal)}</span>
+            </div>
+            <div className="flex justify-between text-emerald-600 font-bold">
+              <span>Số tiền giảm:</span>
+              <span className="font-mono">
+                -{fmt(
+                  tempDiscountType === 'PERCENT'
+                    ? Math.round(subtotal * ((parseFloat(tempDiscountValue) || 0) / 100))
+                    : Math.min(subtotal, parseFloat(tempDiscountValue.replace(/\./g, '')) || 0)
+                )}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex justify-between gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={() => {
+                setOrderDiscount('PERCENT', 0);
+                setIsDiscountModalOpen(false);
+                toast.info('Đã hủy chiết khấu đơn hàng');
+              }}
+              className="px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+            >
+              Hủy chiết khấu
+            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsDiscountModalOpen(false)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-semibold hover:bg-gray-50 cursor-pointer"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const rawVal = tempDiscountType === 'PERCENT'
+                    ? parseFloat(tempDiscountValue) || 0
+                    : parseFloat(tempDiscountValue.replace(/\./g, '')) || 0;
+                  setOrderDiscount(tempDiscountType, rawVal);
+                  setIsDiscountModalOpen(false);
+                  toast.success(`Đã áp dụng chiết khấu đơn hàng: ${tempDiscountType === 'PERCENT' ? `${rawVal}%` : fmt(rawVal)}`);
+                }}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm cursor-pointer"
+              >
+                Áp dụng
+              </button>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ORDER NOTE MODAL (F6) */}
+      <Modal
+        isOpen={isOrderNoteModalOpen}
+        onClose={() => setIsOrderNoteModalOpen(false)}
+        title="📝 Ghi chú đơn hàng (F6)"
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+              Nội dung ghi chú (sẽ in lên hóa đơn & lưu hệ thống)
+            </label>
+            <textarea
+              autoFocus
+              rows={3}
+              value={tempOrderNote}
+              onChange={(e) => setTempOrderNote(e.target.value)}
+              placeholder="Nhập ghi chú cho đơn hàng này..."
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+            />
+          </div>
+
+          {/* Quick chips */}
+          <div className="space-y-1.5">
+            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Mẫu ghi chú nhanh</span>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                'Khách lấy hóa đơn đỏ VAT',
+                'Giao hàng sau 17:00',
+                'Khách thân thiết VIP',
+                'Hàng dễ vỡ - gói kỹ',
+                'Đổi hàng trong 7 ngày',
+                'Đã thanh toán trước 50%',
+              ].map((noteSample) => (
+                <button
+                  key={noteSample}
+                  type="button"
+                  onClick={() => {
+                    setTempOrderNote((prev) => (prev ? `${prev}, ${noteSample}` : noteSample));
+                  }}
+                  className="px-2.5 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-blue-50 hover:text-blue-700 text-gray-700 dark:text-gray-300 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 transition-colors cursor-pointer"
+                >
+                  + {noteSample}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-between gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={() => {
+                setTempOrderNote('');
+                setOrderNote('');
+                setIsOrderNoteModalOpen(false);
+                toast.info('Đã xóa ghi chú đơn hàng');
+              }}
+              className="px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+            >
+              Xóa ghi chú
+            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsOrderNoteModalOpen(false)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-semibold hover:bg-gray-50 cursor-pointer"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderNote(tempOrderNote.trim());
+                  setIsOrderNoteModalOpen(false);
+                  toast.success('Đã lưu ghi chú đơn hàng');
+                }}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm cursor-pointer"
+              >
+                Lưu ghi chú
+              </button>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* KEYBOARD SHORTCUTS GUIDE MODAL */}
+      <Modal
+        isOpen={isShortcutsGuideOpen}
+        onClose={() => setIsShortcutsGuideOpen(false)}
+        title="Danh mục phím tắt bán hàng (POS Shortcuts)"
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Hệ thống hỗ trợ phím tắt chuẩn quầy thu ngân bán lẻ, giúp tăng tốc tối đa tốc độ quét mã và in bill:
+          </p>
+          <div className="grid grid-cols-1 gap-2 text-sm">
+            <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700">
+              <span className="text-gray-700 dark:text-gray-300 font-medium text-xs">Tìm kiếm sản phẩm & Quét Barcode</span>
+              <kbd className="px-2 py-0.5 text-xs font-mono font-bold bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md text-emerald-600 dark:text-emerald-400 shadow-2xs">F1 / F2</kbd>
+            </div>
+            <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700">
+              <span className="text-gray-700 dark:text-gray-300 font-medium text-xs">Tạo nhanh khách hàng mới</span>
+              <kbd className="px-2 py-0.5 text-xs font-mono font-bold bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md text-blue-600 dark:text-blue-400 shadow-2xs">F3</kbd>
+            </div>
+            <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700">
+              <span className="text-gray-700 dark:text-gray-300 font-medium text-xs">Chiết khấu / Giảm giá đơn</span>
+              <kbd className="px-2 py-0.5 text-xs font-mono font-bold bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md text-purple-600 dark:text-purple-400 shadow-2xs">F4</kbd>
+            </div>
+            <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700">
+              <span className="text-gray-700 dark:text-gray-300 font-medium text-xs">Ghi chú đơn hàng</span>
+              <kbd className="px-2 py-0.5 text-xs font-mono font-bold bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md text-cyan-600 dark:text-cyan-400 shadow-2xs">F6</kbd>
+            </div>
+            <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700">
+              <span className="text-gray-700 dark:text-gray-300 font-medium text-xs">In phiếu tạm tính cho khách</span>
+              <kbd className="px-2 py-0.5 text-xs font-mono font-bold bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md text-indigo-600 dark:text-indigo-400 shadow-2xs">F7</kbd>
+            </div>
+            <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700">
+              <span className="text-gray-700 dark:text-gray-300 font-medium text-xs">Mở bảng Chọn thanh toán / Quét QR</span>
+              <kbd className="px-2 py-0.5 text-xs font-mono font-bold bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md text-amber-600 dark:text-amber-400 shadow-2xs">F8</kbd>
+            </div>
+            <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700">
+              <span className="text-gray-700 dark:text-gray-300 font-medium text-xs">Thanh toán tiền mặt & In hóa đơn</span>
+              <kbd className="px-2 py-0.5 text-xs font-mono font-bold bg-emerald-50 dark:bg-emerald-950 border border-emerald-300 dark:border-emerald-700 rounded-md text-emerald-700 dark:text-emerald-300 shadow-2xs">F9</kbd>
+            </div>
+            <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700">
+              <span className="text-gray-700 dark:text-gray-300 font-medium text-xs">Đóng popup / Thoát tìm kiếm</span>
+              <kbd className="px-2 py-0.5 text-xs font-mono font-bold bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md text-red-600 dark:text-red-400 shadow-2xs">Esc</kbd>
+            </div>
+          </div>
+          <div className="flex justify-end pt-2 border-t border-gray-200 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={() => setIsShortcutsGuideOpen(false)}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+            >
+              Đã hiểu
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal Chọn Biến Thể Sản Phẩm POS (Variant Picker) */}
+      {variantPickerProduct && (
+        <Modal
+          isOpen={Boolean(variantPickerProduct)}
+          onClose={() => {
+            setVariantPickerProduct(null);
+            setProductVariants([]);
+          }}
+          title={`Chọn biến thể: ${variantPickerProduct.name}`}
+          maxWidth="max-w-xl"
+        >
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-slate-500">
+              Vui lòng chọn phân loại hàng (Màu sắc / Kích cỡ) để thêm vào đơn hàng POS:
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
+              {productVariants.map((v) => (
+                <button
+                  key={v.id}
+                  onClick={() => handleSelectVariant(v)}
+                  className="p-3 border border-slate-200 dark:border-gray-700 rounded-xl hover:border-emerald-500 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 transition-all text-left flex flex-col justify-between space-y-2 group shadow-xs bg-white dark:bg-gray-800 cursor-pointer"
+                >
+                  <div>
+                    <div className="font-semibold text-slate-800 dark:text-gray-100 text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+                      {v.variantDescription || v.variantCode || v.sku}
+                    </div>
+                    <div className="text-xs text-slate-400 font-mono">SKU: {v.sku}</div>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-gray-700 w-full text-xs">
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                      {Number(v.price || variantPickerProduct.price).toLocaleString('vi-VN')} đ
+                    </span>
+                    <span className="text-slate-500 dark:text-gray-400 bg-slate-100 dark:bg-gray-700 px-2 py-0.5 rounded-full font-medium">
+                      Tồn: {v.stock !== undefined ? v.stock : variantPickerProduct.stock}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => {
+                  setVariantPickerProduct(null);
+                  setProductVariants([]);
+                }}
+                className="px-4 py-2 border border-slate-300 dark:border-gray-600 hover:bg-slate-50 dark:hover:bg-gray-700 text-slate-700 dark:text-gray-300 rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, Receipt, Printer } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, Receipt, Printer, CreditCard, Wallet, CheckCircle, FileText } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 
 
@@ -22,7 +23,9 @@ interface SalesInvoiceRecord {
   subTotal: number;
   discount: number;
   totalAmount: number;
-  status: 'CHO_THANH_TOAN' | 'DA_THANH_TOAN' | 'DA_HUY';
+  paidAmount: number;
+  remainingDebt: number;
+  status: 'CHO_THANH_TOAN' | 'PARTIAL_PAID' | 'DA_THANH_TOAN' | 'DA_HUY';
   notes?: string;
 }
 
@@ -41,12 +44,13 @@ export function SalesInvoicesPage() {
   // Product Line Items for Invoice Form
   const [invoiceItems, setInvoiceItems] = useState<{
     id: string;
+    productId?: string;
     sku: string;
     productName: string;
     quantity: number;
     unitPrice: number;
     discount: number;
-  }>([
+  }[]>([
     { id: '1', sku: 'SKU-COFFEE-01', productName: 'Cà Phê Arabica Rang Xay 250g', quantity: 2, unitPrice: 125000, discount: 0 }
   ]);
 
@@ -81,6 +85,7 @@ export function SalesInvoicesPage() {
     const p = products[0];
     const newItem = {
       id: Date.now().toString(),
+      productId: p ? String(p.id) : undefined,
       sku: p?.sku || 'SKU-NEW',
       productName: p?.name || 'Sản phẩm mới',
       quantity: 1,
@@ -102,6 +107,7 @@ export function SalesInvoicesPage() {
         return {
           ...item,
           sku: value,
+          productId: p ? String(p.id) : item.productId,
           productName: p?.name || item.productName,
           unitPrice: p?.price || item.unitPrice
         };
@@ -120,7 +126,17 @@ export function SalesInvoicesPage() {
       const dueDate = inv.dueDate ? inv.dueDate.substring(0, 10) : invoiceDate;
       const subTotal = Number(inv.subtotal ?? inv.subTotal ?? inv.totalAmount ?? 0);
       const totalAmount = Number(inv.totalAmount ?? inv.subtotal ?? 0);
-      const status = inv.status === 'PAID' || inv.status === 'DA_THANH_TOAN' ? 'DA_THANH_TOAN' : inv.status === 'CANCELLED' || inv.status === 'DA_HUY' ? 'DA_HUY' : 'CHO_THANH_TOAN';
+      const paidAmount = typeof inv.paidAmount === 'number' ? inv.paidAmount : (inv.status === 'PAID' ? totalAmount : 0);
+      const remainingDebt = typeof inv.remainingDebt === 'number' ? inv.remainingDebt : Math.max(0, totalAmount - paidAmount);
+
+      let status: SalesInvoiceRecord['status'] = 'CHO_THANH_TOAN';
+      if (inv.status === 'PAID' || inv.status === 'DA_THANH_TOAN') {
+        status = 'DA_THANH_TOAN';
+      } else if (inv.status === 'CANCELLED' || inv.status === 'DA_HUY') {
+        status = 'DA_HUY';
+      } else if (inv.status === 'PARTIAL_PAID' || (paidAmount > 0 && remainingDebt > 0)) {
+        status = 'PARTIAL_PAID';
+      }
 
       return {
         id: String(inv.id),
@@ -132,11 +148,35 @@ export function SalesInvoicesPage() {
         subTotal: subTotal,
         discount: Number(inv.discount || 0),
         totalAmount: totalAmount,
+        paidAmount: paidAmount,
+        remainingDebt: remainingDebt,
         status: status,
         notes: inv.notes || '',
       };
     });
   }, [exportInvoices, customers]);
+
+  const stats = useMemo(() => {
+    let totalInvoiceAmount = 0;
+    let totalPaidAmount = 0;
+    let totalRemainingDebt = 0;
+    let partialCount = 0;
+    let unpaidCount = 0;
+
+    data.forEach((inv) => {
+      totalInvoiceAmount += inv.totalAmount;
+      totalPaidAmount += inv.paidAmount;
+      totalRemainingDebt += inv.remainingDebt;
+      if (inv.status === 'PARTIAL_PAID') {
+        partialCount++;
+      }
+      if (inv.remainingDebt > 0 && inv.status !== 'DA_HUY') {
+        unpaidCount++;
+      }
+    });
+
+    return { totalInvoiceAmount, totalPaidAmount, totalRemainingDebt, partialCount, unpaidCount };
+  }, [data]);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -151,15 +191,29 @@ export function SalesInvoicesPage() {
 
   const handleOpenCreate = () => {
     setModalMode('create');
+    const p = products[0];
+    const initialItems = p ? [
+      {
+        id: '1',
+        productId: String(p.id),
+        sku: p.sku || 'SKU-001',
+        productName: p.name || 'Sản phẩm mẫu',
+        quantity: 1,
+        unitPrice: p.price || 100000,
+        discount: 0
+      }
+    ] : [];
+    setInvoiceItems(initialItems);
+    const sub = initialItems.reduce((acc, it) => acc + it.quantity * it.unitPrice, 0);
     setEditingItem({
       invoiceCode: `INV-2026-${Date.now().toString().slice(-4)}`,
-      orderCode: '',
-      customerName: '',
+      orderCode: `SO-2026-${Date.now().toString().slice(-4)}`,
+      customerName: customers[0]?.name || '',
       invoiceDate: new Date().toISOString().split('T')[0],
       dueDate: new Date().toISOString().split('T')[0],
-      subTotal: 0,
+      subTotal: sub,
       discount: 0,
-      totalAmount: 0,
+      totalAmount: sub,
       status: 'CHO_THANH_TOAN',
       notes: '',
     });
@@ -169,6 +223,29 @@ export function SalesInvoicesPage() {
   const handleOpenEdit = (item: SalesInvoiceRecord) => {
     setModalMode('edit');
     setEditingItem(item);
+    const original = exportInvoices.find(inv => String(inv.id) === String(item.id));
+    const rawItems = (original as any)?.items || (original as any)?.invoiceItems || [];
+    if (rawItems.length > 0) {
+      setInvoiceItems(rawItems.map((it: any, idx: number) => ({
+        id: String(it.id || idx + 1),
+        productId: String(it.productId || it.id || ''),
+        sku: it.sku || `SKU-${idx + 1}`,
+        productName: it.productName || it.name || 'Sản phẩm',
+        quantity: Number(it.quantity || 1),
+        unitPrice: Number(it.unitPrice || it.price || 0),
+        discount: Number(it.discount || 0),
+      })));
+    } else {
+      setInvoiceItems([{
+        id: '1',
+        productId: products[0] ? String(products[0].id) : '1',
+        sku: 'SKU-001',
+        productName: 'Chi tiết sản phẩm / dịch vụ',
+        quantity: 1,
+        unitPrice: item.subTotal || item.totalAmount || 0,
+        discount: item.discount || 0,
+      }]);
+    }
     setIsModalOpen(true);
   };
 
@@ -181,29 +258,53 @@ export function SalesInvoicesPage() {
       const disc = Number(editingItem.discount || 0);
       const tot = sub - disc;
 
-      const payload = {
-        invoiceNumber: editingItem.invoiceCode,
-        customerId: editingItem.customerName,
-        taxId: 'VAT10',
-        billingAddress: 'Hà Nội, Việt Nam',
-        orderIds: [editingItem.orderCode],
-        issueDate: editingItem.invoiceDate || new Date().toISOString().split('T')[0],
-        dueDate: editingItem.dueDate || new Date().toISOString().split('T')[0],
-        subtotal: sub,
-        vatAmount: sub * 0.1,
-        totalAmount: tot,
-        status: (editingItem.status === 'DA_THANH_TOAN' ? 'PAID' : editingItem.status === 'DA_HUY' ? 'CANCELLED' : 'ISSUED') as any,
-        paymentTerms: 'COD',
-        notes: editingItem.notes || '',
-        invoiceItems: invoiceItems.map(i => ({
+      const matchedCust = customers.find(
+        (c) => c.name.toLowerCase() === (editingItem.customerName || '').toLowerCase() || String(c.id) === editingItem.customerName
+      );
+      const resolvedCustomerId = matchedCust ? String(matchedCust.id) : (customers[0] ? String(customers[0].id) : '1');
+      const billingAddress = matchedCust?.address || (editingItem as any).billingAddress || 'Tại quầy / Cửa hàng';
+
+      const mappedItems = invoiceItems.map(i => {
+        const prod = products.find(p => p.sku === i.sku || String(p.id) === String(i.productId));
+        const resolvedPid = prod ? Number(prod.id) : (i.productId ? Number(i.productId) : (products[0] ? Number(products[0].id) : 1));
+        const itemRate = (i as any).taxRate !== undefined ? Number((i as any).taxRate) : (prod?.vatRate !== undefined ? Number(prod.vatRate) : 0.08);
+        const lineSub = Math.max(0, (i.quantity * i.unitPrice) - (i.discount || 0));
+        const itemTax = Math.round(lineSub * itemRate);
+        return {
           id: i.id,
+          productId: resolvedPid,
           sku: i.sku,
           productName: i.productName,
           quantity: i.quantity,
           unitPrice: i.unitPrice,
           discount: i.discount,
-          lineTotal: (i.quantity * i.unitPrice) - i.discount
-        }))
+          taxRate: itemRate,
+          taxAmount: itemTax,
+          lineTotal: lineSub
+        };
+      });
+
+      const calculatedVat = mappedItems.reduce((acc, it) => acc + (it.taxAmount || 0), 0);
+
+      const payload = {
+        invoiceNumber: editingItem.invoiceCode,
+        customerId: resolvedCustomerId,
+        taxId: 'VAT',
+        billingAddress,
+        orderIds: [editingItem.orderCode],
+        issueDate: editingItem.invoiceDate || new Date().toISOString().split('T')[0],
+        dueDate: editingItem.dueDate || new Date().toISOString().split('T')[0],
+        subtotal: sub,
+        vatAmount: calculatedVat,
+        subTotal: sub,
+        taxAmount: calculatedVat,
+        companyName: editingItem.customerName || 'Khách hàng',
+        totalAmount: tot + calculatedVat,
+        status: (editingItem.status === 'DA_THANH_TOAN' ? 'PAID' : editingItem.status === 'DA_HUY' ? 'CANCELLED' : 'ISSUED') as any,
+        paymentTerms: 'IMMEDIATE' as const,
+        notes: editingItem.notes || '',
+        items: mappedItems,
+        invoiceItems: mappedItems,
       };
 
       if (modalMode === 'create') {
@@ -221,16 +322,18 @@ export function SalesInvoicesPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa hóa đơn này?')) {
-      try {
-        await deleteExportInvoice(id);
-        toast.success('Đã xóa hóa đơn thành công!');
-        fetchExportInvoices();
-      } catch (err) {
-        console.error(err);
-        toast.error('Lỗi khi xóa hóa đơn.');
-      }
+  const [deletingItem, setDeletingItem] = useState<SalesInvoiceRecord | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await deleteExportInvoice(deletingItem.id);
+      toast.success(`Đã xóa hóa đơn ${deletingItem.invoiceCode} thành công!`);
+      setDeletingItem(null);
+      fetchExportInvoices();
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi xóa hóa đơn.');
     }
   };
 
@@ -288,20 +391,68 @@ export function SalesInvoicesPage() {
       {
         accessorKey: 'totalAmount',
         header: 'Thành tiền',
-        cell: (info) => <span className="font-mono font-bold text-emerald-600">{formatCurrency(info.getValue() as number)}</span>,
+        cell: (info) => <span className="font-mono font-bold text-gray-900 dark:text-white">{formatCurrency(info.getValue() as number)}</span>,
+      },
+      {
+        id: 'paidProgress',
+        header: 'Đã thanh toán',
+        cell: ({ row }) => {
+          const inv = row.original;
+          const total = inv.totalAmount;
+          const paid = inv.paidAmount;
+          const percent = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : (inv.status === 'DA_THANH_TOAN' ? 100 : 0);
+          return (
+            <div className="space-y-1 min-w-[120px]">
+              <div className="flex justify-between text-xs font-semibold">
+                <span className="text-emerald-600 dark:text-emerald-400 font-mono">{formatCurrency(paid)}</span>
+                <span className="text-[10px] text-gray-500 font-bold">{percent}%</span>
+              </div>
+              <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    percent >= 100 ? 'bg-emerald-500' : percent > 0 ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                  style={{ width: `${percent}%` }}
+                />
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: 'remainingDebt',
+        header: 'Còn nợ lại',
+        cell: (info) => {
+          const val = info.getValue() as number;
+          const hasDebt = val > 0;
+          return (
+            <span
+              className={`font-mono font-bold text-xs ${
+                hasDebt ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'
+              }`}
+            >
+              {formatCurrency(val)}
+            </span>
+          );
+        },
       },
       {
         accessorKey: 'status',
         header: 'Trạng thái',
         cell: (info) => {
           const status = info.getValue() as string;
-          const badgeClass =
-            status === 'DA_THANH_TOAN'
-              ? 'bg-emerald-100 text-emerald-800'
-              : status === 'CHO_THANH_TOAN'
-              ? 'bg-amber-100 text-amber-800'
-              : 'bg-red-100 text-red-800';
-          const label = status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : status === 'CHO_THANH_TOAN' ? 'Chờ thanh toán' : 'Đã hủy';
+          let badgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
+          let label = 'Chờ thanh toán';
+          if (status === 'DA_THANH_TOAN') {
+            badgeClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300';
+            label = 'Đã thanh toán';
+          } else if (status === 'PARTIAL_PAID') {
+            badgeClass = 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300';
+            label = 'Trả một phần';
+          } else if (status === 'DA_HUY') {
+            badgeClass = 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300';
+            label = 'Đã hủy';
+          }
           return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{label}</span>;
         },
       },
@@ -332,7 +483,7 @@ export function SalesInvoicesPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeletingItem(row.original)}
               className="p-1 text-gray-500 hover:text-red-600 rounded"
               title="Xóa"
             >
@@ -362,6 +513,57 @@ export function SalesInvoicesPage() {
         </button>
       </div>
 
+      {/* KPI Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg">
+            <FileText className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tổng tiền hóa đơn</p>
+            <p className="text-lg font-bold text-gray-900 dark:text-white font-mono">{formatCurrency(stats.totalInvoiceAmount)}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">{data.length} hóa đơn</p>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-lg">
+            <CheckCircle className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Đã thu tiền</p>
+            <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">{formatCurrency(stats.totalPaidAmount)}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              {stats.totalInvoiceAmount > 0 ? Math.round((stats.totalPaidAmount / stats.totalInvoiceAmount) * 100) : 0}% tỷ lệ thu hồi
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-lg">
+            <Wallet className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Còn nợ phải thu</p>
+            <p className="text-lg font-bold text-amber-600 dark:text-amber-400 font-mono">{formatCurrency(stats.totalRemainingDebt)}</p>
+            <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium mt-0.5">
+              {stats.unpaidCount} hóa đơn còn nợ
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-lg">
+            <CreditCard className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider">Nợ dở dang / 1 phần</p>
+            <p className="text-lg font-bold text-purple-600 dark:text-purple-400 font-mono">{stats.partialCount} HĐ</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Đã thu một phần</p>
+          </div>
+        </div>
+      </div>
+
       <div className="p-4 bg-white dark:bg-gray-800 rounded shadow flex items-center gap-4">
         <Search className="w-5 h-5 text-gray-400" />
         <input
@@ -389,6 +591,28 @@ export function SalesInvoicesPage() {
       >
         {selected && (
           <div className="space-y-4 text-sm">
+            {/* Reconciliation cards in modal */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
+                <p className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 uppercase">Tổng hóa đơn</p>
+                <p className="text-sm font-bold font-mono text-gray-900 dark:text-white mt-0.5">
+                  {formatCurrency(selected.totalAmount)}
+                </p>
+              </div>
+              <div className="p-2.5 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-100 dark:border-emerald-800">
+                <p className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 uppercase">Đã thanh toán</p>
+                <p className="text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+                  {formatCurrency(selected.paidAmount)}
+                </p>
+              </div>
+              <div className="p-2.5 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-100 dark:border-amber-800">
+                <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 uppercase">Còn nợ lại</p>
+                <p className="text-sm font-bold font-mono text-amber-600 dark:text-amber-400 mt-0.5">
+                  {formatCurrency(selected.remainingDebt)}
+                </p>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <span className="text-gray-500">Mã hóa đơn:</span>
@@ -426,20 +650,30 @@ export function SalesInvoicesPage() {
                 <span>Tổng phải trả:</span>
                 <span className="font-mono text-emerald-600">{formatCurrency(selected.totalAmount)}</span>
               </div>
+              <div className="flex justify-between text-xs pt-1">
+                <span className="text-gray-500">Đã thanh toán (thu):</span>
+                <span className="font-mono font-semibold text-emerald-600">{formatCurrency(selected.paidAmount)}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-500">Còn nợ lại:</span>
+                <span className="font-mono font-semibold text-amber-600">{formatCurrency(selected.remainingDebt)}</span>
+              </div>
             </div>
             <div>
               <span className="text-gray-500">Trạng thái:</span>
-              <div>
+              <div className="mt-1">
                 <span
                   className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
                     selected.status === 'DA_THANH_TOAN'
                       ? 'bg-emerald-100 text-emerald-800'
+                      : selected.status === 'PARTIAL_PAID'
+                      ? 'bg-purple-100 text-purple-800'
                       : selected.status === 'CHO_THANH_TOAN'
                       ? 'bg-amber-100 text-amber-800'
                       : 'bg-red-100 text-red-800'
                   }`}
                 >
-                  {selected.status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : selected.status === 'CHO_THANH_TOAN' ? 'Chờ thanh toán' : 'Đã hủy'}
+                  {selected.status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : selected.status === 'PARTIAL_PAID' ? 'Trả một phần' : selected.status === 'CHO_THANH_TOAN' ? 'Chờ thanh toán' : 'Đã hủy'}
                 </span>
               </div>
             </div>
@@ -695,6 +929,14 @@ export function SalesInvoicesPage() {
         isOpen={!!printData}
         onClose={() => setPrintData(null)}
         data={printData}
+      />
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa hóa đơn bán lẻ"
+        description={`Bạn có chắc chắn muốn xóa hóa đơn "${deletingItem?.invoiceCode}" của khách hàng "${deletingItem?.customerName}" không?`}
       />
     </div>
   );

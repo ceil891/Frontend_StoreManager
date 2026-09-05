@@ -11,19 +11,21 @@ import { useAuthStore } from '@/features/auth/store/authStore';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 
-export enum StockOutType {
-  BAN_HANG = 'BAN_HANG',
-  TRA_NCC = 'TRA_NCC',
-  HUY_HANG_HONG = 'HUY_HANG_HONG',
-  CHUYEN_KHO = 'CHUYEN_KHO',
-  NOI_BO = 'NOI_BO',
-}
+export const StockOutType = {
+  BAN_HANG: 'BAN_HANG',
+  TRA_NCC: 'TRA_NCC',
+  HUY_HANG_HONG: 'HUY_HANG_HONG',
+  CHUYEN_KHO: 'CHUYEN_KHO',
+  NOI_BO: 'NOI_BO',
+} as const;
+export type StockOutType = (typeof StockOutType)[keyof typeof StockOutType];
 
-export enum StockOutStatus {
-  CHO_XU_LY = 'CHO_XU_LY',
-  DA_XUAT = 'DA_XUAT',
-  DA_HUY = 'DA_HUY',
-}
+export const StockOutStatus = {
+  CHO_XU_LY: 'CHO_XU_LY',
+  DA_XUAT: 'DA_XUAT',
+  DA_HUY: 'DA_HUY',
+} as const;
+export type StockOutStatus = (typeof StockOutStatus)[keyof typeof StockOutStatus];
 
 const TYPE_MAP: Record<StockOutType | string, { label: string; cls: string }> = {
   [StockOutType.BAN_HANG]: { label: 'Bán hàng / Xuất đơn', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200' },

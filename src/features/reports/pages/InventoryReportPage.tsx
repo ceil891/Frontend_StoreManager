@@ -49,14 +49,14 @@ export function InventoryReportPage() {
   const categoryStock = useMemo(() => {
     const map = new Map<string, number>();
     filteredProducts.forEach((p) => {
-      const cat = p.categoryName || p.category || 'Khác';
-      const val = (p.onHand || 10) * (p.costPrice || p.basePrice || 1000000);
+      const cat = (p as any).categoryName || p.category || 'Khác';
+      const val = (p.onHand || 10) * (p.costPrice || (p as any).basePrice || 1000000);
       map.set(cat, (map.get(cat) || 0) + val);
     });
 
     if (map.size === 0) {
       return categories.map((c, i) => ({
-        name: c.name || c.categoryName || 'Danh mục',
+        name: (c as any).name || c.categoryName || 'Danh mục',
         value: 0,
         color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
       }));
@@ -82,9 +82,9 @@ export function InventoryReportPage() {
   // Real Low Stock / Inventory Status Items
   const lowStockItems = useMemo<LowStockItem[]>(() => {
     return filteredProducts.map((p) => ({
-      sku: p.productCode || p.code || `SKU-${p.id}`,
+      sku: (p as any).productCode || (p as any).code || p.sku || `SKU-${p.id}`,
       name: p.name,
-      category: p.categoryName || p.category || 'Khác',
+      category: (p as any).categoryName || p.category || 'Khác',
       currentStock: p.onHand ?? 0,
       minStock: p.minStock ?? 5,
       supplier: p.brand || 'Chính hãng',
@@ -94,7 +94,7 @@ export function InventoryReportPage() {
   // Real KPI Calculations
   const kpis = useMemo(() => {
     const totalValue = filteredProducts.reduce(
-      (sum, p) => sum + (p.onHand || 0) * (p.costPrice || p.basePrice || 0),
+      (sum, p) => sum + (p.onHand || 0) * (p.costPrice || (p as any).basePrice || 0),
       0
     );
     const lowStockCount = filteredProducts.filter((p) => (p.onHand ?? 0) <= (p.minStock ?? 5)).length;

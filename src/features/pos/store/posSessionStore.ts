@@ -14,6 +14,10 @@ export interface PosSessionRecord {
   actualCash: number;
   cashDifference: number;
   status: 'OPEN' | 'CLOSED';
+  totalOrders?: number;
+  totalRevenue?: number;
+  userId?: number | string;
+  branchId?: number | string;
 }
 
 interface PosSessionState {
@@ -32,86 +36,79 @@ export const usePosSessionStore = create<PosSessionState>()(
       fetchSessions: async () => {
         try {
           const response = await axiosClient.get<any, any>('/pos/sessions');
-          const apiSessions: PosSessionRecord[] = Array.isArray(response)
+          const rawList = Array.isArray(response)
             ? response
             : (Array.isArray(response?.data) ? response.data : (response?.content || []));
           
-          if (Array.isArray(apiSessions) && apiSessions.length > 0) {
-            const currentLocal = get().sessions || [];
-            const merged = [...apiSessions];
-            currentLocal.forEach((loc) => {
-              if (!merged.some((m) => String(m.id) === String(loc.id) || m.sessionCode === loc.sessionCode)) {
-                merged.push(loc);
-              }
-            });
-            set({ sessions: merged });
+          const apiSessions: PosSessionRecord[] = rawList.map((item: any) => ({
+            id: String(item.id),
+            sessionCode: item.sessionCode || `SES-${item.id}`,
+            cashierName: item.cashierName || 'Thu ngân',
+            terminalCode: item.terminalCode || 'POS-001',
+            openingTime: item.startTime || item.openingTime || new Date().toISOString(),
+            closingTime: item.endTime || item.closingTime,
+            openingCash: Number(item.openingCash || 0),
+            expectedCash: Number(item.expectedClosingCash ?? item.expectedCash ?? item.openingCash ?? 0),
+            actualCash: Number(item.actualClosingCash ?? item.actualCash ?? 0),
+            cashDifference: Number((item.actualClosingCash ?? item.actualCash ?? 0) - (item.expectedClosingCash ?? item.expectedCash ?? item.openingCash ?? 0)),
+            status: (item.status === 'CLOSED' ? 'CLOSED' : 'OPEN') as 'OPEN' | 'CLOSED',
+            totalOrders: item.totalOrders !== undefined ? Number(item.totalOrders) : undefined,
+            totalRevenue: item.totalRevenue !== undefined ? Number(item.totalRevenue) : undefined,
+            userId: item.userId,
+            branchId: item.branchId,
+          }));
+
+          if (Array.isArray(apiSessions)) {
+            set({ sessions: apiSessions });
           }
         } catch (error) {
           console.error('Failed to fetch pos sessions:', error);
         }
       },
       addSession: async (item) => {
-        const tempId = `sess_${Date.now()}`;
-        const newRecord: PosSessionRecord = {
-          id: tempId,
-          ...item,
-        };
-        set((state) => ({
-          sessions: [newRecord, ...state.sessions.filter((s) => s.sessionCode !== item.sessionCode)],
-        }));
         try {
-          await axiosClient.post('/pos/sessions', item);
+          const authUser = (await import('@/features/auth/store/authStore')).useAuthStore.getState().user;
+          const payload = {
+            sessionCode: item.sessionCode,
+            terminalCode: item.terminalCode || 'POS-001',
+            openingCash: item.openingCash || 0,
+            userId: item.userId ? Number(item.userId) : (authUser?.id ? Number(authUser.id) : null),
+            branchId: item.branchId ? Number(item.branchId) : ((authUser as any)?.branchId ? Number((authUser as any).branchId) : 1),
+          };
+          await axiosClient.post('/pos/sessions', payload);
           await get().fetchSessions();
         } catch (e) {
-          console.error('Failed to post pos session to backend, kept in local store:', e);
+          console.error('Failed to post pos session to backend:', e);
+          throw e;
         }
       },
       updateSession: async (id, data) => {
-        set((state) => ({
-          sessions: state.sessions.map((s) => (s.id === id ? { ...s, ...data } : s)),
-        }));
         try {
           await axiosClient.put(`/pos/sessions/${id}`, data);
           await get().fetchSessions();
         } catch (e) {
           console.error('Failed to update pos session:', e);
+          throw e;
         }
       },
       closeSession: async (id, actualCash) => {
-        const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-        set((state) => ({
-          sessions: state.sessions.map((s) => {
-            if (s.id === id) {
-              const diff = actualCash - (s.expectedCash || s.openingCash || 0);
-              return {
-                ...s,
-                actualCash,
-                cashDifference: diff,
-                closingTime: now,
-                status: 'CLOSED'
-              };
-            }
-            return s;
-          })
-        }));
         try {
           await axiosClient.put(`/pos/sessions/${id}/close`, null, {
             params: { actualClosingCash: actualCash }
           });
           await get().fetchSessions();
         } catch (e) {
-          console.error('Failed to close pos session in API, kept in local state:', e);
+          console.error('Failed to close pos session in API:', e);
+          throw e;
         }
       },
       deleteSession: async (id) => {
-        set((state) => ({
-          sessions: state.sessions.filter((s) => s.id !== id),
-        }));
         try {
           await axiosClient.delete(`/pos/sessions/${id}`);
           await get().fetchSessions();
         } catch (e) {
           console.error('Failed to delete pos session:', e);
+          throw e;
         }
       },
     }),

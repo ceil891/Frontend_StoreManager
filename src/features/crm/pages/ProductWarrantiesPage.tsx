@@ -2,10 +2,10 @@ import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Download, Search, Eye, Edit, Trash2, Scan, QrCode, Sparkles, CheckCircle2, ShieldCheck, Volume2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { useCrmStore } from '../store/crmStore';
-import { axiosClient } from '@/shared/lib/axiosClient';
 import { playBarcodeBeep } from '@/shared/utils/barcodeScanner';
 
 export interface WarrantyRecord {
@@ -31,20 +31,20 @@ export function ProductWarrantiesPage() {
     addProductWarranty,
     updateProductWarranty,
     deleteProductWarranty,
+    isLoading,
   } = useCrmStore();
 
   useEffect(() => {
     fetchProductWarranties();
   }, [fetchProductWarranties]);
 
-  const [data, setData] = useState<WarrantyRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
   const [selectedItem, setSelectedItem] = useState<WarrantyRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<WarrantyRecord>>({});
+  const [deletingItem, setDeletingItem] = useState<WarrantyRecord | null>(null);
 
   // Barcode / Serial Scanner State
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
@@ -58,6 +58,21 @@ export function ProductWarrantiesPage() {
       streamRef.current = null;
     }
   };
+
+  const data: WarrantyRecord[] = useMemo(() => {
+    return (storeWarranties || []).map((item) => ({
+      id: String(item.id),
+      warrantyCode: `WRT-${String(item.id).padStart(4, '0')}`,
+      customerName: item.customerName || 'Khách hàng',
+      customerPhone: item.customerPhone || '',
+      productName: item.productName || 'Sản phẩm',
+      serialOrIMEI: item.serialNumber || 'N/A',
+      startDate: item.purchaseDate ? String(item.purchaseDate).split('T')[0] : '2024-01-01',
+      expiryDate: item.expiryDate ? String(item.expiryDate).split('T')[0] : '2025-01-01',
+      terms: 'Bảo hành chính hãng',
+      status: (item.status === 'EXPIRED' ? 'HẾT_HẠN' : item.status === 'VOIDED' ? 'HỦY' : 'HOẠT_ĐỘNG') as any,
+    }));
+  }, [storeWarranties]);
 
   // 1. Tự động bắt tín hiệu quét từ Máy quét mã vạch phần cứng (USB / Bluetooth / 2.4G)
   useEffect(() => {
@@ -108,38 +123,6 @@ export function ProductWarrantiesPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [data, isModalOpen]);
 
-  const fetchWarranties = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const res: any = await axiosClient.get('/crm/warranties');
-      const list = Array.isArray(res) ? res : res?.content || res?.data || [];
-      if (list.length > 0) {
-        const mapped: WarrantyRecord[] = list.map((item: any) => ({
-          id: String(item.id),
-          warrantyCode: item.warrantyCode || `WRT-${item.id}`,
-          customerName: item.customerName || item.customer?.name || 'Khách hàng',
-          serialOrIMEI: item.serialNumber || item.serialOrIMEI || 'N/A',
-          startDate: item.startDate ? String(item.startDate).split('T')[0] : '2024-01-01',
-          expiryDate: item.endDate ? String(item.endDate).split('T')[0] : '2025-01-01',
-          terms: item.terms || item.notes || 'Bảo hành tiêu chuẩn',
-          status: item.status === 'EXPIRED' ? 'HẾT_HẠN' : item.status === 'CANCELLED' ? 'HỦY' : 'HOẠT_ĐỘNG',
-        }));
-        setData(mapped);
-      } else {
-        setData([]);
-      }
-    } catch (err) {
-      console.error('Error fetching warranties:', err);
-      setData([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchWarranties();
-  }, [fetchWarranties]);
-
   const filtered = useMemo(() => {
     return data.filter((item) => {
       const matchSearch =
@@ -173,43 +156,49 @@ export function ProductWarrantiesPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.warrantyCode || !editingItem.customerName) return;
+    if (!editingItem.customerName) {
+      toast.error('Vui lòng nhập tên khách hàng');
+      return;
+    }
 
-    const payload = {
-      warrantyCode: editingItem.warrantyCode,
+    const payload: any = {
+      serialNumber: editingItem.serialOrIMEI || '',
+      productName: editingItem.productName || 'Sản phẩm',
       customerName: editingItem.customerName,
-      serialNumber: editingItem.serialOrIMEI,
-      terms: editingItem.terms,
-      status: editingItem.status === 'HẾT_HẠN' ? 'EXPIRED' : editingItem.status === 'HỦY' ? 'CANCELLED' : 'ACTIVE',
+      customerPhone: editingItem.customerPhone || '',
+      purchaseDate: editingItem.startDate || new Date().toISOString().split('T')[0],
+      expiryDate: editingItem.expiryDate || new Date().toISOString().split('T')[0],
+      warrantyMonths: 12,
+      status: editingItem.status === 'HẾT_HẠN' ? 'EXPIRED' : editingItem.status === 'HỦY' ? 'VOIDED' : 'VALID',
     };
 
     try {
       if (modalMode === 'create') {
-        await axiosClient.post('/crm/warranties', payload);
-        toast.success(`Tạo sổ bảo hành ${editingItem.warrantyCode} thành công!`);
+        await addProductWarranty(payload);
+        toast.success(`Tạo sổ bảo hành cho ${editingItem.customerName} thành công!`);
       } else if (editingItem.id) {
-        await axiosClient.put(`/crm/warranties/${editingItem.id}`, payload);
-        toast.success(`Cập nhật sổ bảo hành ${editingItem.warrantyCode} thành công!`);
+        await updateProductWarranty(editingItem.id, payload);
+        toast.success(`Cập nhật sổ bảo hành ${editingItem.warrantyCode || ''} thành công!`);
       }
       setIsModalOpen(false);
-      fetchWarranties();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving warranty:', err);
-      toast.error('Lỗi khi lưu sổ bảo hành');
+      toast.error(err?.message || 'Lỗi khi lưu sổ bảo hành');
     }
   };
 
-  const handleDelete = async (item: WarrantyRecord) => {
-    if (!confirm(`Bạn có chắc muốn xóa sổ bảo hành ${item.warrantyCode}?`)) return;
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
     try {
-      await axiosClient.delete(`/crm/warranties/${item.id}`);
-      toast.success(`Đã xóa sổ bảo hành ${item.warrantyCode}`);
-      setData((prev) => prev.filter((d) => d.id !== item.id));
-    } catch (err) {
+      await deleteProductWarranty(deletingItem.id);
+      toast.success(`Đã xóa sổ bảo hành ${deletingItem.warrantyCode}`);
+      if (selectedItem?.id === deletingItem.id) {
+        setSelectedItem(null);
+      }
+      setDeletingItem(null);
+    } catch (err: any) {
       console.error('Error deleting warranty:', err);
-      toast.error('Lỗi khi xóa sổ bảo hành');
-    } finally {
-      setSelectedItem(null);
+      toast.error(err?.message || 'Lỗi khi xóa sổ bảo hành');
     }
   };
 
@@ -270,7 +259,7 @@ export function ProductWarrantiesPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original)}
+              onClick={() => setDeletingItem(row.original)}
               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
               title="Xóa"
             >
@@ -585,6 +574,14 @@ export function ProductWarrantiesPage() {
           </div>
         </div>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa sổ bảo hành"
+        description={`Bạn có chắc muốn xóa sổ bảo hành "${deletingItem?.warrantyCode}" của khách hàng "${deletingItem?.customerName}" không?`}
+      />
     </>
   );
 }

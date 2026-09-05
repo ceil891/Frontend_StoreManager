@@ -1,4 +1,5 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
 import { 
   Plus, Search, Eye, Edit, Trash2, Thermometer, Layers, Warehouse, 
@@ -240,14 +241,17 @@ export function WarehouseZonesPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa phân khu kho này?')) {
-      try {
-        await deleteWarehouseZone(id);
-        toast.success('Đã xóa phân khu kho.');
-      } catch (err) {
-        toast.error('Xóa phân khu kho thất bại.');
-      }
+  const [deletingItem, setDeletingItem] = useState<WarehouseZoneRecord | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await deleteWarehouseZone(deletingItem.id);
+      toast.success(`Đã xóa phân khu kho "${deletingItem.zoneName}".`);
+      if (selected?.id === deletingItem.id) setSelected(null);
+      setDeletingItem(null);
+    } catch (err: any) {
+      toast.error('Xóa phân khu kho thất bại: ' + (err?.message || 'Không thể xóa'));
     }
   };
 
@@ -335,7 +339,7 @@ export function WarehouseZonesPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeletingItem(row.original)}
               className="p-1 text-gray-500 hover:text-red-600 dark:hover:text-red-450 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
               title="Xóa"
             >
@@ -761,6 +765,14 @@ export function WarehouseZonesPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa phân khu kho"
+        description={`Cảnh báo: Việc xóa phân khu "${deletingItem?.zoneName}" có thể ảnh hưởng đến các bãi kho, dãy kệ và ô kệ bên trong. Bạn có chắc chắn muốn xóa không?`}
+      />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Ticket, Calendar, CheckCircle2, Clock, Tag, Copy, Edit, Trash2, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { useCrmStore } from '../store/crmStore';
@@ -96,16 +97,26 @@ export function VouchersPage() {
   // Filter states
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [deleteItem, setDeleteItem] = useState<RewardVoucherRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const handleDelete = async (voucher: RewardVoucherRecord) => {
-    if (!confirm(`Bạn có chắc muốn xóa voucher ${voucher.voucherCode}?`)) return;
+  const handleDelete = (voucher: RewardVoucherRecord) => {
+    setDeleteItem(voucher);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteItem) return;
     try {
-      await axiosClient.delete(`/crm/vouchers/${voucher.id}`);
-      toast.success(`Đã xóa voucher ${voucher.voucherCode}`);
+      setIsDeleting(true);
+      await axiosClient.delete(`/crm/vouchers/${deleteItem.id}`);
+      toast.success(`Đã xóa voucher ${deleteItem.voucherCode}`);
+      setDeleteItem(null);
       fetchVouchers();
     } catch (err) {
       console.error('Error deleting voucher:', err);
       toast.error('Không thể xóa voucher trên máy chủ');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -116,8 +127,8 @@ export function VouchersPage() {
       campaignName: '',
       type: 'PERCENTAGE',
       discountValue: 10,
-      minOrderValue: 100,
-      maxDiscount: 50,
+      minOrderValue: 100000,
+      maxDiscount: 50000,
       startDate: new Date().toISOString().split('T')[0],
       expiryDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
       totalIssued: 500,
@@ -421,13 +432,13 @@ export function VouchersPage() {
             <div className={`flex items-center justify-between p-4 rounded-xl border ${
               selectedVoucher.status === 'ACTIVE'
                 ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
-                : selectedVoucher.status === 'SCHEDULED'
+                : (selectedVoucher.status as string) === 'SCHEDULED'
                 ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
                 : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800'
             }`}>
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold ${
-                  selectedVoucher.status === 'ACTIVE' ? 'bg-emerald-600' : selectedVoucher.status === 'SCHEDULED' ? 'bg-blue-600' : 'bg-gray-600'
+                  selectedVoucher.status === 'ACTIVE' ? 'bg-emerald-600' : (selectedVoucher.status as string) === 'SCHEDULED' ? 'bg-blue-600' : 'bg-gray-600'
                 }`}>
                   <Ticket className="w-5 h-5" />
                 </div>
@@ -440,7 +451,7 @@ export function VouchersPage() {
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
                 selectedVoucher.status === 'ACTIVE' ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
-                selectedVoucher.status === 'SCHEDULED' ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100' :
+                (selectedVoucher.status as string) === 'SCHEDULED' ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100' :
                 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
               }`}>
                 {statusMapFull[selectedVoucher.status] || selectedVoucher.status}
@@ -499,7 +510,7 @@ export function VouchersPage() {
             </div>
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
-              {selectedVoucher.status === 'SCHEDULED' && (
+              {(selectedVoucher.status as string) === 'SCHEDULED' && (
                 <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
                   <CheckCircle2 className="w-4 h-4" /> Kích hoạt ngay lập tức
                 </button>
@@ -654,6 +665,16 @@ export function VouchersPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deleteItem)}
+        onClose={() => setDeleteItem(null)}
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
+        title="Xác nhận xóa chương trình voucher"
+        description="Bạn có chắc chắn muốn xóa voucher này không? Thao tác này không thể hoàn tác."
+        itemName={deleteItem ? `${deleteItem.voucherCode} - ${deleteItem.campaignName}` : ''}
+      />
     </>
   );
 }

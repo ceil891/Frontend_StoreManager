@@ -29,8 +29,8 @@ const resolveProductUnitIdBySku = (sku?: string): number | undefined => {
 export const logisticsService = {
   // --- Price Lists ---
   async fetchPriceLists(): Promise<PriceListSchedule[]> {
-    const res = await axiosClient.get<any, any[]>('/catalog/price-lists');
-    const rawList = Array.isArray(res) ? res : (res?.content || []);
+    const res: any = await axiosClient.get<any, any>('/catalog/price-lists');
+    const rawList = Array.isArray(res) ? res : (res?.content || res?.data || []);
     return rawList.map((p: any) => ({
       id: String(p.id),
       listCode: p.listCode || '',

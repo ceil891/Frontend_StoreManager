@@ -38,6 +38,7 @@ function normalizeCustomer(partial: Partial<CustomerProfile> & Pick<CustomerProf
     creditLimit: partial.creditLimit ?? 0,
     groupId: partial.groupId ? String(partial.groupId) : '',
     areaId: partial.areaId ? String(partial.areaId) : '',
+    isCreditBlocked: Boolean(partial.isCreditBlocked),
   };
 }
 
@@ -79,6 +80,7 @@ function mapCustomer(item: any): CustomerProfile {
     creditLimit: Number(item.debtLimit || item.creditLimit || 0),
     groupId: item.groupId ? String(item.groupId) : '',
     areaId: item.areaId ? String(item.areaId) : '',
+    isCreditBlocked: Boolean(item.isCreditBlocked),
   });
 }
 
@@ -89,6 +91,14 @@ export const crmService = {
     const list = extractPageContent<any>(data);
     if (!Array.isArray(list)) return [];
     return list.map(mapCustomer);
+  },
+
+  async toggleCustomerCreditBlock(id: string, blocked?: boolean): Promise<any> {
+    const url = blocked !== undefined
+      ? `/partnerarea/customers/${id}/credit-block?blocked=${blocked}`
+      : `/partnerarea/customers/${id}/credit-block`;
+    const res = await axiosClient.patch<any, any>(url);
+    return res?.data || res;
   },
 
   async addCustomer(customer: CustomerInput): Promise<CustomerProfile> {
@@ -147,7 +157,7 @@ export const crmService = {
 
   // --- Vouchers ---
   async fetchVouchers(): Promise<VoucherRecord[]> {
-    const res = await axiosClient.get<any, any[]>('/crm/vouchers');
+    const res: any = await axiosClient.get<any, any>('/crm/vouchers');
     const list = Array.isArray(res) ? res : (res?.data || res?.content || []);
     return list.map((item: any) => ({
       id: String(item.id),
@@ -214,7 +224,7 @@ export const crmService = {
 
   // --- Customer Vouchers ---
   async fetchCustomerVouchers(): Promise<CustomerVoucherRecord[]> {
-    const res = await axiosClient.get<any, any[]>('/crm/customer-vouchers');
+    const res: any = await axiosClient.get<any, any>('/crm/customer-vouchers');
     const list = Array.isArray(res) ? res : (res?.data || res?.content || []);
     return list.map((item: any) => {
       let status: 'ACTIVE' | 'USED' | 'EXPIRED' | 'CANCELLED' = 'ACTIVE';
@@ -255,7 +265,7 @@ export const crmService = {
         expiredAt: item.expiryDate ? `${item.expiryDate}T23:59:59` : null,
         status: item.status || 'ACTIVE',
         notes: item.notes,
-        customerId: item.customerId ? Number(item.customerId) : 1,
+        customerId: (item as any).customerId ? Number((item as any).customerId) : 1,
         programId: item.programId ? Number(item.programId) : 1,
         customerName: item.customerName,
         customerPhone: item.customerPhone,
@@ -301,8 +311,8 @@ export const crmService = {
 
   // --- Feedbacks ---
   async fetchFeedbacks(): Promise<FeedbackRecord[]> {
-    const res = await axiosClient.get<any, any[]>('/crm/feedbacks');
-    const list = Array.isArray(res) ? res : (res?.content || []);
+    const res: any = await axiosClient.get<any, any>('/crm/feedbacks');
+    const list = Array.isArray(res) ? res : (res?.content || res?.data || []);
     return list.map((item: any) => ({
       id: String(item.id),
       customerName: item.customerName || '',
@@ -365,8 +375,8 @@ export const crmService = {
 
   // --- Marketing Campaigns ---
   async fetchMarketingCampaigns(): Promise<MarketingCampaignRecord[]> {
-    const res = await axiosClient.get<any, any[]>('/crm/campaigns');
-    const list = Array.isArray(res) ? res : (res?.content || []);
+    const res: any = await axiosClient.get<any, any>('/crm/campaigns');
+    const list = Array.isArray(res) ? res : (res?.content || res?.data || []);
     return list.map((item: any) => ({
       id: String(item.id),
       code: item.campaignCode || item.code || '',
@@ -406,8 +416,8 @@ export const crmService = {
 
   // --- Loyalty Tiers ---
   async fetchLoyaltyTiers(): Promise<any[]> {
-    const res = await axiosClient.get<any, any[]>('/crm/tiers');
-    return Array.isArray(res) ? res : (res?.content || []);
+    const res: any = await axiosClient.get<any, any>('/crm/tiers');
+    return Array.isArray(res) ? res : (res?.content || res?.data || []);
   },
 
   async addLoyaltyTier(tier: any): Promise<any> {
@@ -426,8 +436,8 @@ export const crmService = {
 
   // --- Partner Groups ---
   async fetchPartnerGroups(): Promise<PartnerGroupRecord[]> {
-    const res = await axiosClient.get<any, any[]>('/crm/partner-groups');
-    const list = Array.isArray(res) ? res : (res?.content || []);
+    const res: any = await axiosClient.get<any, any>('/crm/partner-groups');
+    const list = Array.isArray(res) ? res : (res?.content || res?.data || []);
     return list.map((item: any) => ({
       id: String(item.id),
       groupCode: item.groupCode || '',
@@ -462,8 +472,8 @@ export const crmService = {
 
   // --- Product Warranties ---
   async fetchProductWarranties(): Promise<ProductWarrantyRecord[]> {
-    const res = await axiosClient.get<any, any[]>('/crm/warranties');
-    const list = Array.isArray(res) ? res : (res?.content || []);
+    const res: any = await axiosClient.get<any, any>('/crm/warranties');
+    const list = Array.isArray(res) ? res : (res?.content || res?.data || []);
     return list.map((item: any) => ({
       id: String(item.id),
       serialNumber: item.serialNumber || '',
@@ -498,8 +508,8 @@ export const crmService = {
 
   // --- Warranty Claims ---
   async fetchWarrantyClaims(): Promise<WarrantyClaimRecord[]> {
-    const res = await axiosClient.get<any, any[]>('/crm/warranty-claims');
-    const list = Array.isArray(res) ? res : (res?.content || []);
+    const res: any = await axiosClient.get<any, any>('/crm/warranty-claims');
+    const list = Array.isArray(res) ? res : (res?.content || res?.data || []);
     return list.map((item: any) => ({
       id: String(item.id),
       claimCode: item.claimCode || '',

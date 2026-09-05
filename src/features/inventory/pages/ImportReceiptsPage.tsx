@@ -115,6 +115,7 @@ export function ImportReceiptsPage() {
   const [suppliersList, setSuppliersList] = useState<any[]>([]);
   const [branchesList, setBranchesList] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
+  const [purchaseOrdersList, setPurchaseOrdersList] = useState<any[]>([]);
 
   useEffect(() => {
     fetchImportReceipts();
@@ -150,7 +151,43 @@ export function ImportReceiptsPage() {
         }
       })
       .catch(() => {});
+
+    // Fetch purchase orders for lookup
+    axiosClient.get('/purchase/orders')
+      .then((res: any) => {
+        const list = res.data?.content || res.content || res.data || res || [];
+        if (Array.isArray(list) && list.length > 0) {
+          setPurchaseOrdersList(list);
+        }
+      })
+      .catch(() => {});
   }, [fetchImportReceipts, fetchProducts, fetchWarehouseBins]);
+
+  const availablePurchaseOrders = useMemo(() => {
+    const existingPoNumbers = new Set(
+      data
+        .filter((d) => d.status !== 'CANCELLED' && d.status !== 'DA_HUY')
+        .map((d) => d.poNumber?.trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    return purchaseOrdersList.filter((po) => {
+      const poCodeLower = (po.poCode || po.poNumber || '').trim().toLowerCase();
+      const st = String(po.status || '').toUpperCase();
+      const isDelivered =
+        st === 'DELIVERED' ||
+        st === 'RECEIVED' ||
+        st === 'DA_NHAN' ||
+        st === 'COMPLETED' ||
+        st === 'COMPLETE' ||
+        st === 'ĐÃ NHẬN HÀNG';
+
+      if (isDelivered || existingPoNumbers.has(poCodeLower)) {
+        return false;
+      }
+      return st !== 'CANCELLED' && st !== 'DRAFT' && st !== 'PENDING_APPROVAL';
+    });
+  }, [purchaseOrdersList, data]);
 
   const filtered = data.filter((item) => {
     // 1. Text search
@@ -171,69 +208,84 @@ export function ImportReceiptsPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const defaultSuppliers = [
-    'Công ty TNHH Thực phẩm Vinamilk',
-    'Tập đoàn Điện tử Samsung Việt Nam',
-    'Công ty CP Bách Hóa Xanh',
-    'Công ty TNHH Unilever Việt Nam',
-    'Công ty P&G Việt Nam'
-  ];
-
-  const defaultBins = warehouseBins.length > 0 ? warehouseBins : [
-    { id: '1', binCode: 'KHO-MAIN-A01', areaName: 'Khu A - Ô 01 (Tầng 1)' },
-    { id: '2', binCode: 'KHO-MAIN-B02', areaName: 'Khu B - Ô 02 (Tầng 2)' },
-    { id: '3', binCode: 'KHO-COLD-C01', areaName: 'Kho Lạnh - Ô 01' },
-  ];
-
-  const defaultProductsList = products.length > 0 ? products : [
-    { id: '1', name: 'Điện thoại iPhone 15 Pro Max 256GB', sku: 'IP15PM-256GB', price: 26500000 },
-    { id: '2', name: 'Sữa tươi Vinamilk 100% Không đường 1L', sku: 'VNM-MILK-1L', price: 28000 },
-    { id: '3', name: 'Nước Giặt OMO Matic Cửa Trên 3.6kg', sku: 'OMO-MATIC-3.6KG', price: 175000 },
-    { id: '4', name: 'Smart TV Samsung QLED 4K 65 inch', sku: 'SS-TV-65QLED', price: 15000000 },
-  ];
-
   const allSelectableProducts = useMemo(() => {
-    const list: any[] = [];
-    const ids = new Set<string>();
+    return (products || []).map((p: any) => ({
+      id: String(p.id),
+      name: p.name || p.productName || 'Sản phẩm',
+      sku: p.sku || p.productCode || `SKU-${p.id}`,
+      price: p.costPrice || p.price || 0,
+    }));
+  }, [products]);
 
-    (products || []).forEach((p: any) => {
-      ids.add(String(p.id));
-      list.push({ id: String(p.id), name: p.name || p.productName || 'Sản phẩm', sku: p.sku || p.productCode || `SKU-${p.id}`, price: p.costPrice || p.price || 0 });
-    });
+  const handleSelectPo = (poCode: string) => {
+    if (!poCode) {
+      setEditingReceipt(prev => ({ ...prev, poNumber: '' }));
+      return;
+    }
+    const matched = purchaseOrdersList.find(p => (p.poCode || p.poNumber) === poCode);
+    if (matched) {
+      const matchedSupplier = suppliersList.find(s =>
+        (s.id && matched.supplierId && String(s.id) === String(matched.supplierId)) ||
+        (s.name && matched.supplierName && s.name.toLowerCase() === matched.supplierName.toLowerCase())
+      );
+      const matchedBranch = branchesList.find(b =>
+        (b.id && matched.branchId && String(b.id) === String(matched.branchId)) ||
+        (b.name && matched.destinationStore && b.name.toLowerCase() === matched.destinationStore.toLowerCase())
+      );
 
-    defaultProductsList.forEach((p: any) => {
-      if (!ids.has(String(p.id))) {
-        ids.add(String(p.id));
-        list.push(p);
-      }
-    });
+      const rawLines = Array.isArray(matched.details) ? matched.details : (Array.isArray(matched.items) ? matched.items : []);
+      const newLines = rawLines.map((l: any, idx: number) => {
+        const prod = products.find(p => String(p.id) === String(l.productId)) ||
+                     products.find(p => p.sku === l.productCode || p.name === l.productName);
+        const unitPrice = Number(l.unitPrice || l.price || prod?.costPrice || 0);
+        const qty = Number(l.quantity || 1);
+        return {
+          productVariantId: prod?.id ? Number(prod.id) : (l.productId ? Number(l.productId) : idx + 1),
+          quantity: qty,
+          unitPrice: unitPrice,
+          targetBinId: warehouseBins.length > 0 ? Number(warehouseBins[0].id) : 1,
+          batchCode: `BATCH-${Date.now().toString().slice(-4)}`,
+          manufactureDate: new Date().toISOString().split('T')[0],
+          expiryDate: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0]
+        };
+      });
 
-    return list;
-  }, [products, defaultProductsList]);
+      const totalQty = newLines.reduce((sum: number, line: any) => sum + line.quantity, 0);
+      const totalVal = newLines.reduce((sum: number, line: any) => sum + (line.quantity * line.unitPrice), 0);
+
+      setEditingReceipt(prev => ({
+        ...prev,
+        poNumber: matched.poCode || matched.poNumber,
+        supplierName: matched.supplierName || matchedSupplier?.name || prev.supplierName,
+        supplierId: matched.supplierId || matchedSupplier?.id || prev.supplierId,
+        receivingStore: matched.destinationStore || matchedBranch?.name || prev.receivingStore,
+        branchId: matched.branchId || matchedBranch?.id || prev.branchId,
+        totalItems: totalQty > 0 ? totalQty : prev.totalItems,
+        acceptedItems: totalQty > 0 ? totalQty : prev.acceptedItems,
+        totalValuation: totalVal > 0 ? totalVal : prev.totalValuation,
+        lines: newLines.length > 0 ? newLines : prev.lines,
+      }));
+    }
+  };
 
   const handleOpenCreate = () => {
     setModalMode('create');
-    const firstProd = defaultProductsList[0];
-    const initialUnitPrice = (firstProd as any).price || (firstProd as any).costPrice || (firstProd as any).basePrice || 500000;
-    const initialQty = 10;
+    const firstProd = products[0];
+    const initialUnitPrice = firstProd ? Number(firstProd.costPrice || firstProd.price || 0) : 0;
+    const initialQty = 1;
     const today = new Date().toISOString().split('T')[0];
     const expiry = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0];
 
-    // Pre-select first supplier and branch from API list
     const firstSupplier = suppliersList.length > 0 ? suppliersList[0] : null;
     const firstBranch = branchesList.length > 0 ? branchesList[0] : null;
-    const firstSupplierId = firstSupplier ? Number((firstSupplier as any).id) : undefined;
-    const firstSupplierName = firstSupplier
-      ? ((firstSupplier as any).name || (firstSupplier as any).supplierName || (firstSupplier as any).companyName || defaultSuppliers[0])
-      : defaultSuppliers[0];
-    const firstBranchId = firstBranch ? Number((firstBranch as any).id) : 1;
-    const firstBranchName = firstBranch
-      ? ((firstBranch as any).branchName || (firstBranch as any).name || 'Main Flagship / HQ')
-      : 'Main Flagship / HQ';
+    const firstSupplierId = firstSupplier ? Number(firstSupplier.id) : undefined;
+    const firstSupplierName = firstSupplier ? (firstSupplier.name || firstSupplier.supplierName || '') : '';
+    const firstBranchId = firstBranch ? Number(firstBranch.id) : 1;
+    const firstBranchName = firstBranch ? (firstBranch.branchName || firstBranch.name || 'Chi nhánh chính') : 'Chi nhánh chính';
 
     setEditingReceipt({
       grnNumber: `GRN-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
-      poNumber: `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      poNumber: '',
       supplierName: firstSupplierName,
       supplierId: firstSupplierId,
       receivingStore: firstBranchName,
@@ -246,18 +298,18 @@ export function ImportReceiptsPage() {
       status: 'PENDING_INSPECTION',
       inspectedBy: '',
       notes: '',
-      lines: [
+      lines: firstProd ? [
         {
           productVariantId: Number(firstProd.id),
           quantity: initialQty,
           unitPrice: initialUnitPrice,
-          targetBinId: Number(defaultBins[0].id),
+          targetBinId: warehouseBins.length > 0 ? Number(warehouseBins[0].id) : 1,
           batchCode: `BATCH-${Date.now().toString().slice(-4)}`,
           manufactureDate: today,
           expiryDate: expiry
         }
-      ]
-    } as any);
+      ] : []
+    });
     setIsModalOpen(true);
   };
 
@@ -383,12 +435,11 @@ export function ImportReceiptsPage() {
     e.preventDefault();
     if (!editingReceipt.grnNumber || !editingReceipt.supplierName) return;
 
-    if (editingReceipt.receivedDate) {
-      const selectedDate = new Date(editingReceipt.receivedDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (selectedDate < today) {
-        toast.error('Ngày dự kiến nhận không được nằm trong quá khứ!');
+    if (modalMode === 'create' && editingReceipt.poNumber?.trim()) {
+      const targetPo = editingReceipt.poNumber.trim().toLowerCase();
+      const existing = data.find(d => d.poNumber?.trim().toLowerCase() === targetPo && d.status !== 'CANCELLED' && d.status !== 'DA_HUY');
+      if (existing) {
+        toast.error(`Đơn mua ${editingReceipt.poNumber} đã có phiếu nhập kho (${existing.grnNumber})! Không thể tạo trùng.`);
         return;
       }
     }
@@ -870,26 +921,25 @@ export function ImportReceiptsPage() {
               />
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Mã PO Đối chiếu</label>
-                <button
-                  type="button"
-                  onClick={() => setEditingReceipt(prev => ({
-                    ...prev,
-                    poNumber: `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
-                  }))}
-                  className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
-                >
-                  ⚡ Tự sinh mã
-                </button>
-              </div>
-              <input
-                type="text"
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Mã PO Đơn mua đối chiếu
+              </label>
+              <select
                 value={editingReceipt.poNumber || ''}
-                onChange={(e) => setEditingReceipt(prev => ({ ...prev, poNumber: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500"
-                placeholder="Ví dụ: PO-2026-8492..."
-              />
+                onChange={(e) => handleSelectPo(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+              >
+                <option value="">-- Tự do (Không theo PO) hoặc Chọn PO... --</option>
+                {editingReceipt.poNumber && !availablePurchaseOrders.some(p => (p.poCode || p.poNumber) === editingReceipt.poNumber) && (
+                  <option value={editingReceipt.poNumber}>{editingReceipt.poNumber} (Đơn hiện tại)</option>
+                )}
+                {availablePurchaseOrders.map(p => (
+                  <option key={p.id || p.poCode} value={p.poCode || p.poNumber}>
+                    {p.poCode || p.poNumber} - {p.supplierName} ({p.status} | {p.paymentStatus === 'PAID' ? 'Đã TT đủ' : 'Chưa TT'})
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-gray-400 mt-0.5">* Chỉ hiển thị các đơn PO chưa có phiếu nhập</p>
             </div>
           </div>
 
@@ -909,19 +959,12 @@ export function ImportReceiptsPage() {
                   );
                   return matched ? String(matched.id) : '';
                 })()}
-                options={suppliersList.length > 0
-                  ? suppliersList.map((s: any) => ({
-                      id: String(s.id),
-                      code: s.code || s.supplierCode || `SUP-${s.id}`,
-                      name: s.name || s.supplierName || s.companyName || s.fullName,
-                      subtitle: `SĐT: ${s.phone || 'N/A'}`
-                    }))
-                  : defaultSuppliers.map((s, i) => ({
-                      id: String(i + 1),
-                      code: `SUP-0${i + 1}`,
-                      name: s
-                    }))
-                }
+                options={suppliersList.map((s: any) => ({
+                  id: String(s.id),
+                  code: s.code || s.supplierCode || `SUP-${s.id}`,
+                  name: s.name || s.supplierName || s.companyName || s.fullName,
+                  subtitle: `SĐT: ${s.phone || 'N/A'}`
+                }))}
                 onChange={(val, opt) => {
                   const id = Number(val);
                   setEditingReceipt(prev => ({
@@ -1122,7 +1165,7 @@ export function ImportReceiptsPage() {
                           onChange={(e) => handleLineChange(idx, 'targetBinId', Number(e.target.value))}
                           className="w-full mt-0.5 px-2 py-1 text-xs border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-medium"
                         >
-                          {defaultBins.map((b) => (
+                          {(warehouseBins.length > 0 ? warehouseBins : [{ id: '1', binCode: 'KHO-MAIN-A01', areaName: 'Kho chính' }]).map((b: any) => (
                             <option key={b.id} value={b.id}>
                               {b.binCode} {b.areaName ? `[${b.areaName}]` : ''}
                             </option>

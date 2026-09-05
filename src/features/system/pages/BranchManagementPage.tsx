@@ -89,19 +89,73 @@ export function BranchManagementPage() {
     return matchSearch && matchStatus;
   });
 
+  const parseAddressParts = (fullAddr?: string) => {
+    if (!fullAddr) return { province: '', district: '', ward: '', addressDetail: '' };
+    const parts = fullAddr.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length === 0) return { province: '', district: '', ward: '', addressDetail: '' };
+
+    let province = '';
+    let district = '';
+    let ward = '';
+
+    // Find province (usually has "Tỉnh", "Thành phố", "TP")
+    const provIdx = parts.findIndex(p => /^(tỉnh|thành phố|tp\.)/i.test(p));
+    // Find district (usually has "Quận", "Huyện", "Thị xã")
+    const distIdx = parts.findIndex((p, idx) => idx !== provIdx && /^(quận|huyện|thị xã|tp\.|thành phố)/i.test(p));
+    // Find ward (usually has "Phường", "Xã", "Thị trấn")
+    const wardIdx = parts.findIndex((p, idx) => idx !== provIdx && idx !== distIdx && /^(phường|xã|thị trấn|p\.|x\.)/i.test(p));
+
+    if (provIdx !== -1) province = parts[provIdx];
+    if (distIdx !== -1) district = parts[distIdx];
+    if (wardIdx !== -1) ward = parts[wardIdx];
+
+    // Fallback based on standard backward order: [addressDetail], [ward], [district], [province]
+    if (!province && parts.length >= 1) {
+      province = parts[parts.length - 1];
+    }
+    if (!district && parts.length >= 2) {
+      district = parts[parts.length - 2];
+    }
+    if (!ward && parts.length >= 3) {
+      ward = parts[parts.length - 3];
+    }
+
+    // Filter out parts that duplicate province, district, ward or are lonely keywords like "Huyện", "Tỉnh", "Xã"
+    const matchedIndices = new Set([provIdx, distIdx, wardIdx].filter(i => i !== -1));
+    const detailParts = parts.filter((p, idx) => {
+      if (matchedIndices.has(idx)) return false;
+      const lower = p.toLowerCase();
+      if (province && lower === province.toLowerCase()) return false;
+      if (district && lower === district.toLowerCase()) return false;
+      if (ward && lower === ward.toLowerCase()) return false;
+      if (/^(tỉnh|huyện|quận|xã|phường|thị trấn)$/i.test(lower)) return false;
+      return true;
+    });
+
+    const addressDetail = detailParts.join(', ');
+
+    return { province, district, ward, addressDetail };
+  };
+
   // --- CRUD Handlers ---
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingBranch({
       ...EMPTY_BRANCH,
       branchCode: `BR-${String(branches.length + 1).padStart(3, '0')}`,
-    });
+      province: '',
+      district: '',
+      ward: '',
+      addressDetail: '',
+      location: '',
+    } as any);
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (branch: Branch) => {
     setModalMode('edit');
-    setEditingBranch({ ...branch });
+    const parsedAddr = parseAddressParts(branch.location);
+    setEditingBranch({ ...branch, ...parsedAddr } as any);
     setIsModalOpen(true);
   };
 
@@ -505,10 +559,20 @@ export function BranchManagementPage() {
 
               <div>
                 <AddressCascadeSelect
-                  addressDetail={editingBranch.location || ''}
+                  province={(editingBranch as any).province}
+                  district={(editingBranch as any).district}
+                  ward={(editingBranch as any).ward}
+                  addressDetail={(editingBranch as any).addressDetail || ''}
                   onChange={({ province, district, ward, addressDetail }) => {
                     const fullAddr = [addressDetail, ward, district, province].filter(Boolean).join(', ');
-                    setEditingBranch(prev => ({ ...prev, location: fullAddr }));
+                    setEditingBranch(prev => ({
+                      ...prev,
+                      province,
+                      district,
+                      ward,
+                      addressDetail,
+                      location: fullAddr
+                    } as any));
                   }}
                 />
               </div>

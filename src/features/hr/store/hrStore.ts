@@ -296,27 +296,22 @@ export const useHrStore = create<HrState>()(
         }
       },
       addContract: async (item) => {
-        try {
-          await axiosClient.post('/hr/contracts', item);
-          await get().fetchContracts();
-        } catch {
-          set((state) => ({ contracts: [{ id: `c_${Date.now()}`, ...item }, ...state.contracts] }));
-        }
+        await axiosClient.post('/hr/contracts', item);
+        await get().fetchContracts();
       },
       updateContract: async (id, data) => {
-        try {
-          await axiosClient.put(`/hr/contracts/${id}`, data);
-          await get().fetchContracts();
-        } catch {
-          set((state) => ({ contracts: state.contracts.map((c) => (c.id === id ? { ...c, ...data } : c)) }));
-        }
+        await axiosClient.put(`/hr/contracts/${id}`, data);
+        await get().fetchContracts();
       },
       deleteContract: async (id) => {
+        set({ isLoading: true, error: null });
         try {
           await axiosClient.delete(`/hr/contracts/${id}`);
           await get().fetchContracts();
-        } catch {
-          set((state) => ({ contracts: state.contracts.filter((c) => c.id !== id) }));
+        } catch (e: any) {
+          console.error('Failed to delete contract:', e);
+          set({ isLoading: false, error: e?.message || 'Lỗi khi xóa hợp đồng' });
+          throw e;
         }
       },
 
@@ -330,27 +325,22 @@ export const useHrStore = create<HrState>()(
         }
       },
       addKpiRecord: async (item) => {
-        try {
-          await axiosClient.post('/hr/kpis', item);
-          await get().fetchKpiRecords();
-        } catch {
-          set((state) => ({ kpiRecords: [{ id: `kpi_${Date.now()}`, ...item }, ...state.kpiRecords] }));
-        }
+        await axiosClient.post('/hr/kpis', item);
+        await get().fetchKpiRecords();
       },
       updateKpiRecord: async (id, data) => {
-        try {
-          await axiosClient.put(`/hr/kpis/${id}`, data);
-          await get().fetchKpiRecords();
-        } catch {
-          set((state) => ({ kpiRecords: state.kpiRecords.map((k) => (k.id === id ? { ...k, ...data } : k)) }));
-        }
+        await axiosClient.put(`/hr/kpis/${id}`, data);
+        await get().fetchKpiRecords();
       },
       deleteKpiRecord: async (id) => {
+        set({ isLoading: true, error: null });
         try {
           await axiosClient.delete(`/hr/kpis/${id}`);
           await get().fetchKpiRecords();
-        } catch {
-          set((state) => ({ kpiRecords: state.kpiRecords.filter((k) => k.id !== id) }));
+        } catch (e: any) {
+          console.error('Failed to delete KPI record:', e);
+          set({ isLoading: false, error: e?.message || 'Lỗi khi xóa KPI' });
+          throw e;
         }
       },
 
@@ -364,113 +354,81 @@ export const useHrStore = create<HrState>()(
         }
       },
       addLeaveRequest: async (item) => {
-        try {
-          await axiosClient.post('/hr/leave-requests', item);
-          await get().fetchLeaveRequests();
-        } catch {
-          set((state) => ({ leaveRequests: [{ id: `lr_${Date.now()}`, ...item }, ...state.leaveRequests] }));
-        }
+        await axiosClient.post('/hr/leave-requests', item);
+        await get().fetchLeaveRequests();
       },
       updateLeaveRequest: async (id, data) => {
-        try {
-          await axiosClient.put(`/hr/leave-requests/${id}`, data);
-          await get().fetchLeaveRequests();
-        } catch {
-          set((state) => ({ leaveRequests: state.leaveRequests.map((l) => (l.id === id ? { ...l, ...data } : l)) }));
-        }
+        await axiosClient.put(`/hr/leave-requests/${id}`, data);
+        await get().fetchLeaveRequests();
       },
       deleteLeaveRequest: async (id) => {
+        set({ isLoading: true, error: null });
         try {
           await axiosClient.delete(`/hr/leave-requests/${id}`);
           await get().fetchLeaveRequests();
-        } catch {
-          set((state) => ({ leaveRequests: state.leaveRequests.filter((l) => l.id !== id) }));
+        } catch (e: any) {
+          console.error('Failed to delete leave request:', e);
+          set({ isLoading: false, error: e?.message || 'Lỗi khi xóa đơn nghỉ phép' });
+          throw e;
         }
       },
 
       fetchShiftSwapRequests: async () => {
         try {
-          const res = await axiosClient.get<any, ShiftSwapRequestRecord[]>('/hr/shift-swaps');
-          if (res && res.length > 0) {
-            set({ shiftSwapRequests: res });
-          }
-        } catch {
-          // Keep local state
+          const res = await axiosClient.get<any, any>('/hr/shift-swaps');
+          const list = Array.isArray(res) ? res : (res?.data || res?.content || []);
+          set({ shiftSwapRequests: list });
+        } catch (error) {
+          console.error('Failed to fetch shift swap requests:', error);
         }
       },
       addShiftSwapRequest: async (item) => {
-        const newRecord: ShiftSwapRequestRecord = {
-          id: `ssr_${Date.now()}`,
-          requestCode: item.requestCode || `DC-2026-${Math.floor(100 + Math.random() * 900)}`,
-          requesterName: item.requesterName,
-          requesterShift: item.requesterShift,
-          targetUserName: item.targetUserName,
-          targetUserShift: item.targetUserShift,
-          swapDate: item.swapDate,
-          reason: item.reason,
-          status: item.status || 'PENDING',
-          approvedBy: item.approvedBy || 'Chưa duyệt',
-          notes: item.notes || '',
-        };
-        set((state) => ({ shiftSwapRequests: [newRecord, ...state.shiftSwapRequests] }));
-        try {
-          await axiosClient.post('/hr/shift-swaps', item);
-        } catch {
-          // Keep local record
-        }
+        await axiosClient.post('/hr/shift-swaps', item);
+        await get().fetchShiftSwapRequests();
       },
       updateShiftSwapRequest: async (id, data) => {
-        set((state) => ({
-          shiftSwapRequests: state.shiftSwapRequests.map((s) => (s.id === id ? { ...s, ...data } : s)),
-        }));
-        try {
-          await axiosClient.put(`/hr/shift-swaps/${id}`, data);
-        } catch {
-          // Keep local change
-        }
+        await axiosClient.put(`/hr/shift-swaps/${id}`, data);
+        await get().fetchShiftSwapRequests();
       },
       deleteShiftSwapRequest: async (id) => {
-        set((state) => ({
-          shiftSwapRequests: state.shiftSwapRequests.filter((s) => s.id !== id),
-        }));
+        set({ isLoading: true, error: null });
         try {
           await axiosClient.delete(`/hr/shift-swaps/${id}`);
-        } catch {
-          // Keep local change
+          await get().fetchShiftSwapRequests();
+        } catch (e: any) {
+          console.error('Failed to delete shift swap request:', e);
+          set({ isLoading: false, error: e?.message || 'Lỗi khi xóa yêu cầu đổi ca' });
+          throw e;
         }
       },
 
       fetchPayrolls: async () => {
         set({ isLoading: true, error: null });
         try {
-          const res = await axiosClient.get<any, PayrollRecord[]>('/finance/payrolls');
-          set({ payrolls: res, isLoading: false });
+          const res = await axiosClient.get<any, any>('/finance/payrolls');
+          const list = Array.isArray(res) ? res : (res?.data || res?.content || []);
+          set({ payrolls: list, isLoading: false });
         } catch {
           set({ isLoading: false });
         }
       },
       addPayroll: async (item) => {
-        try {
-          await axiosClient.post('/finance/payrolls', item);
-          await get().fetchPayrolls();
-        } catch {
-          set((state) => ({ payrolls: [{ id: `pr_${Date.now()}`, ...item }, ...state.payrolls] }));
-        }
+        await axiosClient.post('/finance/payrolls', item);
+        await get().fetchPayrolls();
       },
       updatePayroll: async (id, data) => {
-        try {
-          await axiosClient.put(`/finance/payrolls/${id}`, data);
-          await get().fetchPayrolls();
-        } catch {
-          set((state) => ({ payrolls: state.payrolls.map((p) => (p.id === id ? { ...p, ...data } : p)) }));
-        }
+        await axiosClient.put(`/finance/payrolls/${id}`, data);
+        await get().fetchPayrolls();
       },
       deletePayroll: async (id) => {
+        set({ isLoading: true, error: null });
         try {
           await axiosClient.delete(`/finance/payrolls/${id}`);
           await get().fetchPayrolls();
-        } catch {
-          set((state) => ({ payrolls: state.payrolls.filter((p) => p.id !== id) }));
+        } catch (e: any) {
+          console.error('Failed to delete payroll:', e);
+          set({ isLoading: false, error: e?.message || 'Lỗi khi xóa bảng lương' });
+          throw e;
         }
       },
     }),

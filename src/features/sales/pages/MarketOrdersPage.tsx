@@ -1,11 +1,11 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, MapPin, Calendar, User, DollarSign, Tag, CheckCircle2, Clock, XCircle, Trash2, Edit } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-
-
 import type { ColumnDef } from '@tanstack/react-table';
 import { useSalesStore } from '@/features/sales/store/salesStore';
+import { useCrmStore } from '@/features/crm/store/crmStore';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 
@@ -25,18 +25,21 @@ interface MarketOrderItem {
 
 export function MarketOrdersPage() {
   const { saleOrders, fetchSaleOrders, addSaleOrder, updateSaleOrder, deleteSaleOrder } = useSalesStore();
+  const { customers, fetchCustomers } = useCrmStore();
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
   const [selectedItem, setSelectedItem] = useState<MarketOrderItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<MarketOrderItem>>({});
+  const [deletingItem, setDeletingItem] = useState<MarketOrderItem | null>(null);
 
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       try {
-        await fetchSaleOrders();
+        await Promise.all([fetchSaleOrders(), fetchCustomers()]);
       } catch (err) {
         console.error(err);
         toast.error('Không thể tải danh sách đơn thị trường');
@@ -80,6 +83,7 @@ export function MarketOrdersPage() {
   });
 
   const handleOpenCreate = () => {
+    setModalMode('create');
     setEditingItem({
       orderCode: `MDO-00${data.length + 1}`,
       customerName: '',
@@ -94,14 +98,26 @@ export function MarketOrdersPage() {
     setIsModalOpen(true);
   };
 
+  const handleOpenEdit = (item: MarketOrderItem) => {
+    setModalMode('edit');
+    setEditingItem(item);
+    setIsModalOpen(true);
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.customerName || !editingItem.orderValue) return;
 
     try {
+      const matchedCust = customers.find(
+        (c) => c.name.toLowerCase() === (editingItem.customerName || '').trim().toLowerCase() || String(c.id) === editingItem.customerName
+      );
+      const customerId = matchedCust ? String(matchedCust.id) : (customers[0]?.id ? String(customers[0].id) : '1');
+
       const payload = {
         code: editingItem.orderCode || `MDO-00${data.length + 1}`,
-        customerId: editingItem.customerName,
+        customerId,
+        customerName: editingItem.customerName,
         date: editingItem.deliveryDate || new Date().toISOString().split('T')[0],
         subTotal: Number(editingItem.orderValue),
         taxAmount: 0,
@@ -112,15 +128,35 @@ export function MarketOrdersPage() {
         createdByName: editingItem.createdBy || 'Quản trị viên',
         shippingAddress: editingItem.address || '',
         paymentMethod: editingItem.notes || '',
-        origin: 'POS' as any,
+        origin: 'MARKETPLACE' as any,
       };
-      await addSaleOrder(payload);
-      toast.success('Tạo đơn thị trường thành công!');
+
+      if (modalMode === 'create') {
+        await addSaleOrder(payload);
+        toast.success('Tạo đơn thị trường thành công!');
+      } else if (editingItem.id) {
+        await updateSaleOrder(editingItem.id, payload);
+        toast.success('Cập nhật đơn thị trường thành công!');
+      }
       setIsModalOpen(false);
       fetchSaleOrders();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lỗi khi lưu đơn thị trường.');
+      toast.error('Lỗi khi lưu đơn thị trường: ' + (err?.message || 'Thất bại'));
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingItem) return;
+    try {
+      await deleteSaleOrder(deletingItem.id);
+      toast.success(`Đã xóa đơn thị trường "${deletingItem.orderCode}" thành công!`);
+      if (selectedItem?.id === deletingItem.id) setSelectedItem(null);
+      setDeletingItem(null);
+      fetchSaleOrders();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Xóa đơn thị trường thất bại: ' + (err?.message || 'Thất bại'));
     }
   };
 
@@ -217,6 +253,20 @@ export function MarketOrdersPage() {
               title="Chi tiết đơn hàng"
             >
               <Eye className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleOpenEdit(row.original)}
+              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors shrink-0"
+              title="Chỉnh sửa đơn hàng"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setDeletingItem(row.original)}
+              className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors shrink-0"
+              title="Xóa đơn hàng"
+            >
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         ),
@@ -382,11 +432,11 @@ export function MarketOrdersPage() {
         )}
       </Modal>
 
-      {/* Modal Lên đơn đi tuyến mới */}
+      {/* Modal Lên đơn đi tuyến mới / Sửa đơn */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Lên đơn đi tuyến thị trường mới"
+        title={modalMode === 'create' ? 'Lên đơn đi tuyến thị trường mới' : 'Chỉnh sửa đơn đi tuyến thị trường'}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -506,11 +556,21 @@ export function MarketOrdersPage() {
               type="submit"
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow transition-colors text-sm"
             >
-              Tạo Đơn Hàng
+              {modalMode === 'create' ? 'Tạo Đơn Hàng' : 'Lưu Thay Đổi'}
             </button>
           </div>
         </form>
       </Modal>
+
+      {/* Modal Xác nhận Xóa đơn thị trường */}
+      <ConfirmDeleteModal
+        isOpen={!!deletingItem}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleDeleteConfirm}
+        itemName={deletingItem?.orderCode || 'đơn thị trường'}
+        title="Xác nhận xóa đơn thị trường"
+        description={`Bạn có chắc chắn muốn xóa đơn hàng "${deletingItem?.orderCode}" không? Hành động này không thể hoàn tác.`}
+      />
     </>
   );
 }

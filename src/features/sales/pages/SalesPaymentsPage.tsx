@@ -1,4 +1,5 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, CreditCard, CheckCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
@@ -28,7 +29,9 @@ export function SalesPaymentsPage() {
   const [selected, setSelected] = useState<SalesPaymentRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  const [editingItem, setEditingItem] = useState<Partial<SalesPaymentRecord>>({});
+  const [editingItem, setEditingItem] = useState<Partial<SalesPaymentRecord & { invoiceId?: number; methodId?: number }>>({});
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [paymentMethodsList, setPaymentMethodsList] = useState<any[]>([]);
 
   const fetchPayments = async () => {
     setIsLoading(true);
@@ -57,6 +60,14 @@ export function SalesPaymentsPage() {
 
   useEffect(() => {
     fetchPayments();
+    axiosClient.get('/sales/invoices').then((res: any) => {
+      const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : res?.content || []);
+      setInvoices(list);
+    }).catch(() => {});
+    axiosClient.get('/finance/payment-methods').then((res: any) => {
+      const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : res?.content || []);
+      setPaymentMethodsList(list);
+    }).catch(() => {});
   }, []);
 
   const filtered = useMemo(() => {
@@ -73,16 +84,20 @@ export function SalesPaymentsPage() {
 
   const handleOpenCreate = () => {
     setModalMode('create');
+    const firstInv = invoices[0];
+    const firstMethod = paymentMethodsList[0];
     setEditingItem({
       paymentCode: `PAY-SO-${Date.now().toString().slice(-4)}`,
-      invoiceCode: '',
-      customerName: '',
+      invoiceCode: firstInv ? (firstInv.invoiceNumber || firstInv.invoiceCode || `INV-${firstInv.id}`) : '',
+      customerName: firstInv ? (firstInv.companyName || firstInv.customerId || 'Khách lẻ') : '',
       paymentMethod: 'CHUYEN_KHOAN',
       paymentDate: new Date().toISOString().split('T')[0],
-      amount: 0,
+      amount: firstInv ? (firstInv.totalAmount || 0) : 0,
       receiver: '',
-      status: 'CHO_DUYET',
+      status: 'DA_THU',
       notes: '',
+      invoiceId: firstInv ? Number(firstInv.id) : undefined,
+      methodId: firstMethod ? Number(firstMethod.id) : undefined,
     });
     setIsModalOpen(true);
   };
@@ -93,12 +108,46 @@ export function SalesPaymentsPage() {
     setIsModalOpen(true);
   };
 
+  const handleSelectInvoice = (invIdStr: string) => {
+    const inv = invoices.find(i => String(i.id) === invIdStr);
+    if (inv) {
+      setEditingItem(prev => ({
+        ...prev,
+        invoiceId: Number(inv.id),
+        invoiceCode: inv.invoiceNumber || inv.invoiceCode || `INV-${inv.id}`,
+        customerName: inv.companyName || inv.customerId || 'Khách lẻ',
+        amount: Number(inv.totalAmount || 0),
+      }));
+    }
+  };
+
+  const handleSelectMethod = (mIdStr: string) => {
+    const m = paymentMethodsList.find(item => String(item.id) === mIdStr);
+    if (m) {
+      setEditingItem(prev => ({
+        ...prev,
+        methodId: Number(m.id),
+        paymentMethod: (m.methodCode === 'CASH' ? 'TIEN_MAT' : 'CHUYEN_KHOAN') as any,
+      }));
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.invoiceCode || !editingItem.amount) return;
 
     try {
+      const invId = editingItem.invoiceId || invoices.find(i => (i.invoiceNumber === editingItem.invoiceCode || i.invoiceCode === editingItem.invoiceCode))?.id;
+      const mId = editingItem.methodId || paymentMethodsList[0]?.id || 1;
+
+      if (!invId) {
+        toast.error('Vui lòng chọn hóa đơn hợp lệ cần thanh toán');
+        return;
+      }
+
       const payload = {
+        invoiceId: Number(invId),
+        methodId: Number(mId),
         amountPaid: Number(editingItem.amount),
         transactionRef: editingItem.paymentCode,
       };
@@ -111,22 +160,25 @@ export function SalesPaymentsPage() {
       }
       setIsModalOpen(false);
       fetchPayments();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Lỗi khi lưu thanh toán.');
+      toast.error('Lỗi khi lưu thanh toán: ' + (err?.response?.data?.message || err?.message || ''));
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa giao dịch thanh toán này?')) {
-      try {
-        await axiosClient.delete(`/finance/order-payments/${id}`);
-        toast.success('Đã xóa giao dịch thanh toán!');
-        fetchPayments();
-      } catch (err) {
-        console.error(err);
-        toast.error('Lỗi khi xóa thanh toán.');
-      }
+  const [deletingItem, setDeletingItem] = useState<SalesPaymentRecord | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await axiosClient.delete(`/finance/order-payments/${deletingItem.id}`);
+      toast.success(`Đã xóa giao dịch thanh toán "${deletingItem.paymentCode}" thành công!`);
+      if (selected?.id === deletingItem.id) setSelected(null);
+      setDeletingItem(null);
+      fetchPayments();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi xóa thanh toán: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
   };
 
@@ -200,7 +252,7 @@ export function SalesPaymentsPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeletingItem(row.original)}
               className="p-1 text-gray-500 hover:text-red-600 rounded"
               title="Xóa"
             >
@@ -356,14 +408,30 @@ export function SalesPaymentsPage() {
             </div>
             <div>
               <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã Hóa đơn / Đơn SO liên kết *</label>
-              <input
-                type="text"
-                value={editingItem.invoiceCode || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, invoiceCode: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                placeholder="INV-2026-XXX hoặc SO-XXX"
-                required
-              />
+              {invoices.length > 0 ? (
+                <select
+                  value={editingItem.invoiceId ? String(editingItem.invoiceId) : (invoices.find(i => (i.invoiceNumber === editingItem.invoiceCode || i.invoiceCode === editingItem.invoiceCode))?.id ? String(invoices.find(i => (i.invoiceNumber === editingItem.invoiceCode || i.invoiceCode === editingItem.invoiceCode))?.id) : '')}
+                  onChange={(e) => handleSelectInvoice(e.target.value)}
+                  className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                  required
+                >
+                  <option value="">-- Chọn hóa đơn cần thu --</option>
+                  {invoices.map((inv) => (
+                    <option key={inv.id} value={inv.id}>
+                      {inv.invoiceNumber || inv.invoiceCode || `INV-${inv.id}`} - {inv.companyName || inv.customerId || 'Khách lẻ'} ({formatCurrency(inv.totalAmount || 0)})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={editingItem.invoiceCode || ''}
+                  onChange={(e) => setEditingItem({ ...editingItem, invoiceCode: e.target.value })}
+                  className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                  placeholder="INV-2026-XXX hoặc SO-XXX"
+                  required
+                />
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -405,16 +473,30 @@ export function SalesPaymentsPage() {
             </div>
             <div>
               <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Phương thức thanh toán *</label>
-              <select
-                value={editingItem.paymentMethod || 'CHUYEN_KHOAN'}
-                onChange={(e) => setEditingItem({ ...editingItem, paymentMethod: e.target.value as any })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-              >
-                <option value="CHUYEN_KHOAN">🏦 Chuyển khoản ngân hàng</option>
-                <option value="TIEN_MAT">💵 Tiền mặt tại quầy</option>
-                <option value="THE">💳 Thẻ (Visa/Master/ATM)</option>
-                <option value="VI_DIEN_TU">📲 Ví điện tử (Momo/VNPay/ZaloPay)</option>
-              </select>
+              {paymentMethodsList.length > 0 ? (
+                <select
+                  value={editingItem.methodId ? String(editingItem.methodId) : (paymentMethodsList[0] ? String(paymentMethodsList[0].id) : '')}
+                  onChange={(e) => handleSelectMethod(e.target.value)}
+                  className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                >
+                  {paymentMethodsList.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.methodName} ({m.methodCode})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <select
+                  value={editingItem.paymentMethod || 'CHUYEN_KHOAN'}
+                  onChange={(e) => setEditingItem({ ...editingItem, paymentMethod: e.target.value as any })}
+                  className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                >
+                  <option value="CHUYEN_KHOAN">🏦 Chuyển khoản ngân hàng</option>
+                  <option value="TIEN_MAT">💵 Tiền mặt tại quầy</option>
+                  <option value="THE">💳 Thẻ (Visa/Master/ATM)</option>
+                  <option value="VI_DIEN_TU">📲 Ví điện tử (Momo/VNPay/ZaloPay)</option>
+                </select>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -474,6 +556,15 @@ export function SalesPaymentsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa giao dịch thanh toán"
+        description="Bạn có chắc chắn muốn xóa phiếu thanh toán này khỏi hệ thống không?"
+        itemName={deletingItem ? `${deletingItem.paymentCode} (${deletingItem.customerName})` : undefined}
+      />
     </div>
   );
 }

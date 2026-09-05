@@ -18,6 +18,11 @@ export interface ReceiptVoucher {
   receivingAccount?: string;
   payerContact?: string;
   attachments?: string[];
+  voucherCode?: string;
+  createdDate?: string;
+  createdByName?: string;
+  invoiceCode?: string;
+  paymentReason?: string;
 }
 
 export interface PaymentVoucher {
@@ -55,7 +60,14 @@ export interface DebtRecord {
   referenceDoc?: string;
   incurredDate?: string;
   paidAmount?: number;
+  increase?: number;
+  decrease?: number;
   currency?: string;
+  partnerCode?: string;
+  partnerName?: string;
+  partnerType?: string;
+  closingDebt?: number;
+  lastTransactionDate?: string;
 }
 
 export interface OperatingCost {
@@ -71,6 +83,7 @@ export interface OperatingCost {
   assignedBudget: string;
   authorizedBy: string;
   description?: string;
+  title?: string;
 }
 
 export interface CorporateBankAccount {
@@ -138,7 +151,16 @@ export interface JournalEntry {
   status: JournalStatus;
   branchId: string;
   lines: JournalLine[];
+  entryCode?: string;
+  transactionDate?: string;
 }
+
+export type ReceiptVoucherRecord = ReceiptVoucher;
+export type PaymentVoucherRecord = PaymentVoucher;
+export type DebtLedgerRecord = DebtRecord;
+export type BankAccountRecord = CorporateBankAccount;
+export type OperatingCostRecord = OperatingCost;
+export type JournalEntryRecord = JournalEntry;
 
 export interface FixedAssetRecord {
   id: string;
@@ -232,6 +254,7 @@ interface FinanceState {
 
   updateJournalEntry: (id: string, data: Partial<JournalEntry>) => Promise<void>;
   addJournalEntry: (row: Omit<JournalEntry, 'id'>) => Promise<void>;
+  deleteJournalEntry: (id: string) => Promise<void>;
 
   fetchFixedAssets: () => Promise<void>;
   addFixedAsset: (item: Omit<FixedAssetRecord, 'id'>) => Promise<void>;
@@ -239,8 +262,18 @@ interface FinanceState {
   deleteFixedAsset: (id: string) => Promise<void>;
 
   fetchDepreciations: () => Promise<void>;
+  addDepreciation: (item: any) => Promise<void>;
+  updateDepreciation: (id: string, data: any) => Promise<void>;
+  deleteDepreciation: (id: string) => Promise<void>;
   fetchFundBalances: () => Promise<void>;
+  addFundBalance: (item: any) => Promise<any>;
+  updateFundBalance: (id: string, data: any) => Promise<any>;
+  deleteFundBalance: (id: string) => Promise<void>;
+
   fetchTaxDuties: () => Promise<void>;
+  addTaxDuty: (item: any) => Promise<any>;
+  updateTaxDuty: (id: string, data: any) => Promise<any>;
+  deleteTaxDuty: (id: string) => Promise<void>;
 }
 
 const DEFAULT_FIXED_ASSETS: FixedAssetRecord[] = [];
@@ -251,7 +284,7 @@ const DEFAULT_TAX_DUTIES: TaxDutyRecord[] = [];
 export const DEFAULT_MOCK_RECEIPTS: ReceiptVoucher[] = [];
 export const DEFAULT_MOCK_PAYMENTS: PaymentVoucher[] = [];
 
-export const useFinanceStore = create<FinanceState>()((set) => ({
+export const useFinanceStore = create<FinanceState>()((set, get) => ({
   receipts: [],
   payments: [],
   debts: [],
@@ -326,16 +359,22 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
       const data = await financeService.fetchDebtLedgers();
       const mapped: DebtRecord[] = data.map((item) => ({
         id: item.id,
-        debtCode: item.partnerCode,
-        entityName: item.partnerName,
-        entityType: item.partnerType as any,
-        totalDebt: item.closingDebt,
-        dueAmount: item.closingDebt,
+        debtCode: item.debtCode || item.partnerCode || `DBT-${item.id}`,
+        entityName: item.entityName || item.partnerName || '',
+        entityType: (item.entityType || item.partnerType || 'CUSTOMER') as any,
+        totalDebt: Number(item.totalDebt ?? item.closingDebt ?? 0),
+        dueAmount: Number(item.dueAmount ?? item.closingDebt ?? 0),
         dueDate: (item as any).dueDate || item.lastTransactionDate || '',
         status: ((item as any).status || 'NORMAL') as any,
-        lastPaymentDate: item.lastTransactionDate || undefined,
+        lastPaymentDate: item.lastPaymentDate || item.lastTransactionDate || undefined,
         accountManager: (item as any).accountManager || 'Kế toán công nợ',
         branchId: '1',
+        increase: Number((item as any).increase ?? (item as any).openingDebt ?? 0),
+        decrease: Number((item as any).decrease ?? (item as any).paidDebt ?? 0),
+        paidAmount: Number((item as any).paidAmount ?? (item as any).decrease ?? 0),
+        referenceDoc: (item as any).referenceDoc || item.partnerCode || '',
+        incurredDate: (item as any).incurredDate || '',
+        notes: (item as any).notes || '',
       }));
       set({ debts: mapped, isLoading: false });
     } catch (e: any) {
@@ -348,18 +387,19 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const data = await financeService.fetchOperatingCosts();
-      const mapped: OperatingCost[] = data.map((item) => ({
+      const mapped: OperatingCost[] = data.map((item: any) => ({
         id: item.id,
         costCode: item.costCode,
-        costName: item.title,
-        category: 'RENTAL',
-        amount: item.amount,
-        incurredDate: item.incurredDate,
-        branch: 'Chi nhánh 1',
-        branchId: '1',
-        paymentStatus: item.paymentStatus as any,
-        assignedBudget: 'Budget-2026',
-        authorizedBy: 'Giám đốc',
+        costName: item.costName || item.title || 'Chi phí vận hành',
+        category: (['RENTAL', 'UTILITIES', 'SALARY', 'MARKETING', 'MAINTENANCE', 'INSURANCE', 'SUPPLIES'].includes(item.category || item.costCategory) ? (item.category || item.costCategory) : 'RENTAL'),
+        amount: Number(item.amount || 0),
+        incurredDate: item.incurredDate || '',
+        branch: item.branch || item.branchName || 'Hội sở chính',
+        branchId: item.branchId || '1',
+        paymentStatus: item.paymentStatus as any || 'PAID',
+        assignedBudget: item.assignedBudget || 'Budget-2026',
+        authorizedBy: item.authorizedBy || 'Giám đốc',
+        description: item.description || item.notes || '',
       }));
       set({ operatingCosts: mapped, isLoading: false });
     } catch (e: any) {
@@ -412,15 +452,15 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const data = await financeService.fetchJournalEntries();
-      const mapped: JournalEntry[] = data.map((item) => ({
+      const mapped: JournalEntry[] = data.map((item: any) => ({
         id: item.id,
-        code: item.entryCode,
-        date: item.transactionDate,
+        code: item.code || item.entryCode,
+        date: item.date || item.transactionDate,
         description: item.description,
-        reference: '',
-        status: 'POSTED',
-        branchId: '1',
-        lines: [],
+        reference: item.reference || '',
+        status: item.status || 'POSTED',
+        branchId: item.branchId || '1',
+        lines: item.lines || [],
       }));
       set({ journalEntries: mapped, isLoading: false });
     } catch (e: any) {
@@ -444,9 +484,10 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
         payerName: row.payerName,
         amount: row.amount,
         paymentMethod: row.paymentMethod,
-        status: (row as any).status || 'PENDING_APPROVAL',
+        status: (row as any).status || 'COMPLETED',
         notes: row.notes || '',
         fundAccountName: (row as any).fundAccountName || '',
+        invoiceCode: row.referenceDoc || (row as any).invoiceCode || '',
       });
       // Reload từ API để có ID thực + dữ liệu chính xác
       const fresh = await financeService.fetchReceiptVouchers();
@@ -460,31 +501,31 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
         receivedDate: item.createdDate,
         cashier: item.createdByName,
         branchId: '1',
-        status: (item.status as any) || 'PENDING_APPROVAL',
+        status: (item.status as any) || 'COMPLETED',
         fundAccountName: item.fundAccountName || '',
         referenceDoc: item.invoiceCode || item.referenceDoc || '',
         notes: item.notes || '',
       }));
       set({ receipts: mapped, isLoading: false });
     } catch (e: any) {
-      console.error('[addReceipt] API error (keeping optimistic record):', e);
-      set({ isLoading: false });
+      console.error('[addReceipt] API error (reverting optimistic record):', e);
+      set((state) => ({ receipts: state.receipts.filter(r => r.id !== newRec.id), isLoading: false }));
+      throw e;
     }
   },
 
   updateReceipt: async (id, data) => {
     set({ isLoading: true, error: null });
     try {
-      try {
-        await financeService.updateReceiptVoucher(id, {
-          voucherCode: data.voucherNumber,
-          payerName: data.payerName,
-          paymentReason: data.notes,
-          amount: data.amount,
-          paymentMethod: data.paymentMethod,
-          createdDate: data.receivedDate,
-        });
-      } catch {}
+      await financeService.updateReceiptVoucher(id, {
+        voucherCode: data.voucherNumber,
+        payerName: data.payerName,
+        paymentReason: data.notes,
+        amount: data.amount,
+        paymentMethod: data.paymentMethod,
+        createdDate: data.receivedDate,
+        status: data.status,
+      });
 
       set((state) => {
         const next = state.receipts.map((r) => (r.id === id ? { ...r, ...data } : r));
@@ -494,18 +535,16 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
         return { receipts: next, isLoading: false };
       });
     } catch (e: any) {
-      console.error(e);
-      set({ isLoading: false });
+      console.error('[updateReceipt] API error:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi cập nhật phiếu thu' });
+      throw e;
     }
   },
 
   deleteReceipt: async (id) => {
     set({ isLoading: true, error: null });
     try {
-      try {
-        await financeService.deleteReceiptVoucher(id);
-      } catch {}
-
+      await financeService.deleteReceiptVoucher(id);
       set((state) => {
         const next = state.receipts.filter((r) => r.id !== id);
         try {
@@ -514,8 +553,9 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
         return { receipts: next, isLoading: false };
       });
     } catch (e: any) {
-      console.error(e);
-      set({ isLoading: false });
+      console.error('Failed to delete receipt voucher:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa phiếu thu' });
+      throw e;
     }
   },
 
@@ -595,25 +635,16 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
         return { payments: next, isLoading: false };
       });
     } catch (e: any) {
-      console.error('[updatePayment] API error (applying local state):', e);
-      // Vẫn giữ local state nếu API cập nhật gặp lỗi tạm thời
-      set((state) => {
-        const next = state.payments.map((p) => (p.id === id ? { ...p, ...data } : p));
-        try {
-          localStorage.setItem('retailhub_finance_payments', JSON.stringify(next));
-        } catch {}
-        return { payments: next, isLoading: false };
-      });
+      console.error('[updatePayment] API error:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi cập nhật phiếu chi' });
+      throw e;
     }
   },
 
   deletePayment: async (id) => {
     set({ isLoading: true, error: null });
     try {
-      try {
-        await financeService.deletePaymentVoucher(id);
-      } catch {}
-
+      await financeService.deletePaymentVoucher(id);
       set((state) => {
         const next = state.payments.filter((p) => p.id !== id);
         try {
@@ -622,8 +653,9 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
         return { payments: next, isLoading: false };
       });
     } catch (e: any) {
-      console.error(e);
-      set({ isLoading: false });
+      console.error('Failed to delete payment voucher:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa phiếu chi' });
+      throw e;
     }
   },
 
@@ -633,8 +665,9 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
       const created = await financeService.addDebtLedger(row as any);
       set((state) => ({ debts: [{ ...row, id: created.id }, ...state.debts], isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ debts: [{ id: String(Date.now()), ...row }, ...state.debts], isLoading: false }));
+      console.error('Failed to add debt ledger:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi thêm sổ nợ' });
+      throw e;
     }
   },
   updateDebt: async (id, data) => {
@@ -643,8 +676,9 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
       await financeService.updateDebtLedger(id, data as any);
       set((state) => ({ debts: state.debts.map((d) => (d.id === id ? { ...d, ...data } : d)), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ debts: state.debts.map((d) => (d.id === id ? { ...d, ...data } : d)), isLoading: false }));
+      console.error('Failed to update debt ledger:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi cập nhật sổ nợ' });
+      throw e;
     }
   },
   deleteDebt: async (id) => {
@@ -653,8 +687,9 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
       await financeService.deleteDebtLedger(id);
       set((state) => ({ debts: state.debts.filter((d) => d.id !== id), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ debts: state.debts.filter((d) => d.id !== id), isLoading: false }));
+      console.error('Failed to delete debt ledger:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa sổ nợ' });
+      throw e;
     }
   },
 
@@ -664,8 +699,9 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
       const created = await financeService.addOperatingCost(row as any);
       set((state) => ({ operatingCosts: [{ ...row, id: created.id }, ...state.operatingCosts], isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ operatingCosts: [{ id: String(Date.now()), ...row }, ...state.operatingCosts], isLoading: false }));
+      console.error('Failed to add operating cost:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi thêm chi phí vận hành' });
+      throw e;
     }
   },
   updateOperatingCost: async (id, data) => {
@@ -674,8 +710,9 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
       await financeService.updateOperatingCost(id, data as any);
       set((state) => ({ operatingCosts: state.operatingCosts.map((c) => (c.id === id ? { ...c, ...data } : c)), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ operatingCosts: state.operatingCosts.map((c) => (c.id === id ? { ...c, ...data } : c)), isLoading: false }));
+      console.error('Failed to update operating cost:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi cập nhật chi phí vận hành' });
+      throw e;
     }
   },
   deleteOperatingCost: async (id) => {
@@ -684,8 +721,9 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
       await financeService.deleteOperatingCost(id);
       set((state) => ({ operatingCosts: state.operatingCosts.filter((c) => c.id !== id), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ operatingCosts: state.operatingCosts.filter((c) => c.id !== id), isLoading: false }));
+      console.error('Failed to delete operating cost:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa chi phí vận hành' });
+      throw e;
     }
   },
 
@@ -753,11 +791,9 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
         isLoading: false,
       }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({
-        bankAccounts: state.bankAccounts.filter((b) => b.id !== id),
-        isLoading: false,
-      }));
+      console.error('Failed to delete bank account:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa tài khoản ngân hàng' });
+      throw e;
     }
   },
 
@@ -787,8 +823,9 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
       await financeService.deleteTransactionReason(id);
       set((state) => ({ transactionReasons: state.transactionReasons.filter((t) => t.id !== id), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ transactionReasons: state.transactionReasons.filter((t) => t.id !== id), isLoading: false }));
+      console.error('Failed to delete transaction reason:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa lý do giao dịch' });
+      throw e;
     }
   },
 
@@ -798,8 +835,9 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
       await financeService.updateJournalEntry(id, data as any);
       set((state) => ({ journalEntries: state.journalEntries.map((j) => (j.id === id ? { ...j, ...data } : j)), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ journalEntries: state.journalEntries.map((j) => (j.id === id ? { ...j, ...data } : j)), isLoading: false }));
+      console.error('Failed to update journal entry:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi cập nhật bút toán' });
+      throw e;
     }
   },
   addJournalEntry: async (row) => {
@@ -808,8 +846,23 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
       const created = await financeService.addJournalEntry(row as any);
       set((state) => ({ journalEntries: [{ ...row, id: created.id }, ...state.journalEntries], isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((state) => ({ journalEntries: [{ id: String(Date.now()), ...row }, ...state.journalEntries], isLoading: false }));
+      console.error('Failed to add journal entry:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi thêm bút toán' });
+      throw e;
+    }
+  },
+  deleteJournalEntry: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await financeService.deleteJournalEntry(id);
+      set((state) => ({
+        journalEntries: state.journalEntries.filter((j) => String(j.id) !== String(id)),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      console.error('Failed to delete journal entry:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa bút toán' });
+      throw e;
     }
   },
 
@@ -829,8 +882,9 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
       const created = await financeService.addFixedAsset(item);
       set((s) => ({ fixedAssets: [{ ...item, id: String(created?.id || Date.now()) }, ...s.fixedAssets], isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((s) => ({ fixedAssets: [{ id: `fa_${Date.now()}`, ...item }, ...s.fixedAssets], isLoading: false }));
+      console.error('Failed to add fixed asset:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi thêm tài sản cố định' });
+      throw e;
     }
   },
   updateFixedAsset: async (id, data) => {
@@ -839,8 +893,9 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
       await financeService.updateFixedAsset(id, data);
       set((s) => ({ fixedAssets: s.fixedAssets.map((f) => (f.id === id ? { ...f, ...data } : f)), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((s) => ({ fixedAssets: s.fixedAssets.map((f) => (f.id === id ? { ...f, ...data } : f)), isLoading: false }));
+      console.error('Failed to update fixed asset:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi cập nhật tài sản cố định' });
+      throw e;
     }
   },
   deleteFixedAsset: async (id) => {
@@ -849,12 +904,163 @@ export const useFinanceStore = create<FinanceState>()((set) => ({
       await financeService.deleteFixedAsset(id);
       set((s) => ({ fixedAssets: s.fixedAssets.filter((f) => f.id !== id), isLoading: false }));
     } catch (e: any) {
-      console.error(e);
-      set((s) => ({ fixedAssets: s.fixedAssets.filter((f) => f.id !== id), isLoading: false }));
+      console.error('Failed to delete fixed asset:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa tài sản cố định' });
+      throw e;
     }
   },
 
-  fetchDepreciations: async () => {},
-  fetchFundBalances: async () => {},
-  fetchTaxDuties: async () => {},
+  fetchDepreciations: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await financeService.fetchDepreciations();
+      set({ depreciations: data, isLoading: false });
+    } catch (e: any) {
+      console.error('Failed to fetch depreciations:', e);
+      set({ isLoading: false });
+    }
+  },
+
+  addDepreciation: async (item) => {
+    set({ isLoading: true, error: null });
+    try {
+      const saved = await financeService.addDepreciation(item);
+      set((s) => ({
+        depreciations: [saved, ...s.depreciations],
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      console.error('Failed to add depreciation:', e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  updateDepreciation: async (id, data) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updated = await financeService.updateDepreciation(id, data);
+      set((s) => ({
+        depreciations: s.depreciations.map((d) => (d.id === id ? { ...d, ...updated } : d)),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      console.error('Failed to update depreciation:', e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  deleteDepreciation: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await financeService.deleteDepreciation(id);
+      set((s) => ({
+        depreciations: s.depreciations.filter((d) => d.id !== id),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      console.error('Failed to delete depreciation:', e);
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+
+  fetchFundBalances: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await financeService.fetchFundBalances();
+      set({ fundBalances: Array.isArray(data) ? data : [], isLoading: false });
+    } catch (e: any) {
+      console.error('Failed to fetch fund balances:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi tải số dư quỹ' });
+    }
+  },
+  addFundBalance: async (item) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await financeService.addFundBalance(item);
+      await get().fetchFundBalances();
+      return created;
+    } catch (e: any) {
+      console.error('Failed to add fund balance:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi tạo số dư quỹ' });
+      throw e;
+    }
+  },
+  updateFundBalance: async (id, data) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updated = await financeService.updateFundBalance(id, data);
+      await get().fetchFundBalances();
+      return updated;
+    } catch (e: any) {
+      console.error('Failed to update fund balance:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi cập nhật số dư quỹ' });
+      throw e;
+    }
+  },
+  deleteFundBalance: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await financeService.deleteFundBalance(id);
+      set((state) => ({
+        fundBalances: state.fundBalances.filter((f) => String(f.id) !== String(id)),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      console.error('Failed to delete fund balance:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa số dư quỹ' });
+      throw e;
+    }
+  },
+
+  fetchTaxDuties: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await financeService.fetchTaxDuties();
+      set({ taxDuties: Array.isArray(data) ? data : [], isLoading: false });
+    } catch (e: any) {
+      console.error('Failed to fetch tax duties:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi tải dữ liệu thuế' });
+    }
+  },
+  addTaxDuty: async (item) => {
+    set({ isLoading: true, error: null });
+    try {
+      const created = await financeService.addTaxDuty(item);
+      await get().fetchTaxDuties();
+      return created;
+    } catch (e: any) {
+      console.error('Failed to add tax duty:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi tạo thuế' });
+      throw e;
+    }
+  },
+  updateTaxDuty: async (id, data) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updated = await financeService.updateTaxDuty(id, data);
+      await get().fetchTaxDuties();
+      return updated;
+    } catch (e: any) {
+      console.error('Failed to update tax duty:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi cập nhật thuế' });
+      throw e;
+    }
+  },
+  deleteTaxDuty: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await financeService.deleteTaxDuty(id);
+      set((state) => ({
+        taxDuties: state.taxDuties.filter((t) => String(t.id) !== String(id)),
+        isLoading: false,
+      }));
+    } catch (e: any) {
+      console.error('Failed to delete tax duty:', e);
+      set({ isLoading: false, error: e?.message || 'Lỗi khi xóa thuế' });
+      throw e;
+    }
+  },
 }));

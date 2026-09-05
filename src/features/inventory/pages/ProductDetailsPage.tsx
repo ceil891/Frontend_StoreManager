@@ -1,11 +1,12 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Calendar, Tag, Layers, Download } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, Calendar, Tag, Layers, Download, AlertTriangle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { TreeSelect } from '@/shared/components/ui/TreeSelect';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
 import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore } from '../store/inventoryStore';
 import { toast } from 'sonner';
@@ -24,6 +25,10 @@ interface ProductDetailRecord {
   reorderPoint?: number;
   safetyStock?: number;
   vatRate?: number;
+  weight?: number;
+  dimensions?: string;
+  warrantyPeriodMonths?: number;
+  allowNegativeStock?: boolean;
 }
 
 export function ProductDetailsPage() {
@@ -43,11 +48,15 @@ export function ProductDetailsPage() {
       sellingPrice: p.price || 0,
       costPrice: p.costPrice || 0,
       status: p.status === 'INACTIVE' ? 'NGUNG_KINH_DOANH' : 'DANG_KINH_DOANH',
-      notes: (p as any).notes || '',
+      notes: (p as any).notes || (p as any).description || '',
       unit: (p as any).unit || 'Cái',
-      reorderPoint: (p as any).minStock || 10,
-      safetyStock: (p as any).safetyStock || 5,
-      vatRate: (p as any).vatRate || 10,
+      reorderPoint: Number((p as any).reorderPoint ?? (p as any).minStock ?? 10),
+      safetyStock: Number((p as any).safetyStock ?? (p as any).minStock ?? 5),
+      vatRate: Number((p as any).vatRate ?? 10),
+      weight: Number((p as any).weight ?? 0),
+      dimensions: (p as any).dimensions || '',
+      warrantyPeriodMonths: Number((p as any).warrantyPeriodMonths ?? 0),
+      allowNegativeStock: Boolean((p as any).allowNegativeStock),
     }));
   }, [storeProducts]);
 
@@ -56,6 +65,7 @@ export function ProductDetailsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<ProductDetailRecord>>({});
+  const [deletingProduct, setDeletingProduct] = useState<ProductDetailRecord | null>(null);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -84,6 +94,10 @@ export function ProductDetailsPage() {
       reorderPoint: 10,
       safetyStock: 5,
       vatRate: 10,
+      weight: 0,
+      dimensions: '',
+      warrantyPeriodMonths: 12,
+      allowNegativeStock: false,
     });
     setIsModalOpen(true);
   };
@@ -98,8 +112,12 @@ export function ProductDetailsPage() {
     e.preventDefault();
     if (!editingItem.barcode || !editingItem.productName) return;
 
+    const barcodeVal = (editingItem.barcode || '').trim();
     const payload: any = {
-      sku: editingItem.barcode,
+      sku: barcodeVal,
+      productCode: barcodeVal,
+      barcode: barcodeVal,
+      barcodes: barcodeVal ? [barcodeVal] : [],
       name: editingItem.productName,
       category: editingItem.categoryName || 'Mặc định',
       brand: editingItem.brand || 'Chính hãng',
@@ -107,7 +125,16 @@ export function ProductDetailsPage() {
       costPrice: Number(editingItem.costPrice || 0),
       status: editingItem.status === 'NGUNG_KINH_DOANH' ? 'INACTIVE' : 'ACTIVE',
       notes: editingItem.notes || '',
+      description: editingItem.notes || '',
       unit: editingItem.unit || 'Cái',
+      reorderPoint: Number(editingItem.reorderPoint) || 0,
+      minStock: Number(editingItem.safetyStock) || 0,
+      safetyStock: Number(editingItem.safetyStock) || 0,
+      vatRate: Number(editingItem.vatRate) || 0,
+      weight: Number(editingItem.weight) || 0,
+      dimensions: editingItem.dimensions || '',
+      warrantyPeriodMonths: Number(editingItem.warrantyPeriodMonths) || 0,
+      allowNegativeStock: Boolean(editingItem.allowNegativeStock),
     };
 
     if (modalMode === 'create') {
@@ -118,6 +145,18 @@ export function ProductDetailsPage() {
       toast.success('Đã cập nhật chi tiết sản phẩm thành công!');
     }
     setIsModalOpen(false);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingProduct) return;
+    try {
+      await deleteProduct(deletingProduct.id);
+      toast.success(`Đã xóa sản phẩm "${deletingProduct.productName}" thành công!`);
+      setDeletingProduct(null);
+    } catch (err: any) {
+      console.error('Delete product error:', err);
+      toast.error(err?.response?.data?.message || err?.message || 'Lỗi khi xóa sản phẩm!');
+    }
   };
 
   const columns = useMemo<ColumnDef<ProductDetailRecord>[]>(
@@ -175,6 +214,13 @@ export function ProductDetailsPage() {
               title="Chỉnh sửa chi tiết"
             >
               <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setDeletingProduct(row.original)}
+              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+              title="Xóa sản phẩm"
+            >
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         ),
@@ -253,6 +299,28 @@ export function ProductDetailsPage() {
               <div>
                 <span className="text-xs text-gray-500 dark:text-gray-400">Giá bán lẻ:</span>
                 <p className="font-mono text-primary font-bold text-base">{selected.sellingPrice.toLocaleString('vi-VN')} đ</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 border-t border-gray-200 dark:border-gray-700 pt-3">
+              <div>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Đơn vị & Trọng lượng:</span>
+                <p className="font-semibold text-gray-900 dark:text-white">{selected.unit} {selected.weight ? `• ${selected.weight}g` : ''}</p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Kích thước (D x R x C):</span>
+                <p className="font-semibold text-gray-900 dark:text-white">{selected.dimensions || 'Chưa thiết lập'}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 border-t border-gray-200 dark:border-gray-700 pt-3">
+              <div>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Bảo hành chính hãng:</span>
+                <p className="font-semibold text-gray-900 dark:text-white">{selected.warrantyPeriodMonths ? `${selected.warrantyPeriodMonths} tháng` : 'Không bảo hành'}</p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Xuất âm khi hết hàng:</span>
+                <p className={`font-semibold ${selected.allowNegativeStock ? 'text-amber-600 dark:text-amber-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                  {selected.allowNegativeStock ? 'Cho phép xuất âm' : 'Chặn khi hết tồn kho'}
+                </p>
               </div>
             </div>
             <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
@@ -408,6 +476,13 @@ export function ProductDetailsPage() {
             </div>
           </div>
 
+          {Number(editingItem.sellingPrice || 0) > 0 && Number(editingItem.costPrice || 0) > 0 && Number(editingItem.sellingPrice) < Number(editingItem.costPrice) && (
+            <div className="flex items-center gap-2 p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-lg text-amber-800 dark:text-amber-300 text-xs font-medium">
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>Cảnh báo: Giá bán lẻ ({Number(editingItem.sellingPrice).toLocaleString('vi-VN')} đ) đang thấp hơn giá vốn ({Number(editingItem.costPrice).toLocaleString('vi-VN')} đ) — Mặt hàng này sẽ bị bán lỗ!</span>
+            </div>
+          )}
+
           <div className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/60">
             <span className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Định mức kho & tồn kho an toàn</span>
             <div className="grid grid-cols-2 gap-4">
@@ -431,6 +506,56 @@ export function ProductDetailsPage() {
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
                 />
               </div>
+            </div>
+          </div>
+
+          <div className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/60 space-y-3">
+            <span className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Thông số đóng gói & Bảo hành</span>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trọng lượng (gram)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editingItem.weight ?? 0}
+                  onChange={(e) => setEditingItem({ ...editingItem, weight: parseFloat(e.target.value) || 0 })}
+                  placeholder="500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Kích thước (DxRxC cm)</label>
+                <input
+                  type="text"
+                  value={editingItem.dimensions ?? ''}
+                  onChange={(e) => setEditingItem({ ...editingItem, dimensions: e.target.value })}
+                  placeholder="20x15x10"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Bảo hành (tháng)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editingItem.warrantyPeriodMonths ?? 0}
+                  onChange={(e) => setEditingItem({ ...editingItem, warrantyPeriodMonths: parseInt(e.target.value) || 0 })}
+                  placeholder="12"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="allowNegativeStock"
+                checked={Boolean(editingItem.allowNegativeStock)}
+                onChange={(e) => setEditingItem({ ...editingItem, allowNegativeStock: e.target.checked })}
+                className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary cursor-pointer"
+              />
+              <label htmlFor="allowNegativeStock" className="text-xs text-gray-700 dark:text-gray-300 font-medium cursor-pointer">
+                Cho phép bán khi hết tồn kho (Cho phép xuất âm)
+              </label>
             </div>
           </div>
 
@@ -486,6 +611,14 @@ export function ProductDetailsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingProduct)}
+        onClose={() => setDeletingProduct(null)}
+        onConfirm={handleDelete}
+        title="Xác nhận xóa sản phẩm"
+        description={`Bạn có chắc chắn muốn xóa sản phẩm "${deletingProduct?.productName}" (${deletingProduct?.barcode}) không? Hành động này không thể hoàn tác.`}
+      />
     </div>
   );
 }

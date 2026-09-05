@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Filter, Eye, Calendar, User, TrendingUp, AlertCircle, Edit, Trash2 } from 'lucide-react';
+import { Plus, Download, Search, Filter, Eye, Calendar, User, TrendingUp, TrendingDown, AlertCircle, Edit, Trash2, Layers, Clock, CheckCircle2, Percent, RefreshCw, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -20,7 +20,8 @@ const entityTypeMap: Record<string, string> = {
 };
 
 const statusMapFull: Record<string, string> = {
-  NORMAL: 'Bình thường',
+  NORMAL: 'Chưa thanh toán',
+  PARTIAL: 'Trả một phần',
   DUE_SOON: 'Sắp đến hạn',
   OVERDUE: 'Quá hạn',
   SETTLED: 'Đã tất toán',
@@ -51,6 +52,7 @@ export function DebtLedgerPage() {
   }, [fetchDebts, fetchSuppliers, fetchCustomers]);
 
   const [search, setSearch] = useState('');
+  const [tabFilter, setTabFilter] = useState<'ALL' | 'CUSTOMER' | 'SUPPLIER' | 'PARTIAL' | 'OVERDUE'>('ALL');
   const [selectedDebt, setSelectedDebt] = useState<DebtRecord | null>(null);
 
   // Modal states
@@ -67,10 +69,65 @@ export function DebtLedgerPage() {
     return [...suppliers.map(s => s.supplierName), ...customers.map(c => c.name)];
   }, [editingDebt.entityType, suppliers, customers]);
 
-  const filtered = data.filter((item) =>
-    item.entityName.toLowerCase().includes(search.toLowerCase()) ||
-    item.debtCode.toLowerCase().includes(search.toLowerCase())
-  );
+  // Thống kê nhanh KPI
+  const stats = useMemo(() => {
+    let customerDebt = 0;
+    let supplierDebt = 0;
+    let partialCount = 0;
+    let partialDebt = 0;
+    let overdueCount = 0;
+    let overdueDebt = 0;
+    const today = new Date().toISOString().substring(0, 10);
+
+    data.forEach((item) => {
+      const bal = Math.abs(item.totalDebt || 0);
+      const paid = item.paidAmount || item.decrease || 0;
+      const isOverdue = item.status === 'OVERDUE' || (Boolean(item.dueDate) && item.dueDate < today && bal > 0);
+      const isPartial = (item.status as any) === 'PARTIAL' || (paid > 0 && bal > 0);
+
+      if (item.entityType === 'CUSTOMER') {
+        customerDebt += bal;
+      } else if (item.entityType === 'SUPPLIER') {
+        supplierDebt += bal;
+      }
+
+      if (isPartial) {
+        partialCount += 1;
+        partialDebt += bal;
+      }
+
+      if (isOverdue) {
+        overdueCount += 1;
+        overdueDebt += bal;
+      }
+    });
+
+    return { customerDebt, supplierDebt, partialCount, partialDebt, overdueCount, overdueDebt };
+  }, [data]);
+
+  const filtered = useMemo(() => {
+    const today = new Date().toISOString().substring(0, 10);
+    return data.filter((item) => {
+      const q = search.toLowerCase();
+      const matchesSearch =
+        item.entityName.toLowerCase().includes(q) ||
+        item.debtCode.toLowerCase().includes(q) ||
+        (item.referenceDoc && item.referenceDoc.toLowerCase().includes(q));
+
+      if (!matchesSearch) return false;
+
+      const bal = Math.abs(item.totalDebt || 0);
+      const paid = item.paidAmount || item.decrease || 0;
+      const isOverdue = item.status === 'OVERDUE' || (Boolean(item.dueDate) && item.dueDate < today && bal > 0);
+      const isPartial = (item.status as any) === 'PARTIAL' || (paid > 0 && bal > 0);
+
+      if (tabFilter === 'CUSTOMER') return item.entityType === 'CUSTOMER';
+      if (tabFilter === 'SUPPLIER') return item.entityType === 'SUPPLIER';
+      if (tabFilter === 'PARTIAL') return isPartial;
+      if (tabFilter === 'OVERDUE') return isOverdue;
+      return true;
+    });
+  }, [data, search, tabFilter]);
 
   const handleOpenCreate = () => {
     setModalMode('create');
@@ -101,12 +158,10 @@ export function DebtLedgerPage() {
     if (!editingDebt.debtCode || !editingDebt.entityName) return;
 
     const today = new Date().toISOString().substring(0, 10);
-    // Validate: Ngày đến hạn >= hôm nay
     if (editingDebt.dueDate && editingDebt.dueDate < today) {
       toast.error('Ngày đến hạn thanh toán phải từ hôm nay trở đi');
       return;
     }
-    // Validate: Ngày giao dịch gần nhất <= hôm nay
     if (editingDebt.lastPaymentDate && editingDebt.lastPaymentDate > today) {
       toast.error('Ngày giao dịch gần nhất không được là ngày tương lai');
       return;
@@ -148,14 +203,28 @@ export function DebtLedgerPage() {
       {
         accessorKey: 'entityName',
         header: 'Đối tác / Doanh nghiệp',
-        cell: (info) => <span className="font-medium text-gray-900 dark:text-white">{info.getValue() as string}</span>,
+        cell: ({ row }) => (
+          <div>
+            <div className="font-medium text-gray-900 dark:text-white">{row.original.entityName}</div>
+            <div className="text-xs text-gray-400 dark:text-gray-500">{row.original.accountManager || 'Chưa phân công'}</div>
+          </div>
+        ),
       },
       {
         accessorKey: 'entityType',
         header: 'Loại hình',
         cell: (info) => {
           const type = info.getValue() as string;
-          return <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded font-medium">{entityTypeMap[type] || type}</span>;
+          const isCust = type === 'CUSTOMER';
+          return (
+            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+              isCust
+                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                : 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+            }`}>
+              {entityTypeMap[type] || type}
+            </span>
+          );
         },
       },
       {
@@ -164,39 +233,120 @@ export function DebtLedgerPage() {
         cell: (info) => <span className="font-mono text-blue-600 dark:text-blue-400 text-xs hover:underline cursor-pointer">{info.getValue() as string || '-'}</span>,
       },
       {
+        id: 'originalAmount',
+        header: 'Tổng phát sinh',
+        cell: ({ row }) => {
+          const bal = Math.abs(row.original.totalDebt || 0);
+          const paid = row.original.paidAmount || row.original.decrease || 0;
+          const orig = (row.original.increase || 0) > 0 ? row.original.increase! : (paid + bal);
+          return <span className="font-mono font-medium text-gray-900 dark:text-white">{orig.toLocaleString('vi-VN')} ₫</span>;
+        },
+      },
+      {
+        id: 'paidAmount',
+        header: 'Đã thanh toán',
+        cell: ({ row }) => {
+          const paid = row.original.paidAmount || row.original.decrease || 0;
+          return (
+            <span className={`font-mono font-medium ${paid > 0 ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-gray-400'}`}>
+              {paid > 0 ? `${paid.toLocaleString('vi-VN')} ₫` : '0 ₫'}
+            </span>
+          );
+        },
+      },
+      {
+        id: 'progress',
+        header: 'Tiến độ TT',
+        cell: ({ row }) => {
+          const bal = Math.abs(row.original.totalDebt || 0);
+          const paid = row.original.paidAmount || row.original.decrease || 0;
+          const orig = (row.original.increase || 0) > 0 ? row.original.increase! : (paid + bal);
+          const pct = orig > 0 ? Math.min(100, Math.round((paid / orig) * 100)) : (bal === 0 ? 100 : 0);
+          return (
+            <div className="w-24">
+              <div className="flex justify-between text-[11px] font-mono mb-1 text-gray-500">
+                <span>{pct}%</span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    pct >= 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          );
+        },
+      },
+      {
         accessorKey: 'totalDebt',
-        header: 'Tổng công nợ',
+        header: 'Còn nợ lại',
         cell: ({ row }) => {
           const val = row.original.totalDebt;
           const curr = row.original.currency || 'VND';
           const prefix = curr === 'USD' ? '$' : '';
           const suffix = curr === 'VND' ? ' ₫' : curr !== 'USD' ? ` ${curr}` : '';
-          return <span className={`font-bold font-mono ${val >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{val >= 0 ? `+${prefix}${val.toLocaleString('en-US')}${suffix}` : `-${prefix}${Math.abs(val).toLocaleString('en-US')}${suffix}`}</span>;
+          if (val === 0) {
+            return <span className="font-mono text-gray-400">0 ₫</span>;
+          }
+          return (
+            <span className={`font-bold font-mono ${val >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+              {val >= 0 ? `+${prefix}${val.toLocaleString('vi-VN')}${suffix}` : `-${prefix}${Math.abs(val).toLocaleString('vi-VN')}${suffix}`}
+            </span>
+          );
         },
-      },
-      {
-        accessorKey: 'incurredDate',
-        header: 'Ngày phát sinh',
-        cell: (info) => <span className="text-gray-500 text-sm font-mono">{info.getValue() as string || '-'}</span>,
       },
       {
         accessorKey: 'dueDate',
         header: 'Hạn thanh toán',
-        cell: (info) => <span className="text-gray-500 text-sm font-mono">{info.getValue() as string}</span>,
+        cell: (info) => {
+          const dateStr = info.getValue() as string;
+          if (!dateStr) return <span className="text-gray-400">-</span>;
+          const today = new Date().toISOString().substring(0, 10);
+          const isOverdue = dateStr < today;
+          return (
+            <span className={`text-xs font-mono ${isOverdue ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-gray-500'}`}>
+              {dateStr}
+            </span>
+          );
+        },
       },
       {
         accessorKey: 'status',
         header: 'Trạng thái',
-        cell: (info) => {
-          const status = info.getValue() as string;
+        cell: ({ row }) => {
+          const bal = Math.abs(row.original.totalDebt || 0);
+          const paid = row.original.paidAmount || row.original.decrease || 0;
+          const orig = (row.original.increase || 0) > 0 ? row.original.increase! : (paid + bal);
+          const pct = orig > 0 ? Math.round((paid / orig) * 100) : 0;
+          const today = new Date().toISOString().substring(0, 10);
+          const isOverdue = row.original.status === 'OVERDUE' || (Boolean(row.original.dueDate) && row.original.dueDate < today && bal > 0);
+
+          if (bal === 0 || row.original.status === 'SETTLED') {
+            return (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                <CheckCircle2 className="w-3 h-3" /> Đã tất toán
+              </span>
+            );
+          }
+          if (paid > 0 && bal > 0) {
+            return (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
+                <Percent className="w-3 h-3" /> Trả một phần ({pct}%)
+              </span>
+            );
+          }
+          if (isOverdue) {
+            return (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">
+                <Clock className="w-3 h-3" /> Quá hạn
+              </span>
+            );
+          }
           return (
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-              status === 'SETTLED' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' :
-              status === 'NORMAL' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' :
-              status === 'DUE_SOON' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' :
-              'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
-            }`}>
-              {statusMapFull[status] || status}
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+              Chưa thanh toán
             </span>
           );
         },
@@ -231,26 +381,40 @@ export function DebtLedgerPage() {
         ),
       },
     ],
-    [data]
+    []
   );
 
   return (
     <>
       <div className="space-y-6">
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sổ công nợ (receivable / payable ledger)</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Quản lý và giám sát công nợ phải thu của khách hàng và công nợ phải trả nhà cung cấp. Số dương: Khách hàng nợ doanh nghiệp. Số âm: Doanh nghiệp nợ đối tác.</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sổ công nợ & Đối trừ quyết toán</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Giám sát công nợ phải thu của Khách hàng và phải trả Nhà cung cấp, theo dõi chi tiết thanh toán một phần và dư nợ lũy kế.
+            </p>
           </div>
           <div className="flex items-center gap-3">
+            <SecondaryButton
+              onClick={() => {
+                fetchDebts();
+                toast.success('Đã đồng bộ lại dữ liệu công nợ mới nhất!');
+              }}
+              leftIcon={<RefreshCw className="w-4 h-4" />}
+            >
+              Đồng bộ hệ thống
+            </SecondaryButton>
             <SecondaryButton
               onClick={() => {
                 exportToCsv('so_cong_no', filtered, [
                   { header: 'Mã công nợ', accessor: r => r.debtCode },
                   { header: 'Tên đối tác', accessor: r => r.entityName },
                   { header: 'Loại đối tác', accessor: r => entityTypeMap[r.entityType] || r.entityType },
-                  { header: 'Tổng công nợ (VND)', accessor: r => r.totalDebt },
-                  { header: 'Đến hạn (VND)', accessor: r => r.dueAmount },
+                  { header: 'Chứng từ gốc', accessor: r => r.referenceDoc || '' },
+                  { header: 'Tổng phát sinh', accessor: r => (r.increase || 0) > 0 ? r.increase : ((r.paidAmount || 0) + Math.abs(r.totalDebt)) },
+                  { header: 'Đã thanh toán', accessor: r => r.paidAmount || r.decrease || 0 },
+                  { header: 'Còn nợ lại (VND)', accessor: r => r.totalDebt },
                   { header: 'Hạn thanh toán', accessor: r => r.dueDate },
                   { header: 'Trạng thái', accessor: r => statusMapFull[r.status] || r.status },
                   { header: 'Phụ trách', accessor: r => r.accountManager },
@@ -259,136 +423,237 @@ export function DebtLedgerPage() {
               }}
               leftIcon={<Download className="w-4 h-4" />}
             >
-              Xuất sổ công nợ
+              Xuất CSV
             </SecondaryButton>
-            <CreateButton
-              onClick={handleOpenCreate}
-            >
-              Ghi nhận khoản nợ mới
+            <CreateButton onClick={handleOpenCreate}>
+              Ghi nhận nợ mới
             </CreateButton>
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        {/* 4 Thẻ KPI Tóm tắt */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-3">
+            <div className="w-11 h-11 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <ArrowUpRight className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Phải thu Khách hàng</p>
+              <p className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                +{stats.customerDebt.toLocaleString('vi-VN')} ₫
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-3">
+            <div className="w-11 h-11 rounded-lg bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+              <ArrowDownLeft className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Phải trả Nhà cung cấp</p>
+              <p className="text-lg font-bold font-mono text-purple-600 dark:text-purple-400">
+                -{stats.supplierDebt.toLocaleString('vi-VN')} ₫
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-3">
+            <div className="w-11 h-11 rounded-lg bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+              <Percent className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Đang trả một phần ({stats.partialCount} ĐH)</p>
+              <p className="text-lg font-bold font-mono text-blue-600 dark:text-blue-400">
+                {stats.partialDebt.toLocaleString('vi-VN')} ₫
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-3">
+            <div className="w-11 h-11 rounded-lg bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 flex items-center justify-center">
+              <Clock className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Công nợ quá hạn ({stats.overdueCount} khoản)</p>
+              <p className="text-lg font-bold font-mono text-red-600 dark:text-red-400">
+                {stats.overdueDebt.toLocaleString('vi-VN')} ₫
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Thanh lọc Tab & Tìm kiếm */}
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[
+              { key: 'ALL', label: 'Tất cả', count: data.length },
+              { key: 'CUSTOMER', label: 'Phải thu KH', count: data.filter(d => d.entityType === 'CUSTOMER').length },
+              { key: 'SUPPLIER', label: 'Phải trả NCC', count: data.filter(d => d.entityType === 'SUPPLIER').length },
+              { key: 'PARTIAL', label: 'Trả một phần', count: stats.partialCount },
+              { key: 'OVERDUE', label: 'Quá hạn', count: stats.overdueCount },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setTabFilter(tab.key as any)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                  tabFilter === tab.key
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                  tabFilter === tab.key ? 'bg-emerald-700 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
+                }`}>
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
           <SearchInput
             value={search}
             onValueChange={setSearch}
-            placeholder="Tìm kiếm theo mã số công nợ hoặc tên doanh nghiệp đối tác..."
-            containerClassName="flex-1 sm:max-w-md"
+            placeholder="Tìm kiếm mã nợ, đối tác, số chứng từ..."
+            containerClassName="w-full sm:w-72"
           />
-          <button className="flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors text-sm">
-            <Filter className="w-4 h-4" /> Bộ lọc
-          </button>
         </div>
 
         <ReusableDataTable columns={columns} data={filtered} onRowClick={(row) => setSelectedDebt(row)} />
       </div>
 
+      {/* Modal xem chi tiết */}
       <Modal
         isOpen={!!selectedDebt}
         onClose={() => setSelectedDebt(null)}
         title={selectedDebt ? `Hồ Sơ Công Nợ: ${selectedDebt.debtCode}` : 'Chi tiết công nợ'}
         size="erp"
       >
-        {selectedDebt && (
-          <div className="space-y-6">
-            <div className={`flex items-center justify-between p-4 rounded-xl border ${
-              selectedDebt.totalDebt >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
-            }`}>
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold ${
-                  selectedDebt.totalDebt >= 0 ? 'bg-emerald-600' : 'bg-red-600'
-                }`}>
-                  <TrendingUp className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className={`text-xs font-semibold uppercase tracking-wider ${
-                    selectedDebt.totalDebt >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-red-800 dark:text-red-400'
-                  }`}>{selectedDebt.totalDebt >= 0 ? 'Khoản phải thu (receivable)' : 'Khoản phải trả (payable)'}</p>
-                  <p className={`text-xl font-bold font-mono mt-0.5 ${
-                    selectedDebt.totalDebt >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
-                  }`}>
-                    {(() => {
-                      const curr = selectedDebt.currency || 'VND';
-                      const val = selectedDebt.totalDebt;
-                      const prefix = curr === 'USD' ? '$' : '';
-                      const suffix = curr === 'VND' ? ' ₫' : curr !== 'USD' ? ` ${curr}` : '';
-                      return val >= 0
-                        ? `+${prefix}${val.toLocaleString('vi-VN')}${suffix}`
-                        : `-${prefix}${Math.abs(val).toLocaleString('vi-VN')}${suffix}`;
-                    })()}
-                  </p>
-                </div>
-              </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                selectedDebt.status === 'SETTLED' ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
-                selectedDebt.status === 'NORMAL' ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100' :
-                selectedDebt.status === 'DUE_SOON' ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
-                'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100'
+        {selectedDebt && (() => {
+          const bal = Math.abs(selectedDebt.totalDebt || 0);
+          const paid = selectedDebt.paidAmount || selectedDebt.decrease || 0;
+          const orig = (selectedDebt.increase || 0) > 0 ? selectedDebt.increase! : (paid + bal);
+          const pct = orig > 0 ? Math.min(100, Math.round((paid / orig) * 100)) : (bal === 0 ? 100 : 0);
+
+          return (
+            <div className="space-y-6">
+              <div className={`flex items-center justify-between p-4 rounded-xl border ${
+                selectedDebt.totalDebt >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
               }`}>
-                {statusMapFull[selectedDebt.status] || selectedDebt.status}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <User className="w-4 h-4 text-blue-500" /> Tên đối tác
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold ${
+                    selectedDebt.totalDebt >= 0 ? 'bg-emerald-600' : 'bg-purple-600'
+                  }`}>
+                    {selectedDebt.totalDebt >= 0 ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownLeft className="w-5 h-5" />}
+                  </div>
+                  <div>
+                    <p className={`text-xs font-semibold uppercase tracking-wider ${
+                      selectedDebt.totalDebt >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-purple-800 dark:text-purple-400'
+                    }`}>
+                      {selectedDebt.totalDebt >= 0 ? 'Khoản phải thu (Khách hàng)' : 'Khoản phải trả (Nhà cung cấp)'}
+                    </p>
+                    <p className={`text-xl font-bold font-mono mt-0.5 ${
+                      selectedDebt.totalDebt >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-purple-700 dark:text-purple-400'
+                    }`}>
+                      {selectedDebt.totalDebt >= 0
+                        ? `+${selectedDebt.totalDebt.toLocaleString('vi-VN')} ₫`
+                        : `-${Math.abs(selectedDebt.totalDebt).toLocaleString('vi-VN')} ₫`}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedDebt.entityName}</p>
-              </div>
-              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Calendar className="w-4 h-4 text-amber-500" /> Ngày đáo hạn
-                </div>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedDebt.dueDate}</p>
-              </div>
-            </div>
-
-            <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Phân loại đối tác:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{entityTypeMap[selectedDebt.entityType] || selectedDebt.entityType}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Đã thanh toán (lũy kế):</span>
-                <span className="font-semibold font-mono text-emerald-600">
-                  {selectedDebt.paidAmount !== undefined ? `${selectedDebt.paidAmount.toLocaleString('vi-VN')} ${selectedDebt.currency || 'VND'}` : '0'}
+                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                  bal === 0 || selectedDebt.status === 'SETTLED' ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
+                  paid > 0 && bal > 0 ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100' :
+                  selectedDebt.status === 'DUE_SOON' ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
+                  'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100'
+                }`}>
+                  {bal === 0 || selectedDebt.status === 'SETTLED' ? 'Đã tất toán' :
+                   paid > 0 && bal > 0 ? `Trả một phần (${pct}%)` :
+                   statusMapFull[selectedDebt.status] || selectedDebt.status}
                 </span>
               </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Còn lại (Chưa thanh toán):</span>
-                <span className={`font-semibold font-mono ${selectedDebt.dueAmount === 0 ? 'text-gray-500' : selectedDebt.dueAmount > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {selectedDebt.dueAmount >= 0 ? `+${selectedDebt.dueAmount.toLocaleString('vi-VN')} ${selectedDebt.currency || 'VND'}` : `-${Math.abs(selectedDebt.dueAmount).toLocaleString('vi-VN')} ${selectedDebt.currency || 'VND'}`}
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Giao dịch thanh toán gần nhất:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedDebt.lastPaymentDate || 'Chưa ghi nhận'}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
-                <span className="text-gray-500 dark:text-gray-400">Nhân viên phụ trách đối tác:</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{selectedDebt.accountManager}</span>
-              </div>
 
-              {selectedDebt.notes && (
-                <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Ghi chú tín dụng & Thỏa thuận</span>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedDebt.notes}</p>
+              {/* Tiến độ thanh toán */}
+              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Tiến độ thanh toán lũy kế</span>
+                  <span className="text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400">{pct}% hoàn thành</span>
                 </div>
-              )}
-            </div>
+                <div className="w-full bg-gray-100 dark:bg-gray-800 h-2.5 rounded-full overflow-hidden mb-3">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="p-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                    <p className="text-gray-400 mb-1">Tổng phát sinh</p>
+                    <p className="font-bold font-mono text-gray-900 dark:text-white">{orig.toLocaleString('vi-VN')} ₫</p>
+                  </div>
+                  <div className="p-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
+                    <p className="text-emerald-700 dark:text-emerald-400 mb-1">Đã thanh toán</p>
+                    <p className="font-bold font-mono text-emerald-600 dark:text-emerald-400">{paid.toLocaleString('vi-VN')} ₫</p>
+                  </div>
+                  <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                    <p className="text-red-700 dark:text-red-400 mb-1">Còn nợ lại</p>
+                    <p className="font-bold font-mono text-red-600 dark:text-red-400">{bal.toLocaleString('vi-VN')} ₫</p>
+                  </div>
+                </div>
+              </div>
 
-            <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
-              <button className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm">
-                Thực hiện đối trừ quyết toán
-              </button>
-              <button className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm">
-                <AlertCircle className="w-4 h-4 inline mr-1 text-amber-500" /> Gửi thông báo nhắc nợ
-              </button>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                  <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <User className="w-4 h-4 text-blue-500" /> Tên đối tác
+                  </div>
+                  <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedDebt.entityName}</p>
+                </div>
+                <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                  <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <Calendar className="w-4 h-4 text-amber-500" /> Ngày đáo hạn
+                  </div>
+                  <p className="text-base font-bold text-gray-900 dark:text-white truncate">{selectedDebt.dueDate || 'Không thời hạn'}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">Phân loại đối tác:</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">{entityTypeMap[selectedDebt.entityType] || selectedDebt.entityType}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">Chứng từ gốc liên quan:</span>
+                  <span className="font-semibold font-mono text-blue-600 dark:text-blue-400">{selectedDebt.referenceDoc || 'Không có'}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">Giao dịch gần nhất:</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">{selectedDebt.lastPaymentDate || 'Chưa ghi nhận'}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
+                  <span className="text-gray-500 dark:text-gray-400">Nhân viên phụ trách:</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">{selectedDebt.accountManager}</span>
+                </div>
+
+                {selectedDebt.notes && (
+                  <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Ghi chú & Thỏa thuận</span>
+                    <p className="text-sm text-gray-700 dark:text-gray-300 italic">{selectedDebt.notes}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDebt(null)}
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                >
+                  Đóng
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </Modal>
 
       {/* Modal: Thêm / Sửa */}

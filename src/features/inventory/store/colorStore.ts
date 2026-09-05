@@ -115,7 +115,7 @@ export const useColorStore = create<ColorState>()((set, get) => ({
     const original = get().colors.find((c) => c.id === id);
     const updated = original ? { ...original, ...data } : (data as ColorRecord);
     set((state) => ({
-      colors: state.colors.map((c) => (c.id === id ? { ...c, ...data } : s => s)),
+      colors: state.colors.map((c) => (c.id === id ? { ...c, ...data } : c)),
     }));
 
     try {
@@ -140,26 +140,26 @@ export const useColorStore = create<ColorState>()((set, get) => ({
 
   deleteColor: async (id) => {
     const target = get().colors.find((c) => c.id === id);
-    set((state) => ({
-      colors: state.colors.filter((c) => c.id !== id),
-    }));
-
     try {
-      const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_colors') || '[]');
-      if (!deletedIds.includes(String(id))) deletedIds.push(String(id));
-      if (target?.colorCode && !deletedIds.includes(target.colorCode)) deletedIds.push(target.colorCode);
-      localStorage.setItem('retailhub_deleted_colors', JSON.stringify(deletedIds));
+      await axiosClient.delete(`/colors/${id}`);
+      set((state) => ({
+        colors: state.colors.filter((c) => c.id !== id),
+      }));
 
-      const editedMap = JSON.parse(localStorage.getItem('retailhub_edited_colors') || '{}');
-      delete editedMap[id];
-      if (target?.colorCode) delete editedMap[target.colorCode];
-      localStorage.setItem('retailhub_edited_colors', JSON.stringify(editedMap));
-    } catch (e) {}
+      try {
+        const deletedIds: string[] = JSON.parse(localStorage.getItem('retailhub_deleted_colors') || '[]');
+        if (!deletedIds.includes(String(id))) deletedIds.push(String(id));
+        if (target?.colorCode && !deletedIds.includes(target.colorCode)) deletedIds.push(target.colorCode);
+        localStorage.setItem('retailhub_deleted_colors', JSON.stringify(deletedIds));
 
-    try {
-      await axiosClient.delete(`/colors/${id}`).catch(() => {});
+        const editedMap = JSON.parse(localStorage.getItem('retailhub_edited_colors') || '{}');
+        delete editedMap[id];
+        if (target?.colorCode) delete editedMap[target.colorCode];
+        localStorage.setItem('retailhub_edited_colors', JSON.stringify(editedMap));
+      } catch (e) {}
     } catch (err: any) {
       console.error('Failed to delete color on API:', err);
+      throw err;
     }
   },
 }));

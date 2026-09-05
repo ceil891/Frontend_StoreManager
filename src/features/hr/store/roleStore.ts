@@ -6,6 +6,7 @@ export interface SecurityRoleRecord {
   id: string;
   roleCode: string;
   roleTitle: string;
+  roleName?: string;
   description: string;
   assignedUsersCount: number;
   permissionScope: 'GLOBAL_SUPERADMIN' | 'DIVISION_MANAGER' | 'BRANCH_OPERATIONS' | 'RESTRICTED_CASHIER' | 'AUDIT_READONLY';

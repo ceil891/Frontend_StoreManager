@@ -1,6 +1,7 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Download, Search, Eye, Calendar, Star, User, ClipboardList, CheckCircle2, Award, AwardIcon, TrendingUp } from 'lucide-react';
+import { Plus, Download, Search, Eye, Edit, Trash2, Calendar, Star, User, ClipboardList, CheckCircle2, Award, AwardIcon, TrendingUp } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 
 
@@ -9,6 +10,7 @@ import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
+import { useAuthStore } from '@/features/auth/store/authStore';
 
 interface SupplierEvaluationItem {
   id: string;
@@ -25,13 +27,16 @@ interface SupplierEvaluationItem {
 }
 
 export function SupplierEvaluationsPage() {
+  const currentUser = useAuthStore((s) => s.user);
   const [data, setData] = useState<SupplierEvaluationItem[]>([]);
   const [suppliersList, setSuppliersList] = useState<{ id: number; name: string; code: string }[]>([]);
   const [search, setSearch] = useState('');
   const [scoreFilter, setScoreFilter] = useState<string>('Tất cả');
   const [selectedItem, setSelectedItem] = useState<SupplierEvaluationItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<SupplierEvaluationItem>>({});
+  const [deletingItem, setDeletingItem] = useState<SupplierEvaluationItem | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchSuppliers = async () => {
@@ -58,19 +63,20 @@ export function SupplierEvaluationsPage() {
         const delivery = item.deliveryScore || 0;
         const quality = item.qualityScore || 0;
         const price = item.priceScore || 0;
-        const overall = item.overallScore || (delivery + quality + price > 0 ? parseFloat(((delivery + quality + price) / 3).toFixed(1)) : 0);
+        const overall = item.overallScore || (delivery + quality + price) / 3;
+
         return {
           id: String(item.id),
-          evaluationId: `EV-${item.id}`,
-          supplierId: item.supplier?.id,
-          supplierName: item.supplier?.name || '',
-          evaluationDate: item.evalDate || '',
+          evaluationId: `DG-2026-00${item.id}`,
+          supplierId: item.supplier?.id || item.supplierId,
+          supplierName: item.supplier?.name || item.supplierName || 'Nhà cung cấp',
+          evaluationDate: item.evalDate ? String(item.evalDate).split('T')[0] : (item.createdAt ? String(item.createdAt).split('T')[0] : ''),
           deliveryDelayScore: delivery,
           defectRateScore: quality,
           priceScore: price,
-          finalScore: overall,
+          finalScore: parseFloat(Number(overall).toFixed(1)),
           comments: item.remarks || '',
-          evaluatedBy: item.evaluatedBy?.username || '',
+          evaluatedBy: item.evaluatedByName || item.evaluatedBy || 'Chuyên viên đánh giá',
         };
       });
       setData(mapped);
@@ -89,9 +95,9 @@ export function SupplierEvaluationsPage() {
 
   const filtered = data.filter((item) => {
     const matchesSearch =
+      item.evaluationId.toLowerCase().includes(search.toLowerCase()) ||
       item.supplierName.toLowerCase().includes(search.toLowerCase()) ||
-      item.evaluatedBy.toLowerCase().includes(search.toLowerCase()) ||
-      item.comments.toLowerCase().includes(search.toLowerCase());
+      item.evaluatedBy.toLowerCase().includes(search.toLowerCase());
     
     let matchesScore = true;
     if (scoreFilter === 'XUAT_SAC') matchesScore = item.finalScore >= 9.0;
@@ -102,6 +108,7 @@ export function SupplierEvaluationsPage() {
   });
 
   const handleOpenCreate = () => {
+    setModalMode('create');
     setEditingItem({
       evaluationId: `DG-2026-00${data.length + 1}`,
       supplierId: suppliersList.length > 0 ? suppliersList[0].id : undefined,
@@ -111,15 +118,40 @@ export function SupplierEvaluationsPage() {
       defectRateScore: 8,
       priceScore: 8,
       comments: '',
-      evaluatedBy: 'Quản lý thu mua'
+      evaluatedBy: currentUser?.fullName || currentUser?.name || 'Chuyên viên đánh giá',
     });
     setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: SupplierEvaluationItem) => {
+    setModalMode('edit');
+    setEditingItem(item);
+    setIsModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await axiosClient.delete(`/purchase/evaluations/${deletingItem.id}`);
+      toast.success('Xóa đánh giá nhà cung cấp thành công!');
+      setDeletingItem(null);
+      await fetchEvaluations();
+    } catch (err: any) {
+      console.error('Lỗi khi xóa đánh giá:', err);
+      toast.error('Xóa đánh giá thất bại: ' + (err?.response?.data?.message || err?.message || 'Lỗi hệ thống'));
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem.supplierId) {
-      toast.error('Vui lòng chọn nhà cung cấp cần đánh giá');
+      toast.error('Vui lòng chọn nhà cung cấp cần đánh giá từ danh sách hệ thống!');
+      return;
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (editingItem.evaluationDate && editingItem.evaluationDate > todayStr) {
+      toast.error('Ngày đánh giá không được lớn hơn ngày hiện tại!');
       return;
     }
 
@@ -139,13 +171,18 @@ export function SupplierEvaluationsPage() {
         overallScore: Math.round(overall),
         remarks: editingItem.comments || 'Không có nhận xét chi tiết.',
       };
-      await axiosClient.post('/purchase/evaluations', payload);
-      toast.success('Tạo đánh giá nhà cung cấp thành công');
+      if (modalMode === 'create') {
+        await axiosClient.post('/purchase/evaluations', payload);
+        toast.success('Tạo đánh giá nhà cung cấp thành công');
+      } else if (editingItem.id) {
+        await axiosClient.put(`/purchase/evaluations/${editingItem.id}`, payload);
+        toast.success('Cập nhật đánh giá nhà cung cấp thành công');
+      }
       await fetchEvaluations();
       setIsModalOpen(false);
     } catch (err: any) {
-      console.error('Lỗi tạo đánh giá:', err);
-      const errMsg = err?.response?.data?.message || err?.response?.data?.errors?.supplierId || 'Không thể tạo đánh giá nhà cung cấp';
+      console.error('Lỗi lưu đánh giá:', err);
+      const errMsg = err?.response?.data?.message || err?.response?.data?.errors?.supplierId || 'Không thể lưu đánh giá nhà cung cấp';
       toast.error(errMsg);
     }
   };
@@ -239,6 +276,20 @@ export function SupplierEvaluationsPage() {
               title="Xem tiêu chí chấm"
             >
               <Eye className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleOpenEdit(row.original)}
+              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors shrink-0"
+              title="Chỉnh sửa đánh giá"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setDeletingItem(row.original)}
+              className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors shrink-0"
+              title="Xóa đánh giá"
+            >
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         ),
@@ -393,6 +444,7 @@ export function SupplierEvaluationsPage() {
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày đánh giá *</label>
               <input
                 type="date"
+                max={new Date().toISOString().split('T')[0]}
                 value={editingItem.evaluationDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, evaluationDate: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
@@ -403,38 +455,27 @@ export function SupplierEvaluationsPage() {
 
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nhà cung cấp cần đánh giá *</label>
-            {suppliersList.length > 0 ? (
-              <select
-                value={editingItem.supplierId || ''}
-                onChange={(e) => {
-                  const val = e.target.value ? Number(e.target.value) : undefined;
-                  const selectedSup = suppliersList.find((s) => s.id === val);
-                  setEditingItem({
-                    ...editingItem,
-                    supplierId: val,
-                    supplierName: selectedSup ? selectedSup.name : '',
-                  });
-                }}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 cursor-pointer font-medium"
-                required
-              >
-                <option value="">-- Chọn Nhà Cung Cấp --</option>
-                {suppliersList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    [{s.code}] {s.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={editingItem.supplierName || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, supplierName: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-                placeholder="Ví dụ: Công ty Unilever Việt Nam"
-                required
-              />
-            )}
+            <select
+              value={editingItem.supplierId || ''}
+              onChange={(e) => {
+                const val = e.target.value ? Number(e.target.value) : undefined;
+                const selectedSup = suppliersList.find((s) => s.id === val);
+                setEditingItem({
+                  ...editingItem,
+                  supplierId: val,
+                  supplierName: selectedSup ? selectedSup.name : '',
+                });
+              }}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 cursor-pointer font-medium"
+              required
+            >
+              <option value="">-- Chọn Nhà Cung Cấp --</option>
+              {suppliersList.map((s) => (
+                <option key={s.id} value={s.id}>
+                  [{s.code}] {s.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-4">
@@ -486,12 +527,12 @@ export function SupplierEvaluationsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người chấm điểm *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Người chấm điểm (Tài khoản hiện tại) *</label>
             <input
               type="text"
-              value={editingItem.evaluatedBy || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, evaluatedBy: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              value={editingItem.evaluatedBy || 'Ban Quản Lý Kho'}
+              readOnly
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white text-sm cursor-not-allowed font-medium"
               required
             />
           </div>
@@ -525,6 +566,14 @@ export function SupplierEvaluationsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={!!deletingItem}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa đánh giá"
+        description={`Bạn có chắc chắn muốn xóa phiếu đánh giá "${deletingItem?.evaluationId}" của nhà cung cấp "${deletingItem?.supplierName}"?`}
+      />
     </>
   );
 }

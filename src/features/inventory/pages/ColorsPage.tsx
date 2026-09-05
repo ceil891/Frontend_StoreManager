@@ -1,4 +1,4 @@
-﻿import { Modal } from '@/shared/components/ui/Modal';
+import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Eye, Edit, Trash2, Search, Palette } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
@@ -42,24 +42,29 @@ export function ColorsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingColor.colorName || !editingColor.colorCode) return;
-    if (modalMode === 'create') {
-      await addColor({
-        colorCode: editingColor.colorCode.toUpperCase().trim(),
-        colorName: editingColor.colorName.trim(),
-        hexCode: editingColor.hexCode || '#000000',
-        description: editingColor.description,
-        status: editingColor.status || 'ACTIVE',
-      });
-      toast.success('Đã thêm màu sắc mới thành công!');
-    } else if (editingColor.id) {
-      await updateColor(editingColor.id, {
-        ...editingColor,
-        colorCode: editingColor.colorCode.toUpperCase().trim(),
-        colorName: editingColor.colorName.trim(),
-      });
-      toast.success('Đã cập nhật màu sắc thành công!');
+    try {
+      if (modalMode === 'create') {
+        await addColor({
+          colorCode: editingColor.colorCode.toUpperCase().trim(),
+          colorName: editingColor.colorName.trim(),
+          hexCode: editingColor.hexCode || '#000000',
+          description: editingColor.description,
+          status: editingColor.status || 'ACTIVE',
+        });
+        toast.success('Đã thêm màu sắc mới thành công!');
+      } else if (editingColor.id) {
+        await updateColor(editingColor.id, {
+          ...editingColor,
+          colorCode: editingColor.colorCode.toUpperCase().trim(),
+          colorName: editingColor.colorName.trim(),
+        });
+        toast.success('Đã cập nhật màu sắc thành công!');
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error('Lỗi lưu màu sắc:', err);
+      toast.error('Lỗi khi lưu màu sắc: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
-    setIsModalOpen(false);
   };
 
   const handleDeleteConfirm = async () => {
@@ -69,9 +74,14 @@ export function ColorsPage() {
       setDeletingColor(null);
       return;
     }
-    await deleteColor(deletingColor.id);
-    toast.success(`Đã xóa màu sắc "${deletingColor.colorName}" thành công!`);
-    setDeletingColor(null);
+    try {
+      await deleteColor(deletingColor.id);
+      toast.success(`Đã xóa màu sắc "${deletingColor.colorName}" thành công!`);
+      setDeletingColor(null);
+    } catch (err: any) {
+      console.error('Lỗi khi xóa màu sắc:', err);
+      toast.error('Không thể xóa màu sắc: ' + (err?.response?.data?.message || err?.message || 'Màu đang được sản phẩm/biến thể sử dụng'));
+    }
   };
 
   const columns = useMemo<ColumnDef<ColorRecord>[]>(

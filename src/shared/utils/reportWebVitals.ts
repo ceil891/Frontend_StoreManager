@@ -12,6 +12,7 @@ export interface Metric {
 
 export function reportWebVitals(onPerfEntry?: (metric: Metric) => void) {
   if (onPerfEntry && typeof onPerfEntry === 'function') {
+    // @ts-ignore
     import('web-vitals')
       .then(({ onCLS, onINP, onLCP, onFCP, onTTFB }) => {
         onCLS(onPerfEntry);

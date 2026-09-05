@@ -8,6 +8,7 @@ import { useAreaStore } from '../store/areaStore';
 import type { AreaItem } from '../store/areaStore';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
+import { toast } from 'sonner';
 export function AreasPage() {
   const { areas: data, isLoading, fetchAreas, createArea, updateArea, deleteArea, toggleStatus } = useAreaStore();
   
@@ -62,9 +63,12 @@ export function AreasPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.areaCode || !editingItem.name || !editingItem.level) return;
+    if (!editingItem.areaCode || !editingItem.name || !editingItem.level) {
+      toast.error('Vui lòng nhập đầy đủ mã, tên và cấp khu vực!');
+      return;
+    }
 
     // Resolve parent name
     let resolvedParentName = '';
@@ -76,32 +80,49 @@ export function AreasPage() {
       }
     }
 
-    if (modalMode === 'create') {
-      createArea({
-        areaCode: editingItem.areaCode.toUpperCase(),
-        name: editingItem.name,
-        level: editingItem.level as any,
-        parentId: parentIdVal,
-        description: editingItem.description || '',
-        status: editingItem.status || 'KÍCH_HOẠT',
-      });
-    } else if (editingItem.id) {
-      updateArea(editingItem.id, {
-        areaCode: editingItem.areaCode.toUpperCase(),
-        name: editingItem.name,
-        level: editingItem.level as any,
-        parentId: parentIdVal,
-        description: editingItem.description || '',
-        status: editingItem.status || 'KÍCH_HOẠT',
-      });
+    try {
+      if (modalMode === 'create') {
+        await createArea({
+          areaCode: editingItem.areaCode.toUpperCase(),
+          name: editingItem.name,
+          level: editingItem.level as any,
+          parentId: parentIdVal,
+          description: editingItem.description || '',
+          status: editingItem.status || 'KÍCH_HOẠT',
+        });
+        toast.success(`Tạo khu vực ${editingItem.name} thành công!`);
+      } else if (editingItem.id) {
+        await updateArea(editingItem.id, {
+          areaCode: editingItem.areaCode.toUpperCase(),
+          name: editingItem.name,
+          level: editingItem.level as any,
+          parentId: parentIdVal,
+          description: editingItem.description || '',
+          status: editingItem.status || 'KÍCH_HOẠT',
+        });
+        toast.success(`Cập nhật khu vực ${editingItem.name} thành công!`);
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error('Error saving area:', err);
+      toast.error(err?.response?.data?.message || err?.message || 'Lỗi khi lưu thông tin khu vực');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deletingItem) return;
-    deleteArea(deletingItem.id);
-    setDeletingItem(null);
+    try {
+      await deleteArea(deletingItem.id);
+      toast.success(`Đã xóa khu vực ${deletingItem.name}`);
+      if (selectedItem?.id === deletingItem.id) {
+        setSelectedItem(null);
+      }
+    } catch (err: any) {
+      console.error('Error deleting area:', err);
+      toast.error(err?.response?.data?.message || err?.message || 'Lỗi khi xóa khu vực');
+    } finally {
+      setDeletingItem(null);
+    }
   };
 
   const columns = useMemo<ColumnDef<AreaItem>[]>(

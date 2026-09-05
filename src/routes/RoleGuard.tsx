@@ -36,9 +36,6 @@ export function RoleGuard({ requiredPermission, requiredPermissions, allowedRole
 
   // Kiểm tra requiredPermission đơn lẻ
   if (requiredPermission) {
-    if (permissions.length === 0) {
-      return <>{content}</>;
-    }
     if (!hasPermission(requiredPermission)) {
       return <Navigate to="/403" replace />;
     }
@@ -47,9 +44,6 @@ export function RoleGuard({ requiredPermission, requiredPermissions, allowedRole
 
   // Kiểm tra mảng requiredPermissions
   if (requiredPermissions && requiredPermissions.length > 0) {
-    if (permissions.length === 0) {
-      return <>{content}</>;
-    }
     if (!hasAnyPermission(requiredPermissions)) {
       return <Navigate to="/403" replace />;
     }

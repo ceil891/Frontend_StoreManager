@@ -4,9 +4,16 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePermissionStore, type Permission as PermissionItem } from '../store/permissionStore';
+import { toast } from 'sonner';
 
 export function PermissionsPage() {
-  const { permissions, fetchPermissions } = usePermissionStore();
+  const { 
+    permissions, 
+    fetchPermissions,
+    addPermission,
+    updatePermission,
+    deletePermission,
+  } = usePermissionStore();
   const [data, setData] = useState<PermissionItem[]>([]);
 
   useEffect(() => {
@@ -54,32 +61,38 @@ export function PermissionsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem.permissionCode || !editingItem.module) return;
-
-    if (modalMode === 'create') {
-      const newItem: PermissionItem = {
-        id: String(data.length + 1),
-        permissionCode: editingItem.permissionCode,
-        module: editingItem.module,
-        description: editingItem.description || '',
-        createdAt: new Date().toISOString().split('T')[0],
-        status: editingItem.status || 'KÍCH_HOẠT',
-        tenantId: editingItem.tenantId || 'tenant-1',
-        version: 1,
-      };
-      setData([newItem, ...data]);
-    } else if (editingItem.id) {
-      setData(data.map((item) => (item.id === editingItem.id ? (editingItem as PermissionItem) : item)));
+    if (!editingItem.permissionCode || !editingItem.module) {
+      toast.error('Vui lòng nhập Mã quyền và Phân hệ');
+      return;
     }
-    setIsModalOpen(false);
+
+    try {
+      if (modalMode === 'create') {
+        await addPermission(editingItem);
+        toast.success(`Thêm quyền ${editingItem.permissionCode} thành công!`);
+      } else if (editingItem.id) {
+        await updatePermission(editingItem.id, editingItem);
+        toast.success(`Cập nhật quyền ${editingItem.permissionCode} thành công!`);
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Lỗi khi lưu thông tin quyền.');
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deletingItem) return;
-    setData(data.filter((item) => item.id !== deletingItem.id));
-    setDeletingItem(null);
+    try {
+      await deletePermission(deletingItem.id);
+      toast.success(`Đã xóa quyền ${deletingItem.permissionCode}`);
+      setDeletingItem(null);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Lỗi khi xóa quyền.');
+    }
   };
 
   const columns = useMemo<ColumnDef<PermissionItem>[]>(

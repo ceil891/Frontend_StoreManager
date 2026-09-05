@@ -53,8 +53,44 @@ const tierLabel: Record<string, string> = {
 export function CustomersPage() {
   const { customers: data, addCustomer, updateCustomer, deleteCustomer, fetchCustomers, isLoadingCustomers } = useCrmStore();
   
+  const [dynamicGroups, setDynamicGroups] = useState<{ id: any; code: string; name: string }[]>([]);
+  const [dynamicAreas, setDynamicAreas] = useState<{ id: any; code: string; name: string }[]>([]);
+
   useEffect(() => {
     fetchCustomers();
+    const loadLookups = async () => {
+      try {
+        const [gRes, aRes] = await Promise.allSettled([
+          axiosClient.get('/crm/partner-groups'),
+          axiosClient.get('/partnerarea/areas?size=500')
+        ]);
+        if (gRes.status === 'fulfilled') {
+          const rawG = (gRes.value as any)?.data || (gRes.value as any) || [];
+          const listG = Array.isArray(rawG) ? rawG : (rawG.content || []);
+          if (listG.length > 0) {
+            setDynamicGroups(listG.map((g: any) => ({
+              id: g.id,
+              code: g.groupCode || `GRP-${g.id}`,
+              name: g.groupName || g.name || 'Nhóm KH'
+            })));
+          }
+        }
+        if (aRes.status === 'fulfilled') {
+          const rawA = (aRes.value as any)?.data || (aRes.value as any) || [];
+          const listA = Array.isArray(rawA) ? rawA : (rawA.content || []);
+          if (listA.length > 0) {
+            setDynamicAreas(listA.map((a: any) => ({
+              id: a.id,
+              code: a.areaCode || `AREA-${a.id}`,
+              name: a.areaName || a.name || 'Khu vực'
+            })));
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load dynamic groups/areas for customers:', err);
+      }
+    };
+    loadLookups();
   }, [fetchCustomers]);
 
   const [search, setSearch] = useState('');
@@ -136,9 +172,8 @@ export function CustomersPage() {
           taxCode:        editingCustomer.taxCode || '',
           gender:         editingCustomer.gender || 'OTHER',
           dateOfBirth:    editingCustomer.dateOfBirth || '',
-          creditLimit:    editingCustomer.creditLimit || 0,
-          groupId:        editingCustomer.groupId || '',
-          areaId:         editingCustomer.areaId || '',
+          groupId:        editingCustomer.groupId ? (String(editingCustomer.groupId).match(/^\d+$/) ? Number(editingCustomer.groupId) : undefined) : undefined,
+          areaId:         editingCustomer.areaId ? (String(editingCustomer.areaId).match(/^\d+$/) ? Number(editingCustomer.areaId) : undefined) : undefined,
           avatarUrl:      editingCustomer.avatarUrl?.trim() || '',
           loyaltyTier:    autoTier,
           loyaltyPoints:  editingCustomer.loyaltyPoints || 0,
@@ -147,7 +182,7 @@ export function CustomersPage() {
           lastActive:     editingCustomer.lastActive    || new Date().toISOString().split('T')[0],
           status:         editingCustomer.status || 'ACTIVE',
           notes:          editingCustomer.notes || '',
-        };
+        } as any;
         await addCustomer(newCust);
         toast.success(`Đã thêm khách hàng mới: ${cleanName}`);
       } else if (editingCustomer.id) {
@@ -161,11 +196,11 @@ export function CustomersPage() {
           gender: editingCustomer.gender || 'OTHER',
           dateOfBirth: editingCustomer.dateOfBirth || '',
           creditLimit: editingCustomer.creditLimit || 0,
-          groupId: editingCustomer.groupId || '',
-          areaId: editingCustomer.areaId || '',
+          groupId: editingCustomer.groupId ? (String(editingCustomer.groupId).match(/^\d+$/) ? Number(editingCustomer.groupId) : undefined) : undefined,
+          areaId: editingCustomer.areaId ? (String(editingCustomer.areaId).match(/^\d+$/) ? Number(editingCustomer.areaId) : undefined) : undefined,
           notes: editingCustomer.notes || '',
           avatarUrl: editingCustomer.avatarUrl || '',
-        });
+        } as any);
         toast.success(`Đã cập nhật thông tin khách hàng: ${cleanName}`);
       }
       await fetchCustomers();
@@ -507,7 +542,7 @@ export function CustomersPage() {
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           title={modalMode === 'create' ? 'Thêm Khách Hàng Mới' : 'Chỉnh Sửa Hồ Sơ Khách Hàng'}
-          size="2xl"
+          size="xl"
         >
           <form onSubmit={handleSaveCustomer} className="space-y-6">
             <div className="erp-form-section space-y-4">
@@ -682,12 +717,12 @@ export function CustomersPage() {
                     iconType="building"
                     placeholder="Chọn nhóm khách hàng..."
                     value={editingCustomer.groupId}
-                    options={[
-                      { id: 'GRP-VIP', code: 'GRP-VIP', name: 'Khách hàng VIP / Doanh nghiệp', subtitle: 'Chiết khấu 10%' },
-                      { id: 'GRP-RETAIL', code: 'GRP-RETAIL', name: 'Khách hàng Bán lẻ', subtitle: 'Chiết khấu chuẩn' },
-                      { id: 'GRP-WHOLESALE', code: 'GRP-WHOLESALE', name: 'Đại lý / Bán sỉ', subtitle: 'Chiết khấu 15%' },
+                    options={dynamicGroups.length > 0 ? dynamicGroups : [
+                      { id: '1', code: 'GRP-VIP', name: 'Khách hàng VIP / Doanh nghiệp', subtitle: 'Chiết khấu 10%' },
+                      { id: '2', code: 'GRP-RETAIL', name: 'Khách hàng Bán lẻ', subtitle: 'Chiết khấu chuẩn' },
+                      { id: '3', code: 'GRP-WHOLESALE', name: 'Đại lý / Bán sỉ', subtitle: 'Chiết khấu 15%' },
                     ]}
-                    onChange={(val) => setEditingCustomer(prev => ({ ...prev, groupId: val }))}
+                    onChange={(val) => setEditingCustomer(prev => ({ ...prev, groupId: val ? String(val) : undefined }))}
                   />
                 </div>
                 <div>
@@ -697,12 +732,12 @@ export function CustomersPage() {
                     iconType="location"
                     placeholder="Chọn khu vực..."
                     value={editingCustomer.areaId}
-                    options={[
-                      { id: 'AREA-HN', code: 'AREA-HN', name: 'Khu vực Hà Nội & Miền Bắc' },
-                      { id: 'AREA-HCM', code: 'AREA-HCM', name: 'Khu vực TP. Hồ Chí Minh & Miền Nam' },
-                      { id: 'AREA-DN', code: 'AREA-DN', name: 'Khu vực Đà Nẵng & Miền Trung' },
+                    options={dynamicAreas.length > 0 ? dynamicAreas : [
+                      { id: '1', code: 'AREA-HN', name: 'Khu vực Hà Nội & Miền Bắc', subtitle: 'Miền Bắc' },
+                      { id: '2', code: 'AREA-HCM', name: 'Khu vực TP. Hồ Chí Minh & Miền Nam', subtitle: 'Miền Nam' },
+                      { id: '3', code: 'AREA-DN', name: 'Khu vực Đà Nẵng & Miền Trung', subtitle: 'Miền Trung' },
                     ]}
-                    onChange={(val) => setEditingCustomer(prev => ({ ...prev, areaId: val }))}
+                    onChange={(val) => setEditingCustomer(prev => ({ ...prev, areaId: val ? String(val) : undefined }))}
                   />
                 </div>
               </div>

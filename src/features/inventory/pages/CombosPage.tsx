@@ -73,7 +73,7 @@ export function CombosPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveCombo = (e: React.FormEvent) => {
+  const handleSaveCombo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCombo.comboCode?.trim()) {
       toast.error('Vui lòng nhập mã combo (ví dụ: CB-1001)!');
@@ -88,6 +88,10 @@ export function CombosPage() {
         toast.error('Ngày kết thúc combo không được nhỏ hơn ngày bắt đầu!');
         return;
       }
+    }
+    if (editingDetails.length === 0 || editingDetails.every(d => (d.quantity || 0) <= 0)) {
+      toast.error('Vui lòng thêm ít nhất 1 sản phẩm vào gói combo với số lượng > 0!');
+      return;
     }
 
     const selectedBranch = branches.find(b => String(b.id) === String((editingCombo as any).branchId));
@@ -106,24 +110,34 @@ export function CombosPage() {
       details: editingDetails,
     };
 
-    if (modalMode === 'create') {
-      addCombo(payload);
-      toast.success('Đã tạo gói combo mới thành công!');
-    } else if (editingCombo.id) {
-      updateCombo(editingCombo.id, payload);
-      toast.success('Đã cập nhật gói combo thành công!');
+    try {
+      if (modalMode === 'create') {
+        await addCombo(payload);
+        toast.success('Đã tạo gói combo mới thành công!');
+      } else if (editingCombo.id) {
+        await updateCombo(editingCombo.id, payload);
+        toast.success('Đã cập nhật gói combo thành công!');
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error('Lỗi khi lưu combo:', err);
+      toast.error('Không thể lưu gói combo: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
-    setIsModalOpen(false);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (deletingCombo) {
-      deleteCombo(deletingCombo.id);
-      toast.success(`Đã xóa gói combo "${deletingCombo.comboName}" thành công!`);
-      setDeletingCombo(null);
-      if (selectedCombo?.id === deletingCombo.id) {
-        setSelectedCombo(null);
+      try {
+        await deleteCombo(deletingCombo.id);
+        toast.success(`Đã xóa gói combo "${deletingCombo.comboName}" thành công!`);
+        if (selectedCombo?.id === deletingCombo.id) {
+          setSelectedCombo(null);
+        }
+      } catch (err: any) {
+        console.error('Lỗi khi xóa combo:', err);
+        toast.error('Không thể xóa combo: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
       }
+      setDeletingCombo(null);
     }
   };
 
@@ -369,7 +383,7 @@ export function CombosPage() {
               <div className="border p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800">
                 <p className="text-xs font-semibold uppercase text-gray-600 dark:text-gray-400">Tổng giá trị gốc</p>
                 <p className="text-2xl font-bold text-gray-500 line-through">
-                  {selectedCombo.details.reduce((sum, i) => sum + (i.quantity * i.unitPriceAtCreation), 0).toLocaleString('vi-VN')} đ
+                  {(selectedCombo.details || []).reduce((sum, i) => sum + (i.quantity * i.unitPriceAtCreation), 0).toLocaleString('vi-VN')} đ
                 </p>
               </div>
             </div>
@@ -377,11 +391,11 @@ export function CombosPage() {
             <div className="space-y-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
               <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                 <span className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-2">
-                  <Tag className="w-4 h-4 text-primary" /> Các sản phẩm trong gói ({selectedCombo.details.length})
+                  <Tag className="w-4 h-4 text-primary" /> Các sản phẩm trong gói ({(selectedCombo.details || []).length})
                 </span>
               </div>
               <div className="p-4 space-y-2">
-                {selectedCombo.details.map(d => (
+                {(selectedCombo.details || []).map(d => (
                   <div key={d.id} className="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-800 last:border-0 last:pb-0">
                     <div>
                       <p className="font-semibold text-gray-900 dark:text-white text-sm">{d.productName}</p>

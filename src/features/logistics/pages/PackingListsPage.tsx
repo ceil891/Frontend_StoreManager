@@ -3,6 +3,7 @@ import { Plus, Search, Eye, Edit, Trash2, Calendar, FileText, UserCheck, CheckCi
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -127,17 +128,19 @@ export function PackingListsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    setSelected(null);
-    if (confirm('Bạn có chắc chắn muốn xóa phiếu đóng gói này?')) {
-      try {
-        await axiosClient.delete(`/wms/packing-lists/${id}`);
-        toast.success('Đã xóa phiếu đóng gói thành công!');
-        fetchPackingLists();
-      } catch (err: any) {
-        console.error(err);
-        toast.error('Lỗi vi phạm ràng buộc khi xóa phiếu đóng gói.');
-      }
+  const [deletingItem, setDeletingItem] = useState<PackingListRecord | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await axiosClient.delete(`/wms/packing-lists/${deletingItem.id}`);
+      toast.success(`Đã xóa phiếu đóng gói "${deletingItem.packingCode}" thành công!`);
+      if (selected?.id === deletingItem.id) setSelected(null);
+      setDeletingItem(null);
+      fetchPackingLists();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi vi phạm ràng buộc khi xóa phiếu đóng gói: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
   };
 
@@ -231,7 +234,7 @@ export function PackingListsPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeletingItem(row.original)}
               className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               title="Xóa"
             >
@@ -498,6 +501,15 @@ export function PackingListsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa phiếu đóng gói"
+        description="Bạn có chắc chắn muốn xóa phiếu đóng gói này không? Thao tác này không thể hoàn tác."
+        itemName={deletingItem ? `${deletingItem.packingCode} (Đơn hàng: ${deletingItem.sourceOrder})` : undefined}
+      />
     </div>
   );
 }

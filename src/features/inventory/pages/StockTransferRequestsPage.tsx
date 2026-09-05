@@ -16,20 +16,22 @@ import { useNavigate } from 'react-router';
 
 import { axiosClient } from '@/shared/lib/axiosClient';
 
-export enum TransferRequestStatus {
-  DRAFT = 'DRAFT',
-  PENDING_APPROVAL = 'PENDING_APPROVAL',
-  APPROVED = 'APPROVED',
-  REJECTED = 'REJECTED',
-  CANCELLED = 'CANCELLED',
-}
+export const TransferRequestStatus = {
+  DRAFT: 'DRAFT',
+  PENDING_APPROVAL: 'PENDING_APPROVAL',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  CANCELLED: 'CANCELLED',
+} as const;
+export type TransferRequestStatus = (typeof TransferRequestStatus)[keyof typeof TransferRequestStatus];
 
-export enum TransferPriority {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-  URGENT = 'URGENT',
-}
+export const TransferPriority = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+  URGENT: 'URGENT',
+} as const;
+export type TransferPriority = (typeof TransferPriority)[keyof typeof TransferPriority];
 
 const STATUS_MAP: Record<TransferRequestStatus | string, { label: string; cls: string }> = {
   [TransferRequestStatus.DRAFT]: { label: 'Bản nháp', cls: 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-800 dark:text-gray-300' },
@@ -87,8 +89,8 @@ export function StockTransferRequestsPage() {
           fetchInventories(),
         ]);
 
-        const res = await axiosClient.get<any, any[]>('/inventories/transfers');
-        const list = Array.isArray(res) ? res : (res?.content || []);
+        const res: any = await axiosClient.get<any, any>('/inventories/transfers');
+        const list = Array.isArray(res) ? res : (res?.content || res?.data || []);
         if (list && list.length > 0) {
           const mapped: TransferRequestRecord[] = list.map((item: any) => ({
             id: String(item.id),
@@ -97,7 +99,7 @@ export function StockTransferRequestsPage() {
             destinationHub: item.toBranchName || 'Chi nhánh nhận',
             priority: (item.priority || TransferPriority.MEDIUM) as TransferPriority,
             reason: item.reason || item.note || 'Bổ sung tồn kho',
-            requestedBy: item.requestedBy || item.createdBy || currentUser?.fullName || currentUser?.name || 'System Admin',
+            requestedBy: item.requestedBy || item.createdBy || currentUser?.name || currentUser?.email || 'System Admin',
             requestDate: item.transferDate ? (item.transferDate.includes('T') ? item.transferDate.split('T')[0] : item.transferDate) : new Date().toISOString().split('T')[0],
             expectedDate: item.estArrivalDate ? (item.estArrivalDate.includes('T') ? item.estArrivalDate.split('T')[0] : item.estArrivalDate) : '',
             status: (item.status || TransferRequestStatus.PENDING_APPROVAL) as TransferRequestStatus,
@@ -205,7 +207,7 @@ export function StockTransferRequestsPage() {
 
     const defaultSource = branches.length > 0 ? branches[0].name : 'Chi nhánh Hà Nội (Kho chính)';
     const defaultDest = branches.length > 1 ? branches[1].name : 'Chi nhánh TP. Hồ Chí Minh';
-    const defaultUser = currentUser?.fullName || currentUser?.name || (users.length > 0 ? (users[0].fullName || users[0].emailAddress) : 'System Admin');
+    const defaultUser = currentUser?.name || currentUser?.email || (users.length > 0 ? (users[0].fullName || users[0].emailAddress) : 'System Admin');
 
     setEditingHeader({
       requestCode: generateNextRequestCode(),
@@ -335,7 +337,7 @@ export function StockTransferRequestsPage() {
       destinationHub: editingHeader.destinationHub || 'Chi nhánh TP. Hồ Chí Minh',
       priority: editingHeader.priority || TransferPriority.MEDIUM,
       reason: editingHeader.reason || 'Bổ sung tồn kho',
-      requestedBy: editingHeader.requestedBy || currentUser?.fullName || currentUser?.name || 'System Admin',
+      requestedBy: editingHeader.requestedBy || currentUser?.name || currentUser?.email || 'System Admin',
       requestDate: editingHeader.requestDate || new Date().toISOString().split('T')[0],
       expectedDate: editingHeader.expectedDate || '',
       status: newStatus,
@@ -773,7 +775,7 @@ export function StockTransferRequestsPage() {
               <div>
                 <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Người đề xuất *</label>
                 <select
-                  value={editingHeader.requestedBy || currentUser?.fullName || currentUser?.name || ''}
+                  value={editingHeader.requestedBy || currentUser?.name || currentUser?.email || ''}
                   onChange={(e) => setEditingHeader({ ...editingHeader, requestedBy: e.target.value })}
                   className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-900 dark:text-white"
                 >
@@ -784,8 +786,8 @@ export function StockTransferRequestsPage() {
                       </option>
                     ))
                   ) : (
-                    <option value={currentUser?.fullName || currentUser?.name || 'Admin'}>
-                      {currentUser?.fullName || currentUser?.name || 'Admin'}
+                    <option value={currentUser?.name || currentUser?.email || 'Admin'}>
+                      {currentUser?.name || currentUser?.email || 'Admin'}
                     </option>
                   )}
                 </select>

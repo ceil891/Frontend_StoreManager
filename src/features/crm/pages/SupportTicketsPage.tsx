@@ -73,8 +73,6 @@ const catMapFull: Record<string, string> = {
 import { axiosClient } from '@/shared/lib/axiosClient';
 
 export function SupportTicketsPage() {
-  const setData = (_fn: any) => {};
-  const fetchTickets = () => {};
   const {
     supportTickets: storeTickets,
     fetchSupportTickets,
@@ -97,9 +95,9 @@ export function SupportTicketsPage() {
       category: 'GENERAL_INQUIRY',
       priority: t.priority as any,
       status: (t.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : t.status === 'CLOSED' ? 'CLOSED' : 'OPEN') as any,
-      assignedAgent: t.assignee || 'Chưa phân công',
-      createdAt: t.createdAt,
-      updatedAt: t.createdAt,
+      assignedAgent: (t as any).assignee || (t as any).assignedTo || 'Chưa phân công',
+      createdAt: (t as any).createdAt || (t as any).createdDate || new Date().toISOString(),
+      updatedAt: (t as any).createdAt || (t as any).createdDate || new Date().toISOString(),
       lastMessage: t.subject,
     }));
   }, [storeTickets]);
@@ -151,7 +149,12 @@ export function SupportTicketsPage() {
 
     const payload = {
       ticketNumber: editingTicket.ticketNumber,
+      ticketCode: editingTicket.ticketNumber,
+      customerName: editingTicket.customerName,
+      customerPhone: editingTicket.customerPhone || '',
+      customerEmail: editingTicket.customerEmail || '',
       title: editingTicket.subject,
+      subject: editingTicket.subject,
       description: editingTicket.lastMessage,
       priority: editingTicket.priority,
       status: editingTicket.status,
@@ -166,7 +169,7 @@ export function SupportTicketsPage() {
         toast.success(`Cập nhật phiếu hỗ trợ ${editingTicket.ticketNumber} thành công!`);
       }
       setIsModalOpen(false);
-      fetchTickets();
+      await fetchSupportTickets();
     } catch (err) {
       console.error('Error saving ticket:', err);
       toast.error('Lỗi khi lưu phiếu hỗ trợ');
@@ -176,9 +179,8 @@ export function SupportTicketsPage() {
   const handleDeleteConfirm = async () => {
     if (!deletingTicket) return;
     try {
-      await axiosClient.delete(`/crm/tickets/${deletingTicket.id}`);
+      await deleteSupportTicket(deletingTicket.id);
       toast.success(`Đã xóa phiếu hỗ trợ ${deletingTicket.ticketNumber}`);
-      setData((prev) => prev.filter((item) => item.id !== deletingTicket.id));
     } catch (err) {
       console.error('Error deleting ticket:', err);
       toast.error('Lỗi khi xóa phiếu hỗ trợ');

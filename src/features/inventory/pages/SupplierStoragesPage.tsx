@@ -1,4 +1,5 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
 import { useInventoryStore } from '../store/inventoryStore';
 import { 
@@ -137,11 +138,18 @@ export function SupplierStoragesPage() {
     setIsModalOpen(false);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa khu vực lưu trữ nhà cung cấp này?')) {
-      await deleteSupplierStorage(id);
-      if (selected?.id === id) setSelected(null);
-      toast.success('Đã xóa khu vực.');
+  const [deletingItem, setDeletingItem] = useState<SupplierStorageRecord | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await deleteSupplierStorage(deletingItem.id);
+      if (selected?.id === deletingItem.id) setSelected(null);
+      toast.success(`Đã xóa khu vực lưu trữ "${deletingItem.storageName}" thành công!`);
+      setDeletingItem(null);
+    } catch (err: any) {
+      console.error('Lỗi khi xóa khu vực lưu trữ:', err);
+      toast.error('Lỗi khi xóa khu vực: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
   };
 
@@ -218,7 +226,7 @@ export function SupplierStoragesPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeletingItem(row.original)}
               className="p-1 text-gray-500 hover:text-red-600 dark:hover:text-red-450 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
               title="Xóa"
             >
@@ -624,6 +632,15 @@ export function SupplierStoragesPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa khu vực lưu trữ"
+        description="Bạn có chắc chắn muốn xóa khu vực lưu trữ nhà cung cấp này khỏi hệ thống?"
+        itemName={deletingItem ? `${deletingItem.storageCode} - ${deletingItem.storageName}` : undefined}
+      />
     </div>
   );
 }

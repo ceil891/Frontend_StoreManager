@@ -38,7 +38,7 @@ export function CustomerReturnsPage() {
   const canManage = usePermission('sales:returns:manage');
   const customers = useCrmStore((s) => s.customers);
   const currentUser = useAuthStore((s) => s.user);
-  const currentAccountName = currentUser?.name || currentUser?.username || 'Admin POS';
+  const currentAccountName = currentUser?.name || currentUser?.email || 'Admin POS';
 
   const { branches, fetchBranches } = useBranchStore();
   const { warehouseZones, fetchWarehouseZones, racks, fetchRacks } = useInventoryStore();
@@ -97,7 +97,7 @@ export function CustomerReturnsPage() {
     if (!ret) return false;
     if (!currentUser) return true;
     const inspectorName = (ret.inspector || '').trim().toLowerCase();
-    const currentName = (currentUser.name || currentUser.username || '').trim().toLowerCase();
+    const currentName = (currentUser.name || currentUser.email || '').trim().toLowerCase();
     const currentRole = (currentUser.role || '').toUpperCase();
 
     // Strictly ONLY SUPER_ADMIN has master override power!
@@ -134,7 +134,7 @@ export function CustomerReturnsPage() {
     const defaultBranch = branches[0]?.id ? String(branches[0].id) : '1';
     const defaultZone = availableZones[0]?.id ? String(availableZones[0].id) : (warehouseZones[0]?.id ? String(warehouseZones[0].id) : 'WH-01');
     const defaultRack = availableRacks[0]?.id ? String(availableRacks[0].id) : (racks[0]?.id ? String(racks[0].id) : 'BIN-A01');
-    const defaultInspector = users[0]?.fullName || users[0]?.username || currentAccountName;
+    const defaultInspector = users[0]?.fullName || users[0]?.userCode || currentAccountName;
 
     setEditing({
       returnCode: `RET-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -361,9 +361,9 @@ export function CustomerReturnsPage() {
       }
       setIsModalOpen(false);
       fetchCustomerReturns();
-    } catch (err) {
-      console.error(err);
-      toast.error('Lỗi khi lưu phiếu hoàn trả.');
+    } catch (err: any) {
+      console.error('Lỗi khi lưu phiếu hoàn trả:', err);
+      toast.error('Lỗi khi lưu phiếu hoàn trả: ' + (err?.response?.data?.message || err?.message || 'Lỗi dữ liệu'));
     }
   };
 
@@ -401,7 +401,7 @@ export function CustomerReturnsPage() {
 
   const resolveBranchName = (branchId: string) => {
     const found = branches.find((b: any) => String(b.id) === String(branchId) || b.code === branchId);
-    if (found) return found.name || found.branchName;
+    if (found) return found.name || (found as any).branchName;
     return BRANCH_NAME_BY_ID[branchId] || `Chi nhánh ID ${branchId}`;
   };
 

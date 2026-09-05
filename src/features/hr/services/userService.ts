@@ -247,8 +247,9 @@ export const userService = {
     await axiosClient.put(`/users/${userId}/role-branch`, body);
   },
 
-
-
+  async resetPassword(userId: string, newPassword: string): Promise<void> {
+    await axiosClient.put(`/users/${userId}/reset-password`, { newPassword });
+  },
 
   async deleteUser(id: string): Promise<void> {
     try {

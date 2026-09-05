@@ -1,8 +1,9 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, Link2, Share2, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-
+import { toast } from 'sonner';
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { useOmnichannelStore } from '../store/omnichannelStore';
@@ -72,6 +73,8 @@ export function SalesChannelsPage() {
     setIsModalOpen(true);
   };
 
+  const [deletingItem, setDeletingItem] = useState<SalesChannelRecord | null>(null);
+
   const handleOpenEdit = (item: SalesChannelRecord) => {
     setModalMode('edit');
     setEditingItem(item);
@@ -80,27 +83,53 @@ export function SalesChannelsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (modalMode === 'create') {
-      await addSalesChannel({
-        channelCode: editingItem.channelCode || 'SC-01',
-        channelName: editingItem.channelName || 'Kênh mới',
-        platform: 'SHOPEE',
-        shopId: 'SHOP-01',
-        status: 'CONNECTED',
-        lastSyncedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-        productCount: 0,
-      });
-    } else if (editingItem.id) {
-      await updateSalesChannel(editingItem.id, {
-        channelName: editingItem.channelName,
-      });
+    if (!editingItem.channelName?.trim()) {
+      toast.error('Vui lòng nhập tên gian hàng / kênh bán!');
+      return;
     }
-    setIsModalOpen(false);
+
+    try {
+      if (modalMode === 'create') {
+        const platformMap: Record<string, any> = {
+          SHOPEE: 'SHOPEE',
+          LAZADA: 'LAZADA',
+          TIKTOK: 'TIKTOK_SHOP',
+          WEBSITE: 'WEBSITE',
+          SOCIAL: 'SOCIAL',
+        };
+        await addSalesChannel({
+          channelCode: editingItem.channelCode || `CH-${Date.now().toString().slice(-4)}`,
+          channelName: editingItem.channelName.trim(),
+          platform: platformMap[editingItem.channelType || 'SHOPEE'] || 'SHOPEE',
+          shopId: `SHOP-${Math.floor(1000 + Math.random() * 9000)}`,
+          status: (editingItem.apiStatus === 'ERROR' ? 'SYNC_ERROR' : (editingItem.apiStatus as any) || 'CONNECTED'),
+          lastSyncedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+          productCount: 0,
+        });
+        toast.success('Kết nối kênh bán hàng mới thành công!');
+      } else if (editingItem.id) {
+        await updateSalesChannel(editingItem.id, {
+          channelName: editingItem.channelName.trim(),
+        });
+        toast.success('Cập nhật kênh bán hàng thành công!');
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi lưu kênh bán hàng: ' + (err?.message || 'Thất bại'));
+    }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn ngắt kết nối và xóa kênh bán hàng này?')) {
-      await deleteSalesChannel(id);
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await deleteSalesChannel(deletingItem.id);
+      toast.success(`Đã ngắt kết nối và xóa kênh "${deletingItem.channelName}" thành công!`);
+      if (selected?.id === deletingItem.id) setSelected(null);
+      setDeletingItem(null);
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi xóa kênh bán hàng: ' + (err?.message || 'Thất bại'));
     }
   };
 
@@ -181,7 +210,7 @@ export function SalesChannelsPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeletingItem(row.original)}
               className="p-1 text-gray-500 hover:text-red-600 rounded"
               title="Ngắt kết nối"
             >
@@ -386,6 +415,14 @@ export function SalesChannelsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Ngắt kết nối và xóa kênh bán hàng"
+        description={`Bạn có chắc chắn muốn ngắt kết nối và xóa kênh bán hàng "${deletingItem?.channelName}" không?`}
+      />
     </div>
   );
 }

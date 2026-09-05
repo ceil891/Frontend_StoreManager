@@ -1,4 +1,5 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
 import { Search, Download, Eye, Plus, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
@@ -22,31 +23,40 @@ const statusCfg: Record<string, { label: string; cls: string }> = {
   CHƯA_HOÀN_THÀNH: { label: 'Chưa hoàn thành', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
 };
 
+import { useFinanceStore } from '../store/financeStore';
+
 export function TaxDutiesPage() {
-  const [data, setData] = useState<TaxDutyItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const {
+    taxDuties: storeTaxDuties,
+    fetchTaxDuties,
+    addTaxDuty,
+    updateTaxDuty,
+    deleteTaxDuty,
+    isLoading,
+  } = useFinanceStore();
+
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<TaxDutyItem | null>(null);
   const [isModal, setIsModal] = useState(false);
+  const [deleteItem, setDeleteItem] = useState<TaxDutyItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [form, setForm] = useState<Partial<TaxDutyItem>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const loadData = async () => {
-    setIsLoading(true);
-    try {
-      const list = await financeService.fetchTaxDuties();
-      setData(list);
-    } catch (err: any) {
-      console.error('Failed to load tax duties:', err);
-      toast.error('Lỗi khi tải danh sách nghĩa vụ thuế!');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
-    loadData();
-  }, []);
+    fetchTaxDuties();
+  }, [fetchTaxDuties]);
+
+  const data: TaxDutyItem[] = useMemo(() => {
+    return (storeTaxDuties || []).map((t: any) => ({
+      id: String(t.id),
+      type: t.type || t.taxType || 'Thuế GTGT (VAT)',
+      period: t.period || t.declarationPeriod || 'Q3-2026',
+      amountDue: Number(t.amountDue || t.taxAmount || 0),
+      amountPaid: Number(t.amountPaid || 0),
+      status: (t.status === 'DA_NOP' || t.status === 'COMPLETED' ? 'ĐÃ_HOÀN_THÀNH' : 'CHƯA_HOÀN_THÀNH') as any,
+    }));
+  }, [storeTaxDuties]);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -81,14 +91,10 @@ export function TaxDutiesPage() {
       };
 
       if (form.id) {
-        await financeService.updateTaxDuty(form.id, payload);
-        setData((prev) =>
-          prev.map((item) => (item.id === form.id ? ({ ...item, ...payload } as TaxDutyItem) : item))
-        );
+        await updateTaxDuty(form.id, payload);
         toast.success('Cập nhật nghĩa vụ thuế thành công!');
       } else {
-        const created = await financeService.addTaxDuty(payload);
-        setData((prev) => [{ ...payload, id: String(created.id) } as TaxDutyItem, ...prev]);
+        await addTaxDuty(payload);
         toast.success('Tạo nghĩa vụ thuế mới thành công!');
       }
       setIsModal(false);
@@ -100,16 +106,18 @@ export function TaxDutiesPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa nghĩa vụ thuế này?')) {
-      try {
-        await financeService.deleteTaxDuty(id);
-        setData((prev) => prev.filter((d) => d.id !== id));
-        toast.success('Đã xóa nghĩa vụ thuế thành công!');
-      } catch (err: any) {
-        console.error('Delete tax error:', err);
-        toast.error('Lỗi khi xóa nghĩa vụ thuế!');
-      }
+  const handleConfirmDelete = async () => {
+    if (!deleteItem) return;
+    try {
+      setIsDeleting(true);
+      await deleteTaxDuty(deleteItem.id);
+      toast.success('Đã xóa nghĩa vụ thuế thành công!');
+      setDeleteItem(null);
+    } catch (err: any) {
+      console.error('Delete tax error:', err);
+      toast.error('Lỗi khi xóa nghĩa vụ thuế!');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -170,7 +178,7 @@ export function TaxDutiesPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeleteItem(row.original)}
               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               title="Xóa"
             >
@@ -354,6 +362,16 @@ export function TaxDutiesPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deleteItem)}
+        onClose={() => setDeleteItem(null)}
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
+        title="Xác nhận xóa nghĩa vụ thuế"
+        description="Bạn có chắc chắn muốn xóa nghĩa vụ thuế này không? Thao tác này không thể hoàn tác."
+        itemName={deleteItem ? `${deleteItem.type} (${deleteItem.period})` : ''}
+      />
     </>
   );
 }

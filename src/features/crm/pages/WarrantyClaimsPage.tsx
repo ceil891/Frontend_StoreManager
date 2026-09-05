@@ -1,11 +1,11 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Scan, Sparkles, ShieldCheck } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { useCrmStore } from '../store/crmStore';
-import { axiosClient } from '@/shared/lib/axiosClient';
 import { playBarcodeBeep } from '@/shared/utils/barcodeScanner';
 
 export interface ClaimRecord {
@@ -27,6 +27,8 @@ export interface ClaimRecord {
 export function WarrantyClaimsPage() {
   const {
     warrantyClaims: storeClaims,
+    productWarranties,
+    fetchProductWarranties,
     fetchWarrantyClaims,
     addWarrantyClaim,
     updateWarrantyClaim,
@@ -35,7 +37,31 @@ export function WarrantyClaimsPage() {
 
   useEffect(() => {
     fetchWarrantyClaims();
-  }, [fetchWarrantyClaims]);
+    if (fetchProductWarranties) fetchProductWarranties();
+  }, [fetchWarrantyClaims, fetchProductWarranties]);
+
+  const [deletingItem, setDeletingItem] = useState<ClaimRecord | null>(null);
+
+  const lookupCustomerByCode = useCallback((code: string) => {
+    if (!code) return null;
+    const found = (productWarranties || []).find((w: any) => 
+      (w.serialNumber && w.serialNumber.toLowerCase() === code.toLowerCase()) ||
+      (w.warrantyCode && w.warrantyCode.toLowerCase() === code.toLowerCase()) ||
+      (w.productName && w.productName.toLowerCase().includes(code.toLowerCase()))
+    );
+    if (found) {
+      return {
+        name: (found as any).customerName || 'Khách hàng có bảo hành',
+        phone: (found as any).customerPhone || (found as any).phone || '',
+        product: (found as any).productName || 'Thiết bị điện tử',
+      };
+    }
+    return {
+      name: 'Khách mang máy trực tiếp',
+      phone: 'Tại quầy POS',
+      product: `Thiết bị (${code})`,
+    };
+  }, [productWarranties]);
 
   const data: ClaimRecord[] = useMemo(() => {
     return storeClaims.map((c: any) => ({
@@ -92,12 +118,13 @@ export function WarrantyClaimsPage() {
   const [mockCustomer, setMockCustomer] = useState<{name: string, phone: string, product: string} | null>(null);
 
   const handleWarrantyCodeBlur = () => {
-    if (form.warrantyCode && form.warrantyCode.trim() !== '') {
-      setMockCustomer({
-        name: 'Nguyễn Văn A',
-        phone: '0988123456',
-        product: 'iPhone 15 Pro Max',
-      });
+    const code = form.warrantyCode?.trim();
+    if (code) {
+      const info = lookupCustomerByCode(code);
+      setMockCustomer(info);
+      if (info?.name && info.name !== 'Khách mang máy trực tiếp') {
+        toast.info(`Đã tìm thấy thông tin bảo hành: ${info.product || code}`);
+      }
     } else {
       setMockCustomer(null);
     }
@@ -124,11 +151,7 @@ export function WarrantyClaimsPage() {
 
           if (isModalOpen) {
             setForm(prev => ({ ...prev, warrantyCode: scanned }));
-            setMockCustomer({
-              name: 'Nguyễn Văn A',
-              phone: '0988123456',
-              product: 'iPhone 15 Pro Max',
-            });
+            setMockCustomer(lookupCustomerByCode(scanned));
           } else {
             setSearch(scanned);
           }
@@ -143,7 +166,7 @@ export function WarrantyClaimsPage() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen]);
+  }, [isModalOpen, lookupCustomerByCode]);
 
   const generateClaimCode = () => {
     const today = new Date();
@@ -197,6 +220,10 @@ export function WarrantyClaimsPage() {
     const payload = {
       claimCode: form.claimCode,
       warrantyCode: form.warrantyCode,
+      serialNumber: form.warrantyCode,
+      customerName: mockCustomer?.name,
+      customerPhone: mockCustomer?.phone,
+      productName: mockCustomer?.product,
       issueDescription: form.description,
       status: form.status === 'APPROVED' ? 'COMPLETED' : form.status === 'REJECTED' ? 'REJECTED' : 'PROCESSING',
       resolutionNotes: form.notes,
@@ -209,11 +236,11 @@ export function WarrantyClaimsPage() {
 
     try {
       if (editingItem) {
-        await axiosClient.put(`/crm/warranty-claims/${editingItem.id}`, payload);
+        await updateWarrantyClaim(editingItem.id, payload as any);
         toast.success(`Cập nhật yêu cầu ${form.claimCode} thành công!`);
       } else {
-        await axiosClient.post('/crm/warranty-claims', payload);
-        toast.success(`Tạo Mới yêu cầu bảo hành ${form.claimCode} thành công!`);
+        await addWarrantyClaim(payload as any);
+        toast.success(`Tạo mới yêu cầu bảo hành ${form.claimCode} thành công!`);
       }
       setIsModalOpen(false);
       fetchWarrantyClaims();
@@ -223,11 +250,12 @@ export function WarrantyClaimsPage() {
     }
   };
 
-  const handleDelete = async (item: ClaimRecord) => {
-    if (!confirm(`Bạn có chắc muốn xóa yêu cầu ${item.claimCode}?`)) return;
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
     try {
-      await axiosClient.delete(`/crm/warranty-claims/${item.id}`);
-      toast.success(`Đã xóa yêu cầu ${item.claimCode}`);
+      await deleteWarrantyClaim(deletingItem.id);
+      toast.success(`Đã xóa yêu cầu ${deletingItem.claimCode}`);
+      setDeletingItem(null);
       fetchWarrantyClaims();
     } catch (err) {
       console.error('Error deleting warranty claim:', err);
@@ -326,7 +354,7 @@ export function WarrantyClaimsPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original)}
+              onClick={() => setDeletingItem(row.original)}
               title="Xóa"
               className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
             >
@@ -669,11 +697,7 @@ export function WarrantyClaimsPage() {
                     toast.success(`Đã quét mã: ${code}`);
                     if (targetScanField === 'form-warranty') {
                       setForm(prev => ({ ...prev, warrantyCode: code }));
-                      setMockCustomer({
-                        name: 'Nguyễn Văn A',
-                        phone: '0988123456',
-                        product: 'iPhone 15 Pro Max',
-                      });
+                      setMockCustomer(lookupCustomerByCode(code));
                     } else {
                       setSearch(code);
                     }
@@ -702,6 +726,14 @@ export function WarrantyClaimsPage() {
           </div>
         </div>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa yêu cầu bảo hành"
+        description={`Bạn có chắc chắn muốn xóa yêu cầu bảo hành "${deletingItem?.claimCode}" không?`}
+      />
     </>
   );
 }

@@ -12,6 +12,8 @@ import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/sh
 import { useSalesStore, type SaleOrder, BRANCH_NAME_BY_ID, calcTotalAmount, formatMoney } from '../store/salesStore';
 import { resolveCustomerName, WALK_IN_CUSTOMER_ID } from '../store/salesHelpers';
 import { useCrmStore } from '@/features/crm/store/crmStore';
+import { useAuthStore } from '@/features/auth/store/authStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { OrderLinesEditor, sumOrderLines, summarizeOrderLines } from '@/shared/components/sales/OrderLinesEditor';
 import { CustomerSelect } from '@/shared/components/sales/CustomerSelect';
@@ -38,6 +40,8 @@ export function SaleOrdersPage() {
   const { saleOrders: data, addSaleOrder, updateSaleOrder, deleteSaleOrder, fetchSaleOrders } = useSalesStore();
 
   const customers = useCrmStore((s) => s.customers);
+  const currentUser = useAuthStore((s) => s.user);
+  const { branches, fetchBranches } = useBranchStore();
   const customerLabel = (id: string, name?: string) => resolveCustomerName(id, customers, name);
   const canManage = usePermission('sales:orders:create');
   const storeOrders = useMemo(() => {
@@ -66,7 +70,7 @@ export function SaleOrdersPage() {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        await fetchSaleOrders();
+        await Promise.allSettled([fetchSaleOrders(), fetchBranches()]);
       } catch (err) {
         console.error(err);
       } finally {
@@ -74,7 +78,7 @@ export function SaleOrdersPage() {
       }
     };
     loadData();
-  }, [fetchSaleOrders]);
+  }, [fetchSaleOrders, fetchBranches]);
 
   const filtered = useMemo(() => {
     return storeOrders.filter((item) => {
@@ -118,6 +122,12 @@ export function SaleOrdersPage() {
 
   const handleOpenCreate = () => {
     setModalMode('create');
+    const firstBranch = branches.find(b => b.status === 'ACTIVE') || branches[0];
+    const defaultBranchId = firstBranch ? String(firstBranch.id) : '1';
+    const defaultBranchName = firstBranch ? firstBranch.name : 'Chi nhánh chính RetailHub';
+    const userName = currentUser?.name || currentUser?.email || 'Nhân viên bán hàng';
+    const userEmail = currentUser?.email || 'staff@retailhub.local';
+
     setEditingOrder({
       code: `ORD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       customerId: WALK_IN_CUSTOMER_ID,
@@ -129,11 +139,11 @@ export function SaleOrdersPage() {
       status: 'PENDING',
       paymentStatus: 'UNPAID',
       paymentMethod: 'Cash',
-      cashier: 'System Admin',
-      createdByName: 'System Admin',
-      createdByEmail: 'admin@system.local',
-      branchId: 'BR-001',
-      branchName: BRANCH_NAME_BY_ID['BR-001'],
+      cashier: userName,
+      createdByName: userName,
+      createdByEmail: userEmail,
+      branchId: defaultBranchId,
+      branchName: defaultBranchName,
       origin: 'MANUAL',
       currency: 'VND',
       orderLines: [],
@@ -166,7 +176,7 @@ export function SaleOrdersPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveOrder = (e: React.FormEvent) => {
+  const handleSaveOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingOrder.customerId || !editingOrder.code) {
       toast.error('Vui lòng chọn khách hàng và nhập mã đơn!');
@@ -198,47 +208,68 @@ export function SaleOrdersPage() {
       itemsSummary: summarizeOrderLines(lines) || editingOrder.itemsSummary,
     };
 
-    if (modalMode === 'create') {
-      const newOrder: Omit<SaleOrder, 'id'> = {
-        code: editingOrder.code,
-        customerId: editingOrder.customerId,
-        date: editingOrder.date || new Date().toISOString().slice(0, 16).replace('T', ' '),
-        ...payload,
-        status: editingOrder.status as any || 'PENDING',
-        paymentStatus: editingOrder.paymentStatus as any || 'UNPAID',
-        paymentMethod: editingOrder.paymentMethod || 'Cash',
-        cashier: editingOrder.cashier || 'System Admin',
-        createdByName: editingOrder.createdByName || editingOrder.cashier || 'System Admin',
-        createdByEmail: editingOrder.createdByEmail,
-        branchId: editingOrder.branchId ?? 'BR-001',
-        branchName: editingOrder.branchName || (editingOrder.branchId ? (BRANCH_NAME_BY_ID[String(editingOrder.branchId)] ?? String(editingOrder.branchId)) : BRANCH_NAME_BY_ID['BR-001']),
-        origin: (editingOrder.origin as SaleOrder['origin']) || 'MANUAL',
-        currency: (editingOrder.currency as SaleOrder['currency']) || 'VND',
-      };
-      addSaleOrder(newOrder);
-      toast.success(`Đã tạo đơn hàng ${newOrder.code} thành công!`);
-    } else if (editingOrder.id) {
-      updateSaleOrder(editingOrder.id, { ...editingOrder, ...payload });
-      toast.success(`Đã cập nhật đơn hàng ${editingOrder.code} thành công!`);
+    try {
+      if (modalMode === 'create') {
+        const userName = currentUser?.name || currentUser?.email || 'Nhân viên bán hàng';
+        const activeBranch = branches.find(b => String(b.id) === String(editingOrder.branchId));
+        const resolvedBranchName = editingOrder.branchName
+          || activeBranch?.name
+          || (editingOrder.branchId ? (BRANCH_NAME_BY_ID[String(editingOrder.branchId)] ?? String(editingOrder.branchId)) : 'Chi nhánh chính');
+
+        const newOrder: Omit<SaleOrder, 'id'> = {
+          code: editingOrder.code,
+          customerId: editingOrder.customerId,
+          date: editingOrder.date || new Date().toISOString().slice(0, 16).replace('T', ' '),
+          ...payload,
+          status: editingOrder.status as any || 'PENDING',
+          paymentStatus: editingOrder.paymentStatus as any || 'UNPAID',
+          paymentMethod: editingOrder.paymentMethod || 'Cash',
+          cashier: editingOrder.cashier || userName,
+          createdByName: editingOrder.createdByName || editingOrder.cashier || userName,
+          createdByEmail: editingOrder.createdByEmail || currentUser?.email || 'staff@retailhub.local',
+          branchId: editingOrder.branchId ?? (branches[0] ? String(branches[0].id) : '1'),
+          branchName: resolvedBranchName,
+          origin: (editingOrder.origin as SaleOrder['origin']) || 'MANUAL',
+          currency: (editingOrder.currency as SaleOrder['currency']) || 'VND',
+        };
+        await addSaleOrder(newOrder);
+        toast.success(`Đã tạo đơn hàng ${newOrder.code} thành công!`);
+      } else if (editingOrder.id) {
+        await updateSaleOrder(editingOrder.id, { ...editingOrder, ...payload });
+        toast.success(`Đã cập nhật đơn hàng ${editingOrder.code} thành công!`);
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error('Lỗi khi lưu đơn hàng:', err);
+      toast.error('Lỗi khi lưu đơn hàng: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
-    setIsModalOpen(false);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingOrder) return;
-    deleteSaleOrder(deletingOrder.id);
-    toast.success(`Đã xóa đơn hàng ${deletingOrder.code}`);
-    setDeletingOrder(null);
+    try {
+      await deleteSaleOrder(deletingOrder.id);
+      toast.success(`Đã xóa đơn hàng ${deletingOrder.code}`);
+      setDeletingOrder(null);
+    } catch (err: any) {
+      console.error('Lỗi khi xóa đơn hàng:', err);
+      toast.error('Xóa đơn hàng thất bại: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
+    }
   };
 
-  const handleBulkDeleteConfirm = () => {
+  const handleBulkDeleteConfirm = async () => {
     if (!deletingBulkOrders) return;
     const { rows, clear } = deletingBulkOrders;
     const ids = rows.map(r => r.id);
-    ids.forEach(id => deleteSaleOrder(id));
-    toast.success(`Đã xóa ${ids.length} đơn hàng`);
-    clear();
-    setDeletingBulkOrders(null);
+    try {
+      await Promise.all(ids.map(id => deleteSaleOrder(id)));
+      toast.success(`Đã xóa ${ids.length} đơn hàng`);
+      clear();
+      setDeletingBulkOrders(null);
+    } catch (err: any) {
+      console.error('Lỗi khi xóa nhiều đơn hàng:', err);
+      toast.error('Có lỗi xảy ra khi xóa các đơn hàng đã chọn!');
+    }
   };
 
   const handleExportCsv = () => {
@@ -729,7 +760,12 @@ export function SaleOrdersPage() {
                     iconType="user"
                     placeholder="Chọn khách hàng..."
                     value={editingOrder.customerId}
-                    options={[
+                    options={customers.length > 0 ? customers.map(c => ({
+                      id: String(c.id),
+                      code: c.customerCode || `CUST-${c.id}`,
+                      name: c.name,
+                      subtitle: `SĐT: ${c.phone || 'N/A'}${(c as any).tier ? ` - ${(c as any).tier}` : ''}`
+                    })) : [
                       { id: 'CUST-001', code: 'CUST-001', name: 'Nguyễn Văn An', subtitle: 'SĐT: 0901234567 - VIP Gold' },
                       { id: 'CUST-002', code: 'CUST-002', name: 'Công ty TNHH Minh Phát', subtitle: 'MST: 0312456789 - Khách DN' },
                       { id: 'CUST-003', code: 'CUST-003', name: 'Trần Thị Bình', subtitle: 'SĐT: 0918889999 - Thường' },
@@ -744,19 +780,45 @@ export function SaleOrdersPage() {
                     iconType="location"
                     placeholder="Chọn chi nhánh..."
                     value={String(editingOrder.branchId || '')}
-                    options={[
+                    options={branches.length > 0 ? branches.map(b => ({
+                      id: String(b.id),
+                      code: b.branchCode || `BR-${b.id}`,
+                      name: b.name
+                    })) : [
                       { id: '1', code: 'STORE-HQ', name: 'Chi nhánh Flagship Q1 (TP.HCM)' },
                       { id: '2', code: 'STORE-HN', name: 'Chi nhánh Cầu Giấy (Hà Nội)' },
                       { id: '3', code: 'STORE-DN', name: 'Chi nhánh Hải Châu (Đà Nẵng)' },
                     ]}
-                    onChange={(val) => setEditingOrder(prev => ({ ...prev, branchId: val }))}
+                    onChange={(val) => {
+                      const selected = branches.find(b => String(b.id) === String(val));
+                      setEditingOrder(prev => ({
+                        ...prev,
+                        branchId: val,
+                        branchName: selected?.name || prev.branchName
+                      }));
+                    }}
                   />
                 </div>
               </div>
 
               <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  Địa chỉ giao hàng (Delivery Address)
+                </label>
                 <AddressCascadeSelect
-                  label="Địa chỉ giao hàng (Delivery Address)"
+                  province={editingOrder.province}
+                  district={editingOrder.district}
+                  addressDetail={editingOrder.shippingAddress}
+                  onChange={(addr) =>
+                    setEditingOrder((prev) => ({
+                      ...prev,
+                      province: addr.province,
+                      district: addr.district,
+                      shippingAddress: addr.addressDetail
+                        ? `${addr.addressDetail}, ${addr.ward}, ${addr.district}, ${addr.province}`
+                        : `${addr.ward}, ${addr.district}, ${addr.province}`,
+                    }))
+                  }
                 />
               </div>
 

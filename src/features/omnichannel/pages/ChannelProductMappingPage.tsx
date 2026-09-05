@@ -1,8 +1,9 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, Link, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-
+import { toast } from 'sonner';
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { useOmnichannelStore } from '../store/omnichannelStore';
@@ -79,6 +80,8 @@ export function ChannelProductMappingPage() {
     setIsModalOpen(true);
   };
 
+  const [deletingItem, setDeletingItem] = useState<MappingRecord | null>(null);
+
   const handleOpenEdit = (item: MappingRecord) => {
     setModalMode('edit');
     setEditingItem(item);
@@ -87,27 +90,46 @@ export function ChannelProductMappingPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (modalMode === 'create') {
-      await addProductMapping({
-        channelName: editingItem.channelName || 'Shopee',
-        channelSku: editingItem.channelItemId || 'CH-001',
-        internalSku: editingItem.sku || 'SKU-001',
-        productName: editingItem.systemProductName || 'Sản phẩm mới',
-        channelPrice: 0,
-        syncStatus: 'SYNCED',
-        lastSyncedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      });
-    } else if (editingItem.id) {
-      await updateProductMapping(editingItem.id, {
-        productName: editingItem.systemProductName,
-      });
+    if (!editingItem.sku?.trim() || !editingItem.systemProductName?.trim()) {
+      toast.error('Vui lòng nhập SKU hệ thống và tên sản phẩm!');
+      return;
     }
-    setIsModalOpen(false);
+
+    try {
+      if (modalMode === 'create') {
+        await addProductMapping({
+          channelName: editingItem.channelName || 'Shopee',
+          channelSku: editingItem.channelItemId || `CH-SKU-${Date.now().toString().slice(-4)}`,
+          internalSku: editingItem.sku.trim(),
+          productName: editingItem.systemProductName.trim(),
+          channelPrice: 0,
+          syncStatus: 'SYNCED',
+          lastSyncedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        });
+        toast.success('Tạo liên kết SKU sàn thành công!');
+      } else if (editingItem.id) {
+        await updateProductMapping(editingItem.id, {
+          productName: editingItem.systemProductName.trim(),
+        });
+        toast.success('Cập nhật liên kết sản phẩm thành công!');
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi lưu liên kết sản phẩm: ' + (err?.message || 'Thất bại'));
+    }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa liên kết sản phẩm này?')) {
-      await deleteProductMapping(id);
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await deleteProductMapping(deletingItem.id);
+      toast.success(`Đã xóa liên kết SKU "${deletingItem.sku}" thành công!`);
+      if (selected?.id === deletingItem.id) setSelected(null);
+      setDeletingItem(null);
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi xóa liên kết sản phẩm: ' + (err?.message || 'Thất bại'));
     }
   };
 
@@ -168,7 +190,7 @@ export function ChannelProductMappingPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => setDeletingItem(row.original)}
               className="p-1 text-gray-500 hover:text-red-600 rounded"
               title="Xóa liên kết"
             >
@@ -368,6 +390,14 @@ export function ChannelProductMappingPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa liên kết sản phẩm"
+        description={`Bạn có chắc chắn muốn xóa liên kết SKU "${deletingItem?.sku}" không?`}
+      />
     </div>
   );
 }

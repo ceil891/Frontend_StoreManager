@@ -36,7 +36,7 @@ export const PurchaseOrderFormModal: React.FC<PurchaseOrderFormModalProps> = ({
     reset,
     formState: { errors },
   } = useForm<PurchaseOrderFormValues>({
-    resolver: zodResolver(purchaseOrderFormSchema),
+    resolver: zodResolver(purchaseOrderFormSchema) as any,
     mode: 'onBlur',
     reValidateMode: 'onChange',
     defaultValues: {
@@ -108,7 +108,7 @@ export const PurchaseOrderFormModal: React.FC<PurchaseOrderFormModalProps> = ({
     >
       <form
         ref={formContainerRef}
-        onSubmit={handleSubmit(onFormSubmit)}
+        onSubmit={handleSubmit(onFormSubmit as any)}
         className="space-y-5 text-xs"
         noValidate
       >

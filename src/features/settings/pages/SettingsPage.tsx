@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { Store, Users, Shield, Save, Building2, MapPin, Phone, Mail, Globe, DollarSign, RefreshCcw } from 'lucide-react';
-import { UsersPage } from '@/features/hr/pages/UsersPage';
-import { RolesPage } from '@/features/hr/pages/RolesPage';
+import { Save, Building2, MapPin, Phone, Mail, Globe, Coins, RefreshCcw } from 'lucide-react';
+import { toast } from 'sonner';
 
-interface EnterpriseBranchConfig {
+export interface EnterpriseBranchConfig {
   branchName: string;
   branchCode: string;
   registrationNumber: string;
@@ -14,31 +13,55 @@ interface EnterpriseBranchConfig {
   operatingCurrency: string;
   timezone: string;
   fiscalYearStartMonth: string;
-  maxDailyCashDropLimitUsd: number;
+  maxDailyCashDropLimitVnd: number;
   autoBatchSettlementHour: string;
 }
 
-const INITIAL_CONFIG: EnterpriseBranchConfig = {
-  branchName: 'RetailHub Central Flagship Plaza',
+export const INITIAL_CONFIG: EnterpriseBranchConfig = {
+  branchName: 'Chi nhánh Trung tâm RetailHub Plaza',
   branchCode: 'RH-FLAGSHIP-001',
-  registrationNumber: 'REG-US-99120485',
-  vatTaxNumber: 'VAT-US-987654321',
-  primaryContactPhone: '+1 (555) 890-1234',
-  supportEmail: 'ops.flagship@retailhub.io',
-  headquartersAddress: '742 Evergreen Terrace, Retail District, New York, NY 10001',
-  operatingCurrency: 'USD ($)',
-  timezone: 'America/New_York (EST/EDT)',
-  fiscalYearStartMonth: 'October (Q4 Start)',
-  maxDailyCashDropLimitUsd: 25000.00,
-  autoBatchSettlementHour: '23:30 (11:30 PM)',
+  registrationNumber: '0316892345',
+  vatTaxNumber: '0316892345-001',
+  primaryContactPhone: '1900 6868',
+  supportEmail: 'hotro@retailhub.vn',
+  headquartersAddress: 'Tòa nhà RetailHub, 123 Đường Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+  operatingCurrency: 'VND (₫)',
+  timezone: 'Asia/Ho_Chi_Minh (GMT+7)',
+  fiscalYearStartMonth: 'Tháng 1 (Bắt đầu Q1)',
+  maxDailyCashDropLimitVnd: 50000000,
+  autoBatchSettlementHour: '23:30 (Chốt sổ cuối ngày)',
 };
 
 export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'branch' | 'users' | 'roles'>('branch');
-  const [config, setConfig] = useState<EnterpriseBranchConfig>(INITIAL_CONFIG);
+  const [config, setConfig] = useState<EnterpriseBranchConfig>(() => {
+    try {
+      const saved = localStorage.getItem('retailhub_enterprise_config');
+      if (saved) {
+        return { ...INITIAL_CONFIG, ...JSON.parse(saved) };
+      }
+    } catch (e) {
+      console.error('Failed to parse saved enterprise config', e);
+    }
+    return INITIAL_CONFIG;
+  });
 
   const handleChange = (field: keyof EnterpriseBranchConfig, val: string | number) => {
     setConfig(prev => ({ ...prev, [field]: val }));
+  };
+
+  const handleSave = () => {
+    try {
+      localStorage.setItem('retailhub_enterprise_config', JSON.stringify(config));
+      toast.success('Đã lưu cấu hình chi nhánh và tham số vận hành thành công!');
+    } catch {
+      toast.error('Không thể lưu cấu hình.');
+    }
+  };
+
+  const handleReset = () => {
+    setConfig(INITIAL_CONFIG);
+    localStorage.removeItem('retailhub_enterprise_config');
+    toast.info('Đã khôi phục cài đặt mặc định chuẩn Việt Nam.');
   };
 
   return (
@@ -46,252 +69,214 @@ export function SettingsPage() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Enterprise Administration & Settings</h1>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Cấu hình Chi nhánh & Tham số Vận hành</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Configure root branch profile specifications, audit staff roster credentials and enforce Role-Based Access Control (RBAC) security matrices.
+            Thiết lập hồ sơ pháp lý chi nhánh, thông tin in hóa đơn bán lẻ POS, cấu hình tiền tệ và múi giờ vận hành.
           </p>
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setConfig(INITIAL_CONFIG)}
-            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm"
+            onClick={handleReset}
+            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium shadow-sm cursor-pointer"
           >
-            <RefreshCcw className="w-4 h-4" /> Reset Defaults
+            <RefreshCcw className="w-4 h-4" /> Đặt lại mặc định
           </button>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 pt-4 rounded-t-xl border-t border-x shadow-2xs">
-        <nav className="-mb-px flex space-x-8">
-          <button
-            onClick={() => setActiveTab('branch')}
-            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition-colors ${
-              activeTab === 'branch'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-gray-600'
-            }`}
-          >
-            <Store className="w-4 h-4" />
-            Branch Configuration
-          </button>
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition-colors ${
-              activeTab === 'users'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-gray-600'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            User Management Roster
-          </button>
-          <button
-            onClick={() => setActiveTab('roles')}
-            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-bold text-sm flex items-center gap-2 transition-colors ${
-              activeTab === 'roles'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-gray-600'
-            }`}
-          >
-            <Shield className="w-4 h-4" />
-            RBAC Roles & Policies
-          </button>
-        </nav>
-      </div>
-
-      {/* Tab Content Container */}
-      <div className="bg-white dark:bg-gray-800 rounded-b-xl border-x border-b border-gray-200 dark:border-gray-700 shadow-sm p-6">
-        
-        {/* Branch Config Tab */}
-        {activeTab === 'branch' && (
-          <div className="space-y-8">
-            <div className="flex items-center justify-between pb-4 border-b border-gray-200 dark:border-gray-700">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-primary" /> Core Entity Profile
-                </h3>
-                <p className="text-xs text-gray-500 mt-1">Official corporate registration identifiers and primary operational contacts.</p>
-              </div>
-              <span className="px-3 py-1 bg-primary/10 text-primary border border-primary/20 font-mono font-bold text-xs rounded">
-                ROOT REPOSITORY CODE: {config.branchCode}
-              </span>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">Registered Branch Name</label>
-                <input
-                  type="text"
-                  value={config.branchName}
-                  onChange={(e) => handleChange('branchName', e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent sm:text-sm font-semibold transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">Branch System Code</label>
-                <input
-                  type="text"
-                  value={config.branchCode}
-                  disabled
-                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-100 dark:bg-gray-900/60 text-gray-500 sm:text-sm font-mono font-bold cursor-not-allowed"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">Corporate Registration ID</label>
-                <input
-                  type="text"
-                  value={config.registrationNumber}
-                  onChange={(e) => handleChange('registrationNumber', e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono sm:text-sm focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">VAT / Tax Identification No.</label>
-                <input
-                  type="text"
-                  value={config.vatTaxNumber}
-                  onChange={(e) => handleChange('vatTaxNumber', e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono sm:text-sm focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-gray-400" /> Headquarters Physical Street Address
-                </label>
-                <input
-                  type="text"
-                  value={config.headquartersAddress}
-                  onChange={(e) => handleChange('headquartersAddress', e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white sm:text-sm focus:ring-2 focus:ring-primary focus:border-transparent transition-all font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1.5">
-                  <Phone className="w-3.5 h-3.5 text-gray-400" /> Primary Contact Hotline
-                </label>
-                <input
-                  type="text"
-                  value={config.primaryContactPhone}
-                  onChange={(e) => handleChange('primaryContactPhone', e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono sm:text-sm focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-gray-400" /> Operations Support Email
-                </label>
-                <input
-                  type="text"
-                  value={config.supportEmail}
-                  onChange={(e) => handleChange('supportEmail', e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono sm:text-sm focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                />
-              </div>
-            </div>
-
-            <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
-                <Globe className="w-5 h-5 text-emerald-600" /> Operational Parameters & Fiscal Defaults
+      {/* Main Configuration Card */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 space-y-8">
+        {/* Branch Profile Section */}
+        <div className="space-y-6">
+          <div className="flex items-center justify-between pb-4 border-b border-gray-200 dark:border-gray-700">
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-emerald-600" /> Hồ sơ Pháp nhân & Chi nhánh Cửa hàng
               </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 dark:bg-gray-900/50 p-6 rounded-xl border border-gray-200 dark:border-gray-800">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">Operating Sovereign Currency</label>
-                  <select
-                    value={config.operatingCurrency}
-                    onChange={(e) => handleChange('operatingCurrency', e.target.value)}
-                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono sm:text-sm focus:ring-2 focus:ring-primary focus:border-transparent font-bold"
-                  >
-                    <option value="USD ($)">USD ($) - United States Dollar</option>
-                    <option value="EUR (€)">EUR (€) - Euro Zone</option>
-                    <option value="GBP (£)">GBP (£) - British Pound</option>
-                    <option value="VND (₫)">VND (₫) - Vietnam Dong</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">Timezone Offset Base</label>
-                  <input
-                    type="text"
-                    value={config.timezone}
-                    onChange={(e) => handleChange('timezone', e.target.value)}
-                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono sm:text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1.5">
-                    <DollarSign className="w-4 h-4 text-emerald-500" /> Max Daily Cash Float Drop Limit ($)
-                  </label>
-                  <input
-                    type="number"
-                    value={config.maxDailyCashDropLimitUsd}
-                    onChange={(e) => handleChange('maxDailyCashDropLimitUsd', parseFloat(e.target.value) || 0)}
-                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono font-bold sm:text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">Auto-Batch Settlement Hour</label>
-                  <input
-                    type="text"
-                    value={config.autoBatchSettlementHour}
-                    onChange={(e) => handleChange('autoBatchSettlementHour', e.target.value)}
-                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono sm:text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                </div>
-              </div>
+              <p className="text-xs text-gray-500 mt-1">Thông tin pháp lý chính thức, mã số thuế và thông tin liên lạc phục vụ in hóa đơn bán lẻ POS.</p>
+            </div>
+            <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-mono font-bold text-xs rounded">
+              MÃ KHO/CHI NHÁNH: {config.branchCode}
+            </span>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                Tên chi nhánh / Đơn vị kinh doanh (In trên hóa đơn)
+              </label>
+              <input
+                type="text"
+                value={config.branchName}
+                onChange={(e) => handleChange('branchName', e.target.value)}
+                placeholder="Ví dụ: Chi nhánh Trung tâm RetailHub"
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent sm:text-sm font-semibold transition-all"
+              />
             </div>
 
-            <div className="pt-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
-              <button
-                onClick={() => alert('Branch Configuration saved successfully.')}
-                className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-8 py-3 rounded-lg text-sm font-semibold transition-colors shadow-md hover:shadow-lg"
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                Mã chi nhánh hệ thống
+              </label>
+              <input
+                type="text"
+                value={config.branchCode}
+                disabled
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-100 dark:bg-gray-900/60 text-gray-500 sm:text-sm font-mono font-bold cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                Số ĐKKD / Giấy phép kinh doanh
+              </label>
+              <input
+                type="text"
+                value={config.registrationNumber}
+                onChange={(e) => handleChange('registrationNumber', e.target.value)}
+                placeholder="Ví dụ: 0316892345"
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                Mã số thuế VAT / Tax ID (In trên hóa đơn)
+              </label>
+              <input
+                type="text"
+                value={config.vatTaxNumber}
+                onChange={(e) => handleChange('vatTaxNumber', e.target.value)}
+                placeholder="Ví dụ: 0316892345-001"
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-gray-400" /> Địa chỉ trụ sở / Chi nhánh (In trên hóa đơn)
+              </label>
+              <input
+                type="text"
+                value={config.headquartersAddress}
+                onChange={(e) => handleChange('headquartersAddress', e.target.value)}
+                placeholder="Nhập số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành phố..."
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all font-medium"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-gray-400" /> Hotline liên hệ chính (In trên hóa đơn)
+              </label>
+              <input
+                type="text"
+                value={config.primaryContactPhone}
+                onChange={(e) => handleChange('primaryContactPhone', e.target.value)}
+                placeholder="Ví dụ: 1900 6868 hoặc 0987 654 321"
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-gray-400" /> Email hỗ trợ vận hành & CSKH
+              </label>
+              <input
+                type="text"
+                value={config.supportEmail}
+                onChange={(e) => handleChange('supportEmail', e.target.value)}
+                placeholder="hotro@retailhub.vn"
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Operating Parameters Section */}
+        <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
+            <Globe className="w-5 h-5 text-emerald-600" /> Tham số Vận hành & Mặc định Tài chính
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 dark:bg-gray-900/50 p-6 rounded-xl border border-gray-200 dark:border-gray-800">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                Định dạng tiền tệ hoạt động (Currency)
+              </label>
+              <select
+                value={config.operatingCurrency}
+                onChange={(e) => handleChange('operatingCurrency', e.target.value)}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-bold"
               >
-                <Save className="w-4 h-4" />
-                Commit Branch Profile Changes
-              </button>
+                <option value="VND (₫)">VND (₫) - Đồng Việt Nam (Mặc định)</option>
+                <option value="USD ($)">USD ($) - Đô la Mỹ</option>
+                <option value="EUR (€)">EUR (€) - Đồng Euro</option>
+                <option value="JPY (¥)">JPY (¥) - Yên Nhật</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                Múi giờ hệ thống (Timezone Offset Base)
+              </label>
+              <select
+                value={config.timezone}
+                onChange={(e) => handleChange('timezone', e.target.value)}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-bold"
+              >
+                <option value="Asia/Ho_Chi_Minh (GMT+7)">Asia/Ho_Chi_Minh (GMT+7) - Việt Nam (Mặc định)</option>
+                <option value="Asia/Bangkok (GMT+7)">Asia/Bangkok (GMT+7) - Thái Lan</option>
+                <option value="Asia/Singapore (GMT+8)">Asia/Singapore (GMT+8) - Singapore</option>
+                <option value="Asia/Tokyo (GMT+9)">Asia/Tokyo (GMT+9) - Nhật Bản</option>
+                <option value="America/New_York (EST/EDT)">America/New_York (EST/EDT) - Mỹ</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1.5">
+                <Coins className="w-4 h-4 text-emerald-600" /> Hạn mức tiền mặt lưu két tối đa (VNĐ)
+              </label>
+              <input
+                type="number"
+                step="1000000"
+                value={config.maxDailyCashDropLimitVnd}
+                onChange={(e) => handleChange('maxDailyCashDropLimitVnd', parseFloat(e.target.value) || 0)}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono font-bold sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                * Cảnh báo thu ngân nộp bớt tiền về quỹ chính khi tiền mặt tại két quầy POS vượt hạn mức này.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
+                Giờ tự động kết ca / Chốt sổ ngày
+              </label>
+              <input
+                type="text"
+                value={config.autoBatchSettlementHour}
+                onChange={(e) => handleChange('autoBatchSettlementHour', e.target.value)}
+                placeholder="23:30 (Chốt sổ cuối ngày)"
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                * Thời điểm hệ thống tự động tổng hợp báo cáo doanh thu và chốt phiên làm việc trong ngày.
+              </p>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* User Management Tab Component */}
-        {activeTab === 'users' && (
-          <div className="-m-6">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <Users className="w-5 h-5 text-primary" /> Integrated Staff Directory Roster
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">Below is the complete employee user directory. Click any record to inspect RBAC assignments and MFA telemetry.</p>
-            </div>
-            <div className="p-6">
-              <UsersPage />
-            </div>
-          </div>
-        )}
-
-        {/* Roles Tab Component */}
-        {activeTab === 'roles' && (
-          <div className="-m-6">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <Shield className="w-5 h-5 text-emerald-600" /> Integrated RBAC Role Management
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">Below is the role security policy matrix. Click any role to review granular permission statements.</p>
-            </div>
-            <div className="p-6">
-              <RolesPage />
-            </div>
-          </div>
-        )}
-
+        {/* Save Button */}
+        <div className="pt-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+          <button
+            onClick={handleSave}
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-xl text-sm font-semibold transition-all shadow-md hover:shadow-lg cursor-pointer active:scale-95"
+          >
+            <Save className="w-4 h-4" />
+            Lưu cấu hình chi nhánh & Tham số
+          </button>
+        </div>
       </div>
     </div>
   );

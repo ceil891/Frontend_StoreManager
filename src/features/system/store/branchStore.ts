@@ -5,6 +5,7 @@ import { axiosClient } from '@/shared/lib/axiosClient';
 export interface Branch {
   id: string;
   name: string;
+  branchName?: string;
   location: string;
   phone: string;
   manager: string;
@@ -19,10 +20,12 @@ export interface Branch {
 
 interface BranchState {
   branches: Branch[];
+  currentBranch: Branch | null;
   isLoading: boolean;
   error: string | null;
 
   fetchBranches: () => Promise<void>;
+  setCurrentBranch: (branch: Branch | null) => void;
   addBranch: (branch: Omit<Branch, 'id' | 'employeesCount' | 'currentRevenue'>) => Promise<void>;
   updateBranch: (id: string, data: Partial<Branch>) => Promise<void>;
   deleteBranch: (id: string) => Promise<void>;
@@ -34,8 +37,11 @@ export const useBranchStore = create<BranchState>()(
   persist(
     (set, get) => ({
       branches: [],
+      currentBranch: null,
       isLoading: false,
       error: null,
+
+      setCurrentBranch: (branch) => set({ currentBranch: branch }),
 
       fetchBranches: async () => {
         set({ isLoading: true, error: null });
@@ -51,21 +57,25 @@ export const useBranchStore = create<BranchState>()(
                   ? res.data.content
                   : [])));
 
-          const mapped: Branch[] = rawList.map((b: any) => ({
-            id: String(b.id),
-            branchCode: b.branchCode || `BR-${b.id}`,
-            name: b.branchName || b.name || `Chi nhánh ${b.id}`,
-            location: b.address || b.location || '',
-            phone: b.phone || '',
-            manager: b.manager?.fullName || b.manager?.username || b.manager || '—',
-            managerId: b.manager?.id ? String(b.manager.id) : (b.managerId ? String(b.managerId) : undefined),
-            employeesCount: Number(b.employeesCount || 0),
-            status: (b.isActive === false ? 'INACTIVE' : 'ACTIVE') as 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE',
-            revenueTarget: Number(b.revenueTarget || 0),
-            currentRevenue: Number(b.currentRevenue || 0),
-            openedDate: b.createdAt ? b.createdAt.split('T')[0] : (b.openedDate || new Date().toISOString().split('T')[0]),
-          }));
-          set({ branches: mapped, isLoading: false });
+          const mapped: Branch[] = rawList.map((b: any) => {
+            const bName = b.branchName || b.name || `Chi nhánh ${b.id}`;
+            return {
+              id: String(b.id),
+              branchCode: b.branchCode || `BR-${b.id}`,
+              name: bName,
+              branchName: bName,
+              location: b.address || b.location || '',
+              phone: b.phone || '',
+              manager: b.manager?.fullName || b.manager?.username || b.manager || '—',
+              managerId: b.manager?.id ? String(b.manager.id) : (b.managerId ? String(b.managerId) : undefined),
+              employeesCount: Number(b.employeesCount || 0),
+              status: (b.isActive === false ? 'INACTIVE' : 'ACTIVE') as 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE',
+              revenueTarget: Number(b.revenueTarget || 0),
+              currentRevenue: Number(b.currentRevenue || 0),
+              openedDate: b.createdAt ? b.createdAt.split('T')[0] : (b.openedDate || new Date().toISOString().split('T')[0]),
+            };
+          });
+          set((state) => ({ branches: mapped, currentBranch: state.currentBranch || mapped[0] || null, isLoading: false }));
         } catch (err: any) {
           console.warn('Failed to fetch branches:', err);
           set({

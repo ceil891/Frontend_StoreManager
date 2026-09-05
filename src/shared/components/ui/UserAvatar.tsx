@@ -4,6 +4,7 @@ import { resolveUserAvatarUrl } from '@/shared/utils/userAvatar';
 
 interface UserAvatarProps {
   name?: string;
+  userFullName?: string;
   avatarUrl?: unknown;
   src?: unknown;
   seed?: string;
@@ -21,6 +22,7 @@ const sizeClasses = {
 
 export function UserAvatar({
   name = 'U',
+  userFullName,
   avatarUrl,
   src: legacySrc,
   seed,
@@ -36,7 +38,8 @@ export function UserAvatar({
   }, [validSrc]);
 
   const dim = sizeClasses[size];
-  const displayName = typeof name === 'string' && name.trim() ? name.trim() : 'U';
+  const finalName = userFullName || name;
+  const displayName = typeof finalName === 'string' && finalName.trim() ? finalName.trim() : 'U';
   const initial = displayName.charAt(0).toUpperCase() || 'U';
 
   if (!validSrc || failed) {

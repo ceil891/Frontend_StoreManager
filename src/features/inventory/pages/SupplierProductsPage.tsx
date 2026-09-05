@@ -3,6 +3,7 @@ import { Plus, Search, Eye, Edit, Trash2, Check, Star } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Drawer } from '@/shared/components/ui/Drawer';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { SearchLookupModal } from '@/shared/components/ui/SearchLookupModal';
 import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { FileDropzone } from '@/shared/components/ui/FileDropzone';
@@ -112,10 +113,17 @@ export function SupplierProductsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa liên kết nhà cung cấp này?')) {
-      await deleteSupplierProduct(id);
-      toast.success('Đã xóa liên kết nhà cung cấp thành công!');
+  const [deletingItem, setDeletingItem] = useState<SupplierProductRecord | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await deleteSupplierProduct(deletingItem.id);
+      toast.success(`Đã xóa liên kết nhà cung cấp cho "${deletingItem.productName}" thành công!`);
+      setDeletingItem(null);
+    } catch (err: any) {
+      console.error('Lỗi khi xóa liên kết nhà cung cấp:', err);
+      toast.error('Lỗi khi xóa liên kết: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
   };
 
@@ -208,7 +216,7 @@ export function SupplierProductsPage() {
               <Edit className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); handleDelete(row.original.id); }}
+              onClick={(e) => { e.stopPropagation(); setDeletingItem(row.original); }}
               className="p-1 text-gray-500 hover:text-red-600 rounded"
               title="Xóa"
             >
@@ -455,6 +463,15 @@ export function SupplierProductsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa liên kết nhà cung cấp"
+        description="Bạn có chắc chắn muốn xóa liên kết nhà cung cấp cho mặt hàng này?"
+        itemName={deletingItem ? `${deletingItem.productName} (${deletingItem.supplierSku || deletingItem.supplierCode})` : undefined}
+      />
     </div>
   );
 }

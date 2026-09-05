@@ -1,9 +1,12 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Search, Download, Eye, Edit, DollarSign, CheckCircle } from 'lucide-react';
+import { Plus, Search, Download, Eye, Edit, Trash2, DollarSign, CheckCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useHrStore } from '../store/hrStore';
+import { useUserStore } from '../store/userStore';
+import { toast } from 'sonner';
 
 export interface PayrollItem {
   id: string;
@@ -22,7 +25,6 @@ export interface PayrollItem {
 const fmt = (n: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(n);
 
 export function PayrollPage() {
-  const setData = (_fn: any) => {};
   const {
     payrolls: storePayrolls,
     fetchPayrolls,
@@ -31,22 +33,25 @@ export function PayrollPage() {
     deletePayroll,
   } = useHrStore();
 
+  const { users, fetchUsers } = useUserStore();
+
   useEffect(() => {
     fetchPayrolls();
-  }, [fetchPayrolls]);
+    fetchUsers();
+  }, [fetchPayrolls, fetchUsers]);
 
   const data: PayrollItem[] = useMemo(() => {
     return storePayrolls.map((p) => ({
       id: p.id,
-      userId: 'U001',
+      userId: p.employeeName || 'U001',
       userName: p.employeeName,
-      department: 'Phòng ban',
-      periodMonth: Number(p.payrollMonth.split('-')[1] || 6),
-      periodYear: Number(p.payrollMonth.split('-')[0] || 2026),
-      baseSalary: p.baseSalary,
-      allowance: p.allowances + p.kpiBonus,
-      deduction: p.deductions,
-      netSalary: p.netSalary,
+      department: 'Nhân sự / Kinh doanh',
+      periodMonth: Number((p.payrollMonth || '').split('-')[1] || new Date().getMonth() + 1),
+      periodYear: Number((p.payrollMonth || '').split('-')[0] || new Date().getFullYear()),
+      baseSalary: Number(p.baseSalary) || 0,
+      allowance: (Number(p.allowances) || 0) + (Number(p.kpiBonus) || 0),
+      deduction: Number(p.deductions) || 0,
+      netSalary: Number(p.netSalary) || ((Number(p.baseSalary) || 0) + (Number(p.allowances) || 0) + (Number(p.kpiBonus) || 0) - (Number(p.deductions) || 0)),
       status: p.status === 'PAID' ? 'ĐÃ_CHI_TRẢ' : 'CHƯA_CHI_TRẢ',
     }));
   }, [storePayrolls]);
@@ -54,10 +59,12 @@ export function PayrollPage() {
   const [statusFilter, setStatusFilter] = useState('Tất cả');
   const [selected, setSelected] = useState<PayrollItem|null>(null);
   const [isModal, setIsModal] = useState(false);
+  const [mode, setMode] = useState<'create' | 'edit'>('create');
   const [form, setForm] = useState<Partial<PayrollItem>>({});
+  const [deletingPayroll, setDeletingPayroll] = useState<PayrollItem | null>(null);
 
   const filtered = data.filter(d => {
-    const ms = d.userName.toLowerCase().includes(search.toLowerCase());
+    const ms = (d.userName || '').toLowerCase().includes(search.toLowerCase());
     const mst = statusFilter === 'Tất cả' || d.status === statusFilter;
     return ms && mst;
   });
@@ -65,18 +72,70 @@ export function PayrollPage() {
   const totalNet = filtered.reduce((s, d) => s + d.netSalary, 0);
 
   const openCreate = () => {
-    setForm({ periodMonth: new Date().getMonth()+1, periodYear: 2026, baseSalary: 0, allowance: 0, deduction: 0, netSalary: 0, status: 'CHƯA_CHI_TRẢ' });
+    setMode('create');
+    const defaultUser = users[0];
+    setForm({
+      userName: defaultUser ? (defaultUser.fullName || defaultUser.email || (defaultUser as any).username) : '',
+      userId: defaultUser ? String(defaultUser.id) : '',
+      periodMonth: new Date().getMonth() + 1,
+      periodYear: new Date().getFullYear(),
+      baseSalary: 10000000,
+      allowance: 1500000,
+      deduction: 1050000,
+      netSalary: 10450000,
+      status: 'CHƯA_CHI_TRẢ'
+    });
     setIsModal(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const net = (form.baseSalary||0) + (form.allowance||0) - (form.deduction||0);
-    setData([{ ...form as PayrollItem, id: String(data.length+1), netSalary: net }, ...data]);
-    setIsModal(false);
+    const net = (form.baseSalary || 0) + (form.allowance || 0) - (form.deduction || 0);
+    const monthStr = `${form.periodYear || new Date().getFullYear()}-${String(form.periodMonth || 1).padStart(2, '0')}`;
+    
+    const payload = {
+      payrollCode: form.id ? undefined : `PR-${Date.now().toString().slice(-4)}`,
+      employeeName: form.userName || 'Nhân viên',
+      payrollMonth: monthStr,
+      baseSalary: form.baseSalary || 0,
+      allowances: form.allowance || 0,
+      kpiBonus: 0,
+      deductions: form.deduction || 0,
+      netSalary: net,
+      status: form.status === 'ĐÃ_CHI_TRẢ' ? 'PAID' : 'DRAFT',
+    };
+
+    try {
+      if (mode === 'create') {
+        await addPayroll(payload as any);
+        toast.success('Lập phiếu lương thành công');
+      } else if (form.id) {
+        await updatePayroll(form.id, payload as any);
+        toast.success('Cập nhật phiếu lương thành công');
+      }
+      setIsModal(false);
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi lưu bảng lương: ' + (err?.message || 'Thất bại'));
+    }
   };
 
-  const markPaid = (id: string) => setData(data.map(d => d.id===id ? {...d, status:'ĐÃ_CHI_TRẢ' as const} : d));
+  const markPaid = async (id: string) => {
+    await updatePayroll(id, { status: 'PAID' } as any);
+    toast.success('Đã cập nhật trạng thái chi trả');
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingPayroll) return;
+    try {
+      await deletePayroll(deletingPayroll.id);
+      toast.success(`Đã xóa phiếu lương của ${deletingPayroll.userName}!`);
+      setDeletingPayroll(null);
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi xóa bảng lương: ' + (err?.message || 'Thất bại'));
+    }
+  };
 
   const columns = useMemo<ColumnDef<PayrollItem>[]>(() => [
     { accessorKey:'userName', header:'Nhân viên', cell:({row}) => <div><p className="font-medium text-gray-900 dark:text-white">{row.original.userName}</p><p className="text-xs text-gray-400">{row.original.department}</p></div> },
@@ -92,6 +151,8 @@ export function PayrollPage() {
     { id:'actions', header:'Thao tác', cell:({row}) => (
       <div className="flex gap-1" onClick={e=>e.stopPropagation()}>
         <button onClick={()=>setSelected(row.original)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"><Eye className="w-4 h-4"/></button>
+        <button onClick={()=>{setMode('edit');setForm(row.original);setIsModal(true);}} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"><Edit className="w-4 h-4"/></button>
+        <button onClick={()=>setDeletingPayroll(row.original)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
         {row.original.status==='CHƯA_CHI_TRẢ' && (
           <button onClick={()=>markPaid(row.original.id)} className="px-2 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium flex items-center gap-1"><CheckCircle className="w-3 h-3"/>Chi lương</button>
         )}
@@ -165,10 +226,43 @@ export function PayrollPage() {
       <Modal isOpen={isModal} onClose={()=>setIsModal(false)} title="Lập phiếu lương mới" width="max-w-lg">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên nhân viên *</label>
-              <input required value={form.userName||''} onChange={e=>setForm({...form,userName:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phòng ban</label>
-              <input value={form.department||''} onChange={e=>setForm({...form,department:e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tên nhân viên *</label>
+              {users.length > 0 ? (
+                <select
+                  required
+                  value={form.userName || ''}
+                  onChange={(e) => {
+                    const u = users.find(usr => (usr.fullName || usr.email || (usr as any).username) === e.target.value);
+                    setForm({
+                      ...form,
+                      userName: e.target.value,
+                      userId: u ? String(u.id) : '',
+                      department: (u as any)?.departmentName || form.department || 'Nhân sự / Kinh doanh'
+                    });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="">-- Chọn nhân viên --</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.fullName || u.email || (u as any).username}>
+                      {u.fullName || u.email || (u as any).username} ({u.email || (u as any).username})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  required
+                  value={form.userName || ''}
+                  onChange={e => setForm({ ...form, userName: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+                />
+              )}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phòng ban</label>
+              <input value={form.department || ''} onChange={e => setForm({ ...form, department: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500" />
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lương cơ bản</label>
@@ -184,10 +278,21 @@ export function PayrollPage() {
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button type="button" onClick={()=>setIsModal(false)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg text-sm">Hủy bỏ</button>
-            <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm">Lập phiếu lương</button>
+            <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm">
+              {mode === 'create' ? 'Lập phiếu lương' : 'Cập nhật phiếu lương'}
+            </button>
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={!!deletingPayroll}
+        onClose={() => setDeletingPayroll(null)}
+        onConfirm={handleDeleteConfirm}
+        title="Xác nhận xóa phiếu lương"
+        description="Bạn có chắc chắn muốn xóa bản ghi phiếu lương này không? Hành động này không thể hoàn tác."
+        itemName={deletingPayroll?.userName}
+      />
     </>
   );
 }

@@ -4,6 +4,7 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useFinanceStore } from '../store/financeStore';
+import { toast } from 'sonner';
 
 interface DepreciationRecord {
   id: string;
@@ -37,10 +38,12 @@ const statusConfig: Record<string, { label: string; className: string }> = {
 };
 
 export function DepreciationHistoryPage() {
-  const setData = (_fn: any) => {};
   const {
     depreciations: storeDepreciations,
     fetchDepreciations,
+    addDepreciation,
+    updateDepreciation,
+    deleteDepreciation,
   } = useFinanceStore();
 
   useEffect(() => {
@@ -102,15 +105,37 @@ export function DepreciationHistoryPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const netBook = (editingRec.originalValue || 0) - (editingRec.accumulatedDep || 0);
-    if (modalMode === 'create') {
-      setData([{ id: Date.now().toString(), ...editingRec, netBookValue: netBook } as DepreciationRecord, ...data]);
-    } else {
-      setData(data.map((r) => (r.id === editingRec.id ? { ...r, ...editingRec, netBookValue: netBook } as DepreciationRecord : r)));
+    try {
+      if (modalMode === 'create') {
+        await addDepreciation({
+          assetCode: editingRec.assetCode || 'FA-001',
+          assetName: editingRec.assetName || 'Tài sản cố định',
+          depDate: editingRec.depDate || new Date().toISOString().split('T')[0],
+          depPeriod: editingRec.depPeriod || '2024-Q4',
+          monthlyAmount: editingRec.depAmount || 0,
+          accumulatedTotal: editingRec.accumulatedDep || 0,
+          netBookValue: netBook,
+        });
+        toast.success('Ghi nhận bút toán khấu hao thành công!');
+      } else if (editingRec.id) {
+        await updateDepreciation(editingRec.id, {
+          assetCode: editingRec.assetCode,
+          assetName: editingRec.assetName,
+          depDate: editingRec.depDate,
+          monthlyAmount: editingRec.depAmount || 0,
+          accumulatedTotal: editingRec.accumulatedDep || 0,
+          netBookValue: netBook,
+        });
+        toast.success('Cập nhật bút toán khấu hao thành công!');
+      }
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error('Save depreciation error:', err);
+      toast.error('Lỗi khi lưu bút toán khấu hao!');
     }
-    setIsModalOpen(false);
   };
 
   const columns = useMemo<ColumnDef<DepreciationRecord>[]>(
@@ -336,7 +361,24 @@ export function DepreciationHistoryPage() {
           <p className="text-sm text-gray-600 dark:text-gray-300">Xóa bút toán <strong>{deletingRec?.depCode}</strong> — {deletingRec?.assetName} ({deletingRec?.depPeriod})?</p>
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button onClick={() => setDeletingRec(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg text-sm">Hủy bỏ</button>
-            <button onClick={() => { setData(data.filter((r) => r.id !== deletingRec?.id)); setDeletingRec(null); }} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg text-sm">Đồng ý xóa</button>
+            <button
+              onClick={async () => {
+                if (deletingRec) {
+                  try {
+                    await deleteDepreciation(deletingRec.id);
+                    toast.success(`Đã xóa bút toán khấu hao ${deletingRec.depCode}`);
+                  } catch (err) {
+                    console.error(err);
+                    toast.error('Lỗi khi xóa bút toán khấu hao!');
+                  } finally {
+                    setDeletingRec(null);
+                  }
+                }
+              }}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg text-sm cursor-pointer"
+            >
+              Đồng ý xóa
+            </button>
           </div>
         </div>
       </Modal>

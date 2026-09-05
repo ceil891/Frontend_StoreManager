@@ -7,6 +7,9 @@ export interface PosProduct {
   price: number;
   image: string;
   sku: string;
+  category?: string;
+  productVariantId?: number | string;
+  variantName?: string;
 }
 
 export interface CartItem extends PosProduct {
@@ -22,17 +25,30 @@ export interface VoucherInfo {
   minOrderValue?: number;
 }
 
+export interface PosCustomer {
+  id: string;
+  name: string;
+  phone?: string;
+  points?: number;
+  loyaltyPoints?: number;
+  membershipRank?: string;
+  [key: string]: any;
+}
+
 export interface CartTab {
   id: string;
   name: string;
   items: CartItem[];
-  customer: { id: string; name: string; phone?: string } | null;
+  customer: PosCustomer | null;
   customerPhone: string;
   selectedPaymentId: string;
   appliedVoucher: VoucherInfo | null;
   usedPoints: number;
   cashGiven: string;
   createdAt: string;
+  orderDiscountType: 'PERCENT' | 'FLAT';
+  orderDiscountValue: number;
+  orderNote: string;
 }
 
 const DEFAULT_TAB: CartTab = {
@@ -46,6 +62,9 @@ const DEFAULT_TAB: CartTab = {
   usedPoints: 0,
   cashGiven: '',
   createdAt: new Date().toISOString(),
+  orderDiscountType: 'PERCENT',
+  orderDiscountValue: 0,
+  orderNote: '',
 };
 
 interface PosCartState {
@@ -54,22 +73,27 @@ interface PosCartState {
 
   // Derived state: always reflects the active tab's properties
   items: CartItem[];
-  customer: { id: string; name: string; phone?: string } | null;
+  customer: PosCustomer | null;
   customerPhone: string;
   selectedPaymentId: string;
   appliedVoucher: VoucherInfo | null;
   usedPoints: number;
   cashGiven: string;
+  orderDiscountType: 'PERCENT' | 'FLAT';
+  orderDiscountValue: number;
+  orderNote: string;
 
   addItem: (product: PosProduct) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
-  setCustomer: (customer: { id: string; name: string; phone?: string } | null) => void;
+  setCustomer: (customer: PosCustomer | null) => void;
   setCustomerPhone: (phone: string) => void;
   setSelectedPaymentId: (paymentId: string) => void;
   setAppliedVoucher: (voucher: VoucherInfo | null) => void;
   setUsedPoints: (points: number) => void;
   setCashGiven: (cash: string) => void;
+  setOrderDiscount: (type: 'PERCENT' | 'FLAT', value: number) => void;
+  setOrderNote: (note: string) => void;
   clearCart: () => void;
   getTotal: () => number;
 
@@ -94,6 +118,9 @@ const deriveFromActive = (tabs: CartTab[], activeTabId: string) => {
     appliedVoucher: active.appliedVoucher || null,
     usedPoints: active.usedPoints || 0,
     cashGiven: active.cashGiven || '',
+    orderDiscountType: active.orderDiscountType || 'PERCENT',
+    orderDiscountValue: active.orderDiscountValue || 0,
+    orderNote: active.orderNote || '',
   };
 };
 
@@ -109,6 +136,9 @@ export const usePosCartStore = create<PosCartState>()(
       appliedVoucher: null,
       usedPoints: 0,
       cashGiven: '',
+      orderDiscountType: 'PERCENT',
+      orderDiscountValue: 0,
+      orderNote: '',
 
       addItem: (product) =>
         set((state) => {
@@ -232,10 +262,34 @@ export const usePosCartStore = create<PosCartState>()(
           };
         }),
 
-      clearCart: () =>
+      setOrderDiscount: (type, value) =>
         set((state) => {
           const activeTab = getActiveTab(state.tabs, state.activeTabId);
           const updatedTabs = state.tabs.map((t) =>
+            t.id === activeTab.id ? { ...t, orderDiscountType: type, orderDiscountValue: value } : t
+          );
+          return {
+            tabs: updatedTabs,
+            ...deriveFromActive(updatedTabs, state.activeTabId),
+          };
+        }),
+
+      setOrderNote: (orderNote) =>
+        set((state) => {
+          const activeTab = getActiveTab(state.tabs, state.activeTabId);
+          const updatedTabs = state.tabs.map((t) =>
+            t.id === activeTab.id ? { ...t, orderNote } : t
+          );
+          return {
+            tabs: updatedTabs,
+            ...deriveFromActive(updatedTabs, state.activeTabId),
+          };
+        }),
+
+      clearCart: () =>
+        set((state) => {
+          const activeTab = getActiveTab(state.tabs, state.activeTabId);
+          const updatedTabs: CartTab[] = state.tabs.map((t) =>
             t.id === activeTab.id
               ? {
                   ...t,
@@ -246,6 +300,9 @@ export const usePosCartStore = create<PosCartState>()(
                   appliedVoucher: null,
                   usedPoints: 0,
                   cashGiven: '',
+                  orderDiscountType: 'PERCENT' as const,
+                  orderDiscountValue: 0,
+                  orderNote: '',
                 }
               : t
           );
@@ -274,6 +331,9 @@ export const usePosCartStore = create<PosCartState>()(
           appliedVoucher: null,
           usedPoints: 0,
           cashGiven: '',
+          orderDiscountType: 'PERCENT',
+          orderDiscountValue: 0,
+          orderNote: '',
           createdAt: new Date().toISOString(),
         };
         const updatedTabs = [...state.tabs, newTab];
@@ -362,7 +422,7 @@ export const usePosCartStore = create<PosCartState>()(
       partialize: (state) => ({
         tabs: state.tabs,
         activeTabId: state.activeTabId,
-      }),
+      } as any),
       onRehydrateStorage: () => (state) => {
         if (state) {
           const derived = deriveFromActive(state.tabs, state.activeTabId);

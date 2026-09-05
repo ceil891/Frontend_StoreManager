@@ -53,35 +53,40 @@ export function UnitsPage() {
   }, [fetchUnits, fetchProducts, statusFilter]);
 
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (modalMode === 'create') {
-      addUnit({
-        code: unitCode,
-        unitName,
-        type: unitType,
-        conversionFactor,
-        baseUnitCode: baseUnitCode || unitCode,
-        status,
-        precisionDecimals,
-        notes,
-        assignedSkusCount: 0,
-      });
-      toast.success('Đã thêm đơn vị tính mới thành công!');
-    } else if (editingId) {
-      updateUnit(editingId, {
-        code: unitCode,
-        unitName,
-        type: unitType,
-        conversionFactor,
-        baseUnitCode: baseUnitCode || unitCode,
-        status,
-        precisionDecimals,
-        notes,
-      });
-      toast.success('Đã cập nhật đơn vị tính thành công!');
+    try {
+      if (modalMode === 'create') {
+        await addUnit({
+          code: unitCode,
+          unitName,
+          type: unitType,
+          conversionFactor,
+          baseUnitCode: baseUnitCode || unitCode,
+          status,
+          precisionDecimals,
+          notes,
+          assignedSkusCount: 0,
+        });
+        toast.success('Đã thêm đơn vị tính mới thành công!');
+      } else if (editingId) {
+        await updateUnit(editingId, {
+          code: unitCode,
+          unitName,
+          type: unitType,
+          conversionFactor,
+          baseUnitCode: baseUnitCode || unitCode,
+          status,
+          precisionDecimals,
+          notes,
+        });
+        toast.success('Đã cập nhật đơn vị tính thành công!');
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error('Lỗi khi lưu đơn vị:', err);
+      toast.error('Lỗi khi lưu đơn vị tính: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
-    setIsModalOpen(false);
   };
 
   const filtered = unitsList.filter((item) => {
@@ -676,15 +681,20 @@ export function UnitsPage() {
             </button>
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 if (deletingUnit) {
                   if (deletingUnit.status === 'ACTIVE') {
                     toast.error(`Đơn vị "${deletingUnit.unitName}" đang ở trạng thái hoạt động. Vui lòng chuyển sang ngừng sử dụng trước khi xóa!`);
                     setDeletingUnit(null);
                     return;
                   }
-                  deleteUnit(deletingUnit.id);
-                  toast.success(`Đã xóa đơn vị "${deletingUnit.unitName}" thành công!`);
+                  try {
+                    await deleteUnit(deletingUnit.id);
+                    toast.success(`Đã xóa đơn vị "${deletingUnit.unitName}" thành công!`);
+                  } catch (err: any) {
+                    console.error('Lỗi khi xóa đơn vị:', err);
+                    toast.error('Không thể xóa đơn vị tính: ' + (err?.response?.data?.message || err?.message || 'Đang được sản phẩm liên kết'));
+                  }
                   setDeletingUnit(null);
                 }
               }}

@@ -13,29 +13,25 @@ import { useUserStore } from '@/features/hr/store/userStore';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { toast } from 'sonner';
 
-export enum StockTransferExecutionStatus {
-  DRAFT = 'DRAFT',
-  READY_TO_SHIP = 'READY_TO_SHIP',
-  IN_TRANSIT = 'IN_TRANSIT',
-  COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED',
-}
+export const StockTransferExecutionStatus = {
+  DRAFT: 'DRAFT',
+  READY_TO_SHIP: 'READY_TO_SHIP',
+  IN_TRANSIT: 'IN_TRANSIT',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+} as const;
+export type StockTransferExecutionStatus = (typeof StockTransferExecutionStatus)[keyof typeof StockTransferExecutionStatus];
 
 const STATUS_MAP: Record<string, { label: string; cls: string }> = {
-  [StockTransferExecutionStatus.DRAFT]: { label: 'Bản nháp', cls: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-300' },
-  'DRAFT': { label: 'Bản nháp', cls: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-300' },
-  'PENDING_APPROVAL': { label: 'Chờ duyệt', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 font-semibold' },
-  'APPROVED': { label: 'Đã duyệt (Chờ xuất)', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 font-semibold' },
-  [StockTransferExecutionStatus.READY_TO_SHIP]: { label: 'Chờ xuất kho', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 font-semibold' },
-  'READY_TO_SHIP': { label: 'Chờ xuất kho', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 font-semibold' },
-  'SHIPPED': { label: 'Đang vận chuyển (Đã xuất nguồn)', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 font-bold' },
-  [StockTransferExecutionStatus.IN_TRANSIT]: { label: 'Đang vận chuyển (Đã xuất nguồn)', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 font-bold' },
-  'IN_TRANSIT': { label: 'Đang vận chuyển (Đã xuất nguồn)', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 font-bold' },
-  'RECEIVED': { label: 'Đã hoàn thành (Đã nhập đích)', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 font-bold' },
-  [StockTransferExecutionStatus.COMPLETED]: { label: 'Đã hoàn thành (Đã nhập đích)', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 font-bold' },
-  'COMPLETED': { label: 'Đã hoàn thành (Đã nhập đích)', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 font-bold' },
-  [StockTransferExecutionStatus.CANCELLED]: { label: 'Đã hủy', cls: 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 border-red-200' },
-  'CANCELLED': { label: 'Đã hủy', cls: 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 border-red-200' },
+  DRAFT: { label: 'Bản nháp', cls: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-300' },
+  PENDING_APPROVAL: { label: 'Chờ duyệt', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 font-semibold' },
+  APPROVED: { label: 'Đã duyệt (Chờ xuất)', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 font-semibold' },
+  READY_TO_SHIP: { label: 'Chờ xuất kho', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 font-semibold' },
+  SHIPPED: { label: 'Đang vận chuyển (Đã xuất nguồn)', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 font-bold' },
+  IN_TRANSIT: { label: 'Đang vận chuyển (Đã xuất nguồn)', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 font-bold' },
+  RECEIVED: { label: 'Đã hoàn thành (Đã nhập đích)', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 font-bold' },
+  COMPLETED: { label: 'Đã hoàn thành (Đã nhập đích)', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 font-bold' },
+  CANCELLED: { label: 'Đã hủy', cls: 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 border-red-200' },
 };
 
 export function StockTransferPage() {
@@ -49,6 +45,8 @@ export function StockTransferPage() {
     completeStockTransfer,
     products,
     fetchProducts,
+    inventories,
+    fetchInventories,
   } = useInventoryStore();
 
   const { branches, fetchBranches } = useBranchStore();
@@ -77,6 +75,7 @@ export function StockTransferPage() {
           fetchProducts(),
           fetchBranches(),
           fetchUsers(),
+          fetchInventories(),
         ]);
       } catch (err) {
         console.error('API fetchStockTransfers error:', err);
@@ -85,7 +84,7 @@ export function StockTransferPage() {
       }
     };
     load();
-  }, [fetchStockTransfers, fetchProducts, fetchBranches, fetchUsers]);
+  }, [fetchStockTransfers, fetchProducts, fetchBranches, fetchUsers, fetchInventories]);
 
   const filtered = useMemo(() => {
     return data.filter((item) => {
@@ -106,6 +105,49 @@ export function StockTransferPage() {
   const generateNextTransferCode = () => {
     const count = data.length + 501;
     return `STX-2026-${count}`;
+  };
+
+  const getAvailableStockForBranch = (productIdentifier: string, sourceBranchName?: string): number => {
+    if (!productIdentifier) return 0;
+    const targetProduct = products.find(
+      (p) =>
+        String(p.id) === String(productIdentifier) ||
+        p.name === productIdentifier ||
+        p.sku === productIdentifier
+    );
+    if (!targetProduct) return 0;
+    if (!sourceBranchName) return targetProduct.onHand ?? 0;
+
+    const cleanSource = sourceBranchName.toLowerCase().trim();
+    const targetBranch = branches.find((b) => {
+      const bName = (b.name || '').toLowerCase().trim();
+      const bCode = (b.branchCode || '').toLowerCase().trim();
+      return (
+        bName === cleanSource ||
+        cleanSource.includes(bName) ||
+        bName.includes(cleanSource) ||
+        (bCode && cleanSource.includes(bCode))
+      );
+    });
+
+    if (inventories && inventories.length > 0) {
+      const match = inventories.find((inv) => {
+        const pMatch =
+          String(inv.productId) === String(targetProduct.id) ||
+          (inv.productCode && inv.productCode === targetProduct.sku) ||
+          inv.productName === targetProduct.name;
+        if (!pMatch) return false;
+        if (targetBranch && String(inv.branchId) === String(targetBranch.id)) return true;
+        const invBranch = (inv.branchName || '').toLowerCase().trim();
+        if (invBranch === cleanSource) return true;
+        if (targetBranch && invBranch === (targetBranch.name || '').toLowerCase().trim()) return true;
+        return false;
+      });
+      if (match) {
+        return match.quantityAvailable ?? match.quantityOnHand ?? 0;
+      }
+    }
+    return targetProduct.onHand ?? 0;
   };
 
   const handleOpenCreate = () => {
@@ -135,6 +177,7 @@ export function StockTransferPage() {
     });
 
     const firstProduct = products.length > 0 ? products[0] : null;
+    const initialAvailable = firstProduct ? getAvailableStockForBranch(firstProduct.id, defaultSource) : 0;
     setEditingLines([
       {
         id: `line-${Date.now()}`,
@@ -143,8 +186,9 @@ export function StockTransferPage() {
           ? `${firstProduct.variants[0].color || ''} ${firstProduct.variants[0].size || ''}`.trim() 
           : 'Lon 330ml Original Taste',
         sku: firstProduct ? firstProduct.sku : 'SKU-COCA-330ML',
+        availableQuantity: initialAvailable,
         requestedQuantity: 50,
-        quantity: 50,
+        quantity: Math.min(50, initialAvailable > 0 ? initialAvailable : 50),
         receivedQuantity: 0,
         unitPrice: firstProduct ? (firstProduct.costPrice || firstProduct.price || 20000) : 20000,
         amount: firstProduct ? (firstProduct.costPrice || firstProduct.price || 20000) * 50 : 1000000,
@@ -156,12 +200,17 @@ export function StockTransferPage() {
   const handleOpenEdit = (transfer: StockTransferOrder) => {
     setModalMode('edit');
     setEditingHeader(transfer);
-    setEditingLines(transfer.items && transfer.items.length > 0 ? transfer.items : []);
+    const linesWithStock = (transfer.items && transfer.items.length > 0 ? transfer.items : []).map((line) => ({
+      ...line,
+      availableQuantity: getAvailableStockForBranch(line.productName, transfer.sourceHub),
+    }));
+    setEditingLines(linesWithStock);
     setIsModalOpen(true);
   };
 
   const handleAddLineItem = () => {
     const firstProduct = products.length > 0 ? products[0] : null;
+    const available = firstProduct ? getAvailableStockForBranch(firstProduct.id, editingHeader.sourceHub) : 0;
     const newLine: StockTransferItem = {
       id: `line-${Date.now()}`,
       productName: firstProduct ? firstProduct.name : 'Sản phẩm mới',
@@ -169,8 +218,9 @@ export function StockTransferPage() {
         ? `${firstProduct.variants[0].color || ''} ${firstProduct.variants[0].size || ''}`.trim() 
         : 'Phiên bản chuẩn',
       sku: firstProduct ? firstProduct.sku : `SKU-TR-${Math.floor(100 + Math.random() * 900)}`,
+      availableQuantity: available,
       requestedQuantity: 10,
-      quantity: 10,
+      quantity: Math.min(10, available > 0 ? available : 10),
       receivedQuantity: 0,
       unitPrice: firstProduct ? (firstProduct.costPrice || firstProduct.price || 50000) : 50000,
       amount: firstProduct ? (firstProduct.costPrice || firstProduct.price || 50000) * 10 : 500000,
@@ -181,6 +231,7 @@ export function StockTransferPage() {
   const handleSelectProductForLine = (index: number, selectedProductId: string) => {
     const p = products.find((prod) => String(prod.id) === selectedProductId);
     if (!p) return;
+    const available = getAvailableStockForBranch(p.id, editingHeader.sourceHub);
 
     setEditingLines((prev) => {
       const next = [...prev];
@@ -190,6 +241,7 @@ export function StockTransferPage() {
         ...next[index],
         productName: p.name,
         sku: p.sku || next[index].sku,
+        availableQuantity: available,
         variant: p.variants && p.variants.length > 0 
           ? `${p.variants[0].color || ''} ${p.variants[0].size || ''}`.trim() 
           : 'Mẫu tiêu chuẩn',
@@ -234,6 +286,35 @@ export function StockTransferPage() {
 
     if (editingHeader.sourceHub === editingHeader.destinationHub) {
       toast.error('Kho xuất và Kho nhận không được giống nhau!');
+      return;
+    }
+
+    if (!editingLines || editingLines.length === 0) {
+      toast.error('Vui lòng thêm ít nhất 1 mặt hàng vào phiếu chuyển kho!');
+      return;
+    }
+
+    const invalidLine = editingLines.find(l => !l.productName.trim() || Number(l.quantity) <= 0);
+    if (invalidLine) {
+      toast.error('Số lượng điều chuyển của tất cả các dòng phải lớn hơn 0!');
+      return;
+    }
+
+    // Strict validation: Do not allow transfer quantity exceeding available inventory at sourceHub
+    const exceededLine = editingLines.find((l) => {
+      const available = l.availableQuantity !== undefined
+        ? l.availableQuantity
+        : getAvailableStockForBranch(l.productName, editingHeader.sourceHub);
+      return Number(l.quantity) > available;
+    });
+
+    if (exceededLine) {
+      const available = exceededLine.availableQuantity !== undefined
+        ? exceededLine.availableQuantity
+        : getAvailableStockForBranch(exceededLine.productName, editingHeader.sourceHub);
+      toast.error(
+        `Sản phẩm "${exceededLine.productName}" vượt quá tồn khả dụng tại kho xuất (${editingHeader.sourceHub || 'Kho xuất'}). Tồn khả dụng: ${available}, yêu cầu chuyển: ${exceededLine.quantity}! Vui lòng điều chỉnh lại.`
+      );
       return;
     }
 
@@ -383,7 +464,7 @@ export function StockTransferPage() {
             >
               <Eye className="w-4 h-4" />
             </button>
-            {(row.original.status === StockTransferExecutionStatus.READY_TO_SHIP || row.original.status === 'READY_TO_SHIP' || row.original.status === 'PENDING_APPROVAL' || row.original.status === 'APPROVED' || row.original.status === 'DRAFT') && (
+            {((row.original.status as string) === 'READY_TO_SHIP' || (row.original.status as string) === 'PENDING_APPROVAL' || (row.original.status as string) === 'APPROVED' || (row.original.status as string) === 'DRAFT') && (
               <button
                 onClick={(e) => { e.stopPropagation(); handleShipStock(row.original); }}
                 className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-lg shadow-sm flex items-center gap-1 cursor-pointer transition-all active:scale-95"
@@ -392,7 +473,7 @@ export function StockTransferPage() {
                 <Truck className="w-3.5 h-3.5" /> Xuất kho
               </button>
             )}
-            {(row.original.status === StockTransferExecutionStatus.IN_TRANSIT || row.original.status === 'IN_TRANSIT' || row.original.status === 'SHIPPED') && (
+            {((row.original.status as string) === 'IN_TRANSIT' || (row.original.status as string) === 'SHIPPED') && (
               <button
                 onClick={(e) => { e.stopPropagation(); handleCompleteStock(row.original); }}
                 className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg shadow-sm flex items-center gap-1 cursor-pointer transition-all active:scale-95"
@@ -502,7 +583,7 @@ export function StockTransferPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                {(selected.status === StockTransferExecutionStatus.READY_TO_SHIP || selected.status === 'READY_TO_SHIP' || selected.status === 'PENDING_APPROVAL' || selected.status === 'APPROVED' || selected.status === 'DRAFT') && (
+                {((selected.status as string) === 'READY_TO_SHIP' || (selected.status as string) === 'PENDING_APPROVAL' || (selected.status as string) === 'APPROVED' || (selected.status as string) === 'DRAFT') && (
                   <button
                     onClick={() => handleShipStock(selected)}
                     className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs shadow-md flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
@@ -510,7 +591,7 @@ export function StockTransferPage() {
                     <Truck className="w-4 h-4" /> Xuất Kho Nguồn (Trừ Tồn Nguồn)
                   </button>
                 )}
-                {(selected.status === StockTransferExecutionStatus.IN_TRANSIT || selected.status === 'IN_TRANSIT' || selected.status === 'SHIPPED') && (
+                {((selected.status as string) === 'IN_TRANSIT' || (selected.status as string) === 'SHIPPED') && (
                   <button
                     onClick={() => handleCompleteStock(selected)}
                     className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-md flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
@@ -812,6 +893,7 @@ export function StockTransferPage() {
                   <tr className="text-gray-500 text-[10px] font-bold uppercase tracking-wider border-b">
                     <th className="pb-1 w-48">Sản phẩm</th>
                     <th className="pb-1 w-32">Variant / SKU</th>
+                    <th className="pb-1 text-right w-24">Tồn khả dụng</th>
                     <th className="pb-1 text-right w-24">SL Yêu cầu</th>
                     <th className="pb-1 text-right w-24">SL Thực xuất *</th>
                     <th className="pb-1 text-right w-28">Đơn giá (đ)</th>
@@ -820,7 +902,13 @@ export function StockTransferPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                  {editingLines.map((line, idx) => (
+                  {editingLines.map((line, idx) => {
+                    const avail = line.availableQuantity !== undefined
+                      ? line.availableQuantity
+                      : getAvailableStockForBranch(line.productName, editingHeader.sourceHub);
+                    const isExceeded = Number(line.quantity) > avail;
+
+                    return (
                     <tr key={line.id || idx}>
                       <td className="py-2 pr-2">
                         {products.length > 0 ? (
@@ -864,18 +952,34 @@ export function StockTransferPage() {
                           placeholder="SKU"
                         />
                       </td>
+                      <td className="py-2 pr-2 text-right">
+                        <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold ${
+                          isExceeded
+                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-300'
+                            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+                        }`}>
+                          {avail}
+                        </span>
+                      </td>
                       <td className="py-2 pr-2 text-right font-mono text-gray-500 font-semibold">
                         {line.requestedQuantity ?? line.quantity}
                       </td>
                       <td className="py-2 pr-2">
-                        <input
-                          type="number"
-                          min={1}
-                          value={line.quantity}
-                          onChange={(e) => handleUpdateLine(idx, 'quantity', parseFloat(e.target.value) || 0)}
-                          className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-mono font-bold text-right"
-                          required
-                        />
+                        <div>
+                          <input
+                            type="number"
+                            min={1}
+                            value={line.quantity}
+                            onChange={(e) => handleUpdateLine(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                            className={`w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-mono font-bold text-right ${
+                              isExceeded ? 'border-rose-500 ring-1 ring-rose-500 text-rose-600 bg-rose-50 dark:bg-rose-950/20' : ''
+                            }`}
+                            required
+                          />
+                          {isExceeded && (
+                            <p className="text-[10px] text-rose-600 font-semibold mt-0.5 text-right">Vượt tồn!</p>
+                          )}
+                        </div>
                       </td>
                       <td className="py-2 pr-2">
                         <input
@@ -903,7 +1007,8 @@ export function StockTransferPage() {
                         )}
                       </td>
                     </tr>
-                  ))}
+                  );
+                })}
                 </tbody>
               </table>
             </div>

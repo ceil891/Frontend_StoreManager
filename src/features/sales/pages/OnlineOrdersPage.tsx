@@ -152,10 +152,10 @@ export function OnlineOrdersPage() {
       .filter(u => u.status === 'ACTIVE' || !u.status)
       .map(u => ({
         id: `staff_${u.id}`,
-        name: u.fullName || u.username,
-        phone: u.phone || u.phoneNumber || '',
+        name: u.fullName || u.userCode,
+        phone: u.contactPhone || '',
         carrier: 'Đội xe AuraMart (Nội bộ)',
-        label: `${u.fullName} — ${u.phone || '0912 345 678'} (${u.assignedRole || 'Nhân viên giao hàng'})`
+        label: `${u.fullName} — ${u.contactPhone || '0912 345 678'} (${u.assignedRole || 'Nhân viên giao hàng'})`
       }));
 
     return [...dynamicShippers, ...staffShippers];
@@ -311,8 +311,10 @@ export function OnlineOrdersPage() {
       if (extraData?.shipperPhone) params.shipperPhone = extraData.shipperPhone;
 
       await axiosClient.put(`/sales/orders/${orderId}/status`, null, { params });
-    } catch (err) {
-      console.warn('Backend status update request failed:', err);
+    } catch (err: any) {
+      console.error('Backend status update request failed:', err);
+      toast.error('Không thể cập nhật trạng thái đơn hàng: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
+      return;
     }
 
     const isSuccess = newStatus === 'GIAO_THANH_CONG';

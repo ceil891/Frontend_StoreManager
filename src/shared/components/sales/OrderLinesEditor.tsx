@@ -122,7 +122,7 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
                 <div className="col-span-12 sm:col-span-5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase">Sản phẩm / biến thể #{idx + 1} *</label>
                   <QuoteVariantSelector
-                    value={line.productVariantId || line.productId}
+                    value={String(line.productVariantId || line.productId || '')}
                     onChange={(sel) => handleVariantSelect(line.id, sel)}
                   />
                 </div>

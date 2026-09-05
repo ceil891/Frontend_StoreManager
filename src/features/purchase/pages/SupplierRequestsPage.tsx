@@ -1,4 +1,5 @@
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, FileText, Send, Download, Paperclip, CheckCircle2, ArrowRight, Building2, User, Package, Upload, X } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
@@ -45,6 +46,13 @@ interface ProductOption {
   sku: string;
   name: string;
   unit: string;
+  price?: number;
+  costPrice?: number;
+}
+
+interface BranchOption {
+  id: number;
+  name: string;
 }
 
 export function SupplierRequestsPage() {
@@ -59,7 +67,7 @@ export function SupplierRequestsPage() {
   // Api master data
   const [suppliersList, setSuppliersList] = useState<SupplierOption[]>([]);
   const [productsList, setProductsList] = useState<ProductOption[]>([]);
-  const [branchesList, setBranchesList] = useState<string[]>([]);
+  const [branchesList, setBranchesList] = useState<BranchOption[]>([]);
 
   // Form line items
   const [formLines, setFormLines] = useState<RFQLineItem[]>([]);
@@ -67,7 +75,7 @@ export function SupplierRequestsPage() {
   const [formFiles, setFormFiles] = useState<{ name: string; size: string }[]>([]);
 
   const currentUser = useAuthStore((s) => s.user);
-  const loggedInUser = currentUser?.fullName || currentUser?.name || currentUser?.username || 'Nhân viên thu mua';
+  const loggedInUser = currentUser?.name || currentUser?.email || 'Nhân viên thu mua';
 
   const fetchMasterData = async () => {
     try {
@@ -91,6 +99,8 @@ export function SupplierRequestsPage() {
           sku: p.sku || `SKU-${idx + 1}`,
           name: p.name || p.productName || 'Sản phẩm',
           unit: p.unit || 'Cái',
+          price: Number(p.price || p.sellingPrice || 0),
+          costPrice: Number(p.costPrice || p.importPrice || 0),
         }));
         setProductsList(mapped);
       });
@@ -98,11 +108,14 @@ export function SupplierRequestsPage() {
       // Load branches
       axiosClient.get('/branches').then((res: any) => {
         const list = extractPageContent<any>(res);
-        const mapped: string[] = list.map((b: any) => b.branchName || b.name || '').filter(Boolean);
+        const mapped: BranchOption[] = list.map((b: any, idx: number) => ({
+          id: Number(b.id || idx + 1),
+          name: b.branchName || b.name || `Chi nhánh ${b.id || idx + 1}`,
+        })).filter((b: any) => Boolean(b.name));
         setBranchesList(mapped.length > 0 ? mapped : [
-          'Kho phân phối Trung tâm (Hà Nội)',
-          'Kho Chi nhánh Quận 1 (TP.HCM)',
-          'Kho tổng miền Trung (Đà Nẵng)',
+          { id: 1, name: 'Kho phân phối Trung tâm (Hà Nội)' },
+          { id: 2, name: 'Kho Chi nhánh Quận 1 (TP.HCM)' },
+          { id: 3, name: 'Kho tổng miền Trung (Đà Nẵng)' },
         ]);
       });
     } catch (err) {
@@ -113,9 +126,16 @@ export function SupplierRequestsPage() {
   const fetchRFQs = async () => {
     try {
       setIsLoading(true);
-      const res = await axiosClient.get('/purchase/orders?size=500');
+      const res = await axiosClient.get<any, any>('/purchase/supplier-requests').catch(() => null);
       const list = extractPageContent<any>(res);
-      const mapped: RFQRecord[] = (Array.isArray(list) ? list : []).map((item: any) => {
+      if (Array.isArray(list) && list.length > 0) {
+        setData(list);
+        return;
+      }
+
+      const ordersRes = await axiosClient.get('/purchase/orders?size=500').catch(() => null);
+      const orderList = extractPageContent<any>(ordersRes);
+      const mapped: RFQRecord[] = (Array.isArray(orderList) ? orderList : []).map((item: any) => {
         let status: RFQRecord['status'] = 'CHO_BAO_GIA';
         if (item.status === 'CONFIRMED' || item.status === 'COMPLETED' || item.status === 'APPROVED') status = 'DA_BAO_GIA';
         else if (item.status === 'CANCELLED') status = 'DA_HUY';
@@ -180,7 +200,7 @@ export function SupplierRequestsPage() {
       rfqCode: `RFQ-2026-${Date.now().toString().slice(-4)}`,
       selectedSuppliers: [defaultSupp],
       supplierName: defaultSupp,
-      destinationBranch: branchesList[0] || 'Kho phân phối Trung tâm (Hà Nội)',
+      destinationBranch: branchesList[0]?.name || 'Kho phân phối Trung tâm (Hà Nội)',
       sentDate: new Date().toISOString().split('T')[0],
       expiryDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
       handler: loggedInUser,
@@ -292,7 +312,7 @@ export function SupplierRequestsPage() {
       selectedSuppliers: selectedSupps,
       supplierName: supplierStr,
       supplierEmails: emails,
-      destinationBranch: editingItem.destinationBranch || branchesList[0] || 'Kho phân phối Trung tâm (Hà Nội)',
+      destinationBranch: editingItem.destinationBranch || branchesList[0]?.name || 'Kho phân phối Trung tâm (Hà Nội)',
       sentDate: editingItem.sentDate || new Date().toISOString().split('T')[0],
       expiryDate: editingItem.expiryDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
       handler: editingItem.handler || loggedInUser,
@@ -304,64 +324,62 @@ export function SupplierRequestsPage() {
 
     try {
       if (modalMode === 'create') {
-        const payload = {
-          poNumber: record.rfqCode,
-          supplierName: record.supplierName,
-          destinationStore: record.destinationBranch,
-          orderDate: record.sentDate,
-          estDeliveryDate: record.expiryDate,
-          notes: record.notes || `${record.items.length} mặt hàng yêu cầu báo giá`,
-          orderedBy: record.handler,
-          status: 'DRAFT',
-          poLines: record.items,
-        };
-        await axiosClient.post('/purchase/orders', payload).catch(() => {});
+        const res = await axiosClient.post<any, any>('/purchase/supplier-requests', record).catch(() => null);
+        if (res?.data?.id) record.id = String(res.data.id);
+        else if (res?.id) record.id = String(res.id);
         setData([record, ...data]);
         toast.success(`Đã gửi thành công yêu cầu báo giá tới ${selectedSupps.length} Nhà cung cấp!`);
       } else {
-        const payload = {
-          poNumber: record.rfqCode,
-          supplierName: record.supplierName,
-          destinationStore: record.destinationBranch,
-          orderDate: record.sentDate,
-          estDeliveryDate: record.expiryDate,
-          notes: record.notes,
-          orderedBy: record.handler,
-          status: 'DRAFT',
-          poLines: record.items,
-        };
-        await axiosClient.put(`/purchase/orders/${record.id}`, payload).catch(() => {});
+        await axiosClient.put(`/purchase/supplier-requests/${record.id}`, record).catch(() => null);
         setData(data.map(d => d.id === record.id ? record : d));
         toast.success('Cập nhật yêu cầu báo giá thành công');
       }
       setIsModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Lỗi lưu yêu cầu báo giá:', err);
-      toast.error('Không thể lưu yêu cầu báo giá');
+      toast.error('Không thể lưu yêu cầu báo giá: ' + (err?.message || 'Thất bại'));
     }
   };
 
   const handleConvertToPO = async (rfq: RFQRecord) => {
     try {
+      const matchedSupplier = suppliersList.find(
+        (s) => s.name === rfq.supplierName || s.name === rfq.selectedSuppliers[0] || String(s.id) === rfq.supplierName
+      );
+      const supplierId = matchedSupplier ? Number(matchedSupplier.id) : (suppliersList[0] ? Number(suppliersList[0].id) : 1);
+      const matchedBranch = branchesList.find(b => b.name === rfq.destinationBranch);
+      const branchId = matchedBranch ? matchedBranch.id : (branchesList[0]?.id || 1);
+
+      const details = (rfq.items && rfq.items.length > 0)
+        ? rfq.items.map((i) => {
+            const matchedProd = productsList.find((p) => p.sku === i.sku || p.name === i.productName);
+            const unitPrice = matchedProd?.costPrice || matchedProd?.price || 50000;
+            return {
+              productId: matchedProd ? Number(matchedProd.id) : (productsList[0] ? Number(productsList[0].id) : 1),
+              quantity: Number(i.quantity || 1),
+              unitPrice: unitPrice > 0 ? unitPrice : 50000,
+            };
+          })
+        : [
+            {
+              productId: productsList[0] ? Number(productsList[0].id) : 1,
+              quantity: 1,
+              unitPrice: 50000,
+            }
+          ];
+
       const poPayload = {
-        poNumber: `PO-${rfq.rfqCode.replace('RFQ-', '')}`,
-        supplierName: rfq.selectedSuppliers[0] || rfq.supplierName,
-        destinationStore: rfq.destinationBranch,
-        orderDate: new Date().toISOString().split('T')[0],
-        estDeliveryDate: rfq.expiryDate,
+        poCode: `PO-${rfq.rfqCode.replace('RFQ-', '')}`,
+        poDate: new Date().toISOString().substring(0, 19),
+        expectedDeliveryDate: rfq.expiryDate ? `${rfq.expiryDate}T00:00:00` : new Date().toISOString().substring(0, 19),
+        supplierId,
+        branchId,
+        status: 'PENDING',
         notes: `Tự động tạo từ phiếu yêu cầu báo giá ${rfq.rfqCode}. Ghi chú: ${rfq.notes || ''}`,
-        orderedBy: rfq.handler,
-        status: 'DRAFT',
-        paymentStatus: 'UNPAID',
-        poLines: rfq.items.map(i => ({
-          productName: i.productName,
-          sku: i.sku,
-          quantity: i.quantity,
-          unitPrice: 50000, // Default price quote
-        }))
+        details,
       };
 
-      await axiosClient.post('/purchase/orders', poPayload).catch(() => {});
+      await axiosClient.post('/purchase/orders', poPayload);
       
       // Update RFQ status to DA_BAO_GIA
       const updatedRFQ: RFQRecord = { ...rfq, status: 'DA_BAO_GIA' };
@@ -371,22 +389,26 @@ export function SupplierRequestsPage() {
       }
 
       toast.success(`Đã chuyển RFQ ${rfq.rfqCode} thành Đơn mua hàng (PO) thành công!`);
-    } catch (err) {
-      console.error(err);
-      toast.error('Có lỗi khi chuyển đổi sang Đơn mua hàng PO');
+    } catch (err: any) {
+      console.error('Lỗi chuyển đổi sang PO:', err);
+      toast.error('Có lỗi khi chuyển đổi sang Đơn mua hàng PO: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa yêu cầu báo giá này?')) {
-      try {
-        await axiosClient.delete(`/purchase/orders/${id}`).catch(() => {});
-        setData(data.filter(d => d.id !== id));
-        toast.success('Đã xóa yêu cầu báo giá');
-      } catch (err) {
-        console.error('Lỗi xóa yêu cầu báo giá:', err);
-        toast.error('Không thể xóa yêu cầu báo giá');
-      }
+  const [deletingItem, setDeletingItem] = useState<RFQRecord | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    const id = deletingItem.id;
+    try {
+      await axiosClient.delete(`/purchase/supplier-requests/${id}`).catch(() => {});
+      setData(data.filter(d => d.id !== id));
+      toast.success(`Đã xóa yêu cầu báo giá "${deletingItem.rfqCode}" thành công!`);
+      if (selected?.id === id) setSelected(null);
+      setDeletingItem(null);
+    } catch (err: any) {
+      console.error('Lỗi xóa yêu cầu báo giá:', err);
+      toast.error('Không thể xóa yêu cầu báo giá: ' + (err?.message || 'Thất bại'));
     }
   };
 
@@ -486,7 +508,7 @@ export function SupplierRequestsPage() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleDelete(row.original.id);
+                setDeletingItem(row.original);
               }}
               className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
               title="Xóa"
@@ -674,13 +696,13 @@ export function SupplierRequestsPage() {
             <div>
               <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Kho / Chi nhánh nhận hàng dự kiến *</label>
               <select
-                value={editingItem.destinationBranch || branchesList[0] || ''}
+                value={editingItem.destinationBranch || branchesList[0]?.name || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, destinationBranch: e.target.value })}
                 className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-medium"
                 required
               >
-                {branchesList.map((b, idx) => (
-                  <option key={idx} value={b}>{b}</option>
+                {branchesList.map((b) => (
+                  <option key={b.id} value={b.name}>{b.name}</option>
                 ))}
               </select>
             </div>
@@ -922,6 +944,15 @@ export function SupplierRequestsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận xóa yêu cầu báo giá"
+        description="Bạn có chắc chắn muốn xóa yêu cầu báo giá này khỏi hệ thống?"
+        itemName={deletingItem ? `${deletingItem.rfqCode} - ${deletingItem.supplierName}` : undefined}
+      />
     </div>
   );
 }

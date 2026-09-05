@@ -73,22 +73,12 @@ export const useOmnichannelStore = create<OmnichannelState>()(
         await get().fetchSalesChannels();
       },
       updateSalesChannel: async (id, data) => {
-        try {
-          await axiosClient.put(`/omnichannel/channels/${id}`, data);
-          await get().fetchSalesChannels();
-        } catch (error) {
-          console.error('Failed to update sales channel via API, falling back to local', error);
-          set((state) => ({ salesChannels: state.salesChannels.map((s) => (s.id === id ? { ...s, ...data } : s)) }));
-        }
+        await axiosClient.put(`/omnichannel/channels/${id}`, data);
+        await get().fetchSalesChannels();
       },
       deleteSalesChannel: async (id) => {
-        try {
-          await axiosClient.delete(`/omnichannel/channels/${id}`);
-          await get().fetchSalesChannels();
-        } catch (error) {
-          console.error('Failed to delete sales channel via API, falling back to local', error);
-          set((state) => ({ salesChannels: state.salesChannels.filter((s) => s.id !== id) }));
-        }
+        await axiosClient.delete(`/omnichannel/channels/${id}`);
+        await get().fetchSalesChannels();
       },
 
       fetchProductMappings: async () => {
@@ -104,22 +94,12 @@ export const useOmnichannelStore = create<OmnichannelState>()(
         await get().fetchProductMappings();
       },
       updateProductMapping: async (id, data) => {
-        try {
-          await axiosClient.put(`/omnichannel/mappings/${id}`, data);
-          await get().fetchProductMappings();
-        } catch (error) {
-          console.error('Failed to update product mapping via API, falling back to local', error);
-          set((state) => ({ productMappings: state.productMappings.map((m) => (m.id === id ? { ...m, ...data } : m)) }));
-        }
+        await axiosClient.put(`/omnichannel/mappings/${id}`, data);
+        await get().fetchProductMappings();
       },
       deleteProductMapping: async (id) => {
-        try {
-          await axiosClient.delete(`/omnichannel/mappings/${id}`);
-          await get().fetchProductMappings();
-        } catch (error) {
-          console.error('Failed to delete product mapping via API, falling back to local', error);
-          set((state) => ({ productMappings: state.productMappings.filter((m) => m.id !== id) }));
-        }
+        await axiosClient.delete(`/omnichannel/mappings/${id}`);
+        await get().fetchProductMappings();
       },
 
       fetchWebhookLogs: async () => {

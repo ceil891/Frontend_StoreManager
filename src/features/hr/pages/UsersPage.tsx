@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { Plus, Download, Search, Eye, Mail, Phone, MapPin, Building, Key, ShieldCheck, UserX, UserCheck, Trash2, X, Edit, Scan, Loader2, CheckCircle2 } from 'lucide-react';
+import { Plus, Download, Search, Eye, Mail, Phone, MapPin, Building, Key, KeyRound, EyeOff, Copy, ShieldCheck, UserX, UserCheck, Trash2, X, Edit, Scan, Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -23,7 +23,7 @@ const statusBadgeStyles = {
 type SearchField = 'all' | 'userCode' | 'fullName' | 'emailAddress' | 'assignedRole' | 'primaryDepartment' | 'branchLocation';
 
 export function UsersPage() {
-  const { users, fetchUsers, addUser, updateUser, updateUserRoleAndBranch, deleteUser } = useUserStore();
+  const { users, fetchUsers, addUser, updateUser, updateUserRoleAndBranch, deleteUser, resetPassword } = useUserStore();
   const { roles, fetchRoles } = useRoleStore();
   const { branches, fetchBranches } = useBranchStore();
   const { departments, positions, fetchDepartments, fetchPositions } = useHrStore();
@@ -58,6 +58,56 @@ export function UsersPage() {
   const [selectedRoleId, setSelectedRoleId] = useState<string>('4');
   const [selectedBranchId, setSelectedBranchId] = useState<string>('1');
   const [isSavingRole, setIsSavingRole] = useState(false);
+
+  // Reset Password Modal State
+  const [resetPasswordUser, setResetPasswordUser] = useState<SystemUserRecord | null>(null);
+  const [newPasswordInput, setNewPasswordInput] = useState('RetailHub@123');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [isSubmittingPasswordReset, setIsSubmittingPasswordReset] = useState(false);
+  const [copiedPassword, setCopiedPassword] = useState(false);
+
+  const generateRandomPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+    let pwd = 'RH@';
+    for (let i = 0; i < 8; i++) {
+      pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setNewPasswordInput(pwd);
+  };
+
+  const handleOpenResetPassword = (user: SystemUserRecord) => {
+    setResetPasswordUser(user);
+    setNewPasswordInput('RetailHub@123');
+    setShowNewPassword(false);
+    setCopiedPassword(false);
+  };
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPasswordUser) return;
+    if (!newPasswordInput || newPasswordInput.length < 6) {
+      toast.error('Mật khẩu phải có ít nhất 6 ký tự!');
+      return;
+    }
+
+    try {
+      setIsSubmittingPasswordReset(true);
+      await resetPassword(resetPasswordUser.id, newPasswordInput);
+      toast.success(`Đã cấp lại mật khẩu cho tài khoản ${resetPasswordUser.fullName} (${resetPasswordUser.userCode}) thành công!`);
+      setResetPasswordUser(null);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || err.message || 'Lỗi khi cấp lại mật khẩu');
+    } finally {
+      setIsSubmittingPasswordReset(false);
+    }
+  };
+
+  const handleCopyPassword = () => {
+    navigator.clipboard.writeText(newPasswordInput);
+    setCopiedPassword(true);
+    toast.success('Đã sao chép mật khẩu vào clipboard!');
+    setTimeout(() => setCopiedPassword(false), 2000);
+  };
 
   const handleOpenRoleModal = (user: SystemUserRecord) => {
     setRoleModalUser(user);
@@ -526,6 +576,13 @@ export function UsersPage() {
               <Scan className="w-4 h-4" />
             </button>
             <button
+              onClick={() => handleOpenResetPassword(row.original)}
+              className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-lg transition-colors"
+              title="Cấp lại mật khẩu đăng nhập"
+            >
+              <KeyRound className="w-4 h-4" />
+            </button>
+            <button
               onClick={() => handleDelete(row.original)}
               disabled={row.original.emailAddress === 'admin@system.com'}
               className={`p-1.5 rounded-lg transition-colors ${
@@ -645,122 +702,185 @@ export function UsersPage() {
       <Modal
         isOpen={!!selectedUser}
         onClose={() => setSelectedUser(null)}
-        title={selectedUser ? `Thông tin tài khoản: ${selectedUser.userCode}` : 'Hồ sơ nhân sự'}
-        width="max-w-lg"
+        title={selectedUser ? `Hồ sơ tài khoản & Nhân sự: ${selectedUser.fullName} (${selectedUser.userCode})` : 'Hồ sơ nhân sự'}
+        width="max-w-4xl"
       >
         {selectedUser && (
           <div className="space-y-6">
-            <div className="flex flex-col items-center text-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-800">
-              <UserAvatar
-                name={selectedUser.fullName}
-                avatarUrl={selectedUser.avatarUrl}
-                seed={selectedUser.emailAddress}
-                size="xl"
-              />
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white">{selectedUser.fullName}</h3>
-              <p className="text-sm text-gray-500">{positions.find(p => String(p.id) === String(selectedUser.positionId))?.positionTitle || selectedUser.positionId || '—'}</p>
-              <p className="text-xs font-mono text-gray-400">{selectedUser.userCode} · {selectedUser.authUserId}</p>
-              {selectedUser.faceEnrolled ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 mt-2 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Nhận diện khuôn mặt (Đã đăng ký)
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 mt-2 rounded-full text-xs font-bold bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
-                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400" /> Nhận diện khuôn mặt (Chưa thiết lập)
-                </span>
-              )}
-            </div>
-
-            <div className={`flex items-center justify-between p-4 rounded-xl border ${
-              selectedUser.status === 'ACTIVE'
-                ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
-                : selectedUser.status === 'ON_LEAVE'
-                ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
-                : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
-            }`}>
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold ${
-                  selectedUser.status === 'ACTIVE' ? 'bg-emerald-600' : selectedUser.status === 'ON_LEAVE' ? 'bg-amber-600' : 'bg-red-600'
-                }`}>
-                  <ShieldCheck className="w-5 h-5" />
+            {/* Top Profile Header Card */}
+            <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-5 p-5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50/40 to-blue-50/30 dark:from-emerald-950/30 dark:via-teal-950/20 dark:to-gray-900 border border-emerald-200/80 dark:border-emerald-800/60 shadow-sm">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
+                <div className="relative shrink-0">
+                  <UserAvatar
+                    name={selectedUser.fullName}
+                    avatarUrl={selectedUser.avatarUrl}
+                    seed={selectedUser.emailAddress}
+                    size="xl"
+                  />
+                  <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white dark:border-gray-800 ${
+                    selectedUser.status === 'ACTIVE' ? 'bg-emerald-500' : selectedUser.status === 'ON_LEAVE' ? 'bg-amber-500' : 'bg-red-500'
+                  }`} />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Vai trò phân quyền</p>
-                  <p className="text-lg font-bold font-mono text-gray-900 dark:text-white mt-0.5">
-                    {roles.find(r => r.roleCode === selectedUser.assignedRole || r.roleName === selectedUser.assignedRole || r.roleTitle === selectedUser.assignedRole || String(r.id) === selectedUser.assignedRole)?.roleTitle || roles.find(r => r.roleCode === selectedUser.assignedRole || r.roleName === selectedUser.assignedRole)?.roleName || selectedUser.assignedRole}
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">{selectedUser.fullName}</h3>
+                    <span className="px-2.5 py-0.5 rounded-md font-mono text-xs font-bold bg-white/80 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 shadow-xs">
+                      {selectedUser.userCode}
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 mt-1">
+                    {positions.find(p => String(p.id) === String(selectedUser.positionId))?.positionTitle || selectedUser.positionId || 'Nhân viên hệ thống'}
+                  </p>
+                  <p className="text-xs font-mono text-gray-500 dark:text-gray-400 mt-0.5">
+                    Mã tài khoản hệ thống: {selectedUser.authUserId || 'N/A'}
                   </p>
                 </div>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                selectedUser.status === 'ACTIVE' ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
-                selectedUser.status === 'ON_LEAVE' ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
-                'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100'
-              }`}>
-                {selectedUser.status === 'ACTIVE' ? 'ĐANG LÀM VIỆC' : selectedUser.status === 'ON_LEAVE' ? 'NGHỈ PHÉP' : selectedUser.status === 'SUSPENDED' ? 'BỊ ĐÌNH CHỈ' : 'ĐÃ NGHỈ VIỆC'}
-              </span>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Mail className="w-4 h-4 text-primary" /> Email đăng ký
-                </div>
-                <p className="text-xs font-mono font-bold text-gray-900 dark:text-white truncate">{selectedUser.emailAddress}</p>
-              </div>
-              <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  <Key className="w-4 h-4 text-emerald-500" /> Trạng thái xác thực 2FA/MFA
-                </div>
-                <p className={`text-xs font-bold truncate font-mono ${selectedUser.mfaEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                  {selectedUser.mfaEnabled ? 'ĐÃ BẬT XÁC THỰC' : 'TÀI KHOẢN CHƯA BẢO MẬT'}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 text-sm">
-              <div className="border-b border-gray-200 dark:border-gray-700 pb-3">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Hợp đồng & Ngày vào làm</span>
-                <span className="inline-block text-xs bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-300 px-2 py-0.5 rounded font-mono font-bold">
-                  {selectedUser.employmentType === 'FULL_TIME' ? 'Chính thức' : selectedUser.employmentType === 'PART_TIME' ? 'Bán thời gian' : selectedUser.employmentType === 'CONTRACTOR' ? 'Hợp đồng ngoài' : 'Thời vụ'}
+              {/* Status Badges Group */}
+              <div className="flex flex-col items-center sm:items-end gap-2 shrink-0">
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                  selectedUser.status === 'ACTIVE' ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100' :
+                  selectedUser.status === 'ON_LEAVE' ? 'bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100' :
+                  'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${
+                    selectedUser.status === 'ACTIVE' ? 'bg-emerald-600 animate-pulse' :
+                    selectedUser.status === 'ON_LEAVE' ? 'bg-amber-600' : 'bg-red-600'
+                  }`} />
+                  {selectedUser.status === 'ACTIVE' ? 'ĐANG LÀM VIỆC' : selectedUser.status === 'ON_LEAVE' ? 'NGHỈ PHÉP' : selectedUser.status === 'SUSPENDED' ? 'BỊ ĐÌNH CHỈ' : 'ĐÃ NGHỈ VIỆC'}
                 </span>
-                <span className="ml-2 text-xs text-gray-500">Từ {selectedUser.hireDate}</span>
-              </div>
 
-              <div className="flex items-center gap-2 text-sm pt-1 text-gray-700 dark:text-gray-300">
-                <Phone className="w-4 h-4 text-gray-400 shrink-0" />
-                <span>Số điện thoại: <span className="font-mono">{selectedUser.contactPhone}</span></span>
+                {selectedUser.faceEnrolled ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100/80 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Nhận diện khuôn mặt (Đã đăng ký)
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-400" /> Nhận diện khuôn mặt (Chưa thiết lập)
+                  </span>
+                )}
               </div>
-              <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <Building className="w-4 h-4 text-gray-400 shrink-0" />
-                <span>Bộ phận phòng ban: <span className="font-semibold">{departments.find(d => String(d.id) === String(selectedUser.departmentId))?.departmentName || selectedUser.departmentId || '—'}</span></span>
-              </div>
-              <div className="flex items-center gap-2 text-sm pt-1 text-gray-700 dark:text-gray-300">
-                <UserCheck className="w-4 h-4 text-gray-400 shrink-0" />
-                <span>Quản lý trực tiếp: <span className="font-semibold">{selectedUser.managerId ? users.find(u => u.id === selectedUser.managerId)?.fullName : 'Không có'}</span></span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
-                <span>Chi nhánh: <span className="font-semibold">{branches.find(b => String(b.id) === String(selectedUser.branchId))?.name || selectedUser.branchLocation || '—'}</span> <span className="font-mono text-xs text-gray-400">({branches.find(b => String(b.id) === String(selectedUser.branchId))?.branchCode || `ID: ${selectedUser.branchId}`})</span></span>
-              </div>
-
-              <div className="flex justify-between items-center pt-3 border-t border-gray-200 dark:border-gray-700 text-xs font-mono">
-                <span className="text-gray-500 dark:text-gray-400 font-sans">Thời gian đăng nhập gần nhất:</span>
-                <span className="text-gray-800 dark:text-gray-200">{selectedUser.lastLoginTimestamp}</span>
-              </div>
-
-              {selectedUser.notes && (
-                <div className="pt-3 border-t border-gray-200 dark:border-gray-800 mt-2">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Ghi chú quản lý nhân sự</span>
-                  <p className="text-xs text-gray-700 dark:text-gray-300 italic bg-white dark:bg-gray-800 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 leading-relaxed">{selectedUser.notes}</p>
-                </div>
-              )}
             </div>
 
-            <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
+            {/* Main Content Grid: 2 Columns */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Left Column: Quyền hạn & Bảo mật tài khoản */}
+              <div className="space-y-4">
+                {/* Role Card */}
+                <div className={`flex items-center justify-between p-4 rounded-xl border ${
+                  selectedUser.status === 'ACTIVE'
+                    ? 'bg-emerald-50/60 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+                    : selectedUser.status === 'ON_LEAVE'
+                    ? 'bg-amber-50/60 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+                    : 'bg-red-50/60 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold shadow-sm ${
+                      selectedUser.status === 'ACTIVE' ? 'bg-emerald-600' : selectedUser.status === 'ON_LEAVE' ? 'bg-amber-600' : 'bg-red-600'
+                    }`}>
+                      <ShieldCheck className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Vai trò phân quyền</p>
+                      <p className="text-base font-bold font-mono text-gray-900 dark:text-white mt-0.5">
+                        {roles.find(r => r.roleCode === selectedUser.assignedRole || r.roleName === selectedUser.assignedRole || r.roleTitle === selectedUser.assignedRole || String(r.id) === selectedUser.assignedRole)?.roleTitle || roles.find(r => r.roleCode === selectedUser.assignedRole || r.roleName === selectedUser.assignedRole)?.roleName || selectedUser.assignedRole}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Account Details */}
+                <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800 pb-2">
+                    Thông tin truy cập &amp; Bảo mật
+                  </h4>
+                  <div>
+                    <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      <Mail className="w-4 h-4 text-emerald-600" /> Email tài khoản
+                    </div>
+                    <p className="text-sm font-mono font-bold text-gray-900 dark:text-white break-all">{selectedUser.emailAddress}</p>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      <Key className="w-4 h-4 text-emerald-600" /> Xác thực bảo mật hai lớp (2FA)
+                    </div>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold font-mono ${
+                      selectedUser.mfaEnabled
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                        : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                    }`}>
+                      {selectedUser.mfaEnabled ? '✓ ĐÃ BẬT XÁC THỰC 2FA' : '⚠ CHƯA KÍCH HOẠT 2FA'}
+                    </span>
+                  </div>
+                  <div className="pt-2 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center text-xs">
+                    <span className="text-gray-500 dark:text-gray-400">Đăng nhập gần nhất:</span>
+                    <span className="font-mono font-semibold text-gray-800 dark:text-gray-200">{selectedUser.lastLoginTimestamp || 'Chưa ghi nhận'}</span>
+                  </div>
+                  <div className="pt-2 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center text-xs">
+                    <span className="text-gray-500 dark:text-gray-400">Mật khẩu đăng nhập:</span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenResetPassword(selectedUser)}
+                      className="text-amber-600 hover:text-amber-700 dark:text-amber-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" /> Cấp lại mật khẩu
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Công việc & Tổ chức */}
+              <div className="space-y-4">
+                <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs space-y-3 text-sm">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800 pb-2">
+                    Hồ sơ công tác &amp; Phòng ban
+                  </h4>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500">Loại hợp đồng:</span>
+                    <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2.5 py-0.5 rounded font-mono font-bold border border-gray-200 dark:border-gray-700">
+                      {selectedUser.employmentType === 'FULL_TIME' ? 'Chính thức' : selectedUser.employmentType === 'PART_TIME' ? 'Bán thời gian' : selectedUser.employmentType === 'CONTRACTOR' ? 'Hợp đồng ngoài' : 'Thời vụ'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500">Ngày vào làm:</span>
+                    <span className="font-mono text-xs font-semibold text-gray-800 dark:text-gray-200">{selectedUser.hireDate || '—'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500 flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-gray-400" /> Số điện thoại:</span>
+                    <span className="font-mono text-xs font-semibold text-gray-900 dark:text-white">{selectedUser.contactPhone || '—'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500 flex items-center gap-1.5"><Building className="w-3.5 h-3.5 text-gray-400" /> Bộ phận / Phòng:</span>
+                    <span className="font-semibold text-xs text-gray-900 dark:text-white">{departments.find(d => String(d.id) === String(selectedUser.departmentId))?.departmentName || selectedUser.departmentId || '—'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500 flex items-center gap-1.5"><UserCheck className="w-3.5 h-3.5 text-gray-400" /> Quản lý trực tiếp:</span>
+                    <span className="font-semibold text-xs text-gray-900 dark:text-white">{selectedUser.managerId ? users.find(u => u.id === selectedUser.managerId)?.fullName : 'Không có'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-gray-400" /> Chi nhánh:</span>
+                    <span className="font-semibold text-xs text-gray-900 dark:text-white text-right">
+                      {branches.find(b => String(b.id) === String(selectedUser.branchId))?.name || selectedUser.branchLocation || '—'}
+                    </span>
+                  </div>
+                </div>
+
+                {selectedUser.notes && (
+                  <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 text-xs">
+                    <span className="font-bold text-gray-500 uppercase tracking-wider block mb-1">Ghi chú quản lý nhân sự</span>
+                    <p className="text-gray-700 dark:text-gray-300 italic leading-relaxed">{selectedUser.notes}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Actions Footer */}
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex flex-wrap gap-3">
               {selectedUser.emailAddress !== 'admin@system.com' && (
                 <button 
                   onClick={() => toggleUserSuspension(selectedUser)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-white font-semibold rounded-lg shadow transition-colors text-sm ${
+                  className={`flex-1 min-w-[180px] flex items-center justify-center gap-2 py-2.5 text-white font-semibold rounded-xl shadow-xs transition-colors text-sm ${
                     selectedUser.status === 'ACTIVE' 
                       ? 'bg-red-600 hover:bg-red-700' 
                       : 'bg-emerald-600 hover:bg-emerald-700'
@@ -782,7 +902,7 @@ export function UsersPage() {
                   setFaceScanUser(selectedUser);
                   setScanStep(0);
                 }}
-                className={`px-4 py-2.5 font-semibold rounded-lg border transition-colors text-sm flex items-center gap-2 ${
+                className={`px-4 py-2.5 font-semibold rounded-xl border transition-colors text-sm flex items-center gap-2 ${
                   selectedUser.faceEnrolled
                     ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100'
                     : 'bg-primary/5 text-primary border-primary/20 hover:bg-primary/10'
@@ -791,10 +911,22 @@ export function UsersPage() {
                 <Scan className="w-4 h-4" /> {selectedUser.faceEnrolled ? 'Cập nhật khuôn mặt' : 'Quét khuôn mặt'}
               </button>
               <button 
-                onClick={() => handleOpenEdit(selectedUser)}
-                className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"
+                onClick={() => handleOpenResetPassword(selectedUser)}
+                className="px-4 py-2.5 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-semibold rounded-xl border border-amber-300 dark:border-amber-800 transition-colors text-sm flex items-center gap-2"
               >
-                <ShieldCheck className="w-4 h-4 inline mr-1" /> Chỉnh sửa hồ sơ
+                <KeyRound className="w-4 h-4" /> Cấp lại mật khẩu
+              </button>
+              <button 
+                onClick={() => handleOpenEdit(selectedUser)}
+                className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-xl border border-gray-300 dark:border-gray-700 transition-colors text-sm flex items-center gap-2"
+              >
+                <Edit className="w-4 h-4" /> Chỉnh sửa hồ sơ
+              </button>
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="px-4 py-2.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold rounded-xl transition-colors text-sm"
+              >
+                Đóng
               </button>
             </div>
           </div>
@@ -1341,6 +1473,98 @@ export function UsersPage() {
         )}
 
       </Modal>
+
+      {/* RESET PASSWORD MODAL */}
+      {resetPasswordUser && (
+        <Modal
+          isOpen={Boolean(resetPasswordUser)}
+          onClose={() => setResetPasswordUser(null)}
+          title={`Cấp lại mật khẩu: ${resetPasswordUser.fullName} (${resetPasswordUser.userCode})`}
+          width="max-w-md"
+        >
+          <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-300">
+              <p className="font-bold flex items-center gap-1.5 mb-1.5 text-sm">
+                <KeyRound className="w-4 h-4 text-amber-600 shrink-0" /> Cấp lại mật khẩu đăng nhập
+              </p>
+              <p className="leading-relaxed">
+                Mật khẩu mới sẽ được cập nhật cho tài khoản <strong>{resetPasswordUser.fullName}</strong> ({resetPasswordUser.emailAddress || resetPasswordUser.userCode}).
+                Toàn bộ phiên làm việc cũ (Refresh Tokens) trên các thiết bị khác sẽ được tự động thu hồi ngay lập tức để bảo vệ tài khoản.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                Mật khẩu mới *
+              </label>
+              <div className="relative">
+                <input
+                  type={showNewPassword ? 'text' : 'password'}
+                  required
+                  minLength={6}
+                  value={newPasswordInput}
+                  onChange={(e) => setNewPasswordInput(e.target.value)}
+                  placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)..."
+                  className="w-full px-3.5 py-2.5 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl font-mono font-bold text-gray-900 dark:text-white pr-20"
+                />
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handleCopyPassword}
+                    className="p-1.5 text-gray-400 hover:text-emerald-600 rounded transition-colors"
+                    title={copiedPassword ? 'Đã sao chép!' : 'Sao chép mật khẩu'}
+                  >
+                    {copiedPassword ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded transition-colors"
+                    title={showNewPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                  >
+                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-[11px] text-gray-400 font-mono">Tối thiểu 6 ký tự</span>
+                <button
+                  type="button"
+                  onClick={generateRandomPassword}
+                  className="text-xs text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                >
+                  <Key className="w-3.5 h-3.5" /> Tạo ngẫu nhiên
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => setResetPasswordUser(null)}
+                className="px-4 py-2.5 text-xs text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 rounded-xl font-semibold transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmittingPasswordReset}
+                className="px-4 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md shadow-amber-600/20 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                {isSubmittingPasswordReset ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Đang cập nhật...
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="w-4 h-4" /> Xác nhận cấp lại
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </>
   );
 }

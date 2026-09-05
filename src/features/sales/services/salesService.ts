@@ -1,6 +1,6 @@
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { extractPageContent } from '@/shared/lib/apiHelpers';
-import type { SaleOrder, QuoteItem, ExportInvoiceItem, CustomerReturnItem } from '../store/salesStore';
+import type { SaleOrder, QuoteItem, ExportInvoiceItem, CustomerReturnItem, ReturnRequestItem } from '../store/salesStore';
 
 export const salesService = {
   // --- Sale Orders ---
@@ -74,8 +74,9 @@ export const salesService = {
     const payload = {
       orderCode: order.code || `SO-${Date.now()}`,
       orderDate: validOrderDate,
-      customerId: Number(order.customerId) || 1,
-      branchId: Number(order.branchId) || 1,
+      customerId: order.customerId && !isNaN(Number(order.customerId)) && Number(order.customerId) > 0 ? Number(order.customerId) : null,
+      branchId: order.branchId && !isNaN(Number(order.branchId)) ? Number(order.branchId) : 1,
+      posSessionId: (order as any).posSessionId ? Number((order as any).posSessionId) : null,
       status: order.status || 'COMPLETED',
       customerName: order.customerName || order.recipientName || 'Khách vãng lai',
       customerPhone: order.customerPhone || order.recipientPhone || '',
@@ -85,42 +86,63 @@ export const salesService = {
       note: (order as any).note || '',
       paymentMethodId: (order as any).paymentMethodId ? Number((order as any).paymentMethodId) : null,
       paymentMethodCode: (order as any).paymentMethodCode || null,
-      details: formattedDetails.length > 0 ? formattedDetails : [
-        {
-          productVariantId: 1,
-          quantity: 1,
-          unitPriceSnapshot: order.totalAmount || 0,
-        }
-      ]
+      voucherCode: (order as any).promoCodeApplied || (order as any).voucherCode || null,
+      voucherDiscountAmount: Number((order as any).voucherDiscountAmount || (order as any).discountAmount || 0),
+      loyaltyPointsUsed: Number((order as any).loyaltyPointsUsed || (order as any).usedPoints || 0),
+      details: formattedDetails
     };
-    try {
-      const res = await axiosClient.post<any, any>('/sales/orders', payload);
-      const rawData = res?.data?.data || res?.data || res;
-      const realId = String(rawData?.id || rawData?.orderId || Date.now());
-      return {
-        ...order,
-        id: realId,
-        code: rawData?.orderCode || rawData?.code || order.code,
-        status: (typeof rawData?.status === 'string') ? (rawData.status as any) : (order.status || 'COMPLETED'),
-        paymentStatus: (typeof rawData?.paymentStatus === 'string') ? (rawData.paymentStatus as any) : (order.paymentStatus || 'PAID'),
-        origin: (rawData?.origin || rawData?.orderOrigin || order.origin || 'POS') as any,
-        date: order.date || new Date().toISOString().split('T')[0],
-      };
-    } catch (err) {
-      console.warn('Backend addSaleOrder failed, saving local POS order:', err);
-      return {
-        ...order,
-        id: String(Date.now()),
-        status: order.status || 'COMPLETED',
-        paymentStatus: order.paymentStatus || 'PAID',
-        origin: order.origin || 'POS',
-        date: order.date || new Date().toISOString().split('T')[0],
-      };
+    
+    if (!formattedDetails || formattedDetails.length === 0) {
+      throw new Error('Đơn hàng không có sản phẩm hợp lệ.');
     }
+
+    const res = await axiosClient.post<any, any>('/sales/orders', payload);
+    const rawData = res?.data?.data || res?.data || res;
+    const realId = String(rawData?.id || rawData?.orderId || Date.now());
+    return {
+      ...order,
+      id: realId,
+      code: rawData?.orderCode || rawData?.code || order.code,
+      status: (typeof rawData?.status === 'string') ? (rawData.status as any) : (order.status || 'COMPLETED'),
+      paymentStatus: (typeof rawData?.paymentStatus === 'string') ? (rawData.paymentStatus as any) : (order.paymentStatus || 'PAID'),
+      origin: (rawData?.origin || rawData?.orderOrigin || order.origin || 'POS') as any,
+      date: order.date || new Date().toISOString().split('T')[0],
+    };
   },
 
   async updateSaleOrder(id: string, data: Partial<SaleOrder>): Promise<Partial<SaleOrder>> {
-    const res = await axiosClient.put<any, any>(`/sales/orders/${id}`, data);
+    const rawDetails = (data as any).details || (data as any).items || (data as any).orderLines || [];
+    const formattedDetails = rawDetails.map((d: any) => ({
+      productVariantId: Number(d.productVariantId || d.productId || d.id || 1),
+      quantity: Number(d.quantity || 1),
+      unitPriceSnapshot: Number(d.unitPriceSnapshot || d.unitPrice || d.price || 0),
+    }));
+
+    let validOrderDate = new Date().toISOString().slice(0, 19);
+    const dateVal = data.date || (data as any).orderDate;
+    if (dateVal) {
+      if (dateVal.includes('T')) {
+        validOrderDate = dateVal.slice(0, 19);
+      } else if (dateVal.includes(' ')) {
+        const parts = dateVal.split(' ');
+        validOrderDate = `${parts[0]}T${parts[1] ? (parts[1].length === 5 ? `${parts[1]}:00` : parts[1]) : '00:00:00'}`;
+      } else {
+        validOrderDate = `${dateVal}T00:00:00`;
+      }
+    }
+
+    const payload = {
+      orderDate: validOrderDate,
+      customerId: Number(data.customerId) || 1,
+      branchId: Number(data.branchId) || 1,
+      status: data.status || 'PENDING',
+      note: (data as any).note || data.notes || '',
+      details: formattedDetails.length > 0 ? formattedDetails : [
+        { productVariantId: 1, quantity: 1, unitPriceSnapshot: Number(data.totalAmount || 100000) }
+      ],
+    };
+
+    const res = await axiosClient.put<any, any>(`/sales/orders/${id}`, payload);
     return res?.data || res || data;
   },
 
@@ -320,74 +342,130 @@ export const salesService = {
     const res = await axiosClient.get<any, any>('/sales/invoices');
     const data = extractPageContent<any>(res);
     if (!Array.isArray(data)) return [];
-    return data.map((item: any) => ({
-      id: String(item.id),
-      invoiceNumber: item.invoiceNumber || `INV-${item.id}`,
-      customerId: item.customerId ? String(item.customerId) : '1',
-      taxId: item.taxId || '',
-      companyName: item.companyName || '',
-      issueDate: item.issueDate ? item.issueDate.split('T')[0] : '',
-      dueDate: item.dueDate ? item.dueDate.split('T')[0] : '',
-      subTotal: Number(item.subTotal || 0),
-      taxAmount: Number(item.taxAmount || 0),
-      totalAmount: Number(item.totalAmount || 0),
-      paymentTerms: item.paymentTerms || 'IMMEDIATE',
-      status: item.status || 'ISSUED',
-      einvoiceRef: item.einvoiceRef || '',
-      notes: item.notes || '',
-    }));
+    return data.map((item: any) => {
+      const tot = Number(item.totalAmount || 0);
+      let paid = item.paidAmount !== undefined && item.paidAmount !== null ? Number(item.paidAmount) : undefined;
+      let remaining = item.remainingDebt !== undefined && item.remainingDebt !== null ? Number(item.remainingDebt) : undefined;
+
+      if (paid === undefined) {
+        if (item.status === 'PAID' || item.status === 'DA_THANH_TOAN' || item.status === 'COMPLETED') {
+          paid = tot;
+          remaining = 0;
+        } else {
+          paid = 0;
+          remaining = tot;
+        }
+      }
+      if (remaining === undefined) {
+        remaining = Math.max(0, tot - (paid || 0));
+      }
+
+      let st = item.status || 'COMPLETED';
+      if (paid > 0 && remaining > 0 && st !== 'PAID' && st !== 'DA_THANH_TOAN') {
+        st = 'PARTIAL_PAID';
+      }
+
+      return {
+        id: String(item.id),
+        invoiceNumber: item.invoiceCode || item.invoiceNumber || `INV-${item.id}`,
+        customerId: item.customerId ? String(item.customerId) : '1',
+        taxId: item.taxId || '',
+        companyName: item.companyName || '',
+        issueDate: item.invoiceDate ? item.invoiceDate.split('T')[0] : (item.issueDate ? item.issueDate.split('T')[0] : ''),
+        dueDate: item.dueDate ? item.dueDate.split('T')[0] : '',
+        subTotal: Number(item.subTotal || 0),
+        taxAmount: Number(item.tax ?? item.taxAmount ?? 0),
+        totalAmount: tot,
+        paidAmount: paid,
+        remainingDebt: remaining,
+        paymentTerms: item.paymentTerms || 'IMMEDIATE',
+        status: st,
+        einvoiceRef: item.einvoiceRef || '',
+        notes: item.note || item.notes || '',
+      };
+    });
   },
 
   async addExportInvoice(invoice: Partial<ExportInvoiceItem>): Promise<ExportInvoiceItem> {
+    const code = invoice.invoiceNumber || `HDX${Date.now()}`;
+    const rawItems = (invoice as any).items || (invoice as any).invoiceItems || [];
+    const numericCustId = Number(String(invoice.customerId || '').replace(/\D/g, ''));
+
+    const subTotalVal = Number(invoice.subTotal ?? (invoice as any).subtotal ?? invoice.totalAmount ?? 0);
+    const taxVal = Number(invoice.taxAmount ?? (invoice as any).vatAmount ?? (invoice as any).tax ?? 0);
+    const totalVal = Number(invoice.totalAmount ?? (subTotalVal + taxVal));
+    const compName = invoice.companyName || (invoice as any).billingAddress || '';
+    const rawTerms = String(invoice.paymentTerms || 'IMMEDIATE').trim();
+
     const payload = {
-      invoiceNumber: invoice.invoiceNumber,
-      customerId: Number(invoice.customerId) || 1,
-      taxId: invoice.taxId,
-      companyName: invoice.companyName,
-      issueDate: invoice.issueDate ? `${invoice.issueDate}T00:00:00` : new Date().toISOString(),
+      invoiceCode: code,
+      customerId: !isNaN(numericCustId) && numericCustId > 0 ? numericCustId : 1,
+      branchId: (invoice as any).branchId ? Number((invoice as any).branchId) : 1,
+      taxId: invoice.taxId || 'VAT10',
+      companyName: compName,
+      invoiceDate: invoice.issueDate ? `${invoice.issueDate}T00:00:00` : new Date().toISOString(),
       dueDate: invoice.dueDate ? `${invoice.dueDate}T23:59:59` : null,
-      subTotal: invoice.subTotal || 0,
-      taxAmount: invoice.taxAmount || 0,
-      totalAmount: invoice.totalAmount || 0,
-      paymentTerms: invoice.paymentTerms || 'IMMEDIATE',
-      status: invoice.status || 'ISSUED',
-      einvoiceRef: invoice.einvoiceRef,
-      notes: invoice.notes,
+      subTotal: subTotalVal,
+      tax: taxVal,
+      discount: 0,
+      totalAmount: totalVal,
+      paymentTerms: rawTerms,
+      status: ((invoice.status as string) === 'PAID' ? 'COMPLETED' : (invoice.status || 'ISSUED')) as any,
+      einvoiceRef: invoice.einvoiceRef || undefined,
+      details: rawItems.length > 0
+        ? rawItems.map((it: any) => ({
+            productId: Number(it.productId || it.id || 1),
+            quantity: Math.max(Number(it.quantity || 1), 1),
+            unitPrice: Math.max(Number(it.unitPrice || it.price || 0), 1000),
+            discount: Number(it.discount || 0),
+          })).filter((it: any) => it.productId)
+        : [
+            {
+              productId: (invoice as any).productId ? Number((invoice as any).productId) : 1,
+              quantity: 1,
+              unitPrice: totalVal > 0 ? totalVal : 100000,
+              discount: 0,
+            }
+          ]
     };
     const res = await axiosClient.post<any, any>('/sales/invoices', payload);
     const item = res?.data || res;
     return {
       id: String(item?.id || Date.now()),
-      invoiceNumber: item?.invoiceNumber || invoice.invoiceNumber || '',
+      invoiceNumber: item?.invoiceCode || item?.invoiceNumber || code,
       customerId: String(item?.customerId || invoice.customerId || '1'),
-      taxId: invoice.taxId || '',
-      companyName: invoice.companyName || '',
-      issueDate: invoice.issueDate || '',
-      dueDate: invoice.dueDate || '',
-      subTotal: Number(item?.subTotal || invoice.subTotal || 0),
-      taxAmount: Number(item?.taxAmount || invoice.taxAmount || 0),
-      totalAmount: Number(item?.totalAmount || invoice.totalAmount || 0),
-      paymentTerms: (invoice.paymentTerms || 'IMMEDIATE') as any,
+      taxId: item?.taxId || invoice.taxId || '',
+      companyName: item?.companyName || compName,
+      issueDate: item?.invoiceDate ? item.invoiceDate.split('T')[0] : (invoice.issueDate || ''),
+      dueDate: item?.dueDate ? item.dueDate.split('T')[0] : (invoice.dueDate || ''),
+      subTotal: Number(item?.subTotal || subTotalVal),
+      taxAmount: Number(item?.tax ?? taxVal),
+      totalAmount: Number(item?.totalAmount || totalVal),
+      paymentTerms: (item?.paymentTerms || rawTerms || 'IMMEDIATE') as any,
       status: (item?.status || invoice.status || 'ISSUED') as any,
-      einvoiceRef: invoice.einvoiceRef,
-      notes: invoice.notes,
+      einvoiceRef: item?.einvoiceRef || invoice.einvoiceRef,
+      notes: item?.note || invoice.notes,
     };
   },
 
   async updateExportInvoice(id: string, data: Partial<ExportInvoiceItem>): Promise<Partial<ExportInvoiceItem>> {
+    const subTotalVal = Number(data.subTotal ?? (data as any).subtotal ?? data.totalAmount ?? 0);
+    const taxVal = Number(data.taxAmount ?? (data as any).vatAmount ?? 0);
     const payload = {
       customerId: data.customerId ? Number(data.customerId) : undefined,
+      branchId: (data as any).branchId ? Number((data as any).branchId) : undefined,
       taxId: data.taxId,
-      companyName: data.companyName,
-      issueDate: data.issueDate ? `${data.issueDate}T00:00:00` : undefined,
+      companyName: data.companyName || (data as any).billingAddress,
+      invoiceDate: data.issueDate ? `${data.issueDate}T00:00:00` : undefined,
       dueDate: data.dueDate ? `${data.dueDate}T23:59:59` : undefined,
-      subTotal: data.subTotal,
-      taxAmount: data.taxAmount,
+      subTotal: subTotalVal,
+      tax: taxVal,
+      taxAmount: taxVal,
       totalAmount: data.totalAmount,
       paymentTerms: data.paymentTerms,
-      status: data.status,
+      status: ((data.status as string) === 'PAID' ? 'COMPLETED' : (data.status || 'ISSUED')) as any,
       einvoiceRef: data.einvoiceRef,
-      notes: data.notes,
+      note: data.notes,
     };
     const res = await axiosClient.put<any, any>(`/sales/invoices/${id}`, payload);
     return res?.data || res || data;
@@ -603,7 +681,8 @@ export const salesService = {
       remainingQty: Number(item.remainingQty !== undefined ? item.remainingQty : (item.requestedQty || 1)),
       reason: item.reason || '',
       status: item.status || 'PENDING',
-      refundMethod: item.refundMethod || 'CASH',
+      requestedRefundMethod: item.requestedRefundMethod || item.refundMethod || 'CASH',
+      refundMethod: item.refundMethod || item.requestedRefundMethod || 'CASH',
       requestDate: item.requestDate ? item.requestDate.split('T')[0] : new Date().toISOString().split('T')[0],
       items: item.items || [],
     }));
@@ -624,7 +703,8 @@ export const salesService = {
       remainingQty: Number(req.requestedQty || 1),
       reason: req.reason || '',
       status: (item?.status || req.status || 'PENDING') as any,
-      refundMethod: (req.refundMethod || 'CASH') as any,
+      requestedRefundMethod: (req.requestedRefundMethod || req.refundMethod || 'CASH') as any,
+      refundMethod: (req.refundMethod || req.requestedRefundMethod || 'CASH') as any,
       requestDate: req.requestDate || new Date().toISOString().split('T')[0],
       items: req.items || [],
     };

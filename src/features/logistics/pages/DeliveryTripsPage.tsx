@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { Plus, Download, Search, Eye, Truck, CheckCircle2, Clock, AlertTriangle, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
+import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
@@ -50,64 +51,6 @@ export function DeliveryTripsPage() {
   const [estimatedDeliveryTime, setEstimatedDeliveryTime] = useState('');
   const [notes, setNotes] = useState('');
 
-const DEFAULT_TRIPS: DeliveryTripRecord[] = [
-  {
-    id: '1',
-    manifestNumber: 'TRIP-990182',
-    driverName: 'Nguyễn Văn Minh (Viettel Post)',
-    driverPhone: '0912 345 678',
-    vehiclePlate: '29C-882.19',
-    vehicleType: 'VAN',
-    departureHub: 'Kho trung chuyển Hà Nội',
-    destinationZone: 'Quận Cầu Giấy & Nam Từ Liêm',
-    scheduledDeparture: '2026-07-30 08:00',
-    actualDeparture: '2026-07-30 08:05',
-    estimatedArrival: '2026-07-30 12:00',
-    totalParcels: 24,
-    totalWeightKg: 145.0,
-    tripStatus: 'EN_ROUTE',
-    cashOnDeliveryTotal: 15400000,
-    notes: 'Giao hỏa tốc đơn hàng điện tử'
-  },
-  {
-    id: '2',
-    manifestNumber: 'TRIP-990183',
-    driverName: 'Trần Quốc Huy (GHTK)',
-    driverPhone: '0987 654 321',
-    vehiclePlate: '51D-492.01',
-    vehicleType: 'MOTORBIKE',
-    departureHub: 'Kho TP. Hồ Chí Minh',
-    destinationZone: 'Quận 1 & Quận 3',
-    scheduledDeparture: '2026-07-30 09:30',
-    actualDeparture: '2026-07-30 09:32',
-    estimatedArrival: '2026-07-30 11:30',
-    totalParcels: 18,
-    totalWeightKg: 42.0,
-    tripStatus: 'EN_ROUTE',
-    cashOnDeliveryTotal: 8900000,
-    notes: 'Giao trong ngày khu vực trung tâm'
-  },
-  {
-    id: '3',
-    manifestNumber: 'TRIP-990184',
-    driverName: 'Đội xe AuraMart Nội bộ',
-    driverPhone: '0283 888 999',
-    vehiclePlate: '51C-771.88',
-    vehicleType: 'TRUCK_3_5T',
-    departureHub: 'Tổng kho AuraMart Tân Bình',
-    destinationZone: 'Tất cả các chi nhánh',
-    scheduledDeparture: '2026-07-30 06:00',
-    actualDeparture: '2026-07-30 06:00',
-    estimatedArrival: '2026-07-30 10:00',
-    tripStatus: 'COMPLETED',
-    completedAt: '2026-07-30 09:50',
-    totalParcels: 150,
-    totalWeightKg: 1250.0,
-    cashOnDeliveryTotal: 0,
-    notes: 'Luân chuyển hàng hóa nội bộ hệ thống'
-  }
-];
-
   const fetchTrips = async () => {
     setIsLoading(true);
     try {
@@ -133,11 +76,11 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
         }));
         setData(mapped);
       } else {
-        setData(DEFAULT_TRIPS);
+        setData([]);
       }
     } catch (err) {
-      console.error(err);
-      setData(DEFAULT_TRIPS);
+      console.error('Fetch trips error:', err);
+      setData([]);
     } finally {
       setIsLoading(false);
     }
@@ -248,17 +191,19 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
     }
   };
 
-  const handleDeleteTrip = async (tripId: string) => {
-    if (confirm('Bạn có chắc chắn muốn hủy chuyến xe này?')) {
-      try {
-        await axiosClient.delete(`/logistics/trips/${tripId}`);
-        toast.success('Hủy chuyến giao hàng thành công!');
-        setSelectedTrip(null);
-        fetchTrips();
-      } catch (err) {
-        console.error(err);
-        toast.error('Lỗi khi hủy chuyến xe.');
-      }
+  const [deletingTrip, setDeletingTrip] = useState<DeliveryTripRecord | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingTrip) return;
+    try {
+      await axiosClient.delete(`/logistics/trips/${deletingTrip.id}`);
+      toast.success(`Hủy chuyến giao hàng "${deletingTrip.manifestNumber}" thành công!`);
+      if (selectedTrip?.id === deletingTrip.id) setSelectedTrip(null);
+      setDeletingTrip(null);
+      fetchTrips();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi hủy chuyến xe: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
     }
   };
 
@@ -345,8 +290,20 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
               <Eye className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); handleDeleteTrip(row.original.id); }}
-              cl  return (
+              onClick={(e) => { e.stopPropagation(); setDeletingTrip(row.original); }}
+              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
+              title="Hủy chuyến"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [areas]
+  );
+
+  return (
     <>
       <datalist id="area-trip-suggestions">
         {areas.map((area) => (
@@ -777,6 +734,15 @@ const DEFAULT_TRIPS: DeliveryTripRecord[] = [
           </div>
         </form>
       </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingTrip)}
+        onClose={() => setDeletingTrip(null)}
+        onConfirm={handleConfirmDelete}
+        title="Xác nhận hủy chuyến xe giao hàng"
+        description="Bạn có chắc chắn muốn hủy chuyến xe giao hàng này không?"
+        itemName={deletingTrip ? `${deletingTrip.manifestNumber} (${deletingTrip.driverName} - ${deletingTrip.vehiclePlate})` : undefined}
+      />
     </>
   );
 }
