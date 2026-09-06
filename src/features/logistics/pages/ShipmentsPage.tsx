@@ -317,6 +317,68 @@ export function ShipmentsPage() {
     loadCarriers();
   }, []);
 
+  useEffect(() => {
+    const fetchApiShipments = async () => {
+      try {
+        const res: any = await axiosClient.get('/inventories/transfer-shipments');
+        const list = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+        if (list.length > 0) {
+          const mapped: ShipmentRecord[] = list.map((item: any) => ({
+            id: `TS-${item.id}`,
+            shipmentCode: item.trackingCode,
+            orderCode: item.transferCode ? `Phiếu CK: ${item.transferCode}` : 'Vận chuyển nội bộ',
+            trackingNumber: item.trackingCode,
+            carrierTrackingCode: item.trackingCode,
+            carrierName: item.carrierName || 'Nội bộ (Đội xe công ty)',
+            shippingMethod: item.carrierType === 'INTERNAL' ? 'Nội bộ (Đội xe công ty)' : 'Hãng 3PL',
+            status: item.status === 'DELIVERED' ? 'DELIVERED' : (item.status === 'CANCELLED' ? 'CANCELLED' : 'IN_TRANSIT'),
+            senderName: item.fromBranchName ? `Kho xuất: ${item.fromBranchName}` : 'Kho xuất AuraMart',
+            senderPhone: '0912 345 678',
+            senderAddress: item.fromBranchName || 'Kho xuất',
+            recipientName: item.toBranchName ? `Kho nhận: ${item.toBranchName}` : 'Chi nhánh nhận',
+            recipientPhone: '0988 765 432',
+            recipientAddress: item.toBranchName || 'Chi nhánh nhận',
+            province: '',
+            district: '',
+            ward: '',
+            goodsType: 'Hàng điều chuyển nội bộ',
+            goodsDescription: `Điều chuyển kho: ${item.transferCode || item.trackingCode}`,
+            packageCount: 1,
+            totalWeightKg: 5,
+            totalVolumeM3: 0.02,
+            declaredValueAmount: 0,
+            isFragile: false,
+            isDangerous: false,
+            isColdStorage: false,
+            collectCod: false,
+            codAmount: 0,
+            codFee: 0,
+            codCollectionMethod: 'Không thu COD',
+            committedSla: '24h',
+            estPickupDate: item.shippedAt ? item.shippedAt.replace('T', ' ').substring(0, 16) : '',
+            estDeliveryDate: '',
+            deliveryDeadline: '',
+            baseShippingFee: 0,
+            surchargesAmount: 0,
+            insuranceFee: 0,
+            returnFee: 0,
+            totalShippingFee: 0,
+            notes: `Mã phiếu chuyển: ${item.transferCode || ''} | ${item.carrierType === 'INTERNAL' ? 'Vận đơn nội bộ' : 'Đơn vị 3PL'}`,
+            podStatus: item.status === 'DELIVERED' ? 'CONFIRMED' : 'PENDING',
+          }));
+
+          setShipments(prev => {
+            const existingNonDuplicates = prev.filter(p => !mapped.some(m => m.trackingNumber === p.trackingNumber));
+            return [...mapped, ...existingNonDuplicates];
+          });
+        }
+      } catch (err) {
+        console.warn('Could not fetch transfer shipments from backend, using local/default state:', err);
+      }
+    };
+    fetchApiShipments();
+  }, []);
+
   const handlePrintPod = (shipment: ShipmentRecord) => {
     const printWindow = window.open('', '_blank', 'width=850,height=950');
     if (!printWindow) {
