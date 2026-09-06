@@ -233,37 +233,6 @@ export function SettingsPage() {
               </select>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1.5">
-                <Coins className="w-4 h-4 text-emerald-600" /> Hạn mức tiền mặt lưu két tối đa (VNĐ)
-              </label>
-              <input
-                type="number"
-                step="1000000"
-                value={config.maxDailyCashDropLimitVnd}
-                onChange={(e) => handleChange('maxDailyCashDropLimitVnd', parseFloat(e.target.value) || 0)}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono font-bold sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              />
-              <p className="text-[11px] text-gray-500 mt-1">
-                * Cảnh báo thu ngân nộp bớt tiền về quỹ chính khi tiền mặt tại két quầy POS vượt hạn mức này.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
-                Giờ tự động kết ca / Chốt sổ ngày
-              </label>
-              <input
-                type="text"
-                value={config.autoBatchSettlementHour}
-                onChange={(e) => handleChange('autoBatchSettlementHour', e.target.value)}
-                placeholder="23:30 (Chốt sổ cuối ngày)"
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              />
-              <p className="text-[11px] text-gray-500 mt-1">
-                * Thời điểm hệ thống tự động tổng hợp báo cáo doanh thu và chốt phiên làm việc trong ngày.
-              </p>
-            </div>
           </div>
         </div>
 

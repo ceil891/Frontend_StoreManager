@@ -64,6 +64,8 @@ export function StorageAreasPage() {
       areaCode: editingItem.areaCode.trim().toUpperCase(),
       areaName: editingItem.areaName.trim(),
       zoneId: editingItem.zoneId,
+      areaSizeM2: editingItem.areaSizeM2 ? Number(editingItem.areaSizeM2) : undefined,
+      storageCondition: editingItem.storageCondition || 'NORMAL',
       isActive: editingItem.isActive !== false,
       description: editingItem.description || '',
     };
@@ -107,6 +109,29 @@ export function StorageAreasPage() {
         accessorKey: 'areaName',
         header: 'Tên bãi kho',
         cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'areaSizeM2',
+        header: 'Diện tích',
+        cell: (info) => {
+          const val = info.getValue() as number | undefined;
+          return <span className="font-mono font-medium">{val ? `${val.toLocaleString('vi-VN')} m²` : '---'}</span>;
+        },
+      },
+      {
+        accessorKey: 'storageCondition',
+        header: 'Điều kiện bảo quản',
+        cell: (info) => {
+          const cond = (info.getValue() as string) || 'NORMAL';
+          const map: Record<string, { label: string; cls: string }> = {
+            NORMAL: { label: 'Thường (15-25°C)', cls: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300' },
+            COLD: { label: 'Kho lạnh (0-5°C)', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300' },
+            FROZEN: { label: 'Kho đông (-18°C)', cls: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300' },
+            HAZMAT: { label: 'Hóa chất / Nguy hiểm', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300' },
+          };
+          const item = map[cond] || map.NORMAL;
+          return <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${item.cls}`}>{item.label}</span>;
+        },
       },
       {
         accessorKey: 'zoneName',
@@ -218,6 +243,27 @@ export function StorageAreasPage() {
               <div>
                 <span className="text-xs text-gray-500 block mb-1">Chi nhánh quản lý</span>
                 <p className="font-semibold text-blue-600 dark:text-blue-400">{selected.branchName || 'Toàn hệ thống'}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800">
+              <div>
+                <span className="text-xs text-gray-500 block mb-1">Diện tích bãi kho</span>
+                <p className="font-mono font-bold text-gray-900 dark:text-white text-base">
+                  {selected.areaSizeM2 ? `${selected.areaSizeM2.toLocaleString('vi-VN')} m²` : 'Chưa thiết lập'}
+                </p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500 block mb-1">Điều kiện bảo quản</span>
+                <p className="font-semibold text-gray-900 dark:text-white">
+                  {selected.storageCondition === 'COLD'
+                    ? '❄️ Kho lạnh (0 - 5°C)'
+                    : selected.storageCondition === 'FROZEN'
+                    ? '🧊 Kho đông (-18°C)'
+                    : selected.storageCondition === 'HAZMAT'
+                    ? '⚠️ Hóa chất / Hàng nguy hiểm'
+                    : '📦 Nhiệt độ thường (15 - 25°C)'}
+                </p>
               </div>
             </div>
 

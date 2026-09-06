@@ -171,8 +171,14 @@ export function SaleOrdersPage() {
       toast.error('Đơn hàng POS khởi tạo tại quầy thu ngân đã hoàn tất hạch toán và bị khóa, không được phép chỉnh sửa!');
       return;
     }
+    const rawAddr = order.shippingAddress || '';
+    const parts = rawAddr.split(',').map(s => s.trim());
+    const derivedDetail = parts.length > 3 ? parts.slice(0, parts.length - 3).join(', ') : (parts[0] || '');
     setModalMode('edit');
-    setEditingOrder(order);
+    setEditingOrder({
+      ...order,
+      addressDetail: (order as any).addressDetail || derivedDetail,
+    } as any);
     setIsModalOpen(true);
   };
 
@@ -180,6 +186,11 @@ export function SaleOrdersPage() {
     e.preventDefault();
     if (!editingOrder.customerId || !editingOrder.code) {
       toast.error('Vui lòng chọn khách hàng và nhập mã đơn!');
+      return;
+    }
+
+    if (editingOrder.status === 'COMPLETED' && editingOrder.paymentStatus === 'UNPAID') {
+      toast.error('Đơn hàng ở trạng thái HOÀN THÀNH bắt buộc phải được ĐÃ THANH TOÁN (PAID)! Vui lòng kiểm tra lại trạng thái thanh toán.');
       return;
     }
 
@@ -808,12 +819,15 @@ export function SaleOrdersPage() {
                 <AddressCascadeSelect
                   province={editingOrder.province}
                   district={editingOrder.district}
-                  addressDetail={editingOrder.shippingAddress}
+                  ward={editingOrder.ward}
+                  addressDetail={(editingOrder as any).addressDetail || ''}
                   onChange={(addr) =>
                     setEditingOrder((prev) => ({
                       ...prev,
                       province: addr.province,
                       district: addr.district,
+                      ward: addr.ward,
+                      addressDetail: addr.addressDetail,
                       shippingAddress: addr.addressDetail
                         ? `${addr.addressDetail}, ${addr.ward}, ${addr.district}, ${addr.province}`
                         : `${addr.ward}, ${addr.district}, ${addr.province}`,
@@ -905,7 +919,14 @@ export function SaleOrdersPage() {
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái đơn</label>
                   <select
                     value={editingOrder.status || 'PENDING'}
-                    onChange={(e) => setEditingOrder({ ...editingOrder, status: e.target.value as any })}
+                    onChange={(e) => {
+                      const newStatus = e.target.value as any;
+                      setEditingOrder((prev) => ({
+                        ...prev,
+                        status: newStatus,
+                        paymentStatus: newStatus === 'COMPLETED' ? 'PAID' : prev.paymentStatus,
+                      }));
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="PENDING">Đang xử lý</option>

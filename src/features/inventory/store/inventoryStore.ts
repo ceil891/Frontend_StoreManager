@@ -683,6 +683,8 @@ export interface AreaRecord {
   district?: string;
   ward?: string;
   addressDetail?: string;
+  areaSizeM2?: number;
+  storageCondition?: string;
   isActive: boolean;
   zoneId: string;
   zoneCode?: string;
@@ -898,6 +900,7 @@ export interface StockOutRecord {
   status: 'CHO_XU_LY' | 'DA_XUAT' | 'DA_HUY';
   items?: StockOutDetailItem[];
   notes?: string;
+  destinationAddress?: string;
   orderRefCode?: string;
   customerName?: string;
   supplierId?: string | number;
@@ -2147,6 +2150,41 @@ export const useInventoryStore = create<InventoryState>()(
           }
           await get().fetchStockTransfers();
           await get().fetchProducts();
+
+          // Tự động đồng bộ Phiếu Xuất Kho (Stock Out) khi chuyển kho xuất khỏi nguồn
+          try {
+            const transfer = get().stockTransfers.find((t) => t.id === id || t.id === targetId);
+            if (transfer) {
+              const refCode = transfer.transferNumber;
+              const hasExisting = get().stockOuts.some((o) => o.orderRefCode === refCode);
+              if (!hasExisting) {
+                await get().addStockOut({
+                  stockOutCode: `PXK-${refCode}`,
+                  outType: 'CHUYEN_KHO',
+                  warehouseName: transfer.sourceHub,
+                  destinationAddress: transfer.destinationHub,
+                  orderRefCode: refCode,
+                  issuedDate: new Date().toISOString().slice(0, 16).replace('T', ' '),
+                  totalVariants: (transfer.items || []).length || 1,
+                  totalItems: (transfer.items || []).reduce((sum, i) => sum + (Number(i.quantity) || 0), 0),
+                  totalValue: (transfer.items || []).reduce((sum, i) => sum + ((Number(i.quantity) || 0) * (Number(i.unitPrice) || 0)), 0),
+                  creator: transfer.requestedBy || 'Thủ kho xuất',
+                  status: 'DA_XUAT',
+                  notes: `Xuất kho luân chuyển theo Lệnh chuyển ${refCode} (${transfer.sourceHub} ➔ ${transfer.destinationHub})`,
+                  items: (transfer.items || []).map((i) => ({
+                    productName: i.productName,
+                    variant: i.variant || 'Tiêu chuẩn',
+                    sku: i.sku,
+                    quantity: Number(i.quantity || 0),
+                    unitPrice: Number(i.unitPrice || 0),
+                    amount: Number(i.quantity || 0) * Number(i.unitPrice || 0),
+                  })),
+                });
+              }
+            }
+          } catch (outErr) {
+            console.warn('Auto stock out creation on transfer ship warning:', outErr);
+          }
         } catch (error) {
           set({ stockTransfers: prevTransfers, products: prevProducts });
           console.error('Failed to ship stock transfer:', error);
@@ -3521,6 +3559,12 @@ export const useInventoryStore = create<InventoryState>()(
             areaCode: item.areaCode,
             areaName: item.areaName,
             description: item.description,
+            province: item.province,
+            district: item.district,
+            ward: item.ward,
+            addressDetail: item.addressDetail,
+            areaSizeM2: item.areaSizeM2 ? Number(item.areaSizeM2) : undefined,
+            storageCondition: item.storageCondition,
             isActive: !!item.isActive,
             zoneId: String(item.zoneId || ''),
             zoneCode: item.zoneCode || '',
@@ -3573,6 +3617,10 @@ export const useInventoryStore = create<InventoryState>()(
               maxVolumeM3: item.maxVolumeM3,
               maxPallet: item.maxPallet,
               description: item.description,
+              province: item.province,
+              district: item.district,
+              ward: item.ward,
+              addressDetail: item.addressDetail,
               isActive: !!item.isActive,
               areaId: String(item.areaId || ''),
               areaCode: item.areaCode || '',
@@ -4073,6 +4121,13 @@ export const useInventoryStore = create<InventoryState>()(
               creator: item.creator || 'Nhân viên kho',
               status: item.status || 'CHO_XU_LY',
               notes: item.notes || '',
+              destinationAddress: item.destinationAddress || item.deliveryAddress || item.address || '',
+              orderRefCode: item.orderRefCode || item.orderCode || item.refCode || '',
+              customerName: item.customerName || '',
+              supplierId: item.supplierId,
+              supplierName: item.supplierName || '',
+              cancelReason: item.cancelReason || '',
+              approver: item.approver || '',
               items: (item.items || []).map((l: any) => ({
                 id: String(l.id || ''),
                 productName: l.productName || '',
@@ -4096,6 +4151,13 @@ export const useInventoryStore = create<InventoryState>()(
             stockOutCode: stockOut.stockOutCode,
             outType: stockOut.outType || 'BAN_HANG',
             warehouseName: stockOut.warehouseName || 'Chi nhánh Hà Nội (Kho chính)',
+            destinationAddress: stockOut.destinationAddress || '',
+            orderRefCode: stockOut.orderRefCode || '',
+            customerName: stockOut.customerName || '',
+            supplierId: stockOut.supplierId,
+            supplierName: stockOut.supplierName || '',
+            cancelReason: stockOut.cancelReason,
+            approver: stockOut.approver,
             issuedDate: stockOut.issuedDate || new Date().toISOString().slice(0, 16).replace('T', ' '),
             totalVariants: stockOut.totalVariants || (stockOut.items ? stockOut.items.length : 1),
             totalItems: Number(stockOut.totalItems || 0),

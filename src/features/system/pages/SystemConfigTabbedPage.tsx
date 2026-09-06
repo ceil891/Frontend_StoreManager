@@ -1,14 +1,12 @@
 import { useSearchParams } from 'react-router';
-import { Sliders, Settings, Receipt } from 'lucide-react';
+import { Settings, Bell } from 'lucide-react';
 import { RoleGuard } from '@/routes/RoleGuard';
-import { SystemConfigPage } from './SystemConfigPage';
 import { SettingsPage } from '@/features/settings/pages/SettingsPage';
-import { VatConfigPage } from './VatConfigPage';
+import { NotificationsPage } from './NotificationsPage';
 
 const tabs = [
-  { id: 'config', label: 'Tham số hệ thống', icon: Sliders, permission: 'system:config:view' },
   { id: 'settings', label: 'Cài đặt chung', icon: Settings, permission: 'system:settings:view' },
-  { id: 'vat', label: 'Cấu hình Thuế VAT', icon: Receipt, permission: 'system:vat:view' },
+  { id: 'notifications', label: 'Cấu hình thông báo', icon: Bell, permission: 'system:notification:view' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];
@@ -16,7 +14,7 @@ type TabId = typeof tabs[number]['id'];
 export function SystemConfigTabbedPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTabParam = searchParams.get('tab') as TabId | null;
-  const activeTab = tabs.some(t => t.id === activeTabParam) ? (activeTabParam as TabId) : 'config';
+  const activeTab = tabs.some(t => t.id === activeTabParam) ? (activeTabParam as TabId) : 'settings';
 
   const handleTabChange = (tabId: TabId) => {
     setSearchParams((prev) => {
@@ -32,7 +30,7 @@ export function SystemConfigTabbedPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cấu hình Kỹ thuật & Cài đặt Chung</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Thiết lập tham số hệ thống, cài đặt chung doanh nghiệp và cấu hình tỷ lệ thuế VAT
+            Thiết lập cài đặt chung doanh nghiệp và quy tắc cấu hình thông báo hệ thống
           </p>
         </div>
       </div>
@@ -59,19 +57,14 @@ export function SystemConfigTabbedPage() {
       </div>
 
       <div>
-        {activeTab === 'config' && (
-          <RoleGuard requiredPermission="system:config:view">
-            <SystemConfigPage />
-          </RoleGuard>
-        )}
         {activeTab === 'settings' && (
           <RoleGuard requiredPermission="system:settings:view">
             <SettingsPage />
           </RoleGuard>
         )}
-        {activeTab === 'vat' && (
-          <RoleGuard requiredPermission="system:vat:view">
-            <VatConfigPage />
+        {activeTab === 'notifications' && (
+          <RoleGuard requiredPermission="system:notification:view">
+            <NotificationsPage />
           </RoleGuard>
         )}
       </div>

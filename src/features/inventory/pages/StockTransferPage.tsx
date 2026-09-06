@@ -52,6 +52,9 @@ export function StockTransferPage() {
     fetchInventories,
     transferRequests,
     fetchTransferRequests,
+    stockOuts,
+    addStockOut,
+    fetchStockOuts,
   } = useInventoryStore();
 
   const { branches, fetchBranches } = useBranchStore();
@@ -87,11 +90,11 @@ export function StockTransferPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // User spec: Chỉ load danh sách các Yêu cầu Chuyển kho (TransferRequest) có trạng thái APPROVED (Đã duyệt) và PENDING_ISSUE (Chờ xuất).
+  // Load danh sách các Yêu cầu Chuyển kho (TransferRequest) hợp lệ đang hoạt động
   const eligibleRequests = useMemo(() => {
     return (transferRequests || []).filter((r) => {
       const st = (r.status || '').toUpperCase();
-      return st === 'APPROVED' || st === 'PENDING_ISSUE';
+      return st !== 'CANCELLED' && st !== 'REJECTED' && st !== 'TU_CHOI' && st !== 'DA_HUY' && st !== 'COMPLETED';
     });
   }, [transferRequests]);
 
@@ -122,6 +125,7 @@ export function StockTransferPage() {
           fetchBranches(),
           fetchUsers(),
           fetchInventories(),
+          fetchStockOuts(),
         ]);
       } catch (err) {
         console.error('API fetchStockTransfers error:', err);
@@ -130,7 +134,7 @@ export function StockTransferPage() {
       }
     };
     load();
-  }, [fetchStockTransfers, fetchTransferRequests, fetchProducts, fetchBranches, fetchUsers, fetchInventories]);
+  }, [fetchStockTransfers, fetchTransferRequests, fetchProducts, fetchBranches, fetchUsers, fetchInventories, fetchStockOuts]);
 
   const filtered = useMemo(() => {
     return data.filter((item) => {
@@ -532,6 +536,40 @@ export function StockTransferPage() {
         await updateStockTransfer(editingHeader.id, recordToSave);
         toast.success(`Đã cập nhật Phiếu Chuyển Kho ${recordToSave.transferNumber}!`);
       }
+
+      if (recordToSave.status === StockTransferExecutionStatus.IN_TRANSIT || (recordToSave.status as string) === 'IN_TRANSIT') {
+        const hasExisting = stockOuts.some((o) => o.orderRefCode === recordToSave.transferNumber);
+        if (!hasExisting) {
+          try {
+            await addStockOut({
+              stockOutCode: `PXK-${recordToSave.transferNumber}`,
+              outType: 'CHUYEN_KHO',
+              warehouseName: recordToSave.sourceHub,
+              destinationAddress: recordToSave.destinationHub,
+              orderRefCode: recordToSave.transferNumber,
+              issuedDate: new Date().toISOString().slice(0, 16).replace('T', ' '),
+              totalVariants: (recordToSave.items || []).length || 1,
+              totalItems: (recordToSave.items || []).reduce((sum, i) => sum + (Number(i.quantity) || 0), 0),
+              totalValue: (recordToSave.items || []).reduce((sum, i) => sum + ((Number(i.quantity) || 0) * (Number(i.unitPrice) || 0)), 0),
+              creator: recordToSave.requestedBy || currentUser?.name || 'Thủ kho xuất',
+              status: 'DA_XUAT',
+              notes: `Xuất kho luân chuyển theo Lệnh chuyển ${recordToSave.transferNumber} (${recordToSave.sourceHub} ➔ ${recordToSave.destinationHub})`,
+              items: (recordToSave.items || []).map((i) => ({
+                productName: i.productName,
+                variant: i.variant || 'Tiêu chuẩn',
+                sku: i.sku,
+                quantity: Number(i.quantity || 0),
+                unitPrice: Number(i.unitPrice || 0),
+                amount: Number(i.quantity || 0) * Number(i.unitPrice || 0),
+              })),
+            });
+            await fetchStockOuts();
+          } catch (outErr) {
+            console.warn('Auto stock out creation warning on save:', outErr);
+          }
+        }
+      }
+
       setIsModalOpen(false);
     } catch (err) {
       console.error('API save stock transfer error:', err);
@@ -542,7 +580,8 @@ export function StockTransferPage() {
   const handleShipStock = async (item: StockTransferOrder) => {
     try {
       await shipStockTransfer(item.id);
-      toast.success(`ĐÃ XUẤT KHO NGUỒN! Đã trừ tồn kho tại ${item.sourceHub} và chuyển trạng thái Đang vận chuyển.`);
+      await fetchStockOuts();
+      toast.success(`ĐÃ XUẤT KHO NGUỒN! Đã trừ tồn kho tại ${item.sourceHub}, chuyển trạng thái Đang vận chuyển và tự động tạo Phiếu xuất kho.`);
       fetchStockTransfers();
       if (selected?.id === item.id) {
         setSelected({ ...item, status: 'IN_TRANSIT' });
@@ -1068,8 +1107,14 @@ export function StockTransferPage() {
                             <span className="font-mono font-bold text-amber-600 dark:text-amber-400 text-xs">
                               {req.requestCode}
                             </span>
-                            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                              {req.status === 'APPROVED' ? 'ĐÃ DUYỆT' : 'CHỜ XUẤT'}
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                              req.status === 'APPROVED'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                : req.status === 'PENDING_APPROVAL' || req.status === 'CHO_DUYET'
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                : 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                            }`}>
+                              {req.status === 'APPROVED' ? 'ĐÃ DUYỆT' : req.status === 'PENDING_APPROVAL' || req.status === 'CHO_DUYET' ? 'CHỜ DUYỆT' : req.status === 'PENDING_ISSUE' ? 'CHỜ XUẤT' : req.status}
                             </span>
                           </div>
                           <div className="text-[11px] text-gray-600 dark:text-gray-300 mt-1 flex items-center gap-1.5 flex-wrap">
@@ -1084,7 +1129,7 @@ export function StockTransferPage() {
                       ))
                     ) : (
                       <div className="p-3 text-center text-xs text-gray-400">
-                        Không tìm thấy đơn yêu cầu nào phù hợp (Chỉ hiển thị đơn ĐÃ DUYỆT / CHỜ XUẤT)
+                        Không tìm thấy đơn yêu cầu chuyển kho khả dụng nào.
                       </div>
                     )}
                   </div>

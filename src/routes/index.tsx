@@ -435,13 +435,13 @@ const router = createBrowserRouter([
           // ── 10. System Canonical Routes ───────────────────────────
           { path: 'system/organization', ...protect(<SystemOrganizationTabbedPage />, 'system:branch:view') },
           { path: 'system/config', ...protect(<SystemConfigTabbedPage />, 'system:config:view') },
-          { path: 'system/notifications', ...protect(<NotificationsPage />, 'system:notification:view') },
 
           // System Legacy Redirects
+          { path: 'system/notifications', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="notifications" /> },
           { path: 'system/branches', element: <LegacyRedirect targetCanonical="/system/organization" defaultTab="branches" /> },
           { path: 'system/banners', element: <LegacyRedirect targetCanonical="/system/organization" defaultTab="banners" /> },
           { path: 'system/settings', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="settings" /> },
-          { path: 'system/vat', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="vat" /> },
+          { path: 'system/vat', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="settings" /> },
           { path: 'system/permissions', element: <LegacyRedirect targetCanonical="/hr/roles-permissions" defaultTab="permissions" /> },
         ],
       },

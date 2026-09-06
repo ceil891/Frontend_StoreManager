@@ -2,7 +2,7 @@ import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import {
   Plus, Search, Eye, Edit, Trash2, Calendar, FileText, Download,
-  Printer, Package, Layers, DollarSign, Building, UserCheck, Tag, PlusCircle, X, Lock
+  Printer, Package, Layers, DollarSign, Building, UserCheck, Tag, PlusCircle, X, Lock, MapPin
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -43,7 +43,19 @@ const STATUS_MAP: Record<StockOutStatus | string, { label: string; cls: string }
 };
 
 export function StockOutsPage() {
-  const { stockOuts: data, fetchStockOuts, addStockOut, updateStockOut, deleteStockOut, products, fetchProducts, inventories, fetchInventories } = useInventoryStore();
+  const {
+    stockOuts: data,
+    fetchStockOuts,
+    stockTransfers,
+    fetchStockTransfers,
+    addStockOut,
+    updateStockOut,
+    deleteStockOut,
+    products,
+    fetchProducts,
+    inventories,
+    fetchInventories
+  } = useInventoryStore();
   const { branches, fetchBranches } = useBranchStore();
   const currentUser = useAuthStore((s) => s.user);
 
@@ -69,6 +81,7 @@ export function StockOutsPage() {
       try {
         await Promise.all([
           fetchStockOuts(),
+          fetchStockTransfers(),
           fetchProducts(),
           fetchBranches(),
           fetchInventories(),
@@ -110,22 +123,75 @@ export function StockOutsPage() {
         }
       })
       .catch(() => {});
-  }, [fetchStockOuts, fetchProducts, fetchBranches, fetchInventories]);
+  }, [fetchStockOuts, fetchStockTransfers, fetchProducts, fetchBranches, fetchInventories]);
+
+  const mergedStockOuts = useMemo(() => {
+    const existingRefCodes = new Set(
+      data.map((d) => (d.orderRefCode || d.stockOutCode || '').toUpperCase()).filter(Boolean)
+    );
+
+    const transferStockOuts: StockOutRecord[] = (stockTransfers || [])
+      .filter((t) => {
+        const st = (t.status || '').toUpperCase();
+        const isDispatched = st === 'IN_TRANSIT' || st === 'SHIPPED' || st === 'COMPLETED' || st === 'RECEIVED';
+        const transferCode = (t.transferNumber || '').toUpperCase();
+        const notInExisting = !existingRefCodes.has(transferCode) && !existingRefCodes.has(`PXK-${transferCode}`);
+        return isDispatched && notInExisting;
+      })
+      .map((t) => {
+        const items: StockOutDetailItem[] = (t.items || []).map((i: any, idx: number) => ({
+          id: `t-item-${t.id}-${idx}`,
+          productName: i.productName || 'Sản phẩm',
+          variant: i.variant || 'Chuẩn',
+          sku: i.sku || '',
+          barcode: i.barcode || '',
+          quantity: Number(i.quantity || 0),
+          unitPrice: Number(i.unitPrice || 0),
+          amount: (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0),
+        }));
+
+        const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+        const totalVal = t.totalValuation || items.reduce((sum, item) => sum + item.amount, 0);
+
+        return {
+          id: `transfer-out-${t.id}`,
+          stockOutCode: `PXK-${t.transferNumber}`,
+          outType: 'CHUYEN_KHO',
+          warehouseName: t.sourceHub || 'Chi nhánh xuất',
+          destinationAddress: t.destinationHub || 'Chi nhánh nhận',
+          issuedDate: t.dispatchDate 
+            ? (t.dispatchDate.includes('T') ? t.dispatchDate.replace('T', ' ').slice(0, 16) : t.dispatchDate)
+            : new Date().toISOString().slice(0, 16).replace('T', ' '),
+          totalVariants: items.length || 1,
+          totalItems: totalItems || 1,
+          totalValue: totalVal || 0,
+          creator: t.requestedBy || 'Nhân viên kho',
+          status: 'DA_XUAT',
+          notes: `Xuất kho luân chuyển theo Lệnh chuyển ${t.transferNumber} (${t.sourceHub} ➔ ${t.destinationHub})`,
+          orderRefCode: t.transferNumber,
+          items: items,
+        };
+      });
+
+    return [...data, ...transferStockOuts];
+  }, [data, stockTransfers]);
 
   const filtered = useMemo(() => {
-    if (!search) return data;
+    if (!search) return mergedStockOuts;
     const q = search.toLowerCase();
-    return data.filter(
+    return mergedStockOuts.filter(
       (d) =>
         d.stockOutCode.toLowerCase().includes(q) ||
         d.creator.toLowerCase().includes(q) ||
         (d.warehouseName && d.warehouseName.toLowerCase().includes(q)) ||
+        (d.destinationAddress && d.destinationAddress.toLowerCase().includes(q)) ||
+        (d.orderRefCode && d.orderRefCode.toLowerCase().includes(q)) ||
         (d.notes && d.notes.toLowerCase().includes(q))
     );
-  }, [search, data]);
+  }, [search, mergedStockOuts]);
 
   const generateNextStockOutCode = () => {
-    const count = data.length + 1;
+    const count = mergedStockOuts.length + 1;
     return `PXK${String(count).padStart(6, '0')}`;
   };
 
@@ -355,6 +421,7 @@ export function StockOutsPage() {
       totalValue: formTotals.totalValue,
       items: editingLines,
       notes: editingItem.notes || '',
+      destinationAddress: editingItem.destinationAddress || '',
       orderRefCode: editingItem.orderRefCode || '',
       customerName: editingItem.customerName || '',
       supplierId: editingItem.supplierId,
@@ -424,7 +491,18 @@ export function StockOutsPage() {
       {
         accessorKey: 'warehouseName',
         header: 'Chi nhánh / Kho xuất',
-        cell: (info) => <span className="font-medium text-gray-800 dark:text-gray-200 text-xs">{info.getValue() as string || 'Chi nhánh Hà Nội'}</span>,
+        cell: (info) => (
+          <div>
+            <span className="font-medium text-gray-800 dark:text-gray-200 text-xs">
+              {info.getValue() as string || 'Chi nhánh Hà Nội'}
+            </span>
+            {info.row.original.destinationAddress && (
+              <span className="text-[11px] text-gray-400 block truncate max-w-[200px]" title={info.row.original.destinationAddress}>
+                ➔ {info.row.original.destinationAddress}
+              </span>
+            )}
+          </div>
+        ),
       },
       {
         accessorKey: 'creator',
@@ -605,7 +683,9 @@ export function StockOutsPage() {
                 </div>
                 {selected.orderRefCode && (
                   <div>
-                    <span className="text-gray-400 text-[11px] block mb-0.5">Mã đơn hàng POS</span>
+                    <span className="text-gray-400 text-[11px] block mb-0.5">
+                      {selected.outType === 'CHUYEN_KHO' ? 'Mã chứng từ chuyển kho' : 'Mã đơn hàng / Chứng từ gốc'}
+                    </span>
                     <span className="font-mono font-bold text-gray-900 dark:text-white">{selected.orderRefCode}</span>
                   </div>
                 )}
@@ -637,6 +717,15 @@ export function StockOutsPage() {
                   <div>
                     <span className="text-gray-400 text-[11px] block mb-0.5">Người duyệt</span>
                     <span className="font-medium text-gray-900 dark:text-white">{selected.approver}</span>
+                  </div>
+                )}
+                {selected.destinationAddress && (
+                  <div className="col-span-2 sm:col-span-3 p-2.5 bg-emerald-50/60 dark:bg-emerald-950/30 rounded-lg flex items-start gap-2 border border-emerald-200 dark:border-emerald-800/40">
+                    <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400 text-[11px] block mb-0.5 font-bold">Địa chỉ giao/nhận hàng</span>
+                      <span className="font-semibold text-gray-900 dark:text-white text-xs">{selected.destinationAddress}</span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -815,6 +904,18 @@ export function StockOutsPage() {
                     className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
                   />
                 </div>
+                <div className="col-span-1 sm:col-span-2">
+                  <label className="block font-semibold text-emerald-900 dark:text-emerald-300 mb-1">
+                    Địa chỉ nhận hàng (Khách hàng)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingItem.destinationAddress || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, destinationAddress: e.target.value })}
+                    placeholder="VD: 123 Lê Lợi, P. Bến Nghé, Quận 1, TP. Hồ Chí Minh..."
+                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
+                  />
+                </div>
               </div>
             )}
 
@@ -829,10 +930,12 @@ export function StockOutsPage() {
                       value={editingItem.supplierName || ''}
                       onChange={(e) => {
                         const s = suppliersList.find((item) => (item.supplierName || item.name) === e.target.value);
+                        const sAddr = (s as any)?.headquartersAddress || (s as any)?.address || (s as any)?.fullAddress || '';
                         setEditingItem({
                           ...editingItem,
                           supplierName: e.target.value,
                           supplierId: s ? String(s.id) : undefined,
+                          destinationAddress: sAddr || editingItem.destinationAddress || '',
                         });
                       }}
                       required
@@ -868,6 +971,33 @@ export function StockOutsPage() {
                     className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-mono text-xs"
                   />
                 </div>
+                <div className="col-span-1 sm:col-span-2">
+                  <label className="block font-semibold text-blue-900 dark:text-blue-300 mb-1">
+                    Địa chỉ trả hàng Nhà Cung Cấp
+                  </label>
+                  <input
+                    type="text"
+                    value={editingItem.destinationAddress || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, destinationAddress: e.target.value })}
+                    placeholder="Địa chỉ trụ sở / kho nhận của Nhà cung cấp..."
+                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+            )}
+
+            {(editingItem.outType === StockOutType.NOI_BO || editingItem.outType === StockOutType.CHUYEN_KHO) && (
+              <div className="p-3 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/40 rounded-lg">
+                <label className="block font-semibold text-purple-900 dark:text-purple-300 mb-1">
+                  Địa chỉ chi nhánh / Bộ phận nhận hàng
+                </label>
+                <input
+                  type="text"
+                  value={editingItem.destinationAddress || ''}
+                  onChange={(e) => setEditingItem({ ...editingItem, destinationAddress: e.target.value })}
+                  placeholder="VD: Chi nhánh Đà Nẵng - 105 Nguyễn Văn Linh, Q. Hải Châu / Phòng Marketing..."
+                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
+                />
               </div>
             )}
 
@@ -900,6 +1030,18 @@ export function StockOutsPage() {
                     value={editingItem.approver || ''}
                     onChange={(e) => setEditingItem({ ...editingItem, approver: e.target.value })}
                     placeholder="VD: Ban giám đốc / Trưởng kho"
+                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
+                  />
+                </div>
+                <div className="col-span-1 sm:col-span-2">
+                  <label className="block font-semibold text-rose-900 dark:text-rose-300 mb-1">
+                    Địa điểm xử lý / Tiêu hủy phế phẩm
+                  </label>
+                  <input
+                    type="text"
+                    value={editingItem.destinationAddress || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, destinationAddress: e.target.value })}
+                    placeholder="VD: Khu vực bãi rác / Công ty môi trường xử lý phế phẩm..."
                     className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
                   />
                 </div>

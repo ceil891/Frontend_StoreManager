@@ -14,6 +14,7 @@ import { useCrmStore } from '@/features/crm/store/crmStore';
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { OrderLinesEditor, sumOrderLines } from '@/shared/components/sales/OrderLinesEditor';
+import { AddressCascadeSelect } from '@/shared/components/ui/AddressCascadeSelect';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton } from '@/shared/components/ui/Button';
 import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
@@ -809,20 +810,37 @@ export function QuotesPage() {
                         ...prev,
                         customerId: val,
                         customerName: found ? found.name : prev.customerName,
-                        shippingAddress: (found && found.address) ? found.address : prev.shippingAddress,
+                        shippingAddress: (found && (found as any).address) ? (found as any).address : prev.shippingAddress,
+                        province: (found as any)?.province || (prev as any)?.province,
+                        district: (found as any)?.district || (prev as any)?.district,
+                        ward: (found as any)?.ward || (prev as any)?.ward,
+                        addressDetail: (found as any)?.addressDetail || (prev as any)?.addressDetail,
                       }));
                     }}
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Địa chỉ giao hàng</label>
-                  <input
-                    type="text"
-                    value={editingQuote.shippingAddress || ''}
-                    onChange={(e) => setEditingQuote({ ...editingQuote, shippingAddress: e.target.value })}
-                    placeholder="Địa chỉ giao hàng nếu báo giá có giao..."
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm"
+                <div className="col-span-1 sm:col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    Địa chỉ giao hàng (Delivery Address)
+                  </label>
+                  <AddressCascadeSelect
+                    province={(editingQuote as any).province}
+                    district={(editingQuote as any).district}
+                    ward={(editingQuote as any).ward}
+                    addressDetail={(editingQuote as any).addressDetail || ''}
+                    onChange={(addr) =>
+                      setEditingQuote((prev) => ({
+                        ...prev,
+                        province: addr.province,
+                        district: addr.district,
+                        ward: addr.ward,
+                        addressDetail: addr.addressDetail,
+                        shippingAddress: addr.addressDetail
+                          ? `${addr.addressDetail}, ${addr.ward}, ${addr.district}, ${addr.province}`
+                          : `${addr.ward}, ${addr.district}, ${addr.province}`,
+                      } as any))
+                    }
                   />
                 </div>
               </div>

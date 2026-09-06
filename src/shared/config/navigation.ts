@@ -88,7 +88,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { name: 'Sơ đồ & vị trí kho', href: '/inventory/locations', icon: MapPin, permission: 'inventory:storage-area:view' },
       { name: 'Trạng thái tồn kho', href: '/inventory/stock-status', icon: Boxes, permission: 'inventory:stock-keeping:view' },
       { name: 'Thao tác & nghiệp vụ kho', href: '/inventory/operations', icon: Truck, permission: 'inventory:import:view' },
-      { name: 'Thẻ kho (sổ nhật ký)', href: '/inventory/ledger', icon: Activity, permission: 'inventory:ledger:view' },
+      { name: 'Thẻ kho', href: '/inventory/ledger', icon: Activity, permission: 'inventory:ledger:view' },
       { name: 'Nguồn gốc & lô / serial', href: '/inventory/tracking', icon: Archive, permission: 'inventory:batch:view' },
     ],
   },
@@ -150,7 +150,6 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { name: 'Chi nhánh & banner', href: '/system/organization', icon: Store, permission: 'system:branch:view' },
       { name: 'Cấu hình & cài đặt', href: '/system/config', icon: Sliders, permission: 'system:config:view' },
-      { name: 'Thông báo', href: '/system/notifications', icon: Bell, permission: 'system:notification:view' },
     ],
   },
 ];
