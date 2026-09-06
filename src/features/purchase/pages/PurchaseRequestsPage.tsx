@@ -181,6 +181,7 @@ export function PurchaseRequestsPage() {
       setConvertModalItem(null);
       setSelectedItem(null);
       fetchRequests();
+      usePurchaseStore.getState().fetchPurchaseOrders().catch(() => {});
     } catch (err: any) {
       toast.error('Lỗi khi chuyển thành PO: ' + (err?.response?.data?.message || err?.message || ''));
     }

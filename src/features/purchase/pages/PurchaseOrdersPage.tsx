@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Filter, Eye, Building2, Calendar, FileText, ShieldCheck, FileCheck, CheckCircle, Edit, Trash2, AlertCircle } from 'lucide-react';
+import { Plus, Download, Search, Filter, Eye, Building2, Calendar, FileText, ShieldCheck, FileCheck, CheckCircle, Edit, Trash2, AlertCircle, Send, XCircle } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -584,47 +584,217 @@ export function PurchaseOrdersPage() {
               )}
             </div>
 
-            <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
+            <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex flex-wrap items-center gap-2.5">
+              {/* Thao tác khi là DRAFT */}
+              {selectedPO.status === 'DRAFT' && (
+                <>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await axiosClient.post(`/purchase/orders/${selectedPO.id}/submit`);
+                        await fetchPurchaseOrders();
+                        setSelectedPO({ ...selectedPO, status: 'PENDING_APPROVAL' });
+                        toast.success('Đã gửi đơn đặt hàng mua để chờ phê duyệt!');
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || 'Lỗi khi gửi duyệt đơn mua');
+                      }
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                  >
+                    <Send className="w-4 h-4" /> Gửi duyệt
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await axiosClient.post(`/purchase/orders/${selectedPO.id}/approve`);
+                        await fetchPurchaseOrders();
+                        setSelectedPO({ ...selectedPO, status: 'APPROVED' });
+                        toast.success('Đã phê duyệt đơn đặt hàng mua thành công!');
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || 'Lỗi khi phê duyệt đơn mua');
+                      }
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                  >
+                    <ShieldCheck className="w-4 h-4" /> Phê duyệt ngay
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await axiosClient.post(`/purchase/orders/${selectedPO.id}/cancel`);
+                        await fetchPurchaseOrders();
+                        setSelectedPO({ ...selectedPO, status: 'CANCELLED' });
+                        toast.success('Đã hủy đơn đặt hàng mua thành công!');
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || 'Lỗi khi hủy đơn mua');
+                      }
+                    }}
+                    className="px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 font-semibold rounded-lg border border-red-200 dark:border-red-800 transition-colors text-sm flex items-center gap-1.5"
+                  >
+                    <XCircle className="w-4 h-4" /> Hủy đơn
+                  </button>
+                </>
+              )}
+
+              {/* Thao tác khi là PENDING_APPROVAL */}
               {selectedPO.status === 'PENDING_APPROVAL' && (
-                <button
-                  onClick={async () => {
-                    try {
-                      await axiosClient.post(`/purchase/orders/${selectedPO.id}/approve`);
-                      await fetchPurchaseOrders();
-                      setSelectedPO({ ...selectedPO, status: 'APPROVED' });
-                      toast.success('Đã phê duyệt đơn đặt hàng mua thành công!');
-                    } catch (e: any) {
-                      toast.error(e?.response?.data?.message || 'Lỗi khi phê duyệt đơn mua');
-                    }
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
-                >
-                  <ShieldCheck className="w-4 h-4" /> Phê duyệt đơn mua
-                </button>
+                <>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await axiosClient.post(`/purchase/orders/${selectedPO.id}/approve`);
+                        await fetchPurchaseOrders();
+                        setSelectedPO({ ...selectedPO, status: 'APPROVED' });
+                        toast.success('Đã phê duyệt đơn đặt hàng mua thành công!');
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || 'Lỗi khi phê duyệt đơn mua');
+                      }
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                  >
+                    <ShieldCheck className="w-4 h-4" /> Phê duyệt đơn mua
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await axiosClient.post(`/purchase/orders/${selectedPO.id}/reject`);
+                        await fetchPurchaseOrders();
+                        setSelectedPO({ ...selectedPO, status: 'REJECTED' });
+                        toast.success('Đã từ chối đơn đặt hàng mua!');
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || 'Lỗi khi từ chối đơn mua');
+                      }
+                    }}
+                    className="px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 font-semibold rounded-lg border border-amber-200 dark:border-amber-800 transition-colors text-sm flex items-center gap-1.5"
+                  >
+                    <XCircle className="w-4 h-4" /> Từ chối
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await axiosClient.post(`/purchase/orders/${selectedPO.id}/cancel`);
+                        await fetchPurchaseOrders();
+                        setSelectedPO({ ...selectedPO, status: 'CANCELLED' });
+                        toast.success('Đã hủy đơn đặt hàng mua thành công!');
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || 'Lỗi khi hủy đơn mua');
+                      }
+                    }}
+                    className="px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 font-semibold rounded-lg border border-red-200 dark:border-red-800 transition-colors text-sm flex items-center gap-1.5"
+                  >
+                    <XCircle className="w-4 h-4" /> Hủy đơn
+                  </button>
+                </>
               )}
-              {['APPROVED', 'DISPATCHED', 'IN_TRANSIT', 'CONFIRMED', 'SENT_TO_SUPPLIER'].includes(selectedPO.status) &&
-                !['DELIVERED', 'RECEIVED', 'DA_NHAN', 'COMPLETED', 'ĐÃ NHẬN HÀNG'].includes(selectedPO.status) && (
-                <button
-                  onClick={async () => {
-                    try {
-                      await axiosClient.post(`/purchase/orders/${selectedPO.id}/create-receipt`);
-                      await fetchPurchaseOrders();
-                      setSelectedPO({ ...selectedPO, status: 'DELIVERED' });
-                      toast.success('Đã lập phiếu nhập kho (GRN) và nhập hàng thành công!');
-                    } catch (e: any) {
-                      toast.error(e?.response?.data?.message || 'Lỗi khi lập phiếu nhập kho');
-                    }
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
-                >
-                  <FileCheck className="w-4 h-4" /> Nhập kho hàng (GRN)
-                </button>
+
+              {/* Thao tác khi là APPROVED */}
+              {['APPROVED', 'CONFIRMED'].includes(selectedPO.status) && (
+                <>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await axiosClient.post(`/purchase/orders/${selectedPO.id}/send-to-supplier`);
+                        await fetchPurchaseOrders();
+                        setSelectedPO({ ...selectedPO, status: 'SENT_TO_SUPPLIER' });
+                        toast.success('Đã chuyển trạng thái gửi đơn cho Nhà cung cấp!');
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || 'Lỗi khi gửi cho NCC');
+                      }
+                    }}
+                    className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow transition-colors text-sm flex items-center gap-1.5"
+                  >
+                    <Send className="w-4 h-4" /> Gửi cho NCC
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await axiosClient.post(`/purchase/orders/${selectedPO.id}/create-receipt`);
+                        await fetchPurchaseOrders();
+                        setSelectedPO({ ...selectedPO, status: 'RECEIVED' });
+                        toast.success('Đã lập phiếu nhập kho (GRN) và nhập hàng thành công!');
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || 'Lỗi khi lập phiếu nhập kho');
+                      }
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                  >
+                    <FileCheck className="w-4 h-4" /> Nhập kho hàng (GRN)
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await axiosClient.post(`/purchase/orders/${selectedPO.id}/cancel`);
+                        await fetchPurchaseOrders();
+                        setSelectedPO({ ...selectedPO, status: 'CANCELLED' });
+                        toast.success('Đã hủy đơn đặt hàng mua thành công!');
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || 'Lỗi khi hủy đơn mua');
+                      }
+                    }}
+                    className="px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 font-semibold rounded-lg border border-red-200 dark:border-red-800 transition-colors text-sm flex items-center gap-1.5"
+                  >
+                    <XCircle className="w-4 h-4" /> Hủy đơn
+                  </button>
+                </>
               )}
+
+              {/* Thao tác khi là SENT_TO_SUPPLIER hoặc DISPATCHED / IN_TRANSIT */}
+              {['SENT_TO_SUPPLIER', 'DISPATCHED', 'IN_TRANSIT'].includes(selectedPO.status) && (
+                <>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await axiosClient.post(`/purchase/orders/${selectedPO.id}/create-receipt`);
+                        await fetchPurchaseOrders();
+                        setSelectedPO({ ...selectedPO, status: 'RECEIVED' });
+                        toast.success('Đã lập phiếu nhập kho (GRN) và nhập hàng thành công!');
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || 'Lỗi khi lập phiếu nhập kho');
+                      }
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
+                  >
+                    <FileCheck className="w-4 h-4" /> Nhập kho hàng (GRN)
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await axiosClient.post(`/purchase/orders/${selectedPO.id}/cancel`);
+                        await fetchPurchaseOrders();
+                        setSelectedPO({ ...selectedPO, status: 'CANCELLED' });
+                        toast.success('Đã hủy đơn đặt hàng mua thành công!');
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || 'Lỗi khi hủy đơn mua');
+                      }
+                    }}
+                    className="px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 font-semibold rounded-lg border border-red-200 dark:border-red-800 transition-colors text-sm flex items-center gap-1.5"
+                  >
+                    <XCircle className="w-4 h-4" /> Hủy đơn
+                  </button>
+                </>
+              )}
+
+              {/* Đã nhập kho */}
               {['DELIVERED', 'RECEIVED', 'DA_NHAN', 'COMPLETED', 'ĐÃ NHẬN HÀNG'].includes(selectedPO.status) && (
                 <div className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 font-semibold rounded-lg border border-emerald-200 dark:border-emerald-800 text-sm">
-                  <CheckCircle className="w-4 h-4 text-emerald-500" /> Đã tạo phiếu nhập kho
+                  <CheckCircle className="w-4 h-4 text-emerald-500" /> Đã tạo phiếu nhập kho & nhận hàng
                 </div>
               )}
+
+              {/* Đã hủy */}
+              {selectedPO.status === 'CANCELLED' && (
+                <div className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 font-semibold rounded-lg border border-red-200 dark:border-red-800 text-sm">
+                  <XCircle className="w-4 h-4 text-red-500" /> Đơn hàng đã bị hủy
+                </div>
+              )}
+
+              {/* Đã từ chối */}
+              {selectedPO.status === 'REJECTED' && (
+                <div className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 font-semibold rounded-lg border border-amber-200 dark:border-amber-800 text-sm">
+                  <AlertCircle className="w-4 h-4 text-amber-500" /> Đơn hàng đã bị từ chối phê duyệt
+                </div>
+              )}
+
               <button
                 onClick={() => toast.success('Đã tải xuống file PO PDF thành công!')}
                 className="px-4 py-2.5 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-lg border border-gray-300 dark:border-gray-700 transition-colors text-sm"

@@ -800,6 +800,43 @@ export function PurchaseInvoicesPage() {
                 </div>
               );
             })()}
+
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex items-center justify-end gap-2.5">
+              <button
+                onClick={() => handlePrintPurchaseInvoice(selected)}
+                className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 flex items-center gap-1.5 transition-colors"
+              >
+                <Printer className="w-4 h-4 text-emerald-600" /> In hóa đơn (PDF)
+              </button>
+              {selected.status !== 'DA_THANH_TOAN' && selected.status !== 'PAID' && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await axiosClient.put(`/purchase/invoices/${selected.id}`, {
+                        ...selected,
+                        status: 'DA_THANH_TOAN',
+                        paidAmount: selected.totalAmount,
+                        remainingDebt: 0
+                      });
+                      toast.success(`Đã xác nhận thanh toán đủ cho hóa đơn ${selected.invoiceCode}!`);
+                      setSelected(prev => prev ? { ...prev, status: 'DA_THANH_TOAN', paidAmount: prev.totalAmount, remainingDebt: 0 } : null);
+                      await fetchInvoices();
+                    } catch (e: any) {
+                      toast.error(e?.response?.data?.message || 'Lỗi khi cập nhật thanh toán hóa đơn');
+                    }
+                  }}
+                  className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 transition-colors shadow-sm"
+                >
+                  <CheckCircle2 className="w-4 h-4" /> Xác nhận đã thanh toán
+                </button>
+              )}
+              <button
+                onClick={() => setSelected(null)}
+                className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         )}
       </Modal>

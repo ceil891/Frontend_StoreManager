@@ -332,7 +332,7 @@ export function PurchasePaymentsPage() {
           handler: recordPayload.handler,
           voucherDate: recordPayload.paymentDate,
           amount: recordPayload.amount,
-          status: 'PENDING_APPROVAL',
+          status: recordPayload.status === 'DA_THANH_TOAN' ? 'COMPLETED' : 'PENDING_APPROVAL',
           notes: recordPayload.notes,
           attachmentUrl: recordPayload.attachmentName || 'UNC-default.pdf',
         });
