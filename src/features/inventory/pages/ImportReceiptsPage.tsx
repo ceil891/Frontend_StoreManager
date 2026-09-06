@@ -315,18 +315,19 @@ export function ImportReceiptsPage() {
 
   const handleAddLine = () => {
     const lines = editingReceipt.lines || [];
-    const firstProd = defaultProductsList[0];
-    const unitPrice = (firstProd as any).price || (firstProd as any).costPrice || (firstProd as any).basePrice || 500000;
+    const firstProd = products.length > 0 ? products[0] : null;
+    const defaultBin = warehouseBins.length > 0 ? warehouseBins[0] : null;
+    const unitPrice = (firstProd as any)?.price || (firstProd as any)?.costPrice || (firstProd as any)?.basePrice || 500000;
     const today = new Date().toISOString().split('T')[0];
     const expiry = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0];
 
     const updatedLines = [
       ...lines,
       {
-        productVariantId: Number(firstProd.id),
+        productVariantId: firstProd ? Number(firstProd.id) : 1,
         quantity: 1,
         unitPrice: unitPrice,
-        targetBinId: Number(defaultBins[0].id),
+        targetBinId: defaultBin ? Number(defaultBin.id) : 1,
         batchCode: `BATCH-${Date.now().toString().slice(-4)}`,
         manufactureDate: today,
         expiryDate: expiry
@@ -351,7 +352,7 @@ export function ImportReceiptsPage() {
     lines[index] = { ...lines[index], [field]: val };
 
     if (field === 'productVariantId') {
-      const found = defaultProductsList.find(p => Number(p.id) === Number(val));
+      const found = products.find(p => Number(p.id) === Number(val));
       if (found) {
         lines[index].unitPrice = (found as any).price || (found as any).costPrice || (found as any).basePrice || lines[index].unitPrice;
       }
@@ -389,16 +390,17 @@ export function ImportReceiptsPage() {
     setModalMode('edit');
     const today = new Date().toISOString().split('T')[0];
     const expiry = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0];
-    const firstProd = defaultProductsList[0];
+    const firstProd = products.length > 0 ? products[0] : null;
+    const defaultBin = warehouseBins.length > 0 ? warehouseBins[0] : null;
 
     const lines = (receipt.lines && receipt.lines.length > 0)
       ? receipt.lines.map(l => ({ ...l, manufactureDate: l.manufactureDate || today }))
       : [
           {
-            productVariantId: Number(firstProd.id),
+            productVariantId: firstProd ? Number(firstProd.id) : 1,
             quantity: receipt.totalItems || 10,
             unitPrice: receipt.totalItems && receipt.totalItems > 0 ? Math.round(receipt.totalValuation / receipt.totalItems) : 500000,
-            targetBinId: Number(defaultBins[0].id),
+            targetBinId: defaultBin ? Number(defaultBin.id) : 1,
             batchCode: `BATCH-${Date.now().toString().slice(-4)}`,
             manufactureDate: today,
             expiryDate: expiry
@@ -562,6 +564,23 @@ export function ImportReceiptsPage() {
         header: 'Thao tác',
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
+            {row.original.status === 'PENDING_INSPECTION' && (
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    await updateImportReceipt(row.original.id, { status: 'INSPECTED_ACCEPTED' });
+                    toast.success(`Đã duyệt nhập kho ${row.original.grnNumber || ''}!`);
+                  } catch (err) {
+                    toast.error('Có lỗi xảy ra khi duyệt nhập kho!');
+                  }
+                }}
+                title="Duyệt nhập kho"
+                className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/40 rounded-lg transition-colors shrink-0"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); setSelectedReceipt(row.original); }}
               title="Xem chi tiết"
@@ -861,10 +880,14 @@ export function ImportReceiptsPage() {
               {selectedReceipt.status === 'PENDING_INSPECTION' && (
                 <>
                   <button
-                    onClick={() => {
-                      updateImportReceipt(selectedReceipt.id, { status: 'INSPECTED_ACCEPTED' });
-                      setSelectedReceipt(null);
-                      toast.success('Đã xác nhận nhập kho thành công!');
+                    onClick={async () => {
+                      try {
+                        await updateImportReceipt(selectedReceipt.id, { status: 'INSPECTED_ACCEPTED' });
+                        setSelectedReceipt(null);
+                        toast.success('Đã xác nhận nhập kho thành công!');
+                      } catch (err) {
+                        toast.error('Có lỗi xảy ra khi xác nhận nhập kho!');
+                      }
                     }}
                     className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm min-w-[180px]"
                   >

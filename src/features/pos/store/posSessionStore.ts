@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { axiosClient } from '@/shared/lib/axiosClient';
+import { useAuthStore } from '@/features/auth/store/authStore';
 
 export interface PosSessionRecord {
   id: string;
@@ -69,7 +70,7 @@ export const usePosSessionStore = create<PosSessionState>()(
       },
       addSession: async (item) => {
         try {
-          const authUser = (await import('@/features/auth/store/authStore')).useAuthStore.getState().user;
+          const authUser = useAuthStore.getState?.()?.user;
           const payload = {
             sessionCode: item.sessionCode,
             terminalCode: item.terminalCode || 'POS-001',

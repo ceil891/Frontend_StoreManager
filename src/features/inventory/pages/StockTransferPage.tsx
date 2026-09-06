@@ -157,14 +157,15 @@ export function StockTransferPage() {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     const defaultSource = branches.length > 0 ? branches[0].name : 'Chi nhánh Hà Nội (Kho chính)';
-    const defaultDest = branches.length > 1 ? branches[1].name : 'Chi nhánh TP. Hồ Chí Minh';
+    const defaultDest = branches.length > 1 ? branches[1].name : (branches.length > 0 ? branches[0].name : 'Chi nhánh TP. Hồ Chí Minh');
+    const finalDest = (defaultSource === defaultDest && branches.length > 1) ? branches[1].name : defaultDest;
     const defaultUser = currentUser?.name || (users.length > 0 ? users[0].fullName : 'Nguyễn Văn Hưng (Thủ kho)');
 
     setEditingHeader({
       transferNumber: generateNextTransferCode(),
       requestRefCode: 'STR-2026-001',
       sourceHub: defaultSource,
-      destinationHub: defaultDest,
+      destinationHub: finalDest,
       priority: 'MEDIUM',
       reason: 'REBALANCE',
       requestedBy: defaultUser,
@@ -786,26 +787,25 @@ export function StockTransferPage() {
 
               <div>
                 <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Người lập phiếu *</label>
-                <select
-                  value={editingHeader.requestedBy || currentUser?.name || ''}
+                <input
+                  type="text"
+                  list="transfer-users-list"
+                  value={editingHeader.requestedBy || ''}
                   onChange={(e) => setEditingHeader({ ...editingHeader, requestedBy: e.target.value })}
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-900 dark:text-white"
-                >
-                  {users.length > 0 ? (
-                    users.map((u) => (
-                      <option key={u.id} value={u.fullName || u.emailAddress}>
-                        {u.fullName || u.emailAddress} ({u.assignedRole || 'Thủ kho'})
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="Nguyễn Văn Hưng (Thủ kho)">Nguyễn Văn Hưng (Thủ kho)</option>
-                      <option value="Lưu Hữu Phước (Quản lý kho)">Lưu Hữu Phước (Quản lý kho)</option>
-                      <option value="Trần Thị Mai (Kế toán kho)">Trần Thị Mai (Kế toán kho)</option>
-                      <option value={currentUser?.name || 'System Admin'}>{currentUser?.name || 'System Admin'}</option>
-                    </>
-                  )}
-                </select>
+                  placeholder="Nhập hoặc chọn người lập phiếu..."
+                  required
+                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                />
+                <datalist id="transfer-users-list">
+                  {users.map((u) => (
+                    <option key={u.id} value={u.fullName || u.emailAddress}>
+                      {u.fullName || u.emailAddress} ({u.assignedRole || 'Thủ kho'})
+                    </option>
+                  ))}
+                  <option value="Nguyễn Văn Hưng (Thủ kho)">Nguyễn Văn Hưng (Thủ kho)</option>
+                  <option value="Lưu Hữu Phước (Quản lý kho)">Lưu Hữu Phước (Quản lý kho)</option>
+                  <option value="Trần Thị Mai (Kế toán kho)">Trần Thị Mai (Kế toán kho)</option>
+                </datalist>
               </div>
             </div>
 
@@ -814,13 +814,21 @@ export function StockTransferPage() {
                 <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Kho / Chi nhánh xuất *</label>
                 <select
                   value={editingHeader.sourceHub || ''}
-                  onChange={(e) => setEditingHeader({ ...editingHeader, sourceHub: e.target.value })}
+                  onChange={(e) => {
+                    const newSource = e.target.value;
+                    let newDest = editingHeader.destinationHub;
+                    if (newDest === newSource) {
+                      const other = branches.find((b) => b.name !== newSource);
+                      newDest = other ? other.name : '';
+                    }
+                    setEditingHeader({ ...editingHeader, sourceHub: newSource, destinationHub: newDest });
+                  }}
                   className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-bold text-gray-900 dark:text-white"
                 >
                   {branches.length > 0 ? (
                     branches.map((b) => (
-                      <option key={b.id} value={b.name}>
-                        {b.name} ({b.branchCode})
+                      <option key={b.id} value={b.name} disabled={b.name === editingHeader.destinationHub}>
+                        {b.name} ({b.branchCode}) {b.name === editingHeader.destinationHub ? '(Đang là kho nhận)' : ''}
                       </option>
                     ))
                   ) : (
@@ -837,13 +845,21 @@ export function StockTransferPage() {
                 <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Kho / Chi nhánh nhận *</label>
                 <select
                   value={editingHeader.destinationHub || ''}
-                  onChange={(e) => setEditingHeader({ ...editingHeader, destinationHub: e.target.value })}
+                  onChange={(e) => {
+                    const newDest = e.target.value;
+                    let newSource = editingHeader.sourceHub;
+                    if (newSource === newDest) {
+                      const other = branches.find((b) => b.name !== newDest);
+                      newSource = other ? other.name : '';
+                    }
+                    setEditingHeader({ ...editingHeader, destinationHub: newDest, sourceHub: newSource });
+                  }}
                   className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-bold text-emerald-600 dark:text-emerald-400"
                 >
                   {branches.length > 0 ? (
                     branches.map((b) => (
-                      <option key={b.id} value={b.name}>
-                        {b.name} ({b.branchCode})
+                      <option key={b.id} value={b.name} disabled={b.name === editingHeader.sourceHub}>
+                        {b.name} ({b.branchCode}) {b.name === editingHeader.sourceHub ? '(Đang là kho xuất)' : ''}
                       </option>
                     ))
                   ) : (
