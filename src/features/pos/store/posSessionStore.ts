@@ -20,6 +20,10 @@ export interface PosSessionRecord {
   userId?: number | string;
   branchId?: number | string;
   shiftName?: string;
+  businessDate?: string;
+  openedByUserId?: number | string;
+  openedBy?: string;
+  isDelegated?: boolean;
 }
 
 interface PosSessionState {
@@ -59,6 +63,10 @@ export const usePosSessionStore = create<PosSessionState>()(
             userId: item.userId,
             branchId: item.branchId,
             shiftName: item.shiftName,
+            businessDate: item.businessDate,
+            openedByUserId: item.openedByUserId,
+            openedBy: item.openedByName || item.openedBy,
+            isDelegated: Boolean(item.isDelegated),
           }));
 
           if (Array.isArray(apiSessions)) {
@@ -78,6 +86,9 @@ export const usePosSessionStore = create<PosSessionState>()(
             userId: item.userId ? Number(item.userId) : (authUser?.id ? Number(authUser.id) : null),
             branchId: item.branchId ? Number(item.branchId) : ((authUser as any)?.branchId ? Number((authUser as any).branchId) : 1),
             shiftName: item.shiftName || null,
+            businessDate: item.businessDate || null,
+            openedByUserId: item.openedByUserId ? Number(item.openedByUserId) : (authUser?.id ? Number(authUser.id) : null),
+            openedBy: item.openedBy || authUser?.fullName || authUser?.name || null,
           };
           await axiosClient.post('/pos/sessions', payload);
           await get().fetchSessions();

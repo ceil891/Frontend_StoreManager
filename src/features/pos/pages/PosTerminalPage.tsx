@@ -5,7 +5,8 @@ import {
   CheckCircle2, ShoppingCart as ShoppingCartIcon, Tag, ChevronDown, Clock,
   type LucideIcon, Loader2, RefreshCw, Layers, Printer, ShieldAlert, Keyboard,
   Percent, FileText, PauseCircle, Calculator, QrCode, Wallet, Receipt,
-  AlertCircle, Lock, PackageSearch, Sparkles, Play
+  AlertCircle, Lock, PackageSearch, Sparkles, Play,
+  AlertTriangle, UserCheck, Calendar
 } from 'lucide-react';
 import { usePosCartStore } from '../store/posCartStore';
 import type { PosProduct } from '../store/posCartStore';
@@ -206,11 +207,18 @@ export function PosTerminalPage() {
   const addSession = usePosSessionStore((s) => s.addSession);
   const [isQuickOpenShiftModalOpen, setIsQuickOpenShiftModalOpen] = useState(false);
   const [openTerminalCode, setOpenTerminalCode] = useState('TERM-01-MAIN');
-  const [openShiftName, setOpenShiftName] = useState('');
   const [openOpeningCash, setOpenOpeningCash] = useState('2000000');
   const [openBranchId, setOpenBranchId] = useState<string>('');
   const [openCashierName, setOpenCashierName] = useState<string>('');
   const [cashiersList, setCashiersList] = useState<any[]>([]);
+  const [currentSystemTime, setCurrentSystemTime] = useState('');
+
+  // 1. Phân quyền Ủy quyền mở ca thay nhân viên khác
+  const canDelegateCashier = useMemo(() => {
+    const role = (user?.role || '').toUpperCase();
+    return role.includes('ADMIN') || role.includes('MANAGER') || role === 'SUPER_ADMIN' || role === 'STORE_MANAGER';
+  }, [user]);
+  const [isDelegateCashier, setIsDelegateCashier] = useState(false);
 
   useEffect(() => {
     axiosClient.get<any, any>('/pos/cashiers').then((res: any) => {
@@ -231,23 +239,143 @@ export function PosTerminalPage() {
     }
   }, [activeBranchId, openBranchId]);
 
+  // 2. Phân cấp Chi nhánh - Quầy & Ràng buộc Quầy đang hoạt động
+  const availableTerminals = useMemo(() => {
+    const branch = branches.find((b) => String(b.id) === String(openBranchId || activeBranchId || 1));
+    const prefix = branch?.branchCode ? branch.branchCode.toUpperCase() : `BR${openBranchId || activeBranchId || '01'}`;
+
+    return [
+      { id: `TERM-${prefix}-01`, name: `TERM-${prefix}-01 (Quầy chính sảnh)` },
+      { id: `TERM-${prefix}-02`, name: `TERM-${prefix}-02 (Quầy thanh toán nhanh)` },
+      { id: `TERM-${prefix}-KIOSK`, name: `TERM-${prefix}-KIOSK (Kiosk tự phục vụ)` },
+      { id: `TERM-${prefix}-BACKOFFICE`, name: `TERM-${prefix}-BACKOFFICE (Quầy kho nội bộ)` },
+    ];
+  }, [branches, openBranchId, activeBranchId]);
+
+  const activeTerminalsAtBranch = useMemo(() => {
+    const activeMap: Record<string, { cashierName: string; sessionCode: string; openedTime: string }> = {};
+    (sessions || []).forEach((s) => {
+      const curBranch = openBranchId || activeBranchId;
+      if (s.status === 'OPEN' && (!curBranch || String(s.branchId) === String(curBranch))) {
+        activeMap[s.terminalCode] = {
+          cashierName: s.cashierName,
+          sessionCode: s.sessionCode,
+          openedTime: s.openingTime,
+        };
+      }
+    });
+    return activeMap;
+  }, [sessions, openBranchId, activeBranchId]);
+
+  const isSelectedTerminalActive = Boolean(activeTerminalsAtBranch[openTerminalCode]);
+
+  // Ghi nhớ thiết bị cho quầy thu ngân trong localStorage
+  useEffect(() => {
+    if (availableTerminals.length > 0) {
+      const storageKey = `retailhub_pos_terminal_${openBranchId || activeBranchId || 'default'}`;
+      const saved = localStorage.getItem(storageKey);
+      if (saved && availableTerminals.some((t) => t.id === saved)) {
+        setOpenTerminalCode(saved);
+      } else {
+        setOpenTerminalCode(availableTerminals[0].id);
+      }
+    }
+  }, [openBranchId, activeBranchId, availableTerminals]);
+
+  // 3. Ca tự động theo thời gian thực & Xử lý ca xuyên đêm (Overnight Shift & Business Date)
+  const getAutoShiftInfo = () => {
+    const now = new Date();
+    const hour = now.getHours();
+    let shiftKey = 'CA_TOI';
+    let shiftLabel = 'Ca tối (18:00 – 23:00)';
+    let icon = '🌙';
+
+    if (hour >= 6 && hour < 12) {
+      shiftKey = 'CA_SANG';
+      shiftLabel = 'Ca sáng (06:00 – 12:00)';
+      icon = '🌅';
+    } else if (hour >= 12 && hour < 18) {
+      shiftKey = 'CA_CHIEU';
+      shiftLabel = 'Ca chiều (12:00 – 18:00)';
+      icon = '🌤️';
+    } else if (hour >= 23 || hour < 6) {
+      shiftKey = 'CA_DEM';
+      shiftLabel = 'Ca đêm / Khuya (23:00 – 06:00)';
+      icon = '🌌';
+    }
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const bDateObj = new Date(now);
+    const isOvernightTMinus1 = hour < 6 && shiftKey === 'CA_DEM';
+    if (isOvernightTMinus1) {
+      bDateObj.setDate(bDateObj.getDate() - 1);
+    }
+    const businessDate = `${bDateObj.getFullYear()}-${pad(bDateObj.getMonth() + 1)}-${pad(bDateObj.getDate())}`;
+    const businessDateFormatted = `${pad(bDateObj.getDate())}/${pad(bDateObj.getMonth() + 1)}/${bDateObj.getFullYear()}`;
+
+    return { 
+      shiftKey, 
+      shiftLabel, 
+      icon, 
+      now, 
+      businessDate, 
+      businessDateFormatted, 
+      isOvernightTMinus1 
+    };
+  };
+
+  // Đồng hồ thời gian thực tế trong modal
+  useEffect(() => {
+    if (!isQuickOpenShiftModalOpen) return;
+    const updateTime = () => {
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const timeFormatted = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      setCurrentSystemTime(timeFormatted);
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, [isQuickOpenShiftModalOpen]);
+
   const handleQuickOpenShift = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSelectedTerminalActive) {
+      toast.error('Quầy thu ngân này hiện đang có ca làm việc mở! Vui lòng chọn quầy khác hoặc kết ca trước.');
+      return;
+    }
+
     const openingCashNum = parseInt(openOpeningCash.replace(/\D/g, ''), 10) || 0;
-    const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const shiftInfo = getAutoShiftInfo();
+    const todayStr = shiftInfo.businessDate.replace(/-/g, '');
     const currentDaySessions = sessions.filter(s => s.sessionCode?.includes(todayStr));
     const nextSessionNum = String(currentDaySessions.length + 1).padStart(2, '0');
     const sessionCode = `SESS-${todayStr}-${nextSessionNum}`;
 
-    const selectedCashier = cashiersList.find(c => c.fullName === openCashierName);
-    const resolvedUserId = selectedCashier ? selectedCashier.id : (user?.id ? Number(user.id) : 1);
+    let resolvedCashierName = user?.fullName || user?.name || 'Thu ngân';
+    let resolvedUserId = user?.id ? Number(user.id) : 1;
+
+    if (isDelegateCashier && openCashierName) {
+      const selectedCashier = cashiersList.find(c => c.fullName === openCashierName || c.username === openCashierName);
+      if (selectedCashier) {
+        resolvedCashierName = selectedCashier.fullName || selectedCashier.username;
+        resolvedUserId = selectedCashier.id;
+      } else {
+        resolvedCashierName = openCashierName;
+      }
+    }
+
     const resolvedBranchId = openBranchId ? Number(openBranchId) : (Number(activeBranchId) || 1);
+
+    try {
+      localStorage.setItem(`retailhub_pos_terminal_${resolvedBranchId}`, openTerminalCode);
+    } catch {}
 
     try {
       await addSession({
         sessionCode,
         terminalCode: openTerminalCode,
-        cashierName: openCashierName || user?.name || 'Thu ngân',
+        cashierName: resolvedCashierName,
         openingTime: new Date().toISOString().replace('T', ' ').slice(0, 19),
         openingCash: openingCashNum,
         expectedCash: openingCashNum,
@@ -256,14 +384,19 @@ export function PosTerminalPage() {
         status: 'OPEN',
         userId: resolvedUserId,
         branchId: resolvedBranchId,
-        shiftName: openShiftName || undefined,
+        shiftName: shiftInfo.shiftKey,
+        businessDate: shiftInfo.businessDate,
+        openedByUserId: user?.id ? Number(user.id) : resolvedUserId,
+        openedBy: user?.fullName || user?.name || resolvedCashierName,
+        isDelegated: isDelegateCashier,
       });
       await fetchSessions();
       setIsQuickOpenShiftModalOpen(false);
+      setIsDelegateCashier(false);
       toast.success(`Đã mở thành công ca làm việc: ${sessionCode}! Bắt đầu phiên bán hàng.`);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to open shift from POS:', err);
-      toast.error('Không thể mở ca làm việc. Vui lòng thử lại!');
+      toast.error(err.response?.data?.message || err.message || 'Không thể mở ca làm việc. Vui lòng thử lại!');
     }
   };
 
@@ -2393,11 +2526,15 @@ export function PosTerminalPage() {
       {/* ═══ Modal Mở Ca Làm Việc POS Nhanh (Trực tiếp tại quầy) ═══ */}
       <Modal
         isOpen={isQuickOpenShiftModalOpen}
-        onClose={() => setIsQuickOpenShiftModalOpen(false)}
+        onClose={() => {
+          setIsQuickOpenShiftModalOpen(false);
+          setIsDelegateCashier(false);
+        }}
         title="⚡ Mở Ca Làm Việc Thu Ngân Mới"
         width="max-w-md"
       >
         <form onSubmit={handleQuickOpenShift} className="space-y-4">
+          {/* 1. CHI NHÁNH BÁN HÀNG */}
           <div>
             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
               Chi nhánh bán hàng
@@ -2405,7 +2542,7 @@ export function PosTerminalPage() {
             <select
               value={openBranchId}
               onChange={(e) => setOpenBranchId(e.target.value)}
-              className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+              className="block w-full px-3.5 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
             >
               {branches.length > 0 ? (
                 branches.map((b) => (
@@ -2419,64 +2556,180 @@ export function PosTerminalPage() {
             </select>
           </div>
 
+          {/* 2. MÃ QUẦY THU NGÂN (PARENT-CHILD THEO CHI NHÁNH & RÀNG BUỘC DUY NHẤT 1 CA MỞ) */}
           <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
-              Mã quầy thu ngân
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">
+                Mã quầy thu ngân
+              </label>
+              {isSelectedTerminalActive && (
+                <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" /> Đang có ca mở
+                </span>
+              )}
+            </div>
             <select
               value={openTerminalCode}
               onChange={(e) => setOpenTerminalCode(e.target.value)}
-              className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+              className={`block w-full px-3.5 py-2.5 border rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:ring-2 focus:outline-none transition-colors ${
+                isSelectedTerminalActive
+                  ? 'border-rose-300 dark:border-rose-700 focus:ring-rose-500 bg-rose-50/20'
+                  : 'border-gray-200 dark:border-gray-700 focus:ring-emerald-500'
+              }`}
             >
-              <option value="TERM-01-MAIN">TERM-01-MAIN (Quầy chính sảnh)</option>
-              <option value="TERM-02-KIOSK">TERM-02-KIOSK (Kiosk tự phục vụ)</option>
-              <option value="TERM-03-BACKOFFICE">TERM-03-BACKOFFICE (Quầy kho nội bộ)</option>
-              <option value="TERM-04-EXPRESS">TERM-04-EXPRESS (Quầy thanh toán nhanh)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
-              Nhân viên thu ngân
-            </label>
-            <select
-              value={openCashierName}
-              onChange={(e) => setOpenCashierName(e.target.value)}
-              className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-            >
-              {cashiersList.length > 0 ? (
-                cashiersList.map((c) => (
-                  <option key={c.id} value={c.fullName}>
-                    {c.fullName} ({c.roleName || 'Thu ngân'})
+              {availableTerminals.map((t) => {
+                const activeInfo = activeTerminalsAtBranch[t.id];
+                return (
+                  <option key={t.id} value={t.id}>
+                    {t.name} {activeInfo ? `⚠️ [Đang mở - Thu ngân ${activeInfo.cashierName}]` : '🟢 [Sẵn sàng]'}
                   </option>
-                ))
-              ) : (
-                <option value={user?.name || 'Thu ngân'}>
-                  {user?.name || 'Thu ngân'} (Đang đăng nhập)
-                </option>
+                );
+              })}
+            </select>
+
+            {/* Cảnh báo đỏ nếu quầy đang có ca mở */}
+            {isSelectedTerminalActive && (
+              <div className="mt-2 p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl text-xs text-rose-800 dark:text-rose-300 flex items-start gap-2 animate-fadeIn">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold">Quầy này đang có ca làm việc hoạt động!</div>
+                  <div className="mt-0.5 text-[11px] leading-relaxed">
+                    Thu ngân: <strong>{activeTerminalsAtBranch[openTerminalCode]?.cashierName}</strong> ({activeTerminalsAtBranch[openTerminalCode]?.sessionCode}). Vui lòng kết ca hiện tại hoặc chọn quầy khác để mở ca mới.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+              💾 Quầy này được lưu tự động cho thiết bị/trình duyệt hiện tại để tránh chọn nhầm.
+            </p>
+          </div>
+
+          {/* 3. THÔNG TIN NHÂN VIÊN THU NGÂN (DEFAULT LOCKED TO CURRENT USER) */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase flex items-center gap-1.5">
+                <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                Nhân viên chịu trách nhiệm ca
+              </label>
+              {canDelegateCashier && (
+                <label className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 cursor-pointer hover:underline font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={isDelegateCashier}
+                    onChange={(e) => setIsDelegateCashier(e.target.checked)}
+                    className="rounded text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
+                  />
+                  <span>Mở ca thay nhân viên khác</span>
+                </label>
               )}
-            </select>
+            </div>
+
+            {isDelegateCashier ? (
+              <div className="space-y-1">
+                <select
+                  value={openCashierName}
+                  onChange={(e) => setOpenCashierName(e.target.value)}
+                  className="block w-full px-3.5 py-2.5 border border-blue-200 dark:border-blue-700 rounded-xl bg-blue-50/50 dark:bg-blue-950/30 text-gray-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                >
+                  {cashiersList.length > 0 ? (
+                    cashiersList.map((c) => (
+                      <option key={c.id} value={c.fullName || c.username}>
+                        {c.fullName || c.username} ({c.roleName || 'Thu ngân'})
+                      </option>
+                    ))
+                  ) : (
+                    <option value={user?.fullName || user?.name || 'Thu ngân'}>
+                      {user?.fullName || user?.name} (Đang đăng nhập)
+                    </option>
+                  )}
+                </select>
+                <p className="text-[11px] text-blue-600 dark:text-blue-400">
+                  ⚠️ Bạn đang mở ca với tư cách quản trị viên ủy quyền cho nhân viên khác.
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between px-3.5 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50/80 dark:bg-gray-800/80">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold text-xs uppercase">
+                    {(user?.fullName || user?.name || 'TN').slice(0, 2)}
+                  </div>
+                  <div>
+                    <div className="font-semibold text-sm text-gray-900 dark:text-white">
+                      {user?.fullName || user?.name || 'Thu ngân'}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                      {user?.email || user?.name}
+                    </div>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                  {user?.role || 'CASHIER'}
+                </span>
+              </div>
+            )}
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+              🔒 Ca làm việc gắn với người trực tiếp phụ trách tiền quỹ lúc mở và chốt ca để đối soát minh bạch.
+            </p>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
-              Khung giờ / Ca làm việc
-            </label>
-            <select
-              value={openShiftName}
-              onChange={(e) => setOpenShiftName(e.target.value)}
-              className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-            >
-              <option value="">Tự động theo giờ hiện tại</option>
-              <option value="CA_SANG">🌅 Ca sáng (6:00 – 12:00)</option>
-              <option value="CA_CHIEU">🌤️ Ca chiều (12:00 – 18:00)</option>
-              <option value="CA_TOI">🌙 Ca tối (18:00 – 23:00)</option>
-              <option value="CA_NGAY">📅 Cả ngày</option>
-            </select>
-          </div>
+          {/* 4. KHUNG GIỜ / CA LÀM VIỆC & NGÀY KINH DOANH (READ-ONLY AUTO DETECTED) */}
+          {(() => {
+            const shiftInfo = getAutoShiftInfo();
+            return (
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1 flex items-center justify-between">
+                  <span>Khung giờ & Ngày kinh doanh (Tự động)</span>
+                  <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-normal">
+                    {currentSystemTime || 'Đang đồng bộ...'}
+                  </span>
+                </label>
+                <div className="p-3 border border-emerald-200 dark:border-emerald-800/50 rounded-xl bg-emerald-50/40 dark:bg-emerald-950/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{shiftInfo.icon}</span>
+                      <div>
+                        <div className="text-xs font-bold text-gray-900 dark:text-white">
+                          {shiftInfo.shiftLabel}
+                        </div>
+                        <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                          Đồng hồ hệ thống tự động xác định ca làm việc
+                        </div>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 text-[11px] font-mono font-bold rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200">
+                      {shiftInfo.shiftKey}
+                    </span>
+                  </div>
 
+                  <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-800/40 flex items-center justify-between text-xs">
+                    <span className="text-gray-600 dark:text-gray-400 flex items-center gap-1.5 font-medium">
+                      <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      Ngày kinh doanh (Kế toán):
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <strong className="font-mono text-emerald-700 dark:text-emerald-300">
+                        {shiftInfo.businessDateFormatted}
+                      </strong>
+                      {shiftInfo.isOvernightTMinus1 && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300">
+                          Ca xuyên đêm (T-1)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                  🔒 Ca làm việc và Ngày kinh doanh được hệ thống tự động khóa theo thời gian thực để ngăn chặn gian lận lùi ca.
+                </p>
+              </div>
+            );
+          })()}
+
+          {/* 5. TIỀN QUỸ ĐẦU CA (₫) */}
           <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1 flex items-center gap-1.5">
+              <Wallet className="w-3.5 h-3.5 text-emerald-600" />
               Tiền quỹ đầu ca (₫)
             </label>
             <input
@@ -2495,16 +2748,24 @@ export function PosTerminalPage() {
           <div className="flex gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
-              onClick={() => setIsQuickOpenShiftModalOpen(false)}
+              onClick={() => {
+                setIsQuickOpenShiftModalOpen(false);
+                setIsDelegateCashier(false);
+              }}
               className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold rounded-xl transition-all text-xs cursor-pointer"
             >
               Hủy
             </button>
             <button
               type="submit"
-              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all text-xs shadow-md shadow-emerald-600/20 cursor-pointer"
+              disabled={isSelectedTerminalActive}
+              className={`flex-1 py-2.5 font-bold rounded-xl transition-all text-xs shadow-md cursor-pointer ${
+                isSelectedTerminalActive
+                  ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed shadow-none'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
+              }`}
             >
-              Kích hoạt mở ca
+              {isSelectedTerminalActive ? 'Quầy đang có ca mở (Khóa)' : 'Kích hoạt mở ca'}
             </button>
           </div>
         </form>
