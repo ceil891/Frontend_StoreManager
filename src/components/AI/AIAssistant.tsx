@@ -327,7 +327,7 @@ export function AIAssistant() {
                                 } else if (val === 61 || val === 120 || val === 121) {
                                   navigate('/reports/crm');
                                 } else if (val === 400) {
-                                  navigate('/crm/campaigns');
+                                  navigate('/reports/crm');
                                 } else if (val === 62) {
                                   navigate('/hr/employees');
                                 } else {

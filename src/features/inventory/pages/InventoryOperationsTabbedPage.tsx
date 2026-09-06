@@ -1,11 +1,10 @@
 import { useSearchParams } from 'react-router';
-import { ArrowDownLeft, ArrowUpRight, ArrowRightLeft, FileQuestion, ClipboardCheck, Sliders, CheckSquare, CornerUpLeft, Trash2 } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ArrowRightLeft, FileQuestion, Sliders, CheckSquare, CornerUpLeft, Trash2 } from 'lucide-react';
 import { RoleGuard } from '@/routes/RoleGuard';
 import { ImportReceiptsPage } from './ImportReceiptsPage';
 import { StockOutsPage } from './StockOutsPage';
 import { StockTransferPage } from './StockTransferPage';
 import { StockTransferRequestsPage } from './StockTransferRequestsPage';
-import { InventoryTransfersPage } from './InventoryTransfersPage';
 import { InventoryAdjustmentsPage } from './InventoryAdjustmentsPage';
 import { InventoryCheckPage } from './InventoryCheckPage';
 import { ReturnToSupplierPage } from './ReturnToSupplierPage';
@@ -16,7 +15,6 @@ const tabs = [
   { id: 'stock-outs', label: 'Xuất kho', icon: ArrowUpRight, permission: 'inventory:stock-out:view' },
   { id: 'transfers', label: 'Chuyển kho', icon: ArrowRightLeft, permission: 'inventory:transfer:view' },
   { id: 'transfer-requests', label: 'Yêu cầu chuyển kho', icon: FileQuestion, permission: 'inventory:transfer-request:view' },
-  { id: 'transfers-list', label: 'Bảng kê chuyển kho', icon: ClipboardCheck, permission: 'inventory:transfer-list:view' },
   { id: 'adjustments', label: 'Điều chỉnh kho', icon: Sliders, permission: 'inventory:adjustment:view' },
   { id: 'checks', label: 'Kiểm kê kho', icon: CheckSquare, permission: 'inventory:check:view' },
   { id: 'returns', label: 'Trả hàng NCC', icon: CornerUpLeft, permission: 'inventory:return:view' },
@@ -89,11 +87,6 @@ export function InventoryOperationsTabbedPage() {
         {activeTab === 'transfer-requests' && (
           <RoleGuard requiredPermission="inventory:transfer-request:view">
             <StockTransferRequestsPage />
-          </RoleGuard>
-        )}
-        {activeTab === 'transfers-list' && (
-          <RoleGuard requiredPermission="inventory:transfer-list:view">
-            <InventoryTransfersPage />
           </RoleGuard>
         )}
         {activeTab === 'adjustments' && (

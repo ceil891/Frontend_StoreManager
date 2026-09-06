@@ -123,8 +123,6 @@ const PurchaseReturnsTabbedPage = lz(() => import('@/features/purchase/pages/Pur
 const VouchersTabbedPage = lz(() => import('@/features/finance/pages/VouchersTabbedPage'), 'VouchersTabbedPage');
 const DebtLedgerPage = lz(() => import('@/features/finance/pages/DebtLedgerPage'), 'DebtLedgerPage');
 const FinanceFundCashTabbedPage = lz(() => import('@/features/finance/pages/FinanceFundCashTabbedPage'), 'FinanceFundCashTabbedPage');
-const FinanceAccountingTabbedPage = lz(() => import('@/features/finance/pages/FinanceAccountingTabbedPage'), 'FinanceAccountingTabbedPage');
-const FixedAssetsTabbedPage = lz(() => import('@/features/finance/pages/FixedAssetsTabbedPage'), 'FixedAssetsTabbedPage');
 
 // 7. CRM Containers
 const CrmCustomersTabbedPage = lz(() => import('@/features/crm/pages/CrmCustomersTabbedPage'), 'CrmCustomersTabbedPage');
@@ -132,7 +130,6 @@ const CrmLoyaltyTabbedPage = lz(() => import('@/features/crm/pages/CrmLoyaltyTab
 const VouchersCRMTabbedPage = lz(() => import('@/features/crm/pages/VouchersTabbedPage'), 'VouchersTabbedPage');
 const WarrantiesTabbedPage = lz(() => import('@/features/crm/pages/WarrantiesTabbedPage'), 'WarrantiesTabbedPage');
 const CrmSupportTabbedPage = lz(() => import('@/features/crm/pages/CrmSupportTabbedPage'), 'CrmSupportTabbedPage');
-const MarketingCampaignsPage = lz(() => import('@/features/crm/pages/MarketingCampaignsPage'), 'default');
 
 // 8. Logistics Containers
 const LogisticsPartnersPage = lz(() => import('@/features/logistics/pages/LogisticsPartnersPage'), 'LogisticsPartnersPage');
@@ -357,21 +354,21 @@ const router = createBrowserRouter([
           { path: 'finance/vouchers', ...protect(<VouchersTabbedPage />, 'finance:receipt:view') },
           { path: 'finance/debts', ...protect(<DebtLedgerPage />, 'finance:debt:view') },
           { path: 'finance/fund-cash', ...protect(<FinanceFundCashTabbedPage />, 'finance:bank:view') },
-          { path: 'finance/accounting', ...protect(<FinanceAccountingTabbedPage />, 'finance:journal:view') },
-          { path: 'finance/fixed-assets', ...protect(<FixedAssetsTabbedPage />, 'finance:fixed-asset:view') },
 
           // Finance Legacy Redirects
           { path: 'finance/receipts', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="receipts" /> },
           { path: 'finance/payments', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="payments" /> },
           { path: 'finance/costs', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="costs" /> },
           { path: 'finance/operating-costs', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="costs" /> },
-          { path: 'finance/cost-centers', element: <LegacyRedirect targetCanonical="/finance/accounting" defaultTab="cost-centers" /> },
+          { path: 'finance/cost-centers', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="costs" /> },
           { path: 'finance/banks', element: <LegacyRedirect targetCanonical="/finance/fund-cash" defaultTab="banks" /> },
           { path: 'finance/fund-balances', element: <LegacyRedirect targetCanonical="/finance/fund-cash" defaultTab="balances" /> },
-          { path: 'finance/journal-entries', element: <LegacyRedirect targetCanonical="/finance/accounting" defaultTab="journal" /> },
-          { path: 'finance/chart-of-accounts', element: <LegacyRedirect targetCanonical="/finance/accounting" defaultTab="coa" /> },
-          { path: 'finance/tax-duties', element: <LegacyRedirect targetCanonical="/finance/accounting" defaultTab="tax" /> },
-          { path: 'finance/depreciation', element: <LegacyRedirect targetCanonical="/finance/fixed-assets" defaultTab="depreciation" /> },
+          { path: 'finance/accounting', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="receipts" /> },
+          { path: 'finance/journal-entries', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="receipts" /> },
+          { path: 'finance/chart-of-accounts', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="receipts" /> },
+          { path: 'finance/tax-duties', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="receipts" /> },
+          { path: 'finance/fixed-assets', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="receipts" /> },
+          { path: 'finance/depreciation', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="receipts" /> },
 
           // ── 6. CRM Canonical Routes (6 Routes) ───────────────────
           { path: 'crm/customers', ...protect(<CrmCustomersTabbedPage />, 'crm:customer:view') },
@@ -379,7 +376,6 @@ const router = createBrowserRouter([
           { path: 'crm/vouchers', ...protect(<VouchersCRMTabbedPage />, 'crm:voucher:view') },
           { path: 'crm/warranties', ...protect(<WarrantiesTabbedPage />, 'crm:warranty:view') },
           { path: 'crm/support', ...protect(<CrmSupportTabbedPage />, 'crm:ticket:view') },
-          { path: 'crm/campaigns', ...protect(<MarketingCampaignsPage />, 'crm:campaign:view') },
 
           // CRM Legacy Redirects
           { path: 'crm', element: <LegacyRedirect targetCanonical="/crm/customers" defaultTab="customers" /> },

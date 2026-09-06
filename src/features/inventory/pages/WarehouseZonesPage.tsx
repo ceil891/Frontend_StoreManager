@@ -48,7 +48,7 @@ export function WarehouseZonesPage() {
       return;
     }
     const isDuplicate = warehouseZones.some(
-      (z) => z.zoneCode.toLowerCase() === code.toLowerCase() && z.id !== editingItem.id
+      (z) => z.zoneCode.toLowerCase() === code.toLowerCase() && String(z.id) !== String(editingItem.id ?? '')
     );
     setCodeStatus(isDuplicate ? 'duplicate' : 'valid');
   }, [editingItem.zoneCode, warehouseZones, editingItem.id]);

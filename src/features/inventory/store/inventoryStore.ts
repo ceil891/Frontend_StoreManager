@@ -649,6 +649,14 @@ export interface WarehouseBinRecord {
   maxVolumeM3?: number;
   maxPallet?: number;
   status: 'EMPTY' | 'OCCUPIED' | 'FULL';
+  statusConfig?: string;
+  binType?: string;
+  allowFood?: boolean;
+  allowCosmetics?: boolean;
+  allowElectronics?: boolean;
+  allowChemicals?: boolean;
+  allowMixedSku?: boolean;
+  allowMixedLot?: boolean;
   description?: string;
   // Rack info
   rackId?: string;
@@ -690,6 +698,15 @@ export interface RackRecord {
   maxWeightKg?: number;
   maxVolumeM3?: number;
   maxPallet?: number;
+  heightM?: number;
+  levels?: number;
+  baysPerLevel?: number;
+  statusConfig?: string;
+  allowFood?: boolean;
+  allowCosmetics?: boolean;
+  allowElectronics?: boolean;
+  allowChemicals?: boolean;
+  allowHazmat?: boolean;
   description?: string;
   province?: string;
   district?: string;
@@ -881,6 +898,13 @@ export interface StockOutRecord {
   status: 'CHO_XU_LY' | 'DA_XUAT' | 'DA_HUY';
   items?: StockOutDetailItem[];
   notes?: string;
+  orderRefCode?: string;
+  customerName?: string;
+  supplierId?: string | number;
+  supplierName?: string;
+  originalReceiptRef?: string;
+  cancelReason?: string;
+  approver?: string;
 }
 
 export interface SupplierWarehouseRecord {
@@ -1583,6 +1607,7 @@ export const useInventoryStore = create<InventoryState>()(
           const data: any = await axiosClient.get<any, any>('/inventories/transfers');
           const list = Array.isArray(data) ? data : (data?.content || data?.data || []);
           if (list.length > 0) {
+            const products = get().products;
             const mapped = list.map((item: any) => {
               const lines = item.transferLines || [];
               const totalUnits = lines.reduce((acc: number, line: any) => acc + (line.transferQuantity || 0), 0);
@@ -1590,6 +1615,29 @@ export const useInventoryStore = create<InventoryState>()(
               if (normalizedStatus === 'SHIPPED') normalizedStatus = 'IN_TRANSIT';
               else if (normalizedStatus === 'RECEIVED') normalizedStatus = 'COMPLETED';
               else if (normalizedStatus === 'PENDING_APPROVAL' || normalizedStatus === 'APPROVED') normalizedStatus = 'READY_TO_SHIP';
+
+              const mappedItems = lines.map((l: any) => {
+                const prod = products.find(
+                  (p) => String(p.id) === String(l.productId) || p.sku === l.productCode || p.name === l.productName
+                );
+                const unitPrice = Number(prod?.costPrice || prod?.price || 50000);
+                const qty = Number(l.transferQuantity || 0);
+                return {
+                  id: String(l.id || ''),
+                  productName: l.productName || prod?.name || 'Sản phẩm',
+                  variant: prod?.variants?.[0]?.name || 'Chuẩn',
+                  sku: l.productCode || prod?.sku || '',
+                  quantity: qty,
+                  unitPrice: unitPrice,
+                  amount: qty * unitPrice,
+                };
+              });
+
+              const computedValuation = mappedItems.reduce((acc: number, it: any) => acc + Number(it.amount || 0), 0);
+              const fallbackValuation = (totalUnits > 0 ? totalUnits : (item.totalUnits || 10)) * 50000;
+              const totalValuation = Number(item.totalValuation || 0) > 0
+                ? Number(item.totalValuation)
+                : (computedValuation > 0 ? computedValuation : fallbackValuation);
 
               return {
                 id: String(item.id),
@@ -1601,22 +1649,14 @@ export const useInventoryStore = create<InventoryState>()(
                 dispatchDate: formatApiDate(item.transferDate || item.createdAt),
                 estArrivalDate: formatApiDate(item.estArrivalDate),
                 totalUnits: totalUnits > 0 ? totalUnits : (item.totalUnits || 10),
-                totalValuation: item.totalValuation || 0,
+                totalValuation: totalValuation,
                 status: normalizedStatus as any,
                 logisticsPartner: item.logisticsPartner || 'Nội bộ (Đội xe công ty)',
                 trackingRef: item.trackingRef || '',
                 requestedBy: item.requestedBy || item.createdBy || 'System',
                 approvedBy: item.approvedBy || '',
                 notes: item.note || '',
-                items: lines.map((l: any) => ({
-                  id: String(l.id || ''),
-                  productName: l.productName || 'Sản phẩm',
-                  variant: '',
-                  sku: l.productCode || '',
-                  quantity: Number(l.transferQuantity || 0),
-                  unitPrice: 0,
-                  amount: 0,
-                })),
+                items: mappedItems,
               };
             }).sort((a: any, b: any) => Number(b.id) - Number(a.id));
             set({ stockTransfers: mapped });
@@ -1893,11 +1933,11 @@ export const useInventoryStore = create<InventoryState>()(
       },
 
       addStockTransfer: async (transfer) => {
-        const id = (transfer as any).id || Date.now().toString();
-        const fullTransfer: StockTransferOrder = { id, ...transfer } as StockTransferOrder;
+        const tempId = (transfer as any).id || Date.now().toString();
+        const fullTransfer: StockTransferOrder = { id: tempId, ...transfer } as StockTransferOrder;
         const previousTransfers = get().stockTransfers;
         set((state) => ({
-          stockTransfers: [fullTransfer, ...state.stockTransfers.filter(s => s.id !== id)],
+          stockTransfers: [fullTransfer, ...state.stockTransfers.filter(s => s.id !== tempId)],
         }));
         try {
           const products = get().products;
@@ -1934,7 +1974,16 @@ export const useInventoryStore = create<InventoryState>()(
             note: transfer.notes || undefined,
             transferLines: transferLines,
           };
-          await axiosClient.post('/inventories/transfers', payload);
+          const res: any = await axiosClient.post('/inventories/transfers', payload);
+          const savedData = res?.data || res;
+          const realId = savedData?.id ? String(savedData.id) : null;
+          if (realId) {
+            set((state) => ({
+              stockTransfers: state.stockTransfers.map((s) => (s.id === tempId ? { ...s, id: realId } : s)),
+            }));
+          }
+          await get().fetchStockTransfers();
+          return realId || tempId;
         } catch (error) {
           set({ stockTransfers: previousTransfers });
           throw error;
@@ -1987,7 +2036,21 @@ export const useInventoryStore = create<InventoryState>()(
             note: data.notes !== undefined ? data.notes : existing?.notes,
             transferLines,
           };
-          await axiosClient.put(`/inventories/transfers/${id}`, payload);
+
+          const prevTransfers = get().stockTransfers;
+          let targetId = id;
+          if (String(id).length > 10) {
+            const found = prevTransfers.find((t) => t.id === id);
+            if (found?.transferNumber) {
+              await get().fetchStockTransfers();
+              const refreshed = get().stockTransfers.find(
+                (t) => t.transferNumber === found.transferNumber && String(t.id).length <= 10
+              );
+              if (refreshed) targetId = refreshed.id;
+            }
+          }
+
+          await axiosClient.put(`/inventories/transfers/${targetId}`, payload);
           await get().fetchStockTransfers();
         } catch (error) {
           console.error('Failed to update stock transfer:', error);
@@ -1996,7 +2059,19 @@ export const useInventoryStore = create<InventoryState>()(
       },
       deleteStockTransfer: async (id) => {
         try {
-          await axiosClient.delete(`/inventories/transfers/${id}`);
+          const prevTransfers = get().stockTransfers;
+          let targetId = id;
+          if (String(id).length > 10) {
+            const found = prevTransfers.find((t) => t.id === id);
+            if (found?.transferNumber) {
+              await get().fetchStockTransfers();
+              const refreshed = get().stockTransfers.find(
+                (t) => t.transferNumber === found.transferNumber && String(t.id).length <= 10
+              );
+              if (refreshed) targetId = refreshed.id;
+            }
+          }
+          await axiosClient.delete(`/inventories/transfers/${targetId}`);
           get().fetchStockTransfers();
         } catch (error) {
           console.error('Failed to delete stock transfer:', error);
@@ -2006,8 +2081,19 @@ export const useInventoryStore = create<InventoryState>()(
         const prevTransfers = get().stockTransfers;
         const prevProducts = get().products;
         try {
-          if (!isNaN(Number(id))) {
-            await axiosClient.post(`/inventories/transfers/${id}/receive`, { notes: notes || '' });
+          let targetId = id;
+          if (String(id).length > 10) {
+            const found = prevTransfers.find((t) => t.id === id);
+            if (found?.transferNumber) {
+              await get().fetchStockTransfers();
+              const refreshed = get().stockTransfers.find(
+                (t) => t.transferNumber === found.transferNumber && String(t.id).length <= 10
+              );
+              if (refreshed) targetId = refreshed.id;
+            }
+          }
+          if (!isNaN(Number(targetId))) {
+            await axiosClient.post(`/inventories/transfers/${targetId}/receive`, { notes: notes || '' });
           }
           await get().fetchStockTransfers();
           await get().fetchProducts();
@@ -2020,8 +2106,19 @@ export const useInventoryStore = create<InventoryState>()(
       approveStockTransfer: async (id) => {
         const prevTransfers = get().stockTransfers;
         try {
-          if (!isNaN(Number(id))) {
-            await axiosClient.post(`/inventories/transfers/${id}/approve`);
+          let targetId = id;
+          if (String(id).length > 10) {
+            const found = prevTransfers.find((t) => t.id === id);
+            if (found?.transferNumber) {
+              await get().fetchStockTransfers();
+              const refreshed = get().stockTransfers.find(
+                (t) => t.transferNumber === found.transferNumber && String(t.id).length <= 10
+              );
+              if (refreshed) targetId = refreshed.id;
+            }
+          }
+          if (!isNaN(Number(targetId))) {
+            await axiosClient.post(`/inventories/transfers/${targetId}/approve`);
           }
           await get().fetchStockTransfers();
         } catch (error) {
@@ -2034,8 +2131,19 @@ export const useInventoryStore = create<InventoryState>()(
         const prevTransfers = get().stockTransfers;
         const prevProducts = get().products;
         try {
-          if (!isNaN(Number(id))) {
-            await axiosClient.post(`/inventories/transfers/${id}/ship`);
+          let targetId = id;
+          if (String(id).length > 10) {
+            const found = prevTransfers.find((t) => t.id === id);
+            if (found?.transferNumber) {
+              await get().fetchStockTransfers();
+              const refreshed = get().stockTransfers.find(
+                (t) => t.transferNumber === found.transferNumber && String(t.id).length <= 10
+              );
+              if (refreshed) targetId = refreshed.id;
+            }
+          }
+          if (!isNaN(Number(targetId))) {
+            await axiosClient.post(`/inventories/transfers/${targetId}/ship`);
           }
           await get().fetchStockTransfers();
           await get().fetchProducts();
@@ -2049,8 +2157,19 @@ export const useInventoryStore = create<InventoryState>()(
         const prevTransfers = get().stockTransfers;
         const prevProducts = get().products;
         try {
-          if (!isNaN(Number(id))) {
-            await axiosClient.post(`/inventories/transfers/${id}/cancel`, { cancelReason });
+          let targetId = id;
+          if (String(id).length > 10) {
+            const found = prevTransfers.find((t) => t.id === id);
+            if (found?.transferNumber) {
+              await get().fetchStockTransfers();
+              const refreshed = get().stockTransfers.find(
+                (t) => t.transferNumber === found.transferNumber && String(t.id).length <= 10
+              );
+              if (refreshed) targetId = refreshed.id;
+            }
+          }
+          if (!isNaN(Number(targetId))) {
+            await axiosClient.post(`/inventories/transfers/${targetId}/cancel`, { cancelReason });
           }
           await get().fetchStockTransfers();
           await get().fetchProducts();
@@ -3285,14 +3404,32 @@ export const useInventoryStore = create<InventoryState>()(
               status: b.status || 'EMPTY',
               description: b.description || '',
             }));
-            set({ warehouseBins: bins });
+            set((state) => {
+              const merged = bins.map((b: any) => {
+                const local = state.warehouseBins.find((wb) => wb.id === b.id || wb.binCode === b.binCode);
+                return {
+                  ...b,
+                  statusConfig: local?.statusConfig ?? (b.status === 'LOCKED' ? 'LOCKED' : b.status === 'MAINTENANCE' ? 'MAINTENANCE' : b.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE'),
+                  binType: local?.binType ?? 'STORAGE',
+                  allowFood: local?.allowFood ?? true,
+                  allowCosmetics: local?.allowCosmetics ?? true,
+                  allowElectronics: local?.allowElectronics ?? false,
+                  allowChemicals: local?.allowChemicals ?? false,
+                  allowMixedSku: local?.allowMixedSku ?? true,
+                  allowMixedLot: local?.allowMixedLot ?? false,
+                };
+              });
+              const backendIds = new Set(bins.map((b: any) => b.id));
+              const localOnly = state.warehouseBins.filter((b) => !backendIds.has(b.id));
+              return { warehouseBins: [...merged, ...localOnly] };
+            });
           }
         } catch (error) {
           console.warn('Failed to fetch warehouse bins, preserving local state:', error);
         }
       },
       addWarehouseBin: async (bin: any) => {
-        const newBinRecord = {
+        const newBinRecord: WarehouseBinRecord = {
           id: bin.id || String(Date.now()),
           binCode: bin.binCode || `BIN-${Date.now().toString().slice(-4)}`,
           barcode: bin.barcode || `BAR-${bin.binCode || Date.now()}`,
@@ -3303,6 +3440,14 @@ export const useInventoryStore = create<InventoryState>()(
           maxVolumeM3: Number(bin.maxVolumeM3 || 2.5),
           maxPallet: Number(bin.maxPallet || 4),
           status: bin.status || 'EMPTY',
+          statusConfig: bin.statusConfig || 'ACTIVE',
+          binType: bin.binType || 'STORAGE',
+          allowFood: bin.allowFood !== false,
+          allowCosmetics: bin.allowCosmetics !== false,
+          allowElectronics: !!bin.allowElectronics,
+          allowChemicals: !!bin.allowChemicals,
+          allowMixedSku: bin.allowMixedSku !== false,
+          allowMixedLot: !!bin.allowMixedLot,
           description: bin.description || '',
         };
 
@@ -3328,7 +3473,7 @@ export const useInventoryStore = create<InventoryState>()(
       },
       updateWarehouseBin: async (id, data: any) => {
         set((state) => ({
-          warehouseBins: state.warehouseBins.map((b) => (b.id === id ? { ...b, ...data } : b)),
+          warehouseBins: state.warehouseBins.map((b) => (b.id === String(id) || b.id === id ? { ...b, ...data } : b)),
         }));
 
         try {
@@ -3438,9 +3583,32 @@ export const useInventoryStore = create<InventoryState>()(
               branchName: item.branchName || '',
             }));
             set((state) => {
-              const backendIds = new Set(backendRacks.map(b => b.id));
-              const localOnly = state.racks.filter(r => !backendIds.has(r.id));
-              return { racks: [...backendRacks, ...localOnly] };
+              const merged = backendRacks.map((b) => {
+                const local = state.racks.find((r) => r.id === b.id || r.rackCode === b.rackCode);
+                return local
+                  ? {
+                      ...b,
+                      ...local,
+                      ...b,
+                      heightM: local.heightM ?? b.heightM,
+                      levels: local.levels ?? b.levels,
+                      baysPerLevel: local.baysPerLevel ?? b.baysPerLevel,
+                      province: local.province ?? b.province,
+                      district: local.district ?? b.district,
+                      ward: local.ward ?? b.ward,
+                      addressDetail: local.addressDetail ?? b.addressDetail,
+                      allowFood: local.allowFood ?? b.allowFood,
+                      allowCosmetics: local.allowCosmetics ?? b.allowCosmetics,
+                      allowElectronics: local.allowElectronics ?? b.allowElectronics,
+                      allowChemicals: local.allowChemicals ?? b.allowChemicals,
+                      allowHazmat: local.allowHazmat ?? b.allowHazmat,
+                      statusConfig: local.statusConfig ?? b.statusConfig,
+                    }
+                  : b;
+              });
+              const backendIds = new Set(backendRacks.map((b) => b.id));
+              const localOnly = state.racks.filter((r) => !backendIds.has(r.id));
+              return { racks: [...merged, ...localOnly] };
             });
           }
         } catch (error) {
@@ -3456,6 +3624,19 @@ export const useInventoryStore = create<InventoryState>()(
           maxWeightKg: rack.maxWeightKg || 500,
           maxVolumeM3: rack.maxVolumeM3 || 2.5,
           maxPallet: rack.maxPallet || 4,
+          heightM: rack.heightM || 3.5,
+          levels: rack.levels || 4,
+          baysPerLevel: rack.baysPerLevel || 5,
+          statusConfig: rack.statusConfig || 'ACTIVE',
+          allowFood: rack.allowFood !== false,
+          allowCosmetics: rack.allowCosmetics !== false,
+          allowElectronics: rack.allowElectronics !== false,
+          allowChemicals: !!rack.allowChemicals,
+          allowHazmat: !!rack.allowHazmat,
+          province: rack.province || '',
+          district: rack.district || '',
+          ward: rack.ward || '',
+          addressDetail: rack.addressDetail || '',
           description: rack.description || '',
           isActive: rack.isActive !== false,
           areaId: String(areaIdNum),

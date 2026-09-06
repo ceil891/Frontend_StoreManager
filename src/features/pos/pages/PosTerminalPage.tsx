@@ -1324,20 +1324,18 @@ export function PosTerminalPage() {
           };
 
           setCompletedPrintInvoice(printInvoicePayload);
-          setPaymentState(directImmediate ? 'idle' : 'success');
+          setPaymentState('idle');
           toast.success(`Thanh toán thành công đơn hàng ${code}!`);
+          if (tabs.length > 1) {
+            closeTab(activeTabId);
+          } else {
+            clearCart();
+          }
+          setVoucherError('');
+          setIsPaymentOpen(false);
+          setCurrentOrderCode('');
           if (withPrint) {
             setIsPrintInvoiceOpen(true);
-          }
-          if (directImmediate) {
-            if (tabs.length > 1) {
-              closeTab(activeTabId);
-            } else {
-              clearCart();
-            }
-            setVoucherError('');
-            setIsPaymentOpen(false);
-            setCurrentOrderCode('');
           }
         } catch (err: any) {
           console.error('Lỗi khi thực hiện lưu đơn hàng POS:', err);
@@ -2163,6 +2161,19 @@ export function PosTerminalPage() {
             <Printer className="w-3.5 h-3.5" />
             <span>Tạm tính (F7)</span>
           </button>
+
+          {/* In lại hóa đơn vừa mua */}
+          {completedPrintInvoice && (
+            <button
+              type="button"
+              onClick={() => setIsPrintInvoiceOpen(true)}
+              className="py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 transition-all cursor-pointer shadow-xs shrink-0"
+              title={`In lại hóa đơn vừa hoàn thành: ${completedPrintInvoice.code}`}
+            >
+              <Printer className="w-3.5 h-3.5 text-emerald-600" />
+              <span>In lại HĐ</span>
+            </button>
+          )}
 
           {/* Xóa giỏ */}
           <button

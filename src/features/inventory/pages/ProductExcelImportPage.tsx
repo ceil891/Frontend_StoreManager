@@ -252,24 +252,91 @@ export function ProductExcelImportPage() {
 
     const branchIdNum = Number(selectedBranchId || '1');
 
+    // 1. Auto-create missing categories
+    const categoryMap = new Map<string, number>();
+    categories.forEach((c) => {
+      if (c.categoryName) categoryMap.set(c.categoryName.trim().toLowerCase(), Number(c.id));
+      if (c.code) categoryMap.set(c.code.trim().toLowerCase(), Number(c.id));
+    });
+
+    const missingCategoryNames = new Set<string>();
+    validRows.forEach((row) => {
+      const cName = (row.categoryName || '').trim();
+      if (cName && !categoryMap.has(cName.toLowerCase())) {
+        missingCategoryNames.add(cName);
+      }
+    });
+
+    for (const catName of missingCategoryNames) {
+      try {
+        const genCatCode = 'CAT-' + catName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) + '-' + Math.floor(100 + Math.random() * 900);
+        const createdCat: any = await axiosClient.post('/categories', {
+          categoryCode: genCatCode,
+          categoryName: catName,
+          description: 'Tự động tạo từ Excel Import',
+          isActive: true,
+        });
+        const newCatId = createdCat?.data?.id || createdCat?.id;
+        if (newCatId) {
+          categoryMap.set(catName.toLowerCase(), Number(newCatId));
+        }
+      } catch (e) {
+        console.warn('Could not auto-create category:', catName, e);
+      }
+    }
+
+    // 2. Auto-create missing units (base and conversion)
+    const unitMap = new Map<string, number>();
+    unitsList.forEach((u) => {
+      if (u.unitName) unitMap.set(u.unitName.trim().toLowerCase(), Number(u.id));
+      if (u.code) unitMap.set(u.code.trim().toLowerCase(), Number(u.id));
+    });
+
+    const missingUnitNames = new Set<string>();
+    validRows.forEach((row) => {
+      const bUnit = (row.baseUnitName || '').trim();
+      if (bUnit && !unitMap.has(bUnit.toLowerCase())) {
+        missingUnitNames.add(bUnit);
+      }
+      (row.conversionUnits || []).forEach((cu) => {
+        const cuName = (cu.unitName || '').trim();
+        if (cuName && !unitMap.has(cuName.toLowerCase())) {
+          missingUnitNames.add(cuName);
+        }
+      });
+    });
+
+    for (const uName of missingUnitNames) {
+      try {
+        const genUnitCode = 'UNT-' + uName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) + '-' + Math.floor(100 + Math.random() * 900);
+        const createdUnit: any = await axiosClient.post('/units', {
+          unitCode: genUnitCode,
+          unitName: uName,
+          description: 'Tự động tạo từ Excel Import',
+          isActive: true,
+          unitType: 'QUANTITY',
+          conversionFactor: 1,
+        });
+        const newUnitId = createdUnit?.data?.id || createdUnit?.id;
+        if (newUnitId) {
+          unitMap.set(uName.toLowerCase(), Number(newUnitId));
+        }
+      } catch (e) {
+        console.warn('Could not auto-create unit:', uName, e);
+      }
+    }
+
     const payloadRequests = validRows.map((row) => {
       // Map conversion units
       const mappedConversionUnits = (row.conversionUnits || [])
         .map((u) => {
           let uId = u.unitId;
-          if (!uId || isNaN(Number(uId))) {
-            const rawUName = (u.unitName || '').trim().toLowerCase();
-            const matched = unitsList.find(
-              (item) =>
-                (item.unitName || '').trim().toLowerCase() === rawUName ||
-                (item.code && (item.code || '').trim().toLowerCase() === rawUName)
-            );
-            if (matched && !isNaN(Number(matched.id))) {
-              uId = Number(matched.id);
-            } else {
-              const firstValid = unitsList.find((item) => !isNaN(Number(item.id)));
-              uId = firstValid ? Number(firstValid.id) : 1;
-            }
+          const rawUName = (u.unitName || '').trim().toLowerCase();
+          if (unitMap.has(rawUName)) {
+            uId = unitMap.get(rawUName);
+          } else if (!uId || isNaN(Number(uId))) {
+            const firstValid = unitsList.find((item) => !isNaN(Number(item.id)));
+            uId = firstValid ? Number(firstValid.id) : 1;
           } else {
             uId = Number(uId);
           }
@@ -288,37 +355,23 @@ export function ProductExcelImportPage() {
           : [];
 
       let finalBaseUnitId = row.resolvedBaseUnitId;
-      if (!finalBaseUnitId || isNaN(Number(finalBaseUnitId))) {
-        const rawBase = (row.baseUnitName || '').trim().toLowerCase();
-        const matched = unitsList.find(
-          (item) =>
-            (item.unitName || '').trim().toLowerCase() === rawBase ||
-            (item.code && (item.code || '').trim().toLowerCase() === rawBase)
-        );
-        if (matched && !isNaN(Number(matched.id))) {
-          finalBaseUnitId = Number(matched.id);
-        } else {
-          const firstValid = unitsList.find((item) => !isNaN(Number(item.id)));
-          finalBaseUnitId = firstValid ? Number(firstValid.id) : 1;
-        }
+      const rawBase = (row.baseUnitName || '').trim().toLowerCase();
+      if (unitMap.has(rawBase)) {
+        finalBaseUnitId = unitMap.get(rawBase);
+      } else if (!finalBaseUnitId || isNaN(Number(finalBaseUnitId))) {
+        const firstValid = unitsList.find((item) => !isNaN(Number(item.id)));
+        finalBaseUnitId = firstValid ? Number(firstValid.id) : 1;
       } else {
         finalBaseUnitId = Number(finalBaseUnitId);
       }
 
       let finalCatId = row.resolvedCategoryId;
-      if (!finalCatId || isNaN(Number(finalCatId))) {
-        const rawCat = (row.categoryName || '').trim().toLowerCase();
-        const matchedCat = categories.find(
-          (c) =>
-            (c.categoryName || '').trim().toLowerCase() === rawCat ||
-            (c.code && (c.code || '').trim().toLowerCase() === rawCat)
-        );
-        if (matchedCat && !isNaN(Number(matchedCat.id))) {
-          finalCatId = Number(matchedCat.id);
-        } else {
-          const firstCat = categories.find((c) => !isNaN(Number(c.id)));
-          finalCatId = firstCat ? Number(firstCat.id) : 1;
-        }
+      const rawCat = (row.categoryName || '').trim().toLowerCase();
+      if (categoryMap.has(rawCat)) {
+        finalCatId = categoryMap.get(rawCat);
+      } else if (!finalCatId || isNaN(Number(finalCatId))) {
+        const firstCat = categories.find((c) => !isNaN(Number(c.id)));
+        finalCatId = firstCat ? Number(firstCat.id) : 1;
       } else {
         finalCatId = Number(finalCatId);
       }

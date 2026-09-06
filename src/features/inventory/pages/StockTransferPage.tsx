@@ -153,13 +153,13 @@ export function StockTransferPage() {
     return `STX-2026-${count}`;
   };
 
-  const getAvailableStockForBranch = (productIdentifier: string, sourceBranchName?: string): number => {
+  const getAvailableStockForBranch = (productIdentifier: string | number, sourceBranchName?: string): number => {
     if (!productIdentifier) return 0;
     const targetProduct = products.find(
       (p) =>
         String(p.id) === String(productIdentifier) ||
-        p.name === productIdentifier ||
-        p.sku === productIdentifier
+        p.name === String(productIdentifier) ||
+        p.sku === String(productIdentifier)
     );
     if (!targetProduct) return 0;
     if (!sourceBranchName) return targetProduct.onHand ?? 0;
@@ -176,6 +176,24 @@ export function StockTransferPage() {
       );
     });
 
+    const bId = targetBranch ? String(targetBranch.id) : '';
+
+    // 1. Check branchStocks map (loaded directly from /inventories/balances)
+    if (bId && targetProduct.branchStocks && targetProduct.branchStocks[bId] !== undefined) {
+      return targetProduct.branchStocks[bId];
+    }
+
+    // 2. Check branchStockDetails
+    if (targetProduct.branchStockDetails && targetProduct.branchStockDetails.length > 0) {
+      const detail = targetProduct.branchStockDetails.find(
+        (d) => (bId && String(d.branchId) === bId) || (d.branchName && d.branchName.toLowerCase().trim() === cleanSource)
+      );
+      if (detail) {
+        return detail.available ?? detail.quantity ?? 0;
+      }
+    }
+
+    // 3. Check inventories table
     if (inventories && inventories.length > 0) {
       const match = inventories.find((inv) => {
         const pMatch =
@@ -183,7 +201,7 @@ export function StockTransferPage() {
           (inv.productCode && inv.productCode === targetProduct.sku) ||
           inv.productName === targetProduct.name;
         if (!pMatch) return false;
-        if (targetBranch && String(inv.branchId) === String(targetBranch.id)) return true;
+        if (bId && String(inv.branchId) === bId) return true;
         const invBranch = (inv.branchName || '').toLowerCase().trim();
         if (invBranch === cleanSource) return true;
         if (targetBranch && invBranch === (targetBranch.name || '').toLowerCase().trim()) return true;
@@ -193,6 +211,12 @@ export function StockTransferPage() {
         return match.quantityAvailable ?? match.quantityOnHand ?? 0;
       }
     }
+
+    // 4. If product has branchStocks map with other branches, but not this branch:
+    if (targetProduct.branchStocks && Object.keys(targetProduct.branchStocks).length > 0) {
+      return targetProduct.branchStocks[bId] || 0;
+    }
+
     return targetProduct.onHand ?? 0;
   };
 
@@ -366,8 +390,11 @@ export function StockTransferPage() {
   };
 
   const handleAddLineItem = () => {
-    const firstProduct = products.length > 0 ? products[0] : null;
+    const inStockProduct = products.find((p) => getAvailableStockForBranch(p.id, editingHeader.sourceHub) > 0);
+    const firstProduct = inStockProduct || (products.length > 0 ? products[0] : null);
     const available = firstProduct ? getAvailableStockForBranch(firstProduct.id, editingHeader.sourceHub) : 0;
+    const defaultQty = available > 0 ? Math.min(10, available) : 1;
+    const price = firstProduct ? (firstProduct.costPrice || firstProduct.price || 50000) : 50000;
     const newLine: StockTransferItem = {
       id: `line-${Date.now()}`,
       productName: firstProduct ? firstProduct.name : 'Sản phẩm mới',
@@ -376,11 +403,11 @@ export function StockTransferPage() {
         : 'Phiên bản chuẩn',
       sku: firstProduct ? firstProduct.sku : `SKU-TR-${Math.floor(100 + Math.random() * 900)}`,
       availableQuantity: available,
-      requestedQuantity: 10,
-      quantity: Math.min(10, available > 0 ? available : 10),
+      requestedQuantity: defaultQty,
+      quantity: defaultQty,
       receivedQuantity: 0,
-      unitPrice: firstProduct ? (firstProduct.costPrice || firstProduct.price || 50000) : 50000,
-      amount: firstProduct ? (firstProduct.costPrice || firstProduct.price || 50000) * 10 : 500000,
+      unitPrice: price,
+      amount: price * defaultQty,
     };
     setEditingLines((prev) => [...prev, newLine]);
   };
@@ -600,7 +627,18 @@ export function StockTransferPage() {
       {
         accessorKey: 'totalValuation',
         header: 'Tổng giá trị',
-        cell: (info) => <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold text-sm">{formatCurrency(info.getValue() as number)}</span>,
+        cell: ({ row }) => {
+          const val = row.original.totalValuation;
+          if (val && Number(val) > 0) {
+            return <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold text-sm">{formatCurrency(Number(val))}</span>;
+          }
+          const itemsTotal = (row.original.items || []).reduce(
+            (acc, it) => acc + (Number(it.amount) || Number(it.quantity || 0) * Number(it.unitPrice || 50000)),
+            0
+          );
+          const fallback = itemsTotal > 0 ? itemsTotal : (Number(row.original.totalUnits) || 1) * 50000;
+          return <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold text-sm">{formatCurrency(fallback)}</span>;
+        },
       },
       {
         accessorKey: 'status',
@@ -1053,26 +1091,22 @@ export function StockTransferPage() {
               </div>
 
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Người lập phiếu *</label>
-                <input
-                  type="text"
-                  list="transfer-users-list"
-                  value={editingHeader.requestedBy || ''}
-                  onChange={(e) => setEditingHeader({ ...editingHeader, requestedBy: e.target.value })}
-                  placeholder="Nhập hoặc chọn người lập phiếu..."
-                  required
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
-                />
-                <datalist id="transfer-users-list">
-                  {users.map((u) => (
-                    <option key={u.id} value={u.fullName || u.emailAddress}>
-                      {u.fullName || u.emailAddress} ({u.assignedRole || 'Thủ kho'})
-                    </option>
-                  ))}
-                  <option value="Nguyễn Văn Hưng (Thủ kho)">Nguyễn Văn Hưng (Thủ kho)</option>
-                  <option value="Lưu Hữu Phước (Quản lý kho)">Lưu Hữu Phước (Quản lý kho)</option>
-                  <option value="Trần Thị Mai (Kế toán kho)">Trần Thị Mai (Kế toán kho)</option>
-                </datalist>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1 flex items-center justify-between">
+                  <span>Người lập phiếu *</span>
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-0.5 font-medium">
+                    <Lock className="w-2.5 h-2.5" /> Khóa cố định theo tài khoản
+                  </span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={currentUser?.name || currentUser?.fullName || editingHeader.requestedBy || 'System Admin'}
+                    readOnly
+                    disabled
+                    className="w-full p-2 bg-gray-100 dark:bg-gray-900/80 border border-gray-300 dark:border-gray-700 rounded-lg font-medium text-gray-700 dark:text-gray-300 cursor-not-allowed pl-8"
+                  />
+                  <Lock className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
+                </div>
               </div>
             </div>
 
@@ -1105,6 +1139,12 @@ export function StockTransferPage() {
                       destinationHub: newDest,
                       toBranchId: destObj ? Number(destObj.id) : undefined,
                     });
+                    setEditingLines((prev) =>
+                      prev.map((l) => ({
+                        ...l,
+                        availableQuantity: getAvailableStockForBranch(l.productName, newSource),
+                      }))
+                    );
                   }}
                   className={`w-full p-2 rounded-lg font-bold text-gray-900 dark:text-white ${
                     isLinkedToRequest
@@ -1247,12 +1287,21 @@ export function StockTransferPage() {
                             onChange={(e) => handleSelectProductForLine(idx, e.target.value)}
                             className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-bold text-gray-900 dark:text-white"
                           >
-                            <option value="">-- Chọn sản phẩm --</option>
-                            {products.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name} ({p.sku})
-                              </option>
-                            ))}
+                            <option value="">-- Chọn sản phẩm ({products.length} sp) --</option>
+                            {[...products]
+                              .sort((a, b) => {
+                                const stockA = getAvailableStockForBranch(a.id, editingHeader.sourceHub);
+                                const stockB = getAvailableStockForBranch(b.id, editingHeader.sourceHub);
+                                return stockB - stockA;
+                              })
+                              .map((p) => {
+                                const avail = getAvailableStockForBranch(p.id, editingHeader.sourceHub);
+                                return (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name} ({p.sku}) — Tồn: {avail} {p.unit || 'sp'}
+                                  </option>
+                                );
+                              })}
                           </select>
                         ) : (
                           <input
@@ -1311,7 +1360,8 @@ export function StockTransferPage() {
                         <div>
                           <input
                             type="number"
-                            min={1}
+                            min={0.01}
+                            step="any"
                             value={line.quantity}
                             onChange={(e) => handleUpdateLine(idx, 'quantity', parseFloat(e.target.value) || 0)}
                             className={`w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-mono font-bold text-right ${
@@ -1328,7 +1378,7 @@ export function StockTransferPage() {
                         <input
                           type="number"
                           min={0}
-                          step={1000}
+                          step="any"
                           value={line.unitPrice}
                           onChange={(e) => handleUpdateLine(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
                           className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-mono text-right"

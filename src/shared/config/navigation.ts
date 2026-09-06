@@ -107,8 +107,6 @@ export const NAV_GROUPS: NavGroup[] = [
     group: 'Kế toán & tài chính',
     items: [
       { name: 'Phiếu thu / chi', href: '/finance/vouchers', icon: DollarSign, permission: 'finance:receipt:view' },
-      { name: 'Sổ nhật ký & COA', href: '/finance/accounting', icon: BookOpen, permission: 'finance:accounting:view' },
-      { name: 'Tài sản cố định', href: '/finance/fixed-assets', icon: FileSpreadsheet, permission: 'finance:asset:view' },
       { name: 'Sổ nợ & công nợ', href: '/finance/debts', icon: Activity, permission: 'finance:debt:view' },
       { name: 'Ngân hàng & quỹ tiền', href: '/finance/fund-cash', icon: CreditCard, permission: 'finance:bank:view' },
     ],
@@ -121,7 +119,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { name: 'Mã giảm giá & voucher', href: '/crm/vouchers', icon: Percent, permission: 'crm:voucher:view' },
       { name: 'Quản lý bảo hành', href: '/crm/warranties', icon: Shield, permission: 'crm:warranty:view' },
       { name: 'Chăm sóc & hỗ trợ', href: '/crm/support', icon: LifeBuoy, permission: 'crm:ticket:view' },
-      { name: 'Chiến dịch marketing', href: '/crm/campaigns', icon: BarChart2, permission: 'crm:campaign:view' },
     ],
   },
   {

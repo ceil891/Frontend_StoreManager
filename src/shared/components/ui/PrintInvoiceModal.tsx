@@ -53,6 +53,7 @@ export function PrintInvoiceModal({ isOpen, onClose, data }: PrintInvoiceModalPr
       onClose={onClose}
       title={`Xem bản in: ${data.code}`}
       width="max-w-4xl"
+      zIndex="z-[80]"
     >
       <div className="space-y-6 text-gray-900 dark:text-gray-100">
         {/* Actions Bar (Screen only) */}

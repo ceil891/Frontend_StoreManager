@@ -1,7 +1,7 @@
 import { Modal } from '@/shared/components/ui/Modal';
 import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Calendar, MapPin, Truck, CheckCircle, Package, ArrowRight, DollarSign, UserCheck, ShieldAlert, Phone } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, Calendar, MapPin, Truck, CheckCircle, Package, ArrowRight, DollarSign, UserCheck, ShieldAlert, Phone, Zap } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import { axiosClient } from '@/shared/lib/axiosClient';
@@ -9,6 +9,24 @@ import { useSalesStore, formatMoney } from '@/features/sales/store/salesStore';
 import { useCrmStore } from '@/features/crm/store/crmStore';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+
+export interface ApiShipper {
+  id: number | string;
+  shipperCode: string;
+  fullName: string;
+  phone?: string;
+  licensePlate?: string;
+  vehicleType?: string;
+}
+
+export interface ApiCarrier {
+  id: number | string;
+  carrierCode: string;
+  carrierName: string;
+  trackingUrlFormat?: string;
+  website?: string;
+  phone?: string;
+}
 
 export interface DeliveryRecord {
   id: string;
@@ -44,15 +62,41 @@ export function DeliveryListsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [selected, setSelected] = useState<DeliveryRecord | null>(null);
   
+  const [shippers, setShippers] = useState<ApiShipper[]>([]);
+  const [carriers, setCarriers] = useState<ApiCarrier[]>([]);
+  const [isSyncingCarrierApi, setIsSyncingCarrierApi] = useState(false);
+  const [apiSyncedMessage, setApiSyncedMessage] = useState<string | null>(null);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingItem, setEditingItem] = useState<Partial<DeliveryRecord>>({});
   const [deletingItem, setDeletingItem] = useState<DeliveryRecord | null>(null);
 
+  const fetchCarriersAndShippers = async () => {
+    try {
+      const [carriersRes, shippersRes] = await Promise.allSettled([
+        axiosClient.get<any, any>('/logistics/carriers'),
+        axiosClient.get<any, any>('/logistics/shippers'),
+      ]);
+      if (carriersRes.status === 'fulfilled') {
+        const raw = carriersRes.value;
+        const list = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : []);
+        if (list.length > 0) setCarriers(list);
+      }
+      if (shippersRes.status === 'fulfilled') {
+        const raw = shippersRes.value;
+        const list = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : []);
+        if (list.length > 0) setShippers(list);
+      }
+    } catch (e) {
+      console.warn('Lỗi khi tải danh sách ĐVVC và Shipper từ API:', e);
+    }
+  };
+
   const fetchTrips = async () => {
     setIsLoading(true);
     try {
-      await Promise.all([fetchSaleOrders(), fetchCustomers()]);
+      await Promise.all([fetchSaleOrders(), fetchCustomers(), fetchCarriersAndShippers()]);
       const res = await axiosClient.get<any, any[]>('/logistics/trips');
       const mapped = (Array.isArray(res) ? res : []).map((t: any) => ({
         id: String(t.id),
@@ -90,6 +134,7 @@ export function DeliveryListsPage() {
 
   useEffect(() => {
     fetchTrips();
+    fetchCarriersAndShippers();
   }, []);
 
   const filtered = useMemo(() => {
@@ -110,6 +155,7 @@ export function DeliveryListsPage() {
 
   const handleOpenCreate = () => {
     setModalMode('create');
+    setApiSyncedMessage(null);
     const today = new Date().toISOString().split('T')[0];
     const expected = new Date(Date.now() + 2 * 84600000).toISOString().split('T')[0];
 
@@ -118,16 +164,20 @@ export function DeliveryListsPage() {
     const paidAmt = firstOrder ? (firstOrder.paymentStatus === 'PAID' ? totalAmt : 300000) : 300000;
     const computedCod = Math.max(0, totalAmt - paidAmt);
 
+    const initialCarrier = carriers[0]?.carrierName || 'Giao Hàng Tiết Kiệm (GHTK)';
+    const isInternal = initialCarrier.toLowerCase().includes('nội bộ');
+    const firstShipper = shippers[0];
+
     setEditingItem({
       waybillCode: `VD-${new Date().getFullYear()}${(new Date().getMonth()+1).toString().padStart(2,'0')}${new Date().getDate().toString().padStart(2,'0')}-${Math.floor(1000 + Math.random() * 9000)}`,
-      carrierTrackingCode: 'GHTK' + Math.floor(100000000 + Math.random() * 900000000),
+      carrierTrackingCode: '',
       orderCode: firstOrder ? firstOrder.code : 'SO-2026-0001',
       customerName: firstOrder ? (firstOrder.customerName || 'Khách hàng') : 'Công ty ABC',
       customerPhone: firstOrder ? (firstOrder.customerPhone || '0908888999') : '0908888999',
       shippingAddress: firstOrder ? (firstOrder.shippingAddress || '123 Nguyễn Huệ, Q.1, TP.HCM') : '123 Nguyễn Huệ, Q.1, TP.HCM',
-      carrierName: 'Giao Hàng Tiết Kiệm (GHTK)',
-      shipperName: 'Nguyễn Văn A (Shipper GHTK)',
-      shipperPhone: '0909123456',
+      carrierName: initialCarrier,
+      shipperName: isInternal ? (firstShipper?.fullName || '') : '',
+      shipperPhone: isInternal ? (firstShipper?.phone || '') : '',
       weightKg: 2.5,
       packageCount: 2,
       totalAmount: totalAmt,
@@ -143,8 +193,42 @@ export function DeliveryListsPage() {
 
   const handleOpenEdit = (item: DeliveryRecord) => {
     setModalMode('edit');
+    setApiSyncedMessage(null);
     setEditingItem(item);
     setIsModalOpen(true);
+  };
+
+  const handleDispatchCarrierApi = async () => {
+    setIsSyncingCarrierApi(true);
+    try {
+      const res: any = await axiosClient.post('/logistics/carriers/dispatch-api', {
+        orderCode: editingItem.orderCode,
+        carrierName: editingItem.carrierName || 'Giao Hàng Tiết Kiệm (GHTK)',
+        receiverName: editingItem.customerName,
+        receiverPhone: editingItem.customerPhone,
+        shippingAddress: editingItem.shippingAddress,
+        weightKg: editingItem.weightKg || 1.5,
+        codAmount: editingItem.codAmount || 0,
+      });
+      const data = res?.data || res;
+      if (data) {
+        setEditingItem((prev) => ({
+          ...prev,
+          carrierTrackingCode: data.carrierTrackingCode || prev.carrierTrackingCode,
+          shipperName: data.shipperName || prev.shipperName,
+          shipperPhone: data.shipperPhone || prev.shipperPhone,
+          status: 'DANG_VAN_CHUYEN',
+          expectedDeliveryDate: data.estimatedDeliveryDate || prev.expectedDeliveryDate,
+        }));
+        setApiSyncedMessage(data.apiMessage || `Đã kết nối API ${editingItem.carrierName} thành công!`);
+        toast.success(`Đã kết nối API ${editingItem.carrierName}! Mã vận đơn: ${data.carrierTrackingCode}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Lỗi khi kết nối API ĐVVC: ' + (err?.response?.data?.message || err?.message || 'Thất bại'));
+    } finally {
+      setIsSyncingCarrierApi(false);
+    }
   };
 
   const handleCalculateCod = (total: number, paid: number) => {
@@ -168,6 +252,9 @@ export function DeliveryListsPage() {
       const matchedOrder = saleOrders.find(
         (so) => so.code === editingItem.orderCode || `SO-${so.id}` === editingItem.orderCode
       );
+      const matchedShipper = shippers.find(
+        (s) => s.fullName === editingItem.shipperName
+      );
 
       if (modalMode === 'create') {
         await axiosClient.post('/logistics/trips', {
@@ -178,6 +265,7 @@ export function DeliveryListsPage() {
           receiverPhone: editingItem.customerPhone || '',
           deliveryNote: editingItem.notes || '',
           orderId: matchedOrder ? Number(matchedOrder.id) : null,
+          shipperId: matchedShipper ? Number(matchedShipper.id) : null,
         });
         toast.success(`Đã tạo Vận đơn giao hàng ${editingItem.waybillCode} thành công!`);
       } else if (editingItem.id) {
@@ -188,6 +276,7 @@ export function DeliveryListsPage() {
           receiverPhone: editingItem.customerPhone,
           deliveryNote: editingItem.notes,
           orderId: matchedOrder ? Number(matchedOrder.id) : undefined,
+          shipperId: matchedShipper ? Number(matchedShipper.id) : undefined,
         });
         toast.success(`Đã cập nhật Vận đơn ${editingItem.waybillCode}!`);
       }
@@ -437,14 +526,19 @@ export function DeliveryListsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  Mã vận đơn của ĐVVC (Tracking Code)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    Mã vận đơn của ĐVVC (Tracking Code)
+                  </label>
+                  {!editingItem.carrierName?.toLowerCase().includes('nội bộ') && (
+                    <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold">API Partner</span>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={editingItem.carrierTrackingCode || ''}
                   onChange={(e) => setEditingItem({ ...editingItem, carrierTrackingCode: e.target.value })}
-                  placeholder="GHTK123456789 (Nếu dùng ĐVVC ngoài)"
+                  placeholder="Bấm 'Kết nối API ĐVVC' hoặc nhập..."
                   className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg font-mono text-purple-600 font-bold"
                 />
               </div>
@@ -536,43 +630,141 @@ export function DeliveryListsPage() {
               </div>
             </div>
 
-            {/* Carrier & Shipper */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border border-blue-200 dark:border-blue-900 bg-blue-50/20 p-4 rounded-xl">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Đơn vị vận chuyển *</label>
-                <select
-                  value={editingItem.carrierName || 'Giao Hàng Tiết Kiệm (GHTK)'}
-                  onChange={(e) => setEditingItem({ ...editingItem, carrierName: e.target.value })}
-                  className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg font-bold text-blue-600"
-                >
-                  <option value="Giao Hàng Tiết Kiệm (GHTK)">Giao Hàng Tiết Kiệm (GHTK)</option>
-                  <option value="Giao Hàng Nhanh (GHN)">Giao Hàng Nhanh (GHN)</option>
-                  <option value="Viettel Post">Viettel Post</option>
-                  <option value="Shopee Express (SPX)">Shopee Express (SPX)</option>
-                  <option value="Vận chuyển nội bộ">Vận chuyển nội bộ (Shipper riêng)</option>
-                </select>
+            {/* Carrier & Shipper with API integration */}
+            <div className="border border-blue-200 dark:border-blue-900 bg-blue-50/20 p-4 rounded-xl space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-blue-100 dark:border-blue-800/40 pb-2.5">
+                <div>
+                  <span className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wide flex items-center gap-1.5">
+                    <Truck className="w-4 h-4 text-blue-600" />
+                    Đơn vị vận chuyển & API Giao hàng
+                  </span>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Tích hợp API đối tác giao hàng tự động sinh mã vận đơn và phân công shipper
+                  </p>
+                </div>
+                {!editingItem.carrierName?.toLowerCase().includes('nội bộ') && (
+                  <button
+                    type="button"
+                    disabled={isSyncingCarrierApi}
+                    onClick={handleDispatchCarrierApi}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg text-xs font-bold shadow-sm hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 cursor-pointer transition-all shrink-0"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
+                    {isSyncingCarrierApi ? 'Đang gọi API ĐVVC...' : `⚡ Kết nối API ${editingItem.carrierName?.split(' ')[0] || 'ĐVVC'}`}
+                  </button>
+                )}
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Tên nhân viên giao hàng</label>
-                <input
-                  type="text"
-                  value={editingItem.shipperName || ''}
-                  onChange={(e) => setEditingItem({ ...editingItem, shipperName: e.target.value })}
-                  placeholder="Họ tên nhân viên giao hàng..."
-                  className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg"
-                />
-              </div>
+              {apiSyncedMessage && (
+                <div className="flex items-center gap-2 p-2.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs text-emerald-800 dark:text-emerald-300 font-medium">
+                  <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{apiSyncedMessage}</span>
+                </div>
+              )}
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">SĐT nhân viên giao hàng</label>
-                <input
-                  type="text"
-                  value={editingItem.shipperPhone || ''}
-                  onChange={(e) => setEditingItem({ ...editingItem, shipperPhone: e.target.value })}
-                  placeholder="09xx..."
-                  className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Đơn vị vận chuyển *
+                  </label>
+                  <select
+                    value={editingItem.carrierName || 'Giao Hàng Tiết Kiệm (GHTK)'}
+                    onChange={(e) => {
+                      const newCarrier = e.target.value;
+                      setApiSyncedMessage(null);
+                      const isInternal = newCarrier.toLowerCase().includes('nội bộ');
+                      if (isInternal) {
+                        const firstShipper = shippers[0];
+                        setEditingItem({
+                          ...editingItem,
+                          carrierName: newCarrier,
+                          shipperName: firstShipper?.fullName || '',
+                          shipperPhone: firstShipper?.phone || '',
+                          carrierTrackingCode: '',
+                        });
+                      } else {
+                        setEditingItem({
+                          ...editingItem,
+                          carrierName: newCarrier,
+                          shipperName: '',
+                          shipperPhone: '',
+                          carrierTrackingCode: '',
+                        });
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg font-bold text-blue-600"
+                  >
+                    {carriers.map((c) => (
+                      <option key={c.id || c.carrierCode} value={c.carrierName}>
+                        {c.carrierName} {c.carrierCode === 'INTERNAL' ? '(Shipper nội bộ)' : '(Tích hợp API)'}
+                      </option>
+                    ))}
+                    {carriers.length === 0 && (
+                      <>
+                        <option value="Giao Hàng Tiết Kiệm (GHTK)">Giao Hàng Tiết Kiệm (GHTK) (Tích hợp API)</option>
+                        <option value="Giao Hàng Nhanh (GHN)">Giao Hàng Nhanh (GHN) (Tích hợp API)</option>
+                        <option value="Viettel Post">Viettel Post (Tích hợp API)</option>
+                        <option value="Shopee Express (SPX)">Shopee Express (SPX) (Tích hợp API)</option>
+                        <option value="Vận chuyển nội bộ">Vận chuyển nội bộ (Shipper riêng)</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Tên nhân viên giao hàng
+                    {editingItem.carrierName?.toLowerCase().includes('nội bộ') ? (
+                      <span className="text-emerald-600 font-normal ml-1">(Từ API Shippers)</span>
+                    ) : (
+                      <span className="text-purple-600 font-normal ml-1">(Từ API ĐVVC)</span>
+                    )}
+                  </label>
+                  {editingItem.carrierName?.toLowerCase().includes('nội bộ') ? (
+                    <select
+                      value={editingItem.shipperName || ''}
+                      onChange={(e) => {
+                        const selectedShipper = shippers.find((s) => s.fullName === e.target.value);
+                        setEditingItem({
+                          ...editingItem,
+                          shipperName: e.target.value,
+                          shipperPhone: selectedShipper?.phone || editingItem.shipperPhone,
+                        });
+                      }}
+                      className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg font-medium text-emerald-700 dark:text-emerald-400"
+                    >
+                      <option value="">-- Chọn shipper từ API ({shippers.length} nhân viên) --</option>
+                      {shippers.map((s) => (
+                        <option key={s.id} value={s.fullName}>
+                          {s.fullName} - {s.phone || 'N/A'} ({s.vehicleType || 'Xe máy'})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={editingItem.shipperName || ''}
+                        onChange={(e) => setEditingItem({ ...editingItem, shipperName: e.target.value })}
+                        placeholder="Bấm 'Kết nối API ĐVVC' ở trên để nhận Shipper..."
+                        className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    SĐT nhân viên giao hàng
+                  </label>
+                  <input
+                    type="text"
+                    value={editingItem.shipperPhone || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, shipperPhone: e.target.value })}
+                    placeholder="SĐT shipper từ API..."
+                    className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg"
+                  />
+                </div>
               </div>
             </div>
 

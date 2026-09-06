@@ -66,10 +66,17 @@ export function WarehouseAreasPage() {
   // Hierarchical Filtered Options for Form
   const filteredZones = useMemo(() => {
     if (!editingItem.branchId) return warehouseZones;
-    // Find branch code/name to filter
-    const selectedBranch = branches.find(b => String(b.id) === editingItem.branchId);
+    const selectedBranch = branches.find(b => String(b.id) === String(editingItem.branchId));
     if (!selectedBranch) return warehouseZones;
-    return warehouseZones.filter(z => z.branchName === selectedBranch.name);
+    const list = warehouseZones.filter(z =>
+      (z.branchId && String(z.branchId) === String(selectedBranch.id)) ||
+      (z.branchName && (
+        z.branchName.toLowerCase() === selectedBranch.name.toLowerCase() ||
+        selectedBranch.name.toLowerCase().includes(z.branchName.toLowerCase()) ||
+        z.branchName.toLowerCase().includes(selectedBranch.name.toLowerCase())
+      ))
+    );
+    return list.length > 0 ? list : warehouseZones;
   }, [editingItem.branchId, warehouseZones, branches]);
 
   const filteredAreas = useMemo(() => {
@@ -93,7 +100,7 @@ export function WarehouseAreasPage() {
       return;
     }
     const isDuplicate = racks.some(
-      (r) => r.rackCode.toLowerCase() === code.toLowerCase() && r.id !== editingItem.id
+      (r) => r.rackCode.toLowerCase() === code.toLowerCase() && String(r.id) !== String(editingItem.id ?? '')
     );
     setCodeStatus(isDuplicate ? 'duplicate' : 'valid');
   }, [editingItem.rackCode, racks, editingItem.id]);
@@ -160,26 +167,54 @@ export function WarehouseAreasPage() {
 
   const handleOpenEdit = (item: RackRecord) => {
     setModalMode('edit');
-    // Map existing properties and default mock values
-    const zone = warehouseZones.find(z => z.zoneCode === item.zoneCode);
-    const branch = branches.find(b => b.name === item.branchName);
-    const area = areas.find(a => a.areaCode === item.areaCode || a.areaName === item.areaName);
+    // Map existing properties and preserve saved values
+    const area = areas.find(a => String(a.id) === String(item.areaId) || a.areaCode === item.areaCode || a.areaName === item.areaName);
     const resolvedAreaId = item.areaId || (area ? String(area.id) : (areas[0]?.id ? String(areas[0].id) : '2'));
-    
+    const matchedArea = area || areas.find(a => String(a.id) === String(resolvedAreaId));
+
+    const zone = warehouseZones.find(z =>
+      (item.zoneId && String(z.id) === String(item.zoneId)) ||
+      (item.zoneCode && z.zoneCode === item.zoneCode) ||
+      (matchedArea?.zoneId && String(z.id) === String(matchedArea.zoneId)) ||
+      (matchedArea?.zoneCode && z.zoneCode === matchedArea.zoneCode)
+    );
+
+    const branch = branches.find(b =>
+      (item.branchId && String(b.id) === String(item.branchId)) ||
+      (item.branchName && (b.name === item.branchName || (b as any).branchName === item.branchName)) ||
+      (zone?.branchId && String(b.id) === String(zone.branchId)) ||
+      (matchedArea?.branchId && String(b.id) === String(matchedArea.branchId))
+    );
+
+    const resolvedZoneId = zone ? String(zone.id) : (item.zoneId || (matchedArea?.zoneId ? String(matchedArea.zoneId) : ''));
+    const resolvedBranchId = branch ? String(branch.id) : (item.branchId || (matchedArea?.branchId ? String(matchedArea.branchId) : ''));
+
+    // Inherit geographic location if not set on the rack
+    const province = item.province || matchedArea?.province || '';
+    const district = item.district || matchedArea?.district || '';
+    const ward = item.ward || matchedArea?.ward || '';
+    const addressDetail = item.addressDetail || matchedArea?.addressDetail || '';
+
     setEditingItem({
       ...item,
       areaId: resolvedAreaId,
-      branchId: branch ? String(branch.id) : (item.branchId || ''),
-      zoneId: zone ? String(zone.id) : (item.zoneId || ''),
-      heightM: 3.5,
-      levels: 4,
-      baysPerLevel: 6,
-      statusConfig: item.isActive !== false ? 'ACTIVE' : 'LOCKED',
-      allowFood: true,
-      allowCosmetics: true,
-      allowElectronics: true,
-      allowChemicals: false,
-      allowHazmat: false,
+      branchId: resolvedBranchId,
+      zoneId: resolvedZoneId,
+      zoneCode: zone?.zoneCode || item.zoneCode || matchedArea?.zoneCode,
+      branchName: branch?.name || item.branchName || matchedArea?.branchName,
+      heightM: item.heightM ?? 3.5,
+      levels: item.levels ?? 4,
+      baysPerLevel: item.baysPerLevel ?? 5,
+      statusConfig: (item.statusConfig as any) || (item.isActive !== false ? 'ACTIVE' : 'LOCKED'),
+      province,
+      district,
+      ward,
+      addressDetail,
+      allowFood: item.allowFood !== false,
+      allowCosmetics: item.allowCosmetics !== false,
+      allowElectronics: item.allowElectronics !== false,
+      allowChemicals: !!item.allowChemicals,
+      allowHazmat: !!item.allowHazmat,
     });
     setIsModalOpen(true);
   };
@@ -198,7 +233,7 @@ export function WarehouseAreasPage() {
       toast.error('Vui lòng nhập đầy đủ Mã kệ và Tên kệ hàng!');
       return;
     }
-    if (codeStatus === 'duplicate') {
+    if (modalMode === 'create' && codeStatus === 'duplicate') {
       toast.error('Mã kệ hàng đã tồn tại!');
       return;
     }
@@ -219,9 +254,22 @@ export function WarehouseAreasPage() {
       zoneCode: matchedZone?.zoneCode || editingItem.zoneCode || 'ZONE-A',
       branchId: matchedBranch?.id ? String(matchedBranch.id) : (editingItem.branchId || '1'),
       branchName: matchedBranch?.name || editingItem.branchName || 'Chi nhánh Hà Nội',
+      province: editingItem.province || '',
+      district: editingItem.district || '',
+      ward: editingItem.ward || '',
+      addressDetail: editingItem.addressDetail || '',
       maxWeightKg: Number(editingItem.maxWeightKg || 0),
       maxVolumeM3: Number(editingItem.maxVolumeM3 || 0),
       maxPallet: Number(editingItem.maxPallet || 0),
+      heightM: Number(editingItem.heightM || 3.5),
+      levels: Number(editingItem.levels || 4),
+      baysPerLevel: Number(editingItem.baysPerLevel || 5),
+      statusConfig: editingItem.statusConfig || 'ACTIVE',
+      allowFood: editingItem.allowFood !== false,
+      allowCosmetics: editingItem.allowCosmetics !== false,
+      allowElectronics: editingItem.allowElectronics !== false,
+      allowChemicals: !!editingItem.allowChemicals,
+      allowHazmat: !!editingItem.allowHazmat,
       isActive: editingItem.statusConfig === 'ACTIVE' || editingItem.statusConfig === 'FULL',
       description: editingItem.description || '',
     };
@@ -557,7 +605,23 @@ export function WarehouseAreasPage() {
                 <label className="block text-[10px] font-bold text-gray-550 uppercase mb-1">Khu vực Bãi kho (Area) *</label>
                 <select
                   value={editingItem.areaId || ''}
-                  onChange={(e) => setEditingItem({ ...editingItem, areaId: e.target.value })}
+                  onChange={(e) => {
+                    const nextAreaId = e.target.value;
+                    const a = areas.find(area => String(area.id) === nextAreaId);
+                    const z = a ? warehouseZones.find(zone => String(zone.id) === String(a.zoneId) || zone.zoneCode === a.zoneCode) : null;
+                    setEditingItem(prev => ({
+                      ...prev,
+                      areaId: nextAreaId,
+                      areaCode: a?.areaCode || prev.areaCode,
+                      areaName: a?.areaName || prev.areaName,
+                      zoneId: z ? String(z.id) : (a?.zoneId ? String(a.zoneId) : prev.zoneId),
+                      zoneCode: z?.zoneCode || a?.zoneCode || prev.zoneCode,
+                      province: prev.province || a?.province || '',
+                      district: prev.district || a?.district || '',
+                      ward: prev.ward || a?.ward || '',
+                      addressDetail: prev.addressDetail || a?.addressDetail || '',
+                    }));
+                  }}
                   className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded text-xs bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
                 >
                   {filteredAreas.length > 0 ? (
@@ -898,7 +962,7 @@ export function WarehouseAreasPage() {
               <button 
                 type="submit" 
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition text-xs font-semibold shadow-sm"
-                disabled={isSaving || codeStatus === 'duplicate' || codeStatus === 'invalid_format'}
+                disabled={isSaving || (modalMode === 'create' && (codeStatus === 'duplicate' || codeStatus === 'invalid_format')) || (modalMode === 'edit' && codeStatus === 'invalid_format')}
               >
                 Lưu kệ hàng
               </button>
