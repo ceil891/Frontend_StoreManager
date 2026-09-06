@@ -258,10 +258,11 @@ export function ProductExcelImportPage() {
         .map((u) => {
           let uId = u.unitId;
           if (!uId || isNaN(Number(uId))) {
+            const rawUName = (u.unitName || '').trim().toLowerCase();
             const matched = unitsList.find(
               (item) =>
-                item.unitName.toLowerCase() === (u.unitName || '').toLowerCase() ||
-                (item.code && item.code.toLowerCase() === (u.unitName || '').toLowerCase())
+                (item.unitName || '').trim().toLowerCase() === rawUName ||
+                (item.code && (item.code || '').trim().toLowerCase() === rawUName)
             );
             if (matched && !isNaN(Number(matched.id))) {
               uId = Number(matched.id);
@@ -288,10 +289,11 @@ export function ProductExcelImportPage() {
 
       let finalBaseUnitId = row.resolvedBaseUnitId;
       if (!finalBaseUnitId || isNaN(Number(finalBaseUnitId))) {
+        const rawBase = (row.baseUnitName || '').trim().toLowerCase();
         const matched = unitsList.find(
           (item) =>
-            item.unitName.toLowerCase() === (row.baseUnitName || '').toLowerCase() ||
-            (item.code && item.code.toLowerCase() === (row.baseUnitName || '').toLowerCase())
+            (item.unitName || '').trim().toLowerCase() === rawBase ||
+            (item.code && (item.code || '').trim().toLowerCase() === rawBase)
         );
         if (matched && !isNaN(Number(matched.id))) {
           finalBaseUnitId = Number(matched.id);
@@ -305,10 +307,11 @@ export function ProductExcelImportPage() {
 
       let finalCatId = row.resolvedCategoryId;
       if (!finalCatId || isNaN(Number(finalCatId))) {
+        const rawCat = (row.categoryName || '').trim().toLowerCase();
         const matchedCat = categories.find(
           (c) =>
-            c.categoryName.toLowerCase() === (row.categoryName || '').toLowerCase() ||
-            (c.code && c.code.toLowerCase() === (row.categoryName || '').toLowerCase())
+            (c.categoryName || '').trim().toLowerCase() === rawCat ||
+            (c.code && (c.code || '').trim().toLowerCase() === rawCat)
         );
         if (matchedCat && !isNaN(Number(matchedCat.id))) {
           finalCatId = Number(matchedCat.id);
@@ -647,6 +650,21 @@ export function ProductExcelImportPage() {
             </div>
           )}
 
+          {/* Error Alert Banner */}
+          {parsedRows.length > 0 && invalidCount > 0 && (
+            <div className="p-4 bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-xl flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+              <div className="text-xs text-rose-800 dark:text-rose-300 space-y-1">
+                <p className="font-bold text-sm">
+                  Phát hiện {invalidCount} dòng chứa cảnh báo / lỗi (chưa thể lưu vào kho):
+                </p>
+                <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
+                  Nguyên nhân phổ biến nhất: <strong>Mã SKU</strong> hoặc <strong>Mã vạch (Barcode)</strong> đã tồn tại trong hệ thống (do sản phẩm đã được nhập từ trước). Bạn có thể bấm vào ô <strong>Mã SKU</strong> hoặc ô <strong>Mã vạch</strong> ngay bên dưới để sửa sang mã mới, hoặc di chuột vào nhãn <span className="font-bold text-rose-600 dark:text-rose-400">[2 Lỗi]</span> để xem chi tiết.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Interactive Preview Table */}
           {parsedRows.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
@@ -656,7 +674,7 @@ export function ProductExcelImportPage() {
                     <tr>
                       <th className="py-3 px-3 w-12 text-center">Dòng</th>
                       <th className="py-3 px-3 w-28">Trạng thái</th>
-                      <th className="py-3 px-3 w-36">Mã SKU</th>
+                      <th className="py-3 px-3 w-40">Mã SKU & Barcode</th>
                       <th className="py-3 px-3 min-w-[200px]">Tên sản phẩm (*)</th>
                       <th className="py-3 px-3 w-32">Danh mục</th>
                       <th className="py-3 px-3 w-28">ĐVT cơ bản (*)</th>
@@ -687,15 +705,18 @@ export function ProductExcelImportPage() {
                               <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Hợp lệ
                             </span>
                           ) : (
-                            <div className="group relative cursor-pointer">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300">
+                            <div 
+                              className="group relative cursor-pointer"
+                              title={row.errors.join('\n')}
+                            >
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 hover:bg-rose-200 transition-colors">
                                 <XCircle className="w-3 h-3 text-rose-600" /> {row.errors.length} Lỗi
                               </span>
                               {/* Error Tooltip */}
-                              <div className="absolute left-0 top-full mt-1 z-30 hidden group-hover:block bg-gray-900 text-white text-[11px] p-2.5 rounded-lg shadow-xl min-w-[240px] max-w-[320px] space-y-1">
-                                <p className="font-bold text-rose-400 border-b border-gray-700 pb-1">Chi tiết lỗi:</p>
+                              <div className="absolute left-0 top-full mt-1 z-30 hidden group-hover:block bg-gray-900 text-white text-[11px] p-2.5 rounded-lg shadow-xl min-w-[260px] max-w-[340px] space-y-1">
+                                <p className="font-bold text-rose-400 border-b border-gray-700 pb-1">Chi tiết lỗi ({row.errors.length}):</p>
                                 {row.errors.map((err, i) => (
-                                  <p key={i} className="text-gray-200">
+                                  <p key={i} className="text-gray-200 leading-snug">
                                     • {err}
                                   </p>
                                 ))}
@@ -704,15 +725,26 @@ export function ProductExcelImportPage() {
                           )}
                         </td>
 
-                        {/* SKU */}
+                        {/* SKU & Barcode */}
                         <td className="py-2.5 px-3">
-                          <input
-                            type="text"
-                            value={row.productCode}
-                            onChange={(e) => handleCellChange(row.rowIndex, 'productCode', e.target.value)}
-                            placeholder="Tự động sinh"
-                            className="w-full px-2 py-1 bg-transparent hover:bg-white dark:hover:bg-gray-900 border border-transparent hover:border-gray-300 dark:hover:border-gray-600 rounded font-mono text-xs focus:bg-white dark:focus:bg-gray-900 focus:border-primary"
-                          />
+                          <div className="space-y-1">
+                            <input
+                              type="text"
+                              value={row.productCode}
+                              onChange={(e) => handleCellChange(row.rowIndex, 'productCode', e.target.value)}
+                              placeholder="Mã SKU (tự sinh)"
+                              title="Mã SKU sản phẩm"
+                              className="w-full px-2 py-1 bg-transparent hover:bg-white dark:hover:bg-gray-900 border border-transparent hover:border-gray-300 dark:hover:border-gray-600 rounded font-mono text-xs focus:bg-white dark:focus:bg-gray-900 focus:border-primary"
+                            />
+                            <input
+                              type="text"
+                              value={row.barcode || ''}
+                              onChange={(e) => handleCellChange(row.rowIndex, 'barcode', e.target.value)}
+                              placeholder="Mã vạch barcode..."
+                              title="Mã vạch cơ bản"
+                              className="w-full px-2 py-0.5 bg-transparent hover:bg-white dark:hover:bg-gray-900 border border-transparent hover:border-gray-300 dark:hover:border-gray-600 rounded font-mono text-[10px] text-gray-500 focus:bg-white dark:focus:bg-gray-900 focus:border-primary"
+                            />
+                          </div>
                         </td>
 
                         {/* Product Name */}

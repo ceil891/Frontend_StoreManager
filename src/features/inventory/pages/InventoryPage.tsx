@@ -4,7 +4,7 @@ import {
   Plus, Download, Eye, Tag,
   MapPin, Image as ImageIcon, Edit, Trash2, AlertCircle, X,
   CircleDot, Package, Barcode, AlertTriangle, Package2, UploadCloud, Loader2,
-  CheckCircle2, ArrowRight
+  CheckCircle2, ArrowRight, FileSpreadsheet
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -799,6 +799,12 @@ function generateSkuCode(existingSkus: string[] = []): string {
           </div>
           <div className="flex items-center gap-3">
             <SecondaryButton 
+              onClick={() => navigate('/inventory/import-excel')}
+              leftIcon={<FileSpreadsheet className="w-4 h-4 text-emerald-600" />}
+            >
+              Nhập từ Excel
+            </SecondaryButton>
+            <SecondaryButton 
               onClick={handleExportCsv}
               leftIcon={<Download className="w-4 h-4" />}
             >
@@ -900,9 +906,17 @@ function generateSkuCode(existingSkus: string[] = []): string {
                 : 'Không tìm thấy sản phẩm nào phù hợp với tiêu chí tìm kiếm hiện tại.'}
             </p>
             {data.length === 0 && (
-              <CreateButton onClick={handleOpenCreate}>
-                Thêm sản phẩm mới
-              </CreateButton>
+              <div className="flex items-center gap-3">
+                <SecondaryButton 
+                  onClick={() => navigate('/inventory/import-excel')}
+                  leftIcon={<FileSpreadsheet className="w-4 h-4 text-emerald-600" />}
+                >
+                  Nhập từ file Excel
+                </SecondaryButton>
+                <CreateButton onClick={handleOpenCreate}>
+                  Thêm sản phẩm mới
+                </CreateButton>
+              </div>
             )}
           </div>
         ) : (

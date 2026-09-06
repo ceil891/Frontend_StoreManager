@@ -104,6 +104,7 @@ const SalesDeliveriesTabbedPage = lz(() => import('@/features/sales/pages/SalesD
 // 4. Inventory Containers
 const InventoryDashboardPage = lz(() => import('@/features/inventory/pages/InventoryDashboardPage'), 'InventoryDashboardPage');
 const InventoryProductsTabbedPage = lz(() => import('@/features/inventory/pages/InventoryProductsTabbedPage'), 'InventoryProductsTabbedPage');
+const ProductExcelImportPage = lz(() => import('@/features/inventory/pages/ProductExcelImportPage'), 'ProductExcelImportPage');
 const InventoryAttributesTabbedPage = lz(() => import('@/features/inventory/pages/InventoryAttributesTabbedPage'), 'InventoryAttributesTabbedPage');
 const InventoryLocationsTabbedPage = lz(() => import('@/features/inventory/pages/InventoryLocationsTabbedPage'), 'InventoryLocationsTabbedPage');
 const InventoryStockStatusTabbedPage = lz(() => import('@/features/inventory/pages/InventoryStockStatusTabbedPage'), 'InventoryStockStatusTabbedPage');
@@ -296,6 +297,7 @@ const router = createBrowserRouter([
           // ── 3. Inventory Canonical Routes (9 Routes) ─────────────
           { path: 'inventory/dashboard', ...protect(<InventoryDashboardPage />, 'inventory:dashboard:view') },
           { path: 'inventory/products', ...protect(<InventoryProductsTabbedPage />, 'catalog:product:view') },
+          { path: 'inventory/import-excel', ...protect(<ProductExcelImportPage />, 'catalog:product:create') },
           { path: 'inventory/attributes', ...protect(<InventoryAttributesTabbedPage />, 'catalog:unit:view') },
           { path: 'inventory/locations', ...protect(<InventoryLocationsTabbedPage />, 'inventory:storage-area:view') },
           { path: 'inventory/stock-status', ...protect(<InventoryStockStatusTabbedPage />, 'inventory:stock-keeping:view') },
@@ -305,7 +307,6 @@ const router = createBrowserRouter([
 
           // Inventory Legacy Redirects
           { path: 'inventory', element: <LegacyRedirect targetCanonical="/inventory/products" defaultTab="products" /> },
-          { path: 'inventory/import-excel', element: <LegacyRedirect targetCanonical="/inventory/products" defaultTab="import-excel" /> },
           { path: 'inventory/variants', element: <LegacyRedirect targetCanonical="/inventory/products" defaultTab="variants" /> },
 
           { path: 'inventory/categories', element: <LegacyRedirect targetCanonical="/inventory/products" defaultTab="categories" /> },

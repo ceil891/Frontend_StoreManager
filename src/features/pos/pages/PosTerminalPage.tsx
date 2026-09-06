@@ -5,7 +5,7 @@ import {
   CheckCircle2, ShoppingCart as ShoppingCartIcon, Tag, ChevronDown, Clock,
   type LucideIcon, Loader2, RefreshCw, Layers, Printer, ShieldAlert, Keyboard,
   Percent, FileText, PauseCircle, Calculator, QrCode, Wallet, Receipt,
-  AlertCircle
+  AlertCircle, Lock, PackageSearch, Sparkles, Play
 } from 'lucide-react';
 import { usePosCartStore } from '../store/posCartStore';
 import type { PosProduct } from '../store/posCartStore';
@@ -201,6 +201,71 @@ export function PosTerminalPage() {
     // 2. Fallback: Ca OPEN không phân định chi nhánh hoặc ca mở mới nhất
     return sessions.find((s) => s.status === 'OPEN') || null;
   }, [sessions, activeBranchId]);
+
+  // Quick Open Session Modal state directly inside POS Terminal
+  const addSession = usePosSessionStore((s) => s.addSession);
+  const [isQuickOpenShiftModalOpen, setIsQuickOpenShiftModalOpen] = useState(false);
+  const [openTerminalCode, setOpenTerminalCode] = useState('TERM-01-MAIN');
+  const [openShiftName, setOpenShiftName] = useState('');
+  const [openOpeningCash, setOpenOpeningCash] = useState('2000000');
+  const [openBranchId, setOpenBranchId] = useState<string>('');
+  const [openCashierName, setOpenCashierName] = useState<string>('');
+  const [cashiersList, setCashiersList] = useState<any[]>([]);
+
+  useEffect(() => {
+    axiosClient.get<any, any>('/pos/cashiers').then((res: any) => {
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      setCashiersList(list);
+      if (list.length > 0 && user) {
+        const match = list.find((c: any) => String(c.id) === String(user.id) || c.username === user.name);
+        if (match) {
+          setOpenCashierName(match.fullName || match.username);
+        }
+      }
+    }).catch(() => {});
+  }, [user]);
+
+  useEffect(() => {
+    if (activeBranchId && !openBranchId) {
+      setOpenBranchId(String(activeBranchId));
+    }
+  }, [activeBranchId, openBranchId]);
+
+  const handleQuickOpenShift = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const openingCashNum = parseInt(openOpeningCash.replace(/\D/g, ''), 10) || 0;
+    const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const currentDaySessions = sessions.filter(s => s.sessionCode?.includes(todayStr));
+    const nextSessionNum = String(currentDaySessions.length + 1).padStart(2, '0');
+    const sessionCode = `SESS-${todayStr}-${nextSessionNum}`;
+
+    const selectedCashier = cashiersList.find(c => c.fullName === openCashierName);
+    const resolvedUserId = selectedCashier ? selectedCashier.id : (user?.id ? Number(user.id) : 1);
+    const resolvedBranchId = openBranchId ? Number(openBranchId) : (Number(activeBranchId) || 1);
+
+    try {
+      await addSession({
+        sessionCode,
+        terminalCode: openTerminalCode,
+        cashierName: openCashierName || user?.name || 'Thu ngân',
+        openingTime: new Date().toISOString().replace('T', ' ').slice(0, 19),
+        openingCash: openingCashNum,
+        expectedCash: openingCashNum,
+        actualCash: 0,
+        cashDifference: 0,
+        status: 'OPEN',
+        userId: resolvedUserId,
+        branchId: resolvedBranchId,
+        shiftName: openShiftName || undefined,
+      });
+      await fetchSessions();
+      setIsQuickOpenShiftModalOpen(false);
+      toast.success(`Đã mở thành công ca làm việc: ${sessionCode}! Bắt đầu phiên bán hàng.`);
+    } catch (err) {
+      console.error('Failed to open shift from POS:', err);
+      toast.error('Không thể mở ca làm việc. Vui lòng thử lại!');
+    }
+  };
 
   // Branch stock mapping for POS
   const [branchStockMap, setBranchStockMap] = useState<Record<string, number>>({});
@@ -1438,14 +1503,18 @@ export function PosTerminalPage() {
                 )}
               </div>
             ) : (
-              <Link
-                to="/pos/sessions"
-                title="Chưa có ca làm việc nào đang mở! Bấm để chuyển tới trang Quản lý ca để mở ca"
-                className="h-9 px-2.5 flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/50 rounded-xl border border-amber-300 dark:border-amber-800 whitespace-nowrap shadow-xs transition-colors"
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenBranchId(String(activeBranchId || '1'));
+                  setIsQuickOpenShiftModalOpen(true);
+                }}
+                title="Chưa có ca làm việc nào đang mở! Bấm để mở ca ngay tại quầy POS"
+                className="h-9 px-3 flex items-center gap-1.5 text-xs font-bold text-amber-800 dark:text-amber-200 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/70 dark:hover:bg-amber-900/80 rounded-xl border border-amber-300 dark:border-amber-700 whitespace-nowrap shadow-xs transition-all cursor-pointer animate-pulse hover:animate-none"
               >
-                <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                <span>Chưa mở ca</span>
-              </Link>
+                <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>Chưa mở ca • Mở ngay</span>
+              </button>
             )}
 
             {/* Đồng hồ thời gian thực */}
@@ -1457,28 +1526,74 @@ export function PosTerminalPage() {
         </header>
 
         {/* Category Tabs */}
-        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2 flex gap-2 overflow-x-auto shrink-0">
-          {categoryTabs.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-                activeCategory === cat
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 py-2 flex items-center gap-2 overflow-x-auto shrink-0 scrollbar-none">
+          {categoryTabs.map(cat => {
+            const count = cat === 'Tất cả' 
+              ? productsList.length 
+              : productsList.filter(p => p.category === cat).length;
+            const isActive = activeCategory === cat;
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setActiveCategory(cat)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all select-none cursor-pointer ${
+                  isActive
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 text-gray-600 dark:text-gray-300'
+                }`}
+              >
+                <span>{cat}</span>
+                {count > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
+                  }`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Product Grid */}
         <div className="flex-1 overflow-y-auto p-3">
           {filteredProducts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400">
-              <Search className="w-10 h-10 opacity-20 mb-2" />
-              <p className="text-sm">Không tìm thấy sản phẩm</p>
+            <div className="flex flex-col items-center justify-center h-full text-center p-6 select-none">
+              <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 flex items-center justify-center mb-3 border border-gray-200 dark:border-gray-700 shadow-xs">
+                <PackageSearch className="w-8 h-8 stroke-[1.5]" />
+              </div>
+              <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-1">
+                {searchQuery.trim() ? `Không tìm thấy sản phẩm "${searchQuery}"` : 'Chưa có sản phẩm hiển thị'}
+              </h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500 max-w-sm mb-4 leading-relaxed">
+                {searchQuery.trim()
+                  ? 'Vui lòng kiểm tra lại từ khóa tìm kiếm hoặc mã SKU/Barcode của sản phẩm.'
+                  : 'Không có sản phẩm nào thuộc bộ lọc hiện tại hoặc máy chủ đang đồng bộ hàng hóa.'}
+              </p>
+              <div className="flex items-center gap-2">
+                {(activeCategory !== 'Tất cả' || searchQuery.trim() !== '') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveCategory('Tất cả');
+                      setSearchQuery('');
+                    }}
+                    className="px-3.5 py-2 text-xs font-bold rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors cursor-pointer"
+                  >
+                    Xem tất cả danh mục
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSyncPosData}
+                  disabled={isSyncing}
+                  className="px-3.5 py-2 text-xs font-bold rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>Đồng bộ từ máy chủ</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5">
@@ -1543,7 +1658,41 @@ export function PosTerminalPage() {
       </div>
 
       {/* ═══ RIGHT PANEL: Cart & Customer ═══ */}
-      <div className="flex flex-col w-[36%] h-full bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700">
+      <div className="relative flex flex-col w-[36%] h-full bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700">
+        {/* 🔒 Gatekeeper Overlay khi chưa mở ca làm việc */}
+        {!activeSession && (
+          <div className="absolute inset-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center select-none animate-fadeIn">
+            <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 flex items-center justify-center text-amber-600 dark:text-amber-400 mb-4 shadow-sm">
+              <Lock className="w-8 h-8" />
+            </div>
+            <h3 className="text-base font-black text-gray-900 dark:text-white tracking-tight mb-1.5">
+              Chưa kích hoạt ca làm việc
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 max-w-xs leading-relaxed mb-6">
+              Bạn cần mở ca thu ngân để kích hoạt các chức năng chọn phương thức thanh toán, tính tiền và in hóa đơn bán lẻ.
+            </p>
+            <div className="flex flex-col gap-2.5 w-full max-w-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenBranchId(String(activeBranchId || '1'));
+                  setIsQuickOpenShiftModalOpen(true);
+                }}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition-all cursor-pointer active:scale-98"
+              >
+                <Play className="w-4 h-4 fill-current" />
+                <span>Mở ca làm việc ngay</span>
+              </button>
+              <Link
+                to="/pos/sessions"
+                className="text-xs font-semibold text-gray-500 hover:text-emerald-600 dark:text-gray-400 dark:hover:text-emerald-400 transition-colors py-1 text-center"
+              >
+                Xem danh sách ca làm việc →
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* Multi-Tab Order Holding Bar (Lưu tạm đơn bán dở) */}
         <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 overflow-x-auto shrink-0">
           {tabs.map((t) => {
@@ -1968,19 +2117,21 @@ export function PosTerminalPage() {
                 <input
                   type="text"
                   inputMode="numeric"
-                  placeholder="Khách đưa tiền mặt..."
+                  disabled={items.length === 0}
+                  placeholder={items.length === 0 ? "Giỏ hàng 0đ (chưa có món)..." : "Khách đưa tiền mặt..."}
                   value={cashGiven}
                   onChange={e => {
                     const digits = e.target.value.replace(/\D/g, '');
                     setCashGiven(digits === '' ? '' : parseInt(digits, 10).toLocaleString('vi-VN'));
                   }}
-                  className="w-full pl-8 pr-2.5 py-1.5 border border-emerald-300 dark:border-emerald-800 rounded-lg text-xs font-mono font-bold bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className="w-full pl-8 pr-2.5 py-1.5 border border-emerald-300 dark:border-emerald-800 rounded-lg text-xs font-mono font-bold bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-850 disabled:cursor-not-allowed"
                 />
               </div>
               <button
                 type="button"
+                disabled={items.length === 0}
                 onClick={() => setCashGiven(totalAmountToPay.toLocaleString('vi-VN'))}
-                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
+                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
                 title="Khách đưa vừa đúng số tiền đơn hàng"
               >
                 ✓ Đủ tiền
@@ -2014,13 +2165,16 @@ export function PosTerminalPage() {
                     <button
                       key={`polymer-${amt}`}
                       type="button"
+                      disabled={items.length === 0}
                       onClick={() => setCashGiven(amt.toLocaleString('vi-VN'))}
-                      className={`py-1.5 px-1 text-xs font-mono font-bold rounded-lg border text-center transition-all cursor-pointer ${
-                        isMatch
-                          ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-500/30 shadow-xs'
-                          : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-gray-750'
+                      className={`py-1.5 px-1 text-xs font-mono font-bold rounded-lg border text-center transition-all ${
+                        items.length === 0
+                          ? 'opacity-40 bg-gray-100 dark:bg-gray-800 border-gray-200 text-gray-400 cursor-not-allowed'
+                          : isMatch
+                          ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-500/30 shadow-xs cursor-pointer'
+                          : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-gray-750 cursor-pointer'
                       }`}
-                      title={`Khách đưa tờ ${amt.toLocaleString('vi-VN')} ₫`}
+                      title={items.length === 0 ? 'Vui lòng thêm sản phẩm vào giỏ trước' : `Khách đưa tờ ${amt.toLocaleString('vi-VN')} ₫`}
                     >
                       {amt.toLocaleString('vi-VN')}
                     </button>
@@ -2035,13 +2189,16 @@ export function PosTerminalPage() {
                       <button
                         key={`polymer-lg-${amt}`}
                         type="button"
+                        disabled={items.length === 0}
                         onClick={() => setCashGiven(amt.toLocaleString('vi-VN'))}
-                        className={`py-1 px-1.5 text-xs font-mono font-bold rounded-lg border text-center transition-all cursor-pointer ${
-                          isMatch
-                            ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-500/30 shadow-xs'
-                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-gray-750'
+                        className={`py-1 px-1.5 text-xs font-mono font-bold rounded-lg border text-center transition-all ${
+                          items.length === 0
+                            ? 'opacity-40 bg-gray-100 dark:bg-gray-800 border-gray-200 text-gray-400 cursor-not-allowed'
+                            : isMatch
+                            ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-500/30 shadow-xs cursor-pointer'
+                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-gray-750 cursor-pointer'
                         }`}
-                        title={`Khách đưa ${amt.toLocaleString('vi-VN')} ₫`}
+                        title={items.length === 0 ? 'Vui lòng thêm sản phẩm vào giỏ trước' : `Khách đưa ${amt.toLocaleString('vi-VN')} ₫`}
                       >
                         {amt.toLocaleString('vi-VN')} ₫
                       </button>
@@ -2094,7 +2251,7 @@ export function PosTerminalPage() {
         )}
 
         {/* ═══ PAYMENT SUMMARY & TOTALS ═══ */}
-        <div className="p-3 bg-gray-50 dark:bg-gray-800 shrink-0 space-y-2">
+        <div className="p-3 pb-16 bg-gray-50 dark:bg-gray-800 shrink-0 space-y-2">
           {/* Voucher input */}
           <div className="flex gap-1.5">
             <div className="relative flex-1">
@@ -2232,6 +2389,126 @@ export function PosTerminalPage() {
           </div>
         </div>
       </div>
+
+      {/* ═══ Modal Mở Ca Làm Việc POS Nhanh (Trực tiếp tại quầy) ═══ */}
+      <Modal
+        isOpen={isQuickOpenShiftModalOpen}
+        onClose={() => setIsQuickOpenShiftModalOpen(false)}
+        title="⚡ Mở Ca Làm Việc Thu Ngân Mới"
+        width="max-w-md"
+      >
+        <form onSubmit={handleQuickOpenShift} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+              Chi nhánh bán hàng
+            </label>
+            <select
+              value={openBranchId}
+              onChange={(e) => setOpenBranchId(e.target.value)}
+              className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+            >
+              {branches.length > 0 ? (
+                branches.map((b) => (
+                  <option key={b.id} value={String(b.id)}>
+                    {b.name} ({b.branchCode || `CN-${b.id}`})
+                  </option>
+                ))
+              ) : (
+                <option value="1">Chi nhánh mặc định</option>
+              )}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+              Mã quầy thu ngân
+            </label>
+            <select
+              value={openTerminalCode}
+              onChange={(e) => setOpenTerminalCode(e.target.value)}
+              className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+            >
+              <option value="TERM-01-MAIN">TERM-01-MAIN (Quầy chính sảnh)</option>
+              <option value="TERM-02-KIOSK">TERM-02-KIOSK (Kiosk tự phục vụ)</option>
+              <option value="TERM-03-BACKOFFICE">TERM-03-BACKOFFICE (Quầy kho nội bộ)</option>
+              <option value="TERM-04-EXPRESS">TERM-04-EXPRESS (Quầy thanh toán nhanh)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+              Nhân viên thu ngân
+            </label>
+            <select
+              value={openCashierName}
+              onChange={(e) => setOpenCashierName(e.target.value)}
+              className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+            >
+              {cashiersList.length > 0 ? (
+                cashiersList.map((c) => (
+                  <option key={c.id} value={c.fullName}>
+                    {c.fullName} ({c.roleName || 'Thu ngân'})
+                  </option>
+                ))
+              ) : (
+                <option value={user?.name || 'Thu ngân'}>
+                  {user?.name || 'Thu ngân'} (Đang đăng nhập)
+                </option>
+              )}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+              Khung giờ / Ca làm việc
+            </label>
+            <select
+              value={openShiftName}
+              onChange={(e) => setOpenShiftName(e.target.value)}
+              className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+            >
+              <option value="">Tự động theo giờ hiện tại</option>
+              <option value="CA_SANG">🌅 Ca sáng (6:00 – 12:00)</option>
+              <option value="CA_CHIEU">🌤️ Ca chiều (12:00 – 18:00)</option>
+              <option value="CA_TOI">🌙 Ca tối (18:00 – 23:00)</option>
+              <option value="CA_NGAY">📅 Cả ngày</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+              Tiền quỹ đầu ca (₫)
+            </label>
+            <input
+              type="text"
+              value={openOpeningCash ? parseInt(openOpeningCash, 10).toLocaleString('vi-VN') : ''}
+              onChange={(e) => {
+                const numeric = e.target.value.replace(/\D/g, '');
+                setOpenOpeningCash(numeric ? String(parseInt(numeric, 10)) : '');
+              }}
+              required
+              placeholder="Nhập số tiền mặt đầu ca..."
+              className="block w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={() => setIsQuickOpenShiftModalOpen(false)}
+              className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold rounded-xl transition-all text-xs cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all text-xs shadow-md shadow-emerald-600/20 cursor-pointer"
+            >
+              Kích hoạt mở ca
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Quick Create Customer Modal for POS (Tối ưu siêu nhanh: Chỉ cần SĐT & Tên) */}
       <Modal
