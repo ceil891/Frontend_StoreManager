@@ -4,7 +4,8 @@ import {
   ArrowLeft, Image as ImageIcon, Gift, Smartphone, Landmark, Banknote,
   CheckCircle2, ShoppingCart as ShoppingCartIcon, Tag, ChevronDown, Clock,
   type LucideIcon, Loader2, RefreshCw, Layers, Printer, ShieldAlert, Keyboard,
-  Percent, FileText, PauseCircle, Calculator, QrCode, Wallet, Receipt
+  Percent, FileText, PauseCircle, Calculator, QrCode, Wallet, Receipt,
+  AlertCircle
 } from 'lucide-react';
 import { usePosCartStore } from '../store/posCartStore';
 import type { PosProduct } from '../store/posCartStore';
@@ -1417,11 +1418,24 @@ export function PosTerminalPage() {
             {/* Ca làm việc Badge */}
             {activeSession ? (
               <div 
-                title={`Mã ca: ${activeSession.sessionCode} • Quầy: ${activeSession.terminalCode} • Tiền quỹ đầu ca: ${fmt(activeSession.openingCash)}`}
+                title={`Mã ca: ${activeSession.sessionCode} • ${activeSession.shiftName || 'Ca làm việc'} • Quầy: ${activeSession.terminalCode} • Tiền quỹ đầu ca: ${fmt(activeSession.openingCash)}`}
                 className="h-9 px-2.5 flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 rounded-xl border border-emerald-200 dark:border-emerald-800 whitespace-nowrap shadow-xs"
               >
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>{activeSession.sessionCode}</span>
+                {activeSession.shiftName && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-800/60 text-emerald-800 dark:text-emerald-200 font-semibold">
+                    {activeSession.shiftName === 'CA_SANG'
+                      ? 'Sáng'
+                      : activeSession.shiftName === 'CA_CHIEU'
+                      ? 'Chiều'
+                      : activeSession.shiftName === 'CA_TOI'
+                      ? 'Tối'
+                      : activeSession.shiftName === 'CA_NGAY'
+                      ? 'Cả ngày'
+                      : activeSession.shiftName}
+                  </span>
+                )}
               </div>
             ) : (
               <Link
