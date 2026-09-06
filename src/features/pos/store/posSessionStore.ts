@@ -18,6 +18,7 @@ export interface PosSessionRecord {
   totalRevenue?: number;
   userId?: number | string;
   branchId?: number | string;
+  shiftName?: string;
 }
 
 interface PosSessionState {
@@ -56,6 +57,7 @@ export const usePosSessionStore = create<PosSessionState>()(
             totalRevenue: item.totalRevenue !== undefined ? Number(item.totalRevenue) : undefined,
             userId: item.userId,
             branchId: item.branchId,
+            shiftName: item.shiftName,
           }));
 
           if (Array.isArray(apiSessions)) {
@@ -74,6 +76,7 @@ export const usePosSessionStore = create<PosSessionState>()(
             openingCash: item.openingCash || 0,
             userId: item.userId ? Number(item.userId) : (authUser?.id ? Number(authUser.id) : null),
             branchId: item.branchId ? Number(item.branchId) : ((authUser as any)?.branchId ? Number((authUser as any).branchId) : 1),
+            shiftName: item.shiftName || null,
           };
           await axiosClient.post('/pos/sessions', payload);
           await get().fetchSessions();

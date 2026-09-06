@@ -30,6 +30,7 @@ interface PosSessionRecord {
   status: 'IN_PROGRESS' | 'PENDING_AUDIT_VERIFICATION' | 'CLOSED_VERIFIED' | 'DISCREPANCY_FLAGGED';
   supervisorSignoff?: string;
   branchId?: number | string;
+  shiftName?: string;
   orders?: any[];
 }
 
@@ -48,7 +49,14 @@ const statusMap: Record<string, string> = {
   IN_PROGRESS: 'Đang mở',
   CLOSED_VERIFIED: 'Đã đóng (Khớp)',
   PENDING_AUDIT_VERIFICATION: 'Chờ kiểm toán',
-  DISCREPANCY_FLAGGED: 'Lệch tiền',
+  DISCREPANCY_FLAGGED: 'Chênh lệch',
+};
+
+const shiftNameMap: Record<string, string> = {
+  CA_SANG: 'Ca sáng (6:00 – 12:00)',
+  CA_CHIEU: 'Ca chiều (12:00 – 18:00)',
+  CA_TOI: 'Ca tối (18:00 – 23:00)',
+  CA_NGAY: 'Cả ngày',
 };
 
 import { usePosSessionStore } from '../store/posSessionStore';
@@ -155,6 +163,7 @@ export function PosSessionsPage() {
         status: s.status === 'OPEN' ? 'IN_PROGRESS' : 'CLOSED_VERIFIED',
         supervisorSignoff: 'Lê Quản lý',
         branchId: s.branchId,
+        shiftName: s.shiftName,
         orders: sessionOrders,
       };
     });
@@ -212,6 +221,7 @@ export function PosSessionsPage() {
   const [newTerminalId, setNewTerminalId] = useState('TERM-01-MAIN');
   const [newCashierName, setNewCashierName] = useState('');
   const [newOpeningCash, setNewOpeningCash] = useState('2000000');
+  const [newShiftName, setNewShiftName] = useState('');
 
   // Edit Session Modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -324,6 +334,7 @@ export function PosSessionsPage() {
         status: 'OPEN',
         userId: resolvedUserId,
         branchId: resolvedBranchId,
+        shiftName: newShiftName || undefined,
       });
       setIsCreateModalOpen(false);
       toast.success(`Đã mở thành công ca làm việc mới: ${sessionCode} tại quầy ${newTerminalId}!`);
@@ -347,6 +358,7 @@ export function PosSessionsPage() {
         cashierName: editingSession.cashierName,
         terminalCode: editingSession.terminalId,
         openingCash: editingSession.openingCashFloatVnd,
+        shiftName: editingSession.shiftName,
       });
       toast.success(`Cập nhật thông tin ca ${editingSession.sessionCode} thành công!`);
     } catch (err) {
@@ -385,12 +397,23 @@ export function PosSessionsPage() {
     () => [
       {
         accessorKey: 'sessionCode',
-        header: 'Mã phiên',
-        cell: (info) => (
-          <span className="font-mono font-bold text-primary px-2.5 py-1 bg-primary/10 rounded-md border border-primary/20 hover:bg-primary/20 transition-all cursor-pointer">
-            {info.getValue() as string}
-          </span>
-        ),
+        header: 'Mã phiên & Ca',
+        cell: ({ row }) => {
+          const shiftKey = row.original.shiftName;
+          const shiftLabel = shiftKey ? (shiftNameMap[shiftKey] || shiftKey) : null;
+          return (
+            <div>
+              <span className="font-mono font-bold text-primary px-2.5 py-1 bg-primary/10 rounded-md border border-primary/20 hover:bg-primary/20 transition-all cursor-pointer">
+                {row.original.sessionCode}
+              </span>
+              {shiftLabel && (
+                <span className="block mt-1 text-[11px] font-semibold text-amber-750 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800 w-fit">
+                  {shiftLabel}
+                </span>
+              )}
+            </div>
+          );
+        },
       },
       {
         accessorKey: 'terminalId',
@@ -656,6 +679,14 @@ export function PosSessionsPage() {
               </div>
 
               <div className="space-y-2.5 font-mono text-xs">
+                {selectedSession.shiftName && (
+                  <div className="flex justify-between items-center font-sans">
+                    <span className="text-gray-400 font-medium">Khung giờ ca:</span>
+                    <span className="font-semibold text-amber-650 dark:text-amber-400">
+                      {shiftNameMap[selectedSession.shiftName] || selectedSession.shiftName}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center font-sans">
                   <span className="text-gray-400 font-medium">Giờ mở ca:</span>
                   <span className="font-mono text-gray-900 dark:text-white font-bold">{selectedSession.openedTimestamp}</span>
@@ -1053,6 +1084,21 @@ export function PosSessionsPage() {
           </div>
 
           <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Khung giờ / Ca làm việc</label>
+            <select
+              value={newShiftName}
+              onChange={(e) => setNewShiftName(e.target.value)}
+              className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm"
+            >
+              <option value="">Tự động theo giờ hiện tại</option>
+              <option value="CA_SANG">🌅 Ca sáng (6:00 – 12:00)</option>
+              <option value="CA_CHIEU">🌤️ Ca chiều (12:00 – 18:00)</option>
+              <option value="CA_TOI">🌙 Ca tối (18:00 – 23:00)</option>
+              <option value="CA_NGAY">📅 Cả ngày</option>
+            </select>
+          </div>
+
+          <div>
             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Tiền quỹ đầu ca (₫)</label>
             <input
               type="text"
@@ -1123,6 +1169,21 @@ export function PosSessionsPage() {
                 required
                 className="block w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:outline-none"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Khung giờ / Ca làm việc</label>
+              <select
+                value={editingSession.shiftName || ''}
+                onChange={(e) => setEditingSession({ ...editingSession, shiftName: e.target.value })}
+                className="block w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-semibold text-sm focus:outline-none"
+              >
+                <option value="">Chưa chọn / Mặc định</option>
+                <option value="CA_SANG">🌅 Ca sáng (6:00 – 12:00)</option>
+                <option value="CA_CHIEU">🌤️ Ca chiều (12:00 – 18:00)</option>
+                <option value="CA_TOI">🌙 Ca tối (18:00 – 23:00)</option>
+                <option value="CA_NGAY">📅 Cả ngày</option>
+              </select>
             </div>
 
             <div>
