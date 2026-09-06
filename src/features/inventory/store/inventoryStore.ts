@@ -2,12 +2,42 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { extractPageContent } from '@/shared/lib/apiHelpers';
+import { useBranchStore } from '@/features/system/store/branchStore';
 
-const resolveBranchId = (name?: string): number => {
+const resolveBranchId = (name?: string | number): number => {
   if (!name) return 1;
-  const lower = name.toLowerCase();
-  if (lower.includes('quận 2') || lower.includes('q2') || lower.includes('cn2')) return 2;
-  if (lower.includes('quận 3') || lower.includes('q3') || lower.includes('cn3')) return 3;
+  const num = Number(name);
+  if (!isNaN(num) && num > 0) return num;
+
+  try {
+    const branches = useBranchStore.getState().branches || [];
+    const lower = String(name).trim().toLowerCase();
+
+    const byId = branches.find((b) => String(b.id) === lower);
+    if (byId) return Number(byId.id);
+
+    const byCode = branches.find((b) => b.branchCode && b.branchCode.toLowerCase() === lower);
+    if (byCode) return Number(byCode.id);
+
+    const byName = branches.find(
+      (b) => b.name.toLowerCase() === lower || (b.branchName && b.branchName.toLowerCase() === lower)
+    );
+    if (byName) return Number(byName.id);
+
+    const bySub = branches.find(
+      (b) =>
+        lower.includes(b.name.toLowerCase()) ||
+        (b.branchName && lower.includes(b.branchName.toLowerCase())) ||
+        b.name.toLowerCase().includes(lower) ||
+        (b.branchCode && lower.includes(b.branchCode.toLowerCase()))
+    );
+    if (bySub) return Number(bySub.id);
+  } catch {}
+
+  const lower = String(name).toLowerCase();
+  if (lower.includes('quận 2') || lower.includes('q2') || lower.includes('cn2') || lower.includes('hồ chí minh') || lower.includes('tphcm')) return 2;
+  if (lower.includes('quận 3') || lower.includes('q3') || lower.includes('cn3') || lower.includes('đà nẵng') || lower.includes('da nang')) return 3;
+  if (lower.includes('hà đông')) return 4;
   return 1;
 };
 
@@ -15,11 +45,19 @@ const mapImportReceiptStatus = (status?: string): ImportReceiptItem['status'] =>
   switch ((status || '').toUpperCase()) {
     case 'COMPLETE':
     case 'COMPLETED':
+    case 'INSPECTED_ACCEPTED':
+    case 'APPROVED':
+    case 'PASSED':
+    case 'ACCEPTED':
+    case 'ĐẠT YÊU CẦU':
+    case 'ĐÃ NHẬP KHO':
       return 'INSPECTED_ACCEPTED';
     case 'PARTIAL':
     case 'PARTIAL_ACCEPTANCE':
       return 'PARTIAL_ACCEPTANCE';
     case 'CANCELLED':
+    case 'REJECTED':
+    case 'CANCEL':
       return 'REJECTED';
     default:
       return 'PENDING_INSPECTION';
@@ -1788,10 +1826,15 @@ export const useInventoryStore = create<InventoryState>()(
 
           const payload = {
             transferCode: transfer.transferNumber || `ST-${Date.now()}`,
-            transferDate: new Date().toISOString(),
+            transferDate: transfer.dispatchDate ? `${transfer.dispatchDate}T00:00:00` : new Date().toISOString(),
             fromBranchId: resolveBranchId(transfer.sourceHub),
             toBranchId: resolveBranchId(transfer.destinationHub),
-            status: transfer.status || 'DRAFT',
+            status: transfer.status || 'READY_TO_SHIP',
+            requestedBy: transfer.requestedBy || undefined,
+            logisticsPartner: transfer.logisticsPartner || undefined,
+            trackingRef: transfer.trackingRef || undefined,
+            estArrivalDate: transfer.estArrivalDate ? `${transfer.estArrivalDate}T00:00:00` : undefined,
+            note: transfer.notes || undefined,
             transferLines: transferLines,
           };
           await axiosClient.post('/inventories/transfers', payload);
@@ -1836,10 +1879,15 @@ export const useInventoryStore = create<InventoryState>()(
 
           const payload = {
             transferCode: data.transferNumber || existing?.transferNumber,
-            transferDate: new Date().toISOString(),
+            transferDate: data.dispatchDate ? `${data.dispatchDate}T00:00:00` : new Date().toISOString(),
             fromBranchId: data.sourceHub ? resolveBranchId(data.sourceHub) : (existing?.sourceHub ? resolveBranchId(existing.sourceHub) : undefined),
             toBranchId: data.destinationHub ? resolveBranchId(data.destinationHub) : (existing?.destinationHub ? resolveBranchId(existing.destinationHub) : undefined),
             status: data.status || existing?.status,
+            requestedBy: data.requestedBy || existing?.requestedBy || undefined,
+            logisticsPartner: data.logisticsPartner || existing?.logisticsPartner || undefined,
+            trackingRef: data.trackingRef !== undefined ? data.trackingRef : existing?.trackingRef,
+            estArrivalDate: data.estArrivalDate ? `${data.estArrivalDate}T00:00:00` : undefined,
+            note: data.notes !== undefined ? data.notes : existing?.notes,
             transferLines,
           };
           await axiosClient.put(`/inventories/transfers/${id}`, payload);

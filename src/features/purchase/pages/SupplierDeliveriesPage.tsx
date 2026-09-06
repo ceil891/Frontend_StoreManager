@@ -630,6 +630,7 @@ export function SupplierDeliveriesPage() {
       createdBy: editingItem.receiver || 'Thủ kho',
       note: editingItem.notes || 'Tạo đợt nhận hàng cho đơn PO',
       receiptLines: deliveryLines.map((line) => ({
+        productId: line.productId,
         productVariantId: line.productVariantId,
         productName: line.productName,
         sku: line.sku,

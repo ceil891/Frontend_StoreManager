@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
+import { CurrencyInput } from '@/shared/components/ui/CurrencyInput';
 import { useAuthStore } from '@/features/auth/store/authStore';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -754,14 +755,23 @@ export function PurchaseOrdersPage() {
                     }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
                   >
-                    <option value="DRAFT">Bản nháp</option>
-                    <option value="PENDING_APPROVAL">Chờ duyệt</option>
-                    <option value="APPROVED">Đã duyệt</option>
-                    <option value="DISPATCHED">Đang vận chuyển</option>
-                    <option value="DELIVERED">Đã giao hàng</option>
-                    <option value="RECEIVED">Đã nhận hàng</option>
-                    <option value="COMPLETED">Đã hoàn thành</option>
-                    <option value="CANCELLED">Đã hủy</option>
+                    {modalMode === 'create' ? (
+                      <>
+                        <option value="DRAFT">Bản nháp</option>
+                        <option value="PENDING_APPROVAL">Chờ duyệt</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="DRAFT">Bản nháp</option>
+                        <option value="PENDING_APPROVAL">Chờ duyệt</option>
+                        <option value="APPROVED">Đã duyệt</option>
+                        <option value="DISPATCHED">Đang vận chuyển</option>
+                        <option value="DELIVERED">Đã giao hàng</option>
+                        <option value="RECEIVED">Đã nhận hàng</option>
+                        <option value="COMPLETED">Đã hoàn thành</option>
+                        <option value="CANCELLED">Đã hủy</option>
+                      </>
+                    )}
                   </select>
                 </div>
                 <div>
@@ -842,12 +852,9 @@ export function PurchaseOrdersPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Cước phí vận chuyển dự kiến (₫)</label>
-                  <input
-                    type="number"
-                    min="0"
+                  <CurrencyInput
                     value={editingPO.shippingFee ?? 0}
-                    onChange={(e) => {
-                      const fee = parseFloat(e.target.value) || 0;
+                    onChange={(fee) => {
                       const { totalQty, totalVal } = calcTotals(editingPO.poLines || [], fee);
                       setEditingPO({
                         ...editingPO,
@@ -857,7 +864,6 @@ export function PurchaseOrdersPage() {
                       });
                     }}
                     placeholder="0"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
               </div>
