@@ -799,12 +799,6 @@ function generateSkuCode(existingSkus: string[] = []): string {
           </div>
           <div className="flex items-center gap-3">
             <SecondaryButton 
-              onClick={() => navigate('/inventory/import-excel')}
-              leftIcon={<FileSpreadsheet className="w-4 h-4 text-emerald-600" />}
-            >
-              Nhập từ Excel
-            </SecondaryButton>
-            <SecondaryButton 
               onClick={handleExportCsv}
               leftIcon={<Download className="w-4 h-4" />}
             >
@@ -907,12 +901,6 @@ function generateSkuCode(existingSkus: string[] = []): string {
             </p>
             {data.length === 0 && (
               <div className="flex items-center gap-3">
-                <SecondaryButton 
-                  onClick={() => navigate('/inventory/import-excel')}
-                  leftIcon={<FileSpreadsheet className="w-4 h-4 text-emerald-600" />}
-                >
-                  Nhập từ file Excel
-                </SecondaryButton>
                 <CreateButton onClick={handleOpenCreate}>
                   Thêm sản phẩm mới
                 </CreateButton>

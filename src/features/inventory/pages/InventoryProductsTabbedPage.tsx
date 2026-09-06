@@ -1,15 +1,13 @@
 import { useSearchParams } from 'react-router';
-import { Package, Layers, FolderTree, Boxes, FileSpreadsheet } from 'lucide-react';
+import { Package, Layers, FolderTree, Boxes } from 'lucide-react';
 import { RoleGuard } from '@/routes/RoleGuard';
 import { InventoryPage } from './InventoryPage';
 import { ProductVariantsPage } from './ProductVariantsPage';
 import { CategoriesPage } from './CategoriesPage';
 import { CombosPage } from './CombosPage';
-import { ProductExcelImportPage } from './ProductExcelImportPage';
 
 const tabs = [
   { id: 'products', label: 'Sản phẩm', icon: Package, permission: 'catalog:product:view' },
-  { id: 'import-excel', label: 'Nhập từ Excel', icon: FileSpreadsheet, permission: 'catalog:product:create' },
   { id: 'variants', label: 'Biến thể sản phẩm', icon: Layers, permission: 'inventory:variant:view' },
   { id: 'categories', label: 'Danh mục sản phẩm', icon: FolderTree, permission: 'catalog:category:view' },
   { id: 'combos', label: 'Gói combo', icon: Boxes, permission: 'catalog:combo:view' },
@@ -67,11 +65,6 @@ export function InventoryProductsTabbedPage() {
         {activeTab === 'products' && (
           <RoleGuard requiredPermission="catalog:product:view">
             <InventoryPage />
-          </RoleGuard>
-        )}
-        {activeTab === 'import-excel' && (
-          <RoleGuard requiredPermission="catalog:product:create">
-            <ProductExcelImportPage />
           </RoleGuard>
         )}
         {activeTab === 'variants' && (
