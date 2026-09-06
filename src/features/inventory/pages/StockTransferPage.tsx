@@ -150,7 +150,8 @@ export function StockTransferPage() {
 
   const generateNextTransferCode = () => {
     const count = data.length + 501;
-    return `STX-2026-${count}`;
+    const rand = Math.floor(Math.random() * 900 + 100);
+    return `STX-${new Date().getFullYear()}-${count}-${rand}`;
   };
 
   const getAvailableStockForBranch = (productIdentifier: string | number, sourceBranchName?: string): number => {

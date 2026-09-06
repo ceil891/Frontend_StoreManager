@@ -115,7 +115,8 @@ export function StockTransferRequestsPage() {
 
   const generateNextRequestCode = () => {
     const count = requests.length + 1;
-    return `STR-2026-${String(count).padStart(3, '0')}`;
+    const rand = Math.floor(Math.random() * 900 + 100);
+    return `STR-${new Date().getFullYear()}-${String(count).padStart(3, '0')}-${rand}`;
   };
 
   // Helper function to resolve available stock for a specific source branch
