@@ -132,7 +132,6 @@ const CrmLoyaltyTabbedPage = lz(() => import('@/features/crm/pages/CrmLoyaltyTab
 const VouchersCRMTabbedPage = lz(() => import('@/features/crm/pages/VouchersTabbedPage'), 'VouchersTabbedPage');
 const WarrantiesTabbedPage = lz(() => import('@/features/crm/pages/WarrantiesTabbedPage'), 'WarrantiesTabbedPage');
 const CrmSupportTabbedPage = lz(() => import('@/features/crm/pages/CrmSupportTabbedPage'), 'CrmSupportTabbedPage');
-const MarketingCampaignsPage = lz(() => import('@/features/crm/pages/MarketingCampaignsPage'), 'default');
 
 // 8. Logistics Containers
 const LogisticsPartnersPage = lz(() => import('@/features/logistics/pages/LogisticsPartnersPage'), 'LogisticsPartnersPage');
@@ -379,7 +378,6 @@ const router = createBrowserRouter([
           { path: 'crm/vouchers', ...protect(<VouchersCRMTabbedPage />, 'crm:voucher:view') },
           { path: 'crm/warranties', ...protect(<WarrantiesTabbedPage />, 'crm:warranty:view') },
           { path: 'crm/support', ...protect(<CrmSupportTabbedPage />, 'crm:ticket:view') },
-          { path: 'crm/campaigns', ...protect(<MarketingCampaignsPage />, 'crm:campaign:view') },
 
           // CRM Legacy Redirects
           { path: 'crm', element: <LegacyRedirect targetCanonical="/crm/customers" defaultTab="customers" /> },

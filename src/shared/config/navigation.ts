@@ -121,7 +121,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { name: 'Mã giảm giá & voucher', href: '/crm/vouchers', icon: Percent, permission: 'crm:voucher:view' },
       { name: 'Quản lý bảo hành', href: '/crm/warranties', icon: Shield, permission: 'crm:warranty:view' },
       { name: 'Chăm sóc & hỗ trợ', href: '/crm/support', icon: LifeBuoy, permission: 'crm:ticket:view' },
-      { name: 'Chiến dịch marketing', href: '/crm/campaigns', icon: BarChart2, permission: 'crm:campaign:view' },
     ],
   },
   {

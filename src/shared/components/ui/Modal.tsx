@@ -13,6 +13,7 @@ interface ModalProps {
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'erp';
   closeOnClickOutside?: boolean;
   scrollable?: boolean;
+  zIndex?: string;
 }
 
 const SIZE_CLASSES: Record<string, string> = {
@@ -23,7 +24,7 @@ const SIZE_CLASSES: Record<string, string> = {
   erp: 'w-[95%] md:w-[70%] max-w-5xl md:min-w-[600px]',
 };
 
-export function Modal({ isOpen, onClose, title, children, width, maxWidth, isDestructive = false, size, closeOnClickOutside = false, scrollable = true }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, width, maxWidth, isDestructive = false, size, closeOnClickOutside = false, scrollable = true, zIndex = 'z-50' }: ModalProps) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -48,7 +49,7 @@ export function Modal({ isOpen, onClose, title, children, width, maxWidth, isDes
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <div className={`fixed inset-0 ${zIndex} flex items-center justify-center p-4 overflow-y-auto`}>
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}

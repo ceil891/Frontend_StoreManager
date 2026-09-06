@@ -1360,7 +1360,8 @@ export function StockTransferPage() {
                         <div>
                           <input
                             type="number"
-                            min={1}
+                            min={0.01}
+                            step="any"
                             value={line.quantity}
                             onChange={(e) => handleUpdateLine(idx, 'quantity', parseFloat(e.target.value) || 0)}
                             className={`w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-mono font-bold text-right ${
@@ -1377,7 +1378,7 @@ export function StockTransferPage() {
                         <input
                           type="number"
                           min={0}
-                          step={1000}
+                          step="any"
                           value={line.unitPrice}
                           onChange={(e) => handleUpdateLine(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
                           className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-mono text-right"
