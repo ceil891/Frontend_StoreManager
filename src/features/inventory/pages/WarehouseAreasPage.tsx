@@ -134,12 +134,13 @@ export function WarehouseAreasPage() {
 
   const handleOpenCreate = () => {
     setModalMode('create');
+    const defaultAreaId = areas[0]?.id ? String(areas[0].id) : '2';
     setEditingItem({
       rackCode: '',
       rackName: '',
       branchId: branches[0]?.id ? String(branches[0].id) : '',
       zoneId: warehouseZones[0]?.id ? String(warehouseZones[0].id) : '',
-      areaId: areas[0]?.id || '',
+      areaId: defaultAreaId,
       maxWeightKg: 1000,
       maxVolumeM3: 5,
       maxPallet: 4,
@@ -162,11 +163,14 @@ export function WarehouseAreasPage() {
     // Map existing properties and default mock values
     const zone = warehouseZones.find(z => z.zoneCode === item.zoneCode);
     const branch = branches.find(b => b.name === item.branchName);
+    const area = areas.find(a => a.areaCode === item.areaCode || a.areaName === item.areaName);
+    const resolvedAreaId = item.areaId || (area ? String(area.id) : (areas[0]?.id ? String(areas[0].id) : '2'));
     
     setEditingItem({
       ...item,
-      branchId: branch ? String(branch.id) : '',
-      zoneId: zone ? String(zone.id) : '',
+      areaId: resolvedAreaId,
+      branchId: branch ? String(branch.id) : (item.branchId || ''),
+      zoneId: zone ? String(zone.id) : (item.zoneId || ''),
       heightM: 3.5,
       levels: 4,
       baysPerLevel: 6,
@@ -190,17 +194,31 @@ export function WarehouseAreasPage() {
 
   const handleSave = async (e: React.FormEvent, createAnother = false) => {
     e.preventDefault();
-    if (!editingItem.rackCode || !editingItem.rackName || !editingItem.areaId) return;
+    if (!editingItem.rackCode?.trim() || !editingItem.rackName?.trim()) {
+      toast.error('Vui lòng nhập đầy đủ Mã kệ và Tên kệ hàng!');
+      return;
+    }
     if (codeStatus === 'duplicate') {
       toast.error('Mã kệ hàng đã tồn tại!');
       return;
     }
 
+    const resolvedAreaId = Number(editingItem.areaId || areas[0]?.id || 2);
+    const matchedArea = areas.find(a => String(a.id) === String(resolvedAreaId));
+    const matchedZone = warehouseZones.find(z => String(z.id) === editingItem.zoneId || z.zoneCode === matchedArea?.zoneCode);
+    const matchedBranch = branches.find(b => String(b.id) === editingItem.branchId || b.name === matchedZone?.branchName);
+
     setIsSaving(true);
     const payload = {
-      rackCode: editingItem.rackCode.toUpperCase(),
-      rackName: editingItem.rackName,
-      areaId: editingItem.areaId,
+      rackCode: editingItem.rackCode.trim().toUpperCase(),
+      rackName: editingItem.rackName.trim(),
+      areaId: resolvedAreaId,
+      areaCode: matchedArea?.areaCode || editingItem.areaCode || 'AREA-01',
+      areaName: matchedArea?.areaName || editingItem.areaName || 'Bãi kho mặc định',
+      zoneId: matchedZone?.id ? String(matchedZone.id) : (editingItem.zoneId || '1'),
+      zoneCode: matchedZone?.zoneCode || editingItem.zoneCode || 'ZONE-A',
+      branchId: matchedBranch?.id ? String(matchedBranch.id) : (editingItem.branchId || '1'),
+      branchName: matchedBranch?.name || editingItem.branchName || 'Chi nhánh Hà Nội',
       maxWeightKg: Number(editingItem.maxWeightKg || 0),
       maxVolumeM3: Number(editingItem.maxVolumeM3 || 0),
       maxPallet: Number(editingItem.maxPallet || 0),
@@ -212,7 +230,7 @@ export function WarehouseAreasPage() {
       await executeSave(payload);
       toast.success(
         modalMode === 'create'
-          ? `Đã cẩu đặt kệ hàng ${payload.rackCode} thành công!`
+          ? `Đã lưu kệ hàng ${payload.rackCode} thành công!`
           : `Đã cập nhật cấu hình kệ ${payload.rackCode}!`
       );
       
@@ -501,7 +519,7 @@ export function WarehouseAreasPage() {
               <MapPin className="w-4 h-4 text-emerald-600" /> 1. Thông tin định vị kho bãi
             </h4>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-[10px] font-bold text-gray-550 uppercase mb-1">Chi nhánh *</label>
                 <select
@@ -533,6 +551,35 @@ export function WarehouseAreasPage() {
                   }))}
                   onChange={(val) => setEditingItem(prev => ({ ...prev, zoneId: val }))}
                 />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-gray-550 uppercase mb-1">Khu vực Bãi kho (Area) *</label>
+                <select
+                  value={editingItem.areaId || ''}
+                  onChange={(e) => setEditingItem({ ...editingItem, areaId: e.target.value })}
+                  className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded text-xs bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                >
+                  {filteredAreas.length > 0 ? (
+                    filteredAreas.map(a => (
+                      <option key={a.id} value={String(a.id)}>
+                        {a.areaName} ({a.areaCode})
+                      </option>
+                    ))
+                  ) : areas.length > 0 ? (
+                    areas.map(a => (
+                      <option key={a.id} value={String(a.id)}>
+                        {a.areaName} ({a.areaCode})
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="1">Bãi A1 (AREA-756)</option>
+                      <option value="2">Bãi A2 (AREA-323)</option>
+                      <option value="3">Area B7R (AREA-390)</option>
+                    </>
+                  )}
+                </select>
               </div>
             </div>
 

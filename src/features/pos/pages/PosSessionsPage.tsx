@@ -157,6 +157,12 @@ export function PosSessionsPage() {
         ? s.expectedCash
         : (s.openingCash + grossRevenue);
 
+      const diff = s.cashDifference !== undefined && !isNaN(s.cashDifference)
+        ? s.cashDifference
+        : ((s.actualCash || 0) - expectedCash);
+      const isClosed = s.status === 'CLOSED';
+      const hasDiscrepancy = isClosed && Math.abs(diff) > 1000;
+
       return {
         id: s.id,
         sessionCode: s.sessionCode,
@@ -167,11 +173,11 @@ export function PosSessionsPage() {
         openingCashFloatVnd: s.openingCash,
         expectedClosingCashVnd: expectedCash,
         actualClosingCashVnd: s.actualCash,
-        cashDiscrepancyVnd: s.cashDifference,
+        cashDiscrepancyVnd: diff,
         totalTransactionsCount: orderCount,
         totalGrossRevenueVnd: grossRevenue,
-        status: s.status === 'OPEN' ? 'IN_PROGRESS' : 'CLOSED_VERIFIED',
-        supervisorSignoff: 'Lê Quản lý',
+        status: s.status === 'OPEN' ? 'IN_PROGRESS' : (hasDiscrepancy ? 'DISCREPANCY_FLAGGED' : 'CLOSED_VERIFIED'),
+        supervisorSignoff: hasDiscrepancy ? 'PENDING_INVESTIGATION' : 'Lê Quản lý',
         branchId: s.branchId,
         shiftName: s.shiftName,
         orders: sessionOrders,
@@ -394,7 +400,8 @@ export function PosSessionsPage() {
   // 2. Close Shift handlers
   const handleOpenCloseShift = () => {
     if (!selectedSession) return;
-    setActualClosingCashInput(String(selectedSession.expectedClosingCashVnd));
+    const roundedExpected = Math.round(selectedSession.expectedClosingCashVnd || 0);
+    setActualClosingCashInput(String(roundedExpected));
     setShowDenomCalculator(false);
     setDenominations({});
     setIsCloseShiftModalOpen(true);
@@ -403,9 +410,10 @@ export function PosSessionsPage() {
   const handleConfirmCloseShift = async () => {
     if (!selectedSession) return;
     
-    const parsedActualCash = parseInt(actualClosingCashInput.replace(/\D/g, ''), 10) || 0;
-    const discrepancy = parsedActualCash - selectedSession.expectedClosingCashVnd;
-    const newStatus = discrepancy === 0 ? 'CLOSED_VERIFIED' : 'DISCREPANCY_FLAGGED';
+    const numericOnly = actualClosingCashInput.replace(/\D/g, '');
+    const parsedActualCash = numericOnly ? parseInt(numericOnly, 10) : 0;
+    const discrepancy = parsedActualCash - (selectedSession.expectedClosingCashVnd || 0);
+    const newStatus = Math.abs(discrepancy) <= 1000 ? 'CLOSED_VERIFIED' : 'DISCREPANCY_FLAGGED';
     
     try {
       await closeSession(selectedSession.id, parsedActualCash);

@@ -5,40 +5,52 @@ import { extractPageContent } from '@/shared/lib/apiHelpers';
 import { useBranchStore } from '@/features/system/store/branchStore';
 
 const resolveBranchId = (name?: string | number): number => {
-  if (!name) return 1;
+  if (!name) {
+    const defaultBranch = useBranchStore.getState().branches[0];
+    return defaultBranch ? Number(defaultBranch.id) : 1;
+  }
   const num = Number(name);
   if (!isNaN(num) && num > 0) return num;
 
   try {
     const branches = useBranchStore.getState().branches || [];
-    const lower = String(name).trim().toLowerCase();
+    if (branches.length > 0) {
+      const raw = String(name).trim();
+      const lower = raw.toLowerCase();
+      const cleanLower = lower.replace(/\(.*?\)/g, '').trim();
 
-    const byId = branches.find((b) => String(b.id) === lower);
-    if (byId) return Number(byId.id);
+      const byId = branches.find((b) => String(b.id) === lower);
+      if (byId) return Number(byId.id);
 
-    const byCode = branches.find((b) => b.branchCode && b.branchCode.toLowerCase() === lower);
-    if (byCode) return Number(byCode.id);
+      const byCode = branches.find((b) => b.branchCode && b.branchCode.toLowerCase() === lower);
+      if (byCode) return Number(byCode.id);
 
-    const byName = branches.find(
-      (b) => b.name.toLowerCase() === lower || (b.branchName && b.branchName.toLowerCase() === lower)
-    );
-    if (byName) return Number(byName.id);
+      const byName = branches.find(
+        (b) =>
+          b.name.toLowerCase() === lower ||
+          b.name.toLowerCase() === cleanLower ||
+          (b.branchName && (b.branchName.toLowerCase() === lower || b.branchName.toLowerCase() === cleanLower))
+      );
+      if (byName) return Number(byName.id);
 
-    const bySub = branches.find(
-      (b) =>
-        lower.includes(b.name.toLowerCase()) ||
-        (b.branchName && lower.includes(b.branchName.toLowerCase())) ||
-        b.name.toLowerCase().includes(lower) ||
-        (b.branchCode && lower.includes(b.branchCode.toLowerCase()))
-    );
-    if (bySub) return Number(bySub.id);
+      const bySub = branches.find(
+        (b) =>
+          cleanLower.includes(b.name.toLowerCase()) ||
+          b.name.toLowerCase().includes(cleanLower) ||
+          (b.branchName && (cleanLower.includes(b.branchName.toLowerCase()) || b.branchName.toLowerCase().includes(cleanLower))) ||
+          (b.branchCode && (cleanLower.includes(b.branchCode.toLowerCase()) || b.branchCode.toLowerCase().includes(cleanLower)))
+      );
+      if (bySub) return Number(bySub.id);
+    }
   } catch {}
 
   const lower = String(name).toLowerCase();
   if (lower.includes('quận 2') || lower.includes('q2') || lower.includes('cn2') || lower.includes('hồ chí minh') || lower.includes('tphcm')) return 2;
   if (lower.includes('quận 3') || lower.includes('q3') || lower.includes('cn3') || lower.includes('đà nẵng') || lower.includes('da nang')) return 3;
   if (lower.includes('hà đông')) return 4;
-  return 1;
+
+  const firstBranch = useBranchStore.getState().branches[0];
+  return firstBranch ? Number(firstBranch.id) : 1;
 };
 
 const mapImportReceiptStatus = (status?: string): ImportReceiptItem['status'] => {
@@ -353,6 +365,8 @@ export interface StockTransferOrder {
   id: string;
   transferNumber: string;
   requestRefCode?: string;
+  fromBranchId?: number;
+  toBranchId?: number;
   sourceHub: string;
   destinationHub: string;
   dispatchDate: string;
@@ -968,6 +982,14 @@ interface InventoryState {
   approveStockTransfer: (id: string) => Promise<void>;
   shipStockTransfer: (id: string) => Promise<void>;
 
+  // --- Transfer Requests (STR) ---
+  transferRequests: TransferRequestRecord[];
+  fetchTransferRequests: () => Promise<void>;
+  addTransferRequest: (req: Omit<TransferRequestRecord, 'id'>) => Promise<void>;
+  updateTransferRequest: (id: string, data: Partial<TransferRequestRecord>) => Promise<void>;
+  deleteTransferRequest: (id: string) => Promise<void>;
+  approveTransferRequest: (id: string) => Promise<void>;
+
   addProduct: (product: Omit<ProductInventory, 'id'>) => void;
   updateProduct: (id: string, data: Partial<ProductInventory>) => void;
   deleteProduct: (id: string) => void;
@@ -1114,6 +1136,78 @@ export const VARIANCE_REASON_LABELS: Record<VarianceReason, string> = {
   OTHER: 'Khác',
 };
 
+export const DEFAULT_TRANSFER_REQUESTS: TransferRequestRecord[] = [
+  {
+    id: 'req-001',
+    requestCode: 'STR-2026-001',
+    sourceHub: 'Chi Nhánh Đà Nẵng (BR-003)',
+    destinationHub: 'Chi nhánh Hà Nội (BR-001)',
+    priority: 'URGENT',
+    reason: 'Điều chuyển hàng gấp phục vụ chiến dịch khuyến mãi',
+    requestedBy: 'Nguyễn Lưu Hưng',
+    requestDate: '2026-09-05',
+    expectedDate: '2026-09-08',
+    status: 'APPROVED',
+    notes: 'Đã duyệt xuất kho ngày 06/09/2026. Ưu tiên đóng gói chuyển nhanh.',
+    items: [
+      {
+        id: 'req-line-1',
+        productName: 'Dầu đậu nành Simply 1L',
+        variant: 'Lon 330ml / Chai 1L',
+        sku: 'PRO-SIMPLY-1L',
+        availableQuantity: 100,
+        requestedQuantity: 50,
+      },
+    ],
+  },
+  {
+    id: 'req-002',
+    requestCode: 'STR-2026-002',
+    sourceHub: 'Chi nhánh Hà Nội (Kho chính)',
+    destinationHub: 'Chi nhánh TP. Hồ Chí Minh (BR-002)',
+    priority: 'HIGH',
+    reason: 'Cân đối tồn kho tuần 36',
+    requestedBy: 'Trần Thị Mai',
+    requestDate: '2026-09-06',
+    expectedDate: '2026-09-09',
+    status: 'APPROVED',
+    notes: 'Điều phối hàng tồn từ kho chính Hà Nội vào kho TP.HCM.',
+    items: [
+      {
+        id: 'req-line-2',
+        productName: 'Nước giải khát Coca-Cola 330ml',
+        variant: 'Lon 330ml Original Taste',
+        sku: 'SKU-COCA-330ML',
+        availableQuantity: 80,
+        requestedQuantity: 30,
+      },
+    ],
+  },
+  {
+    id: 'req-003',
+    requestCode: 'STR-2026-003',
+    sourceHub: 'Chi nhánh TP. Hồ Chí Minh (BR-002)',
+    destinationHub: 'Chi nhánh Cần Thơ (BR-004)',
+    priority: 'MEDIUM',
+    reason: 'Bổ sung tồn kho định kỳ',
+    requestedBy: 'Lê Văn Nam',
+    requestDate: '2026-09-06',
+    expectedDate: '2026-09-10',
+    status: 'PENDING_APPROVAL',
+    notes: 'Chờ Quản lý vùng duyệt điều chuyển.',
+    items: [
+      {
+        id: 'req-line-3',
+        productName: 'Sữa tươi tiệt trùng Vinamilk 100% 1L',
+        variant: 'Hộp 1L Không Đường',
+        sku: 'SKU-VNM-1L-KD',
+        availableQuantity: 120,
+        requestedQuantity: 40,
+      },
+    ],
+  },
+];
+
 export const useInventoryStore = create<InventoryState>()(
   persist(
     (set, get) => ({
@@ -1121,6 +1215,7 @@ export const useInventoryStore = create<InventoryState>()(
       brands: [],
       productBatches: [],
       stockTransfers: [],
+      transferRequests: DEFAULT_TRANSFER_REQUESTS,
       products: [],
       combos: [],
       cancelIssues: [],
@@ -1499,6 +1594,8 @@ export const useInventoryStore = create<InventoryState>()(
               return {
                 id: String(item.id),
                 transferNumber: item.transferCode || `STX-2026-${item.id}`,
+                fromBranchId: item.fromBranchId ? Number(item.fromBranchId) : undefined,
+                toBranchId: item.toBranchId ? Number(item.toBranchId) : undefined,
                 sourceHub: item.fromBranchName || 'Chi nhánh gửi',
                 destinationHub: item.toBranchName || 'Chi nhánh nhận',
                 dispatchDate: formatApiDate(item.transferDate || item.createdAt),
@@ -1827,8 +1924,8 @@ export const useInventoryStore = create<InventoryState>()(
           const payload = {
             transferCode: transfer.transferNumber || `ST-${Date.now()}`,
             transferDate: transfer.dispatchDate ? `${transfer.dispatchDate}T00:00:00` : new Date().toISOString(),
-            fromBranchId: resolveBranchId(transfer.sourceHub),
-            toBranchId: resolveBranchId(transfer.destinationHub),
+            fromBranchId: transfer.fromBranchId ? Number(transfer.fromBranchId) : resolveBranchId(transfer.sourceHub),
+            toBranchId: transfer.toBranchId ? Number(transfer.toBranchId) : resolveBranchId(transfer.destinationHub),
             status: transfer.status || 'READY_TO_SHIP',
             requestedBy: transfer.requestedBy || undefined,
             logisticsPartner: transfer.logisticsPartner || undefined,
@@ -1880,8 +1977,8 @@ export const useInventoryStore = create<InventoryState>()(
           const payload = {
             transferCode: data.transferNumber || existing?.transferNumber,
             transferDate: data.dispatchDate ? `${data.dispatchDate}T00:00:00` : new Date().toISOString(),
-            fromBranchId: data.sourceHub ? resolveBranchId(data.sourceHub) : (existing?.sourceHub ? resolveBranchId(existing.sourceHub) : undefined),
-            toBranchId: data.destinationHub ? resolveBranchId(data.destinationHub) : (existing?.destinationHub ? resolveBranchId(existing.destinationHub) : undefined),
+            fromBranchId: (data as any).fromBranchId ? Number((data as any).fromBranchId) : (data.sourceHub ? resolveBranchId(data.sourceHub) : (existing?.fromBranchId || (existing?.sourceHub ? resolveBranchId(existing.sourceHub) : undefined))),
+            toBranchId: (data as any).toBranchId ? Number((data as any).toBranchId) : (data.destinationHub ? resolveBranchId(data.destinationHub) : (existing?.toBranchId || (existing?.destinationHub ? resolveBranchId(existing.destinationHub) : undefined))),
             status: data.status || existing?.status,
             requestedBy: data.requestedBy || existing?.requestedBy || undefined,
             logisticsPartner: data.logisticsPartner || existing?.logisticsPartner || undefined,
@@ -1961,6 +2058,148 @@ export const useInventoryStore = create<InventoryState>()(
           set({ stockTransfers: prevTransfers, products: prevProducts });
           console.error('Failed to cancel stock transfer:', error);
           throw error;
+        }
+      },
+
+      fetchTransferRequests: async () => {
+        try {
+          const res: any = await axiosClient.get<any, any>('/inventories/transfers');
+          const list = Array.isArray(res) ? res : (res?.content || res?.data || []);
+          if (list && list.length > 0) {
+            const mapped: TransferRequestRecord[] = list.map((item: any) => ({
+              id: String(item.id),
+              requestCode: item.transferCode || `STR-2026-${String(item.id).padStart(3, '0')}`,
+              sourceHub: item.fromBranchName || 'Chi nhánh xuất',
+              destinationHub: item.toBranchName || 'Chi nhánh nhận',
+              priority: (item.priority || 'MEDIUM') as any,
+              reason: item.reason || item.note || 'Bổ sung tồn kho',
+              requestedBy: item.requestedBy || item.createdBy || 'System Admin',
+              requestDate: item.transferDate ? (item.transferDate.includes('T') ? item.transferDate.split('T')[0] : item.transferDate) : new Date().toISOString().split('T')[0],
+              expectedDate: item.estArrivalDate ? (item.estArrivalDate.includes('T') ? item.estArrivalDate.split('T')[0] : item.estArrivalDate) : '',
+              status: (item.status || 'PENDING_APPROVAL') as any,
+              notes: item.note || '',
+              items: (item.transferLines || []).map((l: any, idx: number) => ({
+                id: String(l.id || idx),
+                productName: l.productName || 'Sản phẩm',
+                variant: l.variantName || 'Mặc định',
+                sku: l.sku || l.productCode || '',
+                availableQuantity: l.availableQuantity || 0,
+                requestedQuantity: l.transferQuantity || l.requestedQuantity || 1,
+              })),
+            }));
+
+            // Merge with local approved requests so user doesn't lose newly approved/local items
+            const current = get().transferRequests;
+            const merged = [...mapped];
+            current.forEach((c) => {
+              if (!merged.some((m) => m.id === c.id || m.requestCode === c.requestCode)) {
+                merged.push(c);
+              }
+            });
+            set({ transferRequests: merged });
+          } else {
+            if (!get().transferRequests || get().transferRequests.length === 0) {
+              set({ transferRequests: DEFAULT_TRANSFER_REQUESTS });
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to fetch transfer requests API, preserving local state:', err);
+          if (!get().transferRequests || get().transferRequests.length === 0) {
+            set({ transferRequests: DEFAULT_TRANSFER_REQUESTS });
+          }
+        }
+      },
+
+      addTransferRequest: async (req) => {
+        const id = (req as any).id || `req-${Date.now()}`;
+        const newRecord: TransferRequestRecord = { id, ...req };
+        set((state) => ({
+          transferRequests: [newRecord, ...state.transferRequests.filter((r) => r.id !== id)],
+        }));
+        try {
+          const fromBranchId = resolveBranchId(req.sourceHub);
+          const toBranchId = resolveBranchId(req.destinationHub);
+          const apiPayload = {
+            transferCode: req.requestCode,
+            fromBranchId,
+            fromBranchName: req.sourceHub,
+            toBranchId,
+            toBranchName: req.destinationHub,
+            transferDate: req.requestDate,
+            estArrivalDate: req.expectedDate,
+            status: req.status || 'PENDING_APPROVAL',
+            note: req.notes || req.reason,
+            requestedBy: req.requestedBy,
+            transferLines: (req.items || []).map((line) => ({
+              productName: line.productName,
+              variantName: line.variant,
+              sku: line.sku,
+              transferQuantity: line.requestedQuantity,
+            })),
+          };
+          await axiosClient.post('/inventories/transfers', apiPayload);
+        } catch (err) {
+          console.warn('API save transfer request warning:', err);
+        }
+      },
+
+      updateTransferRequest: async (id, data) => {
+        set((state) => ({
+          transferRequests: state.transferRequests.map((r) => (r.id === id ? { ...r, ...data } : r)),
+        }));
+        try {
+          const current = get().transferRequests.find((r) => r.id === id);
+          if (current && !id.startsWith('req-')) {
+            const apiPayload = {
+              transferCode: current.requestCode,
+              fromBranchId: resolveBranchId(current.sourceHub),
+              fromBranchName: current.sourceHub,
+              toBranchId: resolveBranchId(current.destinationHub),
+              toBranchName: current.destinationHub,
+              transferDate: current.requestDate,
+              estArrivalDate: current.expectedDate,
+              status: current.status,
+              note: current.notes || current.reason,
+              requestedBy: current.requestedBy,
+              transferLines: (current.items || []).map((line) => ({
+                productName: line.productName,
+                variantName: line.variant,
+                sku: line.sku,
+                transferQuantity: line.requestedQuantity,
+              })),
+            };
+            await axiosClient.put(`/inventories/transfers/${id}`, apiPayload);
+          }
+        } catch (err) {
+          console.warn('API update transfer request warning:', err);
+        }
+      },
+
+      deleteTransferRequest: async (id) => {
+        set((state) => ({
+          transferRequests: state.transferRequests.filter((r) => r.id !== id),
+        }));
+        try {
+          if (!id.startsWith('req-')) {
+            await axiosClient.delete(`/inventories/transfers/${id}`);
+          }
+        } catch (err) {
+          console.warn('API delete transfer request warning:', err);
+        }
+      },
+
+      approveTransferRequest: async (id) => {
+        set((state) => ({
+          transferRequests: state.transferRequests.map((r) =>
+            r.id === id ? { ...r, status: 'APPROVED' } : r
+          ),
+        }));
+        try {
+          if (!id.startsWith('req-')) {
+            await axiosClient.post(`/inventories/transfers/${id}/approve`);
+          }
+        } catch (err) {
+          console.warn('API approve transfer request warning:', err);
         }
       },
 
@@ -3180,8 +3419,8 @@ export const useInventoryStore = create<InventoryState>()(
           const url = areaId ? `/wms/racks/by-area/${areaId}` : '/wms/racks';
           const data = await axiosClient.get<any, any>(url);
           const list = Array.isArray(data) ? data : (data?.data || data?.content || []);
-          if (list.length > 0) {
-            const mapped = list.map((item: any) => ({
+          if (Array.isArray(list) && list.length > 0) {
+            const backendRacks: RackRecord[] = list.map((item: any) => ({
               id: String(item.id),
               rackCode: item.rackCode,
               rackName: item.rackName,
@@ -3198,13 +3437,18 @@ export const useInventoryStore = create<InventoryState>()(
               branchId: String(item.branchId || ''),
               branchName: item.branchName || '',
             }));
-            set({ racks: mapped });
+            set((state) => {
+              const backendIds = new Set(backendRacks.map(b => b.id));
+              const localOnly = state.racks.filter(r => !backendIds.has(r.id));
+              return { racks: [...backendRacks, ...localOnly] };
+            });
           }
         } catch (error) {
           console.warn('Failed to fetch racks, preserving local state:', error);
         }
       },
       addRack: async (rack) => {
+        const areaIdNum = Number(rack.areaId || 2);
         const newRackRecord: RackRecord = {
           id: (rack as any).id || String(Date.now()),
           rackCode: rack.rackCode || `RACK-${Date.now().toString().slice(-4)}`,
@@ -3214,7 +3458,7 @@ export const useInventoryStore = create<InventoryState>()(
           maxPallet: rack.maxPallet || 4,
           description: rack.description || '',
           isActive: rack.isActive !== false,
-          areaId: rack.areaId || '1',
+          areaId: String(areaIdNum),
           areaCode: rack.areaCode || 'AREA-01',
           areaName: rack.areaName || 'Khu vực bãi kho A',
           zoneId: rack.zoneId || '1',
@@ -3224,25 +3468,42 @@ export const useInventoryStore = create<InventoryState>()(
         };
         set((state) => ({ racks: [newRackRecord, ...state.racks.filter(r => r.id !== newRackRecord.id)] }));
         try {
-          await axiosClient.post('/wms/racks', rack);
+          const res = await axiosClient.post<any, any>('/wms/racks', {
+            ...rack,
+            areaId: areaIdNum,
+          });
+          if (res?.data?.id || res?.id) {
+            const savedId = String(res?.data?.id || res?.id);
+            set((state) => ({
+              racks: state.racks.map(r => r.id === newRackRecord.id ? { ...r, id: savedId } : r)
+            }));
+          }
         } catch (error) {
           console.warn('Failed to add rack on backend, preserved local item:', error);
         }
       },
       updateRack: async (id, data) => {
+        const areaIdNum = Number(data.areaId || 2);
+        set((state) => ({
+          racks: state.racks.map(r => r.id === String(id) ? { ...r, ...data, areaId: String(areaIdNum) } : r)
+        }));
         try {
-          await axiosClient.put(`/wms/racks/${id}`, data);
-          await get().fetchRacks();
+          await axiosClient.put(`/wms/racks/${id}`, {
+            ...data,
+            areaId: areaIdNum,
+          });
         } catch (error) {
-          console.error('Failed to update rack:', error);
+          console.warn('Failed to update rack on backend, preserved local changes:', error);
         }
       },
       deleteRack: async (id) => {
+        set((state) => ({
+          racks: state.racks.filter(r => r.id !== String(id))
+        }));
         try {
           await axiosClient.delete(`/wms/racks/${id}`);
-          await get().fetchRacks();
         } catch (error) {
-          console.error('Failed to delete rack:', error);
+          console.warn('Failed to delete rack on backend, removed locally:', error);
         }
       },
 

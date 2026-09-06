@@ -75,7 +75,12 @@ export function Modal({ isOpen, onClose, title, children, width, maxWidth, isDes
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h2>
               </div>
               <button
-                onClick={onClose}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onClose();
+                }}
                 className="p-1.5 rounded-full text-gray-400 hover:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors focus:outline-none"
               >
                 <X className="w-5 h-5" />

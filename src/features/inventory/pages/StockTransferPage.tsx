@@ -1,9 +1,11 @@
 import { Modal } from '@/shared/components/ui/Modal';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router';
 import {
   Plus, Search, Eye, Edit, Trash2, ArrowRightLeft, Calendar, FileText,
   Download, Printer, Package, Layers, AlertCircle, CheckCircle2, XCircle,
-  Truck, Building2, User, ShieldAlert, PlusCircle, X, Check, RefreshCw
+  Truck, Building2, User, ShieldAlert, PlusCircle, X, Check, RefreshCw,
+  Lock, Unlock
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -35,6 +37,7 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
 };
 
 export function StockTransferPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     stockTransfers: data,
     fetchStockTransfers,
@@ -47,6 +50,8 @@ export function StockTransferPage() {
     fetchProducts,
     inventories,
     fetchInventories,
+    transferRequests,
+    fetchTransferRequests,
   } = useInventoryStore();
 
   const { branches, fetchBranches } = useBranchStore();
@@ -66,12 +71,53 @@ export function StockTransferPage() {
   const [editingLines, setEditingLines] = useState<StockTransferItem[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Searchable Select state for Transfer Request in Modal
+  const [requestSearch, setRequestSearch] = useState('');
+  const [isRequestDropdownOpen, setIsRequestDropdownOpen] = useState(false);
+  const requestDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (requestDropdownRef.current && !requestDropdownRef.current.contains(event.target as Node)) {
+        setIsRequestDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // User spec: Chỉ load danh sách các Yêu cầu Chuyển kho (TransferRequest) có trạng thái APPROVED (Đã duyệt) và PENDING_ISSUE (Chờ xuất).
+  const eligibleRequests = useMemo(() => {
+    return (transferRequests || []).filter((r) => {
+      const st = (r.status || '').toUpperCase();
+      return st === 'APPROVED' || st === 'PENDING_ISSUE';
+    });
+  }, [transferRequests]);
+
+  const filteredEligibleRequests = useMemo(() => {
+    const q = (requestSearch || '').toLowerCase().trim();
+    if (!q) return eligibleRequests;
+    return eligibleRequests.filter(
+      (r) =>
+        r.requestCode.toLowerCase().includes(q) ||
+        (r.sourceHub && r.sourceHub.toLowerCase().includes(q)) ||
+        (r.destinationHub && r.destinationHub.toLowerCase().includes(q)) ||
+        (r.reason && r.reason.toLowerCase().includes(q))
+    );
+  }, [eligibleRequests, requestSearch]);
+
+  const isLinkedToRequest = Boolean(
+    editingHeader.requestRefCode && editingHeader.requestRefCode.trim().length > 0
+  );
+
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       try {
         await Promise.all([
           fetchStockTransfers(),
+          fetchTransferRequests(),
           fetchProducts(),
           fetchBranches(),
           fetchUsers(),
@@ -84,7 +130,7 @@ export function StockTransferPage() {
       }
     };
     load();
-  }, [fetchStockTransfers, fetchProducts, fetchBranches, fetchUsers, fetchInventories]);
+  }, [fetchStockTransfers, fetchTransferRequests, fetchProducts, fetchBranches, fetchUsers, fetchInventories]);
 
   const filtered = useMemo(() => {
     return data.filter((item) => {
@@ -150,22 +196,141 @@ export function StockTransferPage() {
     return targetProduct.onHand ?? 0;
   };
 
+  // Handle URL param ?fromReq=STR-xxx to auto open modal with pre-selected request
+  useEffect(() => {
+    const fromReq = searchParams.get('fromReq') || searchParams.get('reqCode');
+    if (fromReq && transferRequests.length > 0) {
+      handleOpenCreateWithRequest(fromReq);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('fromReq');
+          next.delete('reqCode');
+          return next;
+        },
+        { replace: true }
+      );
+    }
+  }, [searchParams, transferRequests]);
+
+  // Event Trigger khi Chọn Đơn (onChange Transfer Request)
+  const handleSelectTransferRequest = (requestCode: string) => {
+    if (!requestCode) {
+      // Bỏ chọn Đơn yêu cầu (Clear selection):
+      // Reset Form về trạng thái Chuyển kho tự do (Mở khóa Kho xuất, Kho nhận, cho phép chọn/thêm sản phẩm thủ công)
+      const defaultSource = branches.length > 0 ? branches[0].name : '';
+      const defaultDest =
+        branches.length > 1
+          ? branches[1].name
+          : branches.length > 0
+          ? branches[0].name
+          : '';
+      const finalDest = defaultSource === defaultDest && branches.length > 1 ? branches[1].name : defaultDest;
+
+      setEditingHeader((prev) => ({
+        ...prev,
+        requestRefCode: '',
+        sourceHub: defaultSource,
+        fromBranchId: branches[0] ? Number(branches[0].id) : undefined,
+        destinationHub: finalDest,
+        toBranchId: branches.length > 1 ? Number(branches[1].id) : (branches[0] ? Number(branches[0].id) : undefined),
+        notes: 'Phiếu chuyển kho tự do.',
+      }));
+      setEditingLines([]);
+      setRequestSearch('');
+      setIsRequestDropdownOpen(false);
+      toast.info('Đã hủy liên kết đơn yêu cầu. Mở khóa Kho xuất, Kho nhận và chuyển về chế độ Chuyển kho tự do.');
+      return;
+    }
+
+    const req = transferRequests.find((r) => r.requestCode === requestCode);
+    if (!req) {
+      toast.error(`Không tìm thấy đơn yêu cầu ${requestCode}!`);
+      return;
+    }
+
+    // Khi chọn một Mã yêu cầu:
+    // 1. Clear toàn bộ Form State hiện tại.
+    // 2. Auto-fill Kho xuất, Kho nhận từ Đơn yêu cầu và KHÓA (Read-only).
+    // 3. Auto-fill danh sách Sản phẩm từ Đơn yêu cầu xuống Table.
+    // 4. Disable/Ẩn nút + Thêm sản phẩm.
+    const bSrc = branches.find(b => b.name === req.sourceHub || b.branchCode === req.sourceHub || String(b.id) === req.sourceHub);
+    const bDest = branches.find(b => b.name === req.destinationHub || b.branchCode === req.destinationHub || String(b.id) === req.destinationHub);
+
+    setEditingHeader({
+      transferNumber: editingHeader.transferNumber || generateNextTransferCode(),
+      requestRefCode: req.requestCode,
+      sourceHub: bSrc ? bSrc.name : req.sourceHub,
+      fromBranchId: bSrc ? Number(bSrc.id) : undefined,
+      destinationHub: bDest ? bDest.name : req.destinationHub,
+      toBranchId: bDest ? Number(bDest.id) : undefined,
+      priority: req.priority || 'MEDIUM',
+      reason: req.reason || 'Điều chuyển hàng theo yêu cầu đã duyệt',
+      requestedBy: currentUser?.name || (users.length > 0 ? users[0].fullName : req.requestedBy),
+      dispatchDate: new Date().toISOString().split('T')[0],
+      estArrivalDate: req.expectedDate || '',
+      logisticsPartner: 'Nội bộ (Đội xe công ty)',
+      trackingRef: '',
+      notes: req.notes
+        ? `Thực hiện theo Yêu cầu ${req.requestCode}: ${req.notes}`
+        : `Xuất chuyển kho theo Yêu cầu ${req.requestCode}`,
+      status: StockTransferExecutionStatus.READY_TO_SHIP,
+    });
+
+    const loadedLines: StockTransferItem[] = (req.items || []).map((item) => {
+      const matchedProduct = products.find(
+        (p) => String(p.id) === item.productName || p.name === item.productName || p.sku === item.sku
+      );
+      const available = getAvailableStockForBranch(item.productName, req.sourceHub);
+      const reqQty = Number(item.requestedQuantity || 1);
+      const actualQty = Math.min(reqQty, available > 0 ? available : reqQty);
+      const unitPrice = matchedProduct ? matchedProduct.costPrice || matchedProduct.price || 44000 : 44000;
+
+      return {
+        id: `line-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        productName: item.productName,
+        variant: item.variant || 'Mặc định',
+        sku: item.sku || (matchedProduct ? matchedProduct.sku : 'SKU-AUTO'),
+        availableQuantity: available,
+        requestedQuantity: reqQty,
+        quantity: actualQty,
+        receivedQuantity: 0,
+        unitPrice: unitPrice,
+        amount: actualQty * unitPrice,
+      };
+    });
+
+    setEditingLines(loadedLines);
+    setRequestSearch('');
+    setIsRequestDropdownOpen(false);
+    toast.success(
+      `Đã nạp ${loadedLines.length} sản phẩm từ Yêu Cầu Chuyển Kho ${req.requestCode}! Kho xuất (${req.sourceHub}) và Kho nhận (${req.destinationHub}) đã được khóa cố định.`
+    );
+  };
+
   const handleOpenCreate = () => {
     setModalMode('create');
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const defaultSource = branches.length > 0 ? branches[0].name : 'Chi nhánh Hà Nội (Kho chính)';
-    const defaultDest = branches.length > 1 ? branches[1].name : (branches.length > 0 ? branches[0].name : 'Chi nhánh TP. Hồ Chí Minh');
-    const finalDest = (defaultSource === defaultDest && branches.length > 1) ? branches[1].name : defaultDest;
+    const defaultSource = branches.length > 0 ? branches[0].name : '';
+    const defaultDest =
+      branches.length > 1
+        ? branches[1].name
+        : branches.length > 0
+        ? branches[0].name
+        : '';
+    const finalDest = defaultSource === defaultDest && branches.length > 1 ? branches[1].name : defaultDest;
     const defaultUser = currentUser?.name || (users.length > 0 ? users[0].fullName : 'Nguyễn Văn Hưng (Thủ kho)');
 
     setEditingHeader({
       transferNumber: generateNextTransferCode(),
-      requestRefCode: 'STR-2026-001',
+      requestRefCode: '', // Mặc định chuyển tự do hoặc chọn từ dropdown
       sourceHub: defaultSource,
+      fromBranchId: branches[0] ? Number(branches[0].id) : undefined,
       destinationHub: finalDest,
+      toBranchId: branches.length > 1 ? Number(branches[1].id) : (branches[0] ? Number(branches[0].id) : undefined),
       priority: 'MEDIUM',
       reason: 'REBALANCE',
       requestedBy: defaultUser,
@@ -173,29 +338,20 @@ export function StockTransferPage() {
       estArrivalDate: tomorrow.toISOString().split('T')[0],
       logisticsPartner: 'Nội bộ (Đội xe công ty)',
       trackingRef: '',
-      notes: 'Phiếu thực hiện chuyển kho theo yêu cầu đã duyệt.',
+      notes: 'Phiếu chuyển kho mới.',
       status: StockTransferExecutionStatus.READY_TO_SHIP,
     });
-
-    const firstProduct = products.length > 0 ? products[0] : null;
-    const initialAvailable = firstProduct ? getAvailableStockForBranch(firstProduct.id, defaultSource) : 0;
-    setEditingLines([
-      {
-        id: `line-${Date.now()}`,
-        productName: firstProduct ? firstProduct.name : 'Nước giải khát Coca-Cola 330ml',
-        variant: firstProduct && firstProduct.variants && firstProduct.variants.length > 0 
-          ? `${firstProduct.variants[0].color || ''} ${firstProduct.variants[0].size || ''}`.trim() 
-          : 'Lon 330ml Original Taste',
-        sku: firstProduct ? firstProduct.sku : 'SKU-COCA-330ML',
-        availableQuantity: initialAvailable,
-        requestedQuantity: 50,
-        quantity: Math.min(50, initialAvailable > 0 ? initialAvailable : 50),
-        receivedQuantity: 0,
-        unitPrice: firstProduct ? (firstProduct.costPrice || firstProduct.price || 20000) : 20000,
-        amount: firstProduct ? (firstProduct.costPrice || firstProduct.price || 20000) * 50 : 1000000,
-      },
-    ]);
+    setEditingLines([]);
+    setRequestSearch('');
+    setIsRequestDropdownOpen(false);
     setIsModalOpen(true);
+  };
+
+  const handleOpenCreateWithRequest = (reqCode: string) => {
+    handleOpenCreate();
+    setTimeout(() => {
+      handleSelectTransferRequest(reqCode);
+    }, 60);
   };
 
   const handleOpenEdit = (transfer: StockTransferOrder) => {
@@ -323,8 +479,10 @@ export function StockTransferPage() {
       id: editingHeader.id || String(Date.now()),
       transferNumber: editingHeader.transferNumber || generateNextTransferCode(),
       requestRefCode: editingHeader.requestRefCode || '',
-      sourceHub: editingHeader.sourceHub || 'Chi nhánh Hà Nội (Kho chính)',
-      destinationHub: editingHeader.destinationHub || 'Chi nhánh TP. Hồ Chí Minh',
+      fromBranchId: editingHeader.fromBranchId || (branches.find(b => b.name === editingHeader.sourceHub) ? Number(branches.find(b => b.name === editingHeader.sourceHub)!.id) : undefined),
+      toBranchId: editingHeader.toBranchId || (branches.find(b => b.name === editingHeader.destinationHub) ? Number(branches.find(b => b.name === editingHeader.destinationHub)!.id) : undefined),
+      sourceHub: editingHeader.sourceHub || (branches.length > 0 ? branches[0].name : ''),
+      destinationHub: editingHeader.destinationHub || (branches.length > 1 ? branches[1].name : (branches[0]?.name || '')),
       dispatchDate: editingHeader.dispatchDate || new Date().toISOString().split('T')[0],
       estArrivalDate: editingHeader.estArrivalDate || '',
       totalUnits: formTotals.totalUnits,
@@ -774,15 +932,124 @@ export function StockTransferPage() {
                 />
               </div>
 
-              <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Theo Yêu cầu số</label>
-                <input
-                  type="text"
-                  value={editingHeader.requestRefCode || ''}
-                  onChange={(e) => setEditingHeader({ ...editingHeader, requestRefCode: e.target.value })}
-                  placeholder="STR-2026-xxx"
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-mono font-bold text-amber-600"
-                />
+              {/* 1.2. Theo Yêu cầu số: Dropdown / Searchable Select */}
+              <div className="relative" ref={requestDropdownRef}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300">
+                    Theo Yêu cầu số
+                  </label>
+                  {isLinkedToRequest ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectTransferRequest('')}
+                      className="text-[10px] text-red-500 hover:text-red-700 dark:text-red-400 font-semibold flex items-center gap-0.5 cursor-pointer"
+                      title="Bỏ chọn đơn yêu cầu để chuyển tự do"
+                    >
+                      <X className="w-3 h-3" /> Bỏ chọn
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-gray-400 font-normal">
+                      (Chỉ hiện Đã duyệt / Chờ xuất)
+                    </span>
+                  )}
+                </div>
+
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={isRequestDropdownOpen ? requestSearch : (editingHeader.requestRefCode || '')}
+                    onChange={(e) => {
+                      setRequestSearch(e.target.value);
+                      setIsRequestDropdownOpen(true);
+                    }}
+                    onFocus={() => {
+                      setRequestSearch('');
+                      setIsRequestDropdownOpen(true);
+                    }}
+                    placeholder={
+                      isLinkedToRequest
+                        ? editingHeader.requestRefCode
+                        : '🔍 Chọn hoặc tìm Mã yêu cầu (VD: STR-2026-001)...'
+                    }
+                    className={`w-full p-2 pr-8 bg-white dark:bg-gray-800 border-2 rounded-lg font-mono font-bold text-xs transition-all ${
+                      isLinkedToRequest
+                        ? 'border-amber-500 text-amber-600 dark:text-amber-400 bg-amber-50/60 dark:bg-amber-950/30'
+                        : 'border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200'
+                    }`}
+                  />
+                  {isLinkedToRequest ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectTransferRequest('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 p-0.5"
+                      title="Hủy liên kết đơn"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsRequestDropdownOpen(!isRequestDropdownOpen)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                    >
+                      <Search className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Dropdown menu displaying only APPROVED & PENDING_ISSUE */}
+                {isRequestDropdownOpen && (
+                  <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl max-h-60 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700/60">
+                    <div
+                      onClick={() => {
+                        handleSelectTransferRequest('');
+                      }}
+                      className="p-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer text-xs flex items-center justify-between text-gray-500"
+                    >
+                      <span className="font-medium text-gray-700 dark:text-gray-300">
+                        -- [Chuyển tự do] Không theo yêu cầu --
+                      </span>
+                      {!isLinkedToRequest && <Check className="w-4 h-4 text-emerald-600" />}
+                    </div>
+
+                    {filteredEligibleRequests.length > 0 ? (
+                      filteredEligibleRequests.map((req) => (
+                        <div
+                          key={req.id}
+                          onClick={() => {
+                            handleSelectTransferRequest(req.requestCode);
+                          }}
+                          className={`p-2.5 hover:bg-amber-50 dark:hover:bg-amber-950/40 cursor-pointer transition-colors ${
+                            editingHeader.requestRefCode === req.requestCode
+                              ? 'bg-amber-50 dark:bg-amber-950/50 font-bold border-l-4 border-amber-500'
+                              : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono font-bold text-amber-600 dark:text-amber-400 text-xs">
+                              {req.requestCode}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                              {req.status === 'APPROVED' ? 'ĐÃ DUYỆT' : 'CHỜ XUẤT'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-gray-600 dark:text-gray-300 mt-1 flex items-center gap-1.5 flex-wrap">
+                            <span className="font-medium">{req.sourceHub}</span>
+                            <span>➔</span>
+                            <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                              {req.destinationHub}
+                            </span>
+                            <span className="text-gray-400">({req.items?.length || 0} SP)</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-3 text-center text-xs text-gray-400">
+                        Không tìm thấy đơn yêu cầu nào phù hợp (Chỉ hiển thị đơn ĐÃ DUYỆT / CHỜ XUẤT)
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -811,19 +1078,39 @@ export function StockTransferPage() {
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Kho / Chi nhánh xuất *</label>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1 flex items-center justify-between">
+                  <span>Kho / Chi nhánh xuất *</span>
+                  {isLinkedToRequest && (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-0.5 font-medium">
+                      <Lock className="w-2.5 h-2.5" /> Khóa theo Yêu cầu
+                    </span>
+                  )}
+                </label>
                 <select
                   value={editingHeader.sourceHub || ''}
+                  disabled={isLinkedToRequest}
                   onChange={(e) => {
                     const newSource = e.target.value;
+                    const bObj = branches.find((b) => b.name === newSource);
                     let newDest = editingHeader.destinationHub;
                     if (newDest === newSource) {
                       const other = branches.find((b) => b.name !== newSource);
                       newDest = other ? other.name : '';
                     }
-                    setEditingHeader({ ...editingHeader, sourceHub: newSource, destinationHub: newDest });
+                    const destObj = branches.find((b) => b.name === newDest);
+                    setEditingHeader({
+                      ...editingHeader,
+                      sourceHub: newSource,
+                      fromBranchId: bObj ? Number(bObj.id) : undefined,
+                      destinationHub: newDest,
+                      toBranchId: destObj ? Number(destObj.id) : undefined,
+                    });
                   }}
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-bold text-gray-900 dark:text-white"
+                  className={`w-full p-2 rounded-lg font-bold text-gray-900 dark:text-white ${
+                    isLinkedToRequest
+                      ? 'bg-gray-100 dark:bg-gray-900/80 text-gray-600 dark:text-gray-300 border border-amber-300 dark:border-amber-700 cursor-not-allowed'
+                      : 'bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600'
+                  }`}
                 >
                   {branches.length > 0 ? (
                     branches.map((b) => (
@@ -832,29 +1119,45 @@ export function StockTransferPage() {
                       </option>
                     ))
                   ) : (
-                    <>
-                      <option value="Chi nhánh Hà Nội (Kho chính)">Chi nhánh Hà Nội (Kho chính)</option>
-                      <option value="Tổng kho TP. Hồ Chí Minh">Tổng kho TP. Hồ Chí Minh</option>
-                      <option value="Chi nhánh Đà Nẵng">Chi nhánh Đà Nẵng</option>
-                    </>
+                    <option value="" disabled>Đang tải chi nhánh từ hệ thống...</option>
                   )}
                 </select>
               </div>
 
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Kho / Chi nhánh nhận *</label>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1 flex items-center justify-between">
+                  <span>Kho / Chi nhánh nhận *</span>
+                  {isLinkedToRequest && (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-0.5 font-medium">
+                      <Lock className="w-2.5 h-2.5" /> Khóa theo Yêu cầu
+                    </span>
+                  )}
+                </label>
                 <select
                   value={editingHeader.destinationHub || ''}
+                  disabled={isLinkedToRequest}
                   onChange={(e) => {
                     const newDest = e.target.value;
+                    const destObj = branches.find((b) => b.name === newDest);
                     let newSource = editingHeader.sourceHub;
                     if (newSource === newDest) {
                       const other = branches.find((b) => b.name !== newDest);
                       newSource = other ? other.name : '';
                     }
-                    setEditingHeader({ ...editingHeader, destinationHub: newDest, sourceHub: newSource });
+                    const bObj = branches.find((b) => b.name === newSource);
+                    setEditingHeader({
+                      ...editingHeader,
+                      destinationHub: newDest,
+                      toBranchId: destObj ? Number(destObj.id) : undefined,
+                      sourceHub: newSource,
+                      fromBranchId: bObj ? Number(bObj.id) : undefined,
+                    });
                   }}
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-bold text-emerald-600 dark:text-emerald-400"
+                  className={`w-full p-2 rounded-lg font-bold text-emerald-600 dark:text-emerald-400 ${
+                    isLinkedToRequest
+                      ? 'bg-gray-100 dark:bg-gray-900/80 text-gray-600 dark:text-gray-300 border border-amber-300 dark:border-amber-700 cursor-not-allowed'
+                      : 'bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600'
+                  }`}
                 >
                   {branches.length > 0 ? (
                     branches.map((b) => (
@@ -863,11 +1166,7 @@ export function StockTransferPage() {
                       </option>
                     ))
                   ) : (
-                    <>
-                      <option value="Chi nhánh TP. Hồ Chí Minh">Chi nhánh TP. Hồ Chí Minh</option>
-                      <option value="Chi nhánh Hà Nội (Kho chính)">Chi nhánh Hà Nội (Kho chính)</option>
-                      <option value="Chi nhánh Đà Nẵng">Chi nhánh Đà Nẵng</option>
-                    </>
+                    <option value="" disabled>Đang tải chi nhánh từ hệ thống...</option>
                   )}
                 </select>
               </div>
@@ -894,13 +1193,19 @@ export function StockTransferPage() {
               <h4 className="font-bold text-gray-900 dark:text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
                 <Package className="w-4 h-4 text-emerald-600" /> 2. Chi tiết mặt hàng xuất chuyển kho
               </h4>
-              <button
-                type="button"
-                onClick={handleAddLineItem}
-                className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-sm cursor-pointer"
-              >
-                <PlusCircle className="w-3.5 h-3.5" /> Thêm sản phẩm
-              </button>
+              {!isLinkedToRequest ? (
+                <button
+                  type="button"
+                  onClick={handleAddLineItem}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-sm cursor-pointer"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" /> Thêm sản phẩm
+                </button>
+              ) : (
+                <span className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-md border border-amber-200 dark:border-amber-800 font-medium flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> Danh mục sản phẩm cố định theo đơn yêu cầu ({editingHeader.requestRefCode})
+                </span>
+              )}
             </div>
 
             <div className="overflow-x-auto">
@@ -927,7 +1232,16 @@ export function StockTransferPage() {
                     return (
                     <tr key={line.id || idx}>
                       <td className="py-2 pr-2">
-                        {products.length > 0 ? (
+                        {isLinkedToRequest ? (
+                          <div className="py-1">
+                            <span className="font-bold text-gray-900 dark:text-white block text-xs">
+                              {line.productName}
+                            </span>
+                            <span className="text-[10px] text-gray-500 font-mono">
+                              Mã: {line.sku || 'N/A'}
+                            </span>
+                          </div>
+                        ) : products.length > 0 ? (
                           <select
                             value={products.find((p) => p.name === line.productName)?.id || ''}
                             onChange={(e) => handleSelectProductForLine(idx, e.target.value)}
@@ -952,21 +1266,34 @@ export function StockTransferPage() {
                         )}
                       </td>
                       <td className="py-2 pr-2">
-                        <input
-                          type="text"
-                          value={line.variant}
-                          onChange={(e) => handleUpdateLine(idx, 'variant', e.target.value)}
-                          className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs text-emerald-600 font-semibold mb-1"
-                          placeholder="Variant"
-                          required
-                        />
-                        <input
-                          type="text"
-                          value={line.sku}
-                          onChange={(e) => handleUpdateLine(idx, 'sku', e.target.value)}
-                          className="w-full p-1 bg-white dark:bg-gray-800 border rounded text-[10px] font-mono text-gray-500"
-                          placeholder="SKU"
-                        />
+                        {isLinkedToRequest ? (
+                          <div className="py-1">
+                            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold block">
+                              {line.variant || 'Mặc định'}
+                            </span>
+                            <span className="text-[10px] font-mono text-gray-400">
+                              SKU: {line.sku || 'N/A'}
+                            </span>
+                          </div>
+                        ) : (
+                          <>
+                            <input
+                              type="text"
+                              value={line.variant}
+                              onChange={(e) => handleUpdateLine(idx, 'variant', e.target.value)}
+                              className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs text-emerald-600 font-semibold mb-1"
+                              placeholder="Variant"
+                              required
+                            />
+                            <input
+                              type="text"
+                              value={line.sku}
+                              onChange={(e) => handleUpdateLine(idx, 'sku', e.target.value)}
+                              className="w-full p-1 bg-white dark:bg-gray-800 border rounded text-[10px] font-mono text-gray-500"
+                              placeholder="SKU"
+                            />
+                          </>
+                        )}
                       </td>
                       <td className="py-2 pr-2 text-right">
                         <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold ${
@@ -1025,6 +1352,21 @@ export function StockTransferPage() {
                     </tr>
                   );
                 })}
+                {editingLines.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="py-8 text-center text-gray-400 dark:text-gray-500">
+                      <Package className="w-7 h-7 mx-auto mb-1 text-gray-300 dark:text-gray-600" />
+                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Chưa có sản phẩm nào trong phiếu chuyển kho
+                      </p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        {isLinkedToRequest
+                          ? 'Đơn yêu cầu này không có mặt hàng nào.'
+                          : 'Vui lòng chọn một Đơn yêu cầu ở trên hoặc bấm "+ Thêm sản phẩm" để thêm mặt hàng thủ công.'}
+                      </p>
+                    </td>
+                  </tr>
+                )}
                 </tbody>
               </table>
             </div>
