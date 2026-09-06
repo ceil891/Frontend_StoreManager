@@ -1,9 +1,15 @@
 /** Trích danh sách từ response phân trang Spring (PageResponse) hoặc mảng thuần. */
 export function extractPageContent<T = unknown>(data: unknown): T[] {
   if (Array.isArray(data)) return data as T[];
-  if (data && typeof data === 'object' && 'content' in data) {
-    const content = (data as { content?: unknown }).content;
-    return Array.isArray(content) ? (content as T[]) : [];
+  if (data && typeof data === 'object') {
+    const obj = data as any;
+    if (Array.isArray(obj.content)) return obj.content as T[];
+    if (Array.isArray(obj.data)) return obj.data as T[];
+    if (obj.data && typeof obj.data === 'object') {
+      if (Array.isArray(obj.data.content)) return obj.data.content as T[];
+      if (Array.isArray(obj.data.items)) return obj.data.items as T[];
+    }
+    if (Array.isArray(obj.items)) return obj.items as T[];
   }
   return [];
 }

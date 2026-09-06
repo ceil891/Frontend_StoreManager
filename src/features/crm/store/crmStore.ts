@@ -21,7 +21,9 @@ export interface CustomerProfile {
   dateOfBirth?: string;
   creditLimit?: number;
   groupId?: string;
+  groupName?: string;
   areaId?: string;
+  areaName?: string;
   notes?: string;
   isCreditBlocked?: boolean;
 }

@@ -1,7 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Modal } from '@/shared/components/ui/Modal';
+import { axiosClient } from '@/shared/lib/axiosClient';
 import { FormField } from '@/shared/components/ui/FormField';
 import { useAutoFocusFirstError } from '@/shared/hooks/useAutoFocusFirstError';
 import {
@@ -25,7 +26,27 @@ export const PurchaseOrderFormModal: React.FC<PurchaseOrderFormModalProps> = ({
   onSubmitSuccess,
 }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const formContainerRef = useRef<HTMLFormElement | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      axiosClient.get<any, any>('/partnerarea/suppliers?size=500').then((res) => {
+        const list = res?.data?.content || res?.content || (Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []));
+        if (Array.isArray(list) && list.length > 0) {
+          setSuppliers(list.map((s: any) => ({ id: String(s.id), name: s.name || s.supplierName || `NCC ${s.id}` })));
+        }
+      }).catch(() => {});
+
+      axiosClient.get<any, any>('/branches?size=100').then((res) => {
+        const list = res?.data?.content || res?.content || (Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []));
+        if (Array.isArray(list) && list.length > 0) {
+          setBranches(list.map((b: any) => ({ id: String(b.id), name: b.branchName || b.name || `Chi nhánh ${b.id}` })));
+        }
+      }).catch(() => {});
+    }
+  }, [isOpen]);
 
   const {
     register,
@@ -50,14 +71,14 @@ export const PurchaseOrderFormModal: React.FC<PurchaseOrderFormModalProps> = ({
       items: [
         {
           productId: '1',
-          sku: 'SKU-COCA-330',
-          productName: 'Nước ngọt Coca Cola 330ml',
-          unit: 'Thùng',
-          quantity: 10,
-          unitPrice: 180000,
-          taxRate: 0.08,
-          subTotal: 1800000,
-          notes: 'Hàng mới nguyên đai',
+          sku: 'SKU-001',
+          productName: 'Sản phẩm đặt mua',
+          unit: 'Cái',
+          quantity: 1,
+          unitPrice: 100000,
+          taxRate: 0.1,
+          subTotal: 100000,
+          notes: '',
         },
       ],
     },
@@ -127,9 +148,17 @@ export const PurchaseOrderFormModal: React.FC<PurchaseOrderFormModalProps> = ({
               {...register('supplierId')}
               className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 text-sm"
             >
-              <option value="1">Công ty TNHH Coca-Cola Việt Nam</option>
-              <option value="2">Công ty Cổ phần Sữa Vinamilk</option>
-              <option value="3">Công ty TNHH Unilever Việt Nam</option>
+              {suppliers.length > 0 ? (
+                suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))
+              ) : (
+                <>
+                  <option value="1">Công ty TNHH Phân Phối Tiêu Dùng</option>
+                  <option value="2">Công ty Cổ phần Thực phẩm Miền Nam</option>
+                  <option value="3">Công ty TNHH Thiết bị & Hàng tiêu dùng</option>
+                </>
+              )}
             </select>
           </FormField>
 
@@ -138,9 +167,17 @@ export const PurchaseOrderFormModal: React.FC<PurchaseOrderFormModalProps> = ({
               {...register('destinationBranchId')}
               className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 text-sm"
             >
-              <option value="1">Kho Tổng Miền Bắc (Hà Nội)</option>
-              <option value="2">Kho Trung Chuyển Miền Nam (TP.HCM)</option>
-              <option value="3">Kho Chi Nhánh Cần Thơ</option>
+              {branches.length > 0 ? (
+                branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))
+              ) : (
+                <>
+                  <option value="1">Kho Tổng Miền Bắc (Hà Nội)</option>
+                  <option value="2">Kho Trung Chuyển Miền Nam (TP.HCM)</option>
+                  <option value="3">Kho Chi Nhánh Cần Thơ</option>
+                </>
+              )}
             </select>
           </FormField>
         </div>

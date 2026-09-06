@@ -142,9 +142,15 @@ export function SupplierContractsPage() {
       return;
     }
 
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (modalMode === 'create' && editingItem.signingDate && editingItem.signingDate < todayStr) {
+      toast.error('Ngày ký kết hợp đồng mới không được ở trong quá khứ!');
+      return;
+    }
+
     if (editingItem.expirationDate && editingItem.signingDate) {
-      if (new Date(editingItem.expirationDate) < new Date(editingItem.signingDate)) {
-        toast.error('Ngày hết hạn hợp đồng không được nhỏ hơn Ngày ký kết!');
+      if (editingItem.expirationDate < editingItem.signingDate) {
+        toast.error('Ngày hết hạn hợp đồng không được trước ngày ký kết!');
         return;
       }
     }
@@ -536,6 +542,7 @@ export function SupplierContractsPage() {
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày ký kết hợp đồng *</label>
               <input
                 type="date"
+                min={modalMode === 'create' ? new Date().toISOString().split('T')[0] : undefined}
                 value={editingItem.signingDate || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, signingDate: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"

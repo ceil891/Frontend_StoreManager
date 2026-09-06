@@ -78,6 +78,7 @@ export function BranchManagementPage() {
   const [editingBranch, setEditingBranch] = useState<Partial<Branch>>(EMPTY_BRANCH);
   const [deletingBranch, setDeletingBranch] = useState<Branch | null>(null);
   const [viewingBranch, setViewingBranch] = useState<Branch | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // --- Filter ---
   const filteredData = branches.filter((b) => {
@@ -140,6 +141,7 @@ export function BranchManagementPage() {
   // --- CRUD Handlers ---
   const handleOpenCreate = () => {
     setModalMode('create');
+    setFormError(null);
     setEditingBranch({
       ...EMPTY_BRANCH,
       branchCode: `BR-${String(branches.length + 1).padStart(3, '0')}`,
@@ -154,6 +156,7 @@ export function BranchManagementPage() {
 
   const handleOpenEdit = (branch: Branch) => {
     setModalMode('edit');
+    setFormError(null);
     const parsedAddr = parseAddressParts(branch.location);
     setEditingBranch({ ...branch, ...parsedAddr } as any);
     setIsModalOpen(true);
@@ -238,8 +241,14 @@ export function BranchManagementPage() {
       setIsModalOpen(false);
     } catch (err: any) {
       console.error('Lỗi lưu chi nhánh:', err);
-      const msg = err.response?.data?.message || err.message || 'Lỗi khi lưu chi nhánh. Vui lòng kiểm tra lại!';
+      let msg = err.response?.data?.message || err.message || '';
+      if (typeof msg === 'string' && (msg.toLowerCase().includes('duplicate') || msg.toLowerCase().includes('already exists') || msg.toLowerCase().includes('branchcode') || msg.toLowerCase().includes('trùng') || msg.toLowerCase().includes('đã tồn tại'))) {
+        msg = `Mã chi nhánh "${editingBranch.branchCode}" đã tồn tại trong cơ sở dữ liệu! Vui lòng chọn mã khác.`;
+      } else if (!msg) {
+        msg = 'Lỗi khi lưu chi nhánh. Vui lòng kiểm tra lại!';
+      }
       toast.error(msg);
+      setFormError(msg);
     }
   };
 
@@ -528,6 +537,12 @@ export function BranchManagementPage() {
       >
         <form onSubmit={handleSave}>
           <div className="erp-form-body">
+            {formError && (
+              <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs rounded-lg flex items-center gap-2 mb-4">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
+                <span className="font-semibold">{formError}</span>
+              </div>
+            )}
             {/* Section 1: Định danh & Địa lý */}
             <div className="erp-form-section space-y-4">
               <h3 className="text-base font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">Vị trí & Liên hệ</h3>

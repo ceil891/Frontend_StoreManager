@@ -20,6 +20,7 @@ interface PurchaseInvoiceRecord {
   id: string;
   invoiceCode: string;
   poCode: string;
+  poId?: string | number;
   supplierName: string;
   invoiceDate: string;
   dueDate: string;
@@ -30,6 +31,18 @@ interface PurchaseInvoiceRecord {
   remainingDebt: number;
   status: 'CHO_THANH_TOAN' | 'DA_THANH_TOAN' | 'PARTIAL_PAID' | 'DA_HUY' | string;
   notes?: string;
+  items?: {
+    id?: string | number;
+    productId?: number | string;
+    sku?: string;
+    productName?: string;
+    unitName?: string;
+    quantity: number;
+    unitPrice: number;
+    vatRate?: number;
+    vatAmount?: number;
+    totalAmount?: number;
+  }[];
 }
 
 export function PurchaseInvoicesPage() {
@@ -133,10 +146,25 @@ export function PurchaseInvoicesPage() {
           st = 'PARTIAL_PAID';
         }
 
+        const rawItems = item.items || item.details || item.invoiceItems || [];
+        const items = Array.isArray(rawItems) ? rawItems.map((it: any, idx: number) => ({
+          id: String(it.id || idx + 1),
+          productId: it.productId,
+          sku: it.sku || it.productSku || `SKU-${it.productId || idx + 1}`,
+          productName: it.productName || it.name || 'Sản phẩm',
+          unitName: it.unitName || it.unit || 'Cái',
+          quantity: Number(it.quantity || 1),
+          unitPrice: Number(it.unitPrice || 0),
+          vatRate: Number(it.vatRate || it.vatPercent || 0),
+          vatAmount: Number(it.vatAmount || 0),
+          totalAmount: Number(it.totalAmount || (Number(it.quantity || 1) * Number(it.unitPrice || 0))),
+        })) : [];
+
         return {
           id: String(item.id),
           invoiceCode: item.invoiceCode || `INV-MH-${item.id}`,
           poCode: item.poCode || item.poNumber || `PO-${item.poId || item.id}`,
+          poId: item.poId,
           supplierName: item.supplierName || item.supplier?.name || '',
           invoiceDate: item.invoiceDate ? String(item.invoiceDate).split('T')[0] : '',
           dueDate: item.dueDate ? String(item.dueDate).split('T')[0] : '',
@@ -147,6 +175,7 @@ export function PurchaseInvoicesPage() {
           remainingDebt: remaining,
           status: st,
           notes: item.note || '',
+          items,
         };
       });
       setData(mapped);
@@ -163,7 +192,8 @@ export function PurchaseInvoicesPage() {
     fetchProducts();
     fetchSuppliers();
     fetchBranches();
-  }, [fetchInvoices, fetchProducts, fetchSuppliers, fetchBranches]);
+    fetchPurchaseOrders();
+  }, [fetchInvoices, fetchProducts, fetchSuppliers, fetchBranches, fetchPurchaseOrders]);
 
   const stats = useMemo(() => {
     let totalInvoiceAmount = 0;
@@ -707,6 +737,69 @@ export function PurchaseInvoicesPage() {
                 </p>
               </div>
             )}
+
+            {(() => {
+              const po = purchaseOrders.find(p => p.poNumber === selected.poCode || (p as any).poCode === selected.poCode || String(p.id) === String(selected.poId));
+              const displayItems = (selected.items && selected.items.length > 0)
+                ? selected.items
+                : (po?.poLines && po.poLines.length > 0
+                  ? po.poLines.map((l: any, idx: number) => ({
+                      id: idx,
+                      sku: l.sku || `SKU-${idx + 1}`,
+                      productName: l.productName,
+                      unitName: l.unit || 'Cái',
+                      quantity: Number(l.quantity || 1),
+                      unitPrice: Number(l.unitPrice || 0),
+                      totalAmount: Number((l.quantity || 1) * (l.unitPrice || 0)),
+                    }))
+                  : []);
+
+              return (
+                <div className="border-t pt-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-gray-700 dark:text-gray-300 uppercase text-[11px] block">
+                      📦 Danh sách sản phẩm mua ({displayItems.length} mặt hàng)
+                    </span>
+                    {po && (
+                      <span className="text-[10px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded font-mono font-medium">
+                        Đối chiếu Đơn mua: {po.poNumber || (po as any).poCode}
+                      </span>
+                    )}
+                  </div>
+                  {displayItems.length > 0 ? (
+                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-gray-50 dark:bg-gray-900 text-gray-500 uppercase text-[10px]">
+                          <tr>
+                            <th className="p-2">Sản phẩm</th>
+                            <th className="p-2 w-20 text-center">Số lượng</th>
+                            <th className="p-2 w-28 text-right">Đơn giá</th>
+                            <th className="p-2 w-28 text-right">Thành tiền</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                          {displayItems.map((item, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/50">
+                              <td className="p-2">
+                                <span className="font-semibold text-gray-900 dark:text-white block">{item.productName}</span>
+                                <span className="text-[10px] text-gray-400 font-mono">SKU: {item.sku || '—'} | ĐVT: {item.unitName || 'Cái'}</span>
+                              </td>
+                              <td className="p-2 text-center font-bold font-mono">{item.quantity}</td>
+                              <td className="p-2 text-right font-mono">{Number(item.unitPrice || 0).toLocaleString('vi-VN')} ₫</td>
+                              <td className="p-2 text-right font-mono font-bold text-emerald-600">
+                                {Number(item.totalAmount || (item.quantity * item.unitPrice)).toLocaleString('vi-VN')} ₫
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">Không có chi tiết sản phẩm trên hóa đơn này.</p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
       </Modal>
@@ -741,15 +834,56 @@ export function PurchaseInvoicesPage() {
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Mã PO Đơn mua hàng gốc *</label>
-              <input
-                type="text"
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase">Mã PO Đơn mua hàng gốc *</label>
+                {purchaseOrders.length > 0 && (
+                  <span className="text-[10px] text-emerald-600 font-medium">Truy xuất từ danh sách PO</span>
+                )}
+              </div>
+              <select
                 value={editingItem.poCode || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, poCode: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                placeholder="PO-2026-XXX"
+                onChange={(e) => {
+                  const code = e.target.value;
+                  const po = purchaseOrders.find(p => p.poNumber === code || (p as any).poCode === code || String(p.id) === code);
+                  if (po) {
+                    const lines = (po.poLines && po.poLines.length > 0) ? po.poLines.map((l: any, idx: number) => {
+                      const matchedProd = products.find(prod => prod.name === l.productName || String(prod.id) === String(l.productId));
+                      return {
+                        id: String(Date.now() + idx),
+                        sku: matchedProd?.sku || `SKU-${idx + 1}`,
+                        productName: l.productName || 'Sản phẩm',
+                        quantity: Number(l.quantity || 1),
+                        unitPrice: Number(l.unitPrice || 0),
+                        vatPercent: 8,
+                      };
+                    }) : [];
+                    setEditingItem(prev => ({
+                      ...prev,
+                      poCode: po.poNumber || (po as any).poCode || code,
+                      supplierName: po.supplierName || prev.supplierName,
+                      invoiceDate: po.orderDate ? String(po.orderDate).split('T')[0] : prev.invoiceDate,
+                      dueDate: po.estDeliveryDate ? String(po.estDeliveryDate).split('T')[0] : prev.dueDate,
+                    }));
+                    if (lines.length > 0) {
+                      updatePurItemsAndTotals(lines);
+                    }
+                  } else {
+                    setEditingItem(prev => ({ ...prev, poCode: code }));
+                  }
+                }}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs"
                 required
-              />
+              >
+                <option value="">-- Chọn Đơn Mua Hàng (PO) gốc --</option>
+                {purchaseOrders.map((po) => (
+                  <option key={po.id} value={po.poNumber || (po as any).poCode}>
+                    {po.poNumber || (po as any).poCode} - {po.supplierName} ({Number(po.totalCost || 0).toLocaleString('vi-VN')} ₫)
+                  </option>
+                ))}
+                {editingItem.poCode && !purchaseOrders.some(p => p.poNumber === editingItem.poCode || (p as any).poCode === editingItem.poCode) && (
+                  <option value={editingItem.poCode}>{editingItem.poCode}</option>
+                )}
+              </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">

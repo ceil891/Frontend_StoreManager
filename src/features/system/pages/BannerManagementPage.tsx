@@ -143,6 +143,15 @@ export default function BannerManagementPage() {
       toast.error('Vui lòng chọn hình ảnh cho banner!');
       return;
     }
+    const today = new Date().toISOString().split('T')[0];
+    if (modalMode === 'create' && editingBanner.validFrom && editingBanner.validFrom < today) {
+      toast.error('Ngày bắt đầu áp dụng banner mới không được ở trong quá khứ!');
+      return;
+    }
+    if (editingBanner.validUntil && editingBanner.validUntil < today) {
+      toast.error('Ngày kết thúc áp dụng không được ở trong quá khứ!');
+      return;
+    }
     if (editingBanner.validFrom && editingBanner.validUntil) {
       if (editingBanner.validUntil < editingBanner.validFrom) {
         toast.error('Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu áp dụng!');

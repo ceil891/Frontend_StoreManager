@@ -293,6 +293,12 @@ export function SupplierRequestsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (editingItem.expiryDate && editingItem.expiryDate < todayStr) {
+      toast.error('Hạn nhận báo giá không được nhỏ hơn ngày hiện tại');
+      return;
+    }
+
     const selectedSupps = editingItem.selectedSuppliers || [];
     if (selectedSupps.length === 0) {
       toast.error('Vui lòng chọn ít nhất 1 Nhà cung cấp');
@@ -368,13 +374,18 @@ export function SupplierRequestsPage() {
             }
           ];
 
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const expectedDateStr = rfq.expiryDate ? `${rfq.expiryDate}T23:59:59` : `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T23:59:59`;
+
       const poPayload = {
         poCode: `PO-${rfq.rfqCode.replace('RFQ-', '')}`,
-        poDate: new Date().toISOString().substring(0, 19),
-        expectedDeliveryDate: rfq.expiryDate ? `${rfq.expiryDate}T00:00:00` : new Date().toISOString().substring(0, 19),
+        poDate: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00:00`,
+        expectedDate: expectedDateStr,
         supplierId,
         branchId,
-        status: 'PENDING',
+        status: 'DRAFT',
+        paymentStatus: 'UNPAID',
         notes: `Tự động tạo từ phiếu yêu cầu báo giá ${rfq.rfqCode}. Ghi chú: ${rfq.notes || ''}`,
         details,
       };
@@ -387,6 +398,11 @@ export function SupplierRequestsPage() {
       if (selected?.id === rfq.id) {
         setSelected(updatedRFQ);
       }
+
+      // Refresh purchase store POs
+      try {
+        await usePurchaseStore.getState().fetchPurchaseOrders();
+      } catch (e) {}
 
       toast.success(`Đã chuyển RFQ ${rfq.rfqCode} thành Đơn mua hàng (PO) thành công!`);
     } catch (err: any) {
