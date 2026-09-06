@@ -84,6 +84,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { name: 'Tổng quan tồn kho', href: '/inventory/dashboard', icon: LayoutDashboard, permission: 'inventory:dashboard:view' },
       { name: 'Quản lý sản phẩm', href: '/inventory/products', icon: Package, permission: 'catalog:product:view' },
+      { name: 'Nhập sản phẩm từ Excel', href: '/inventory/import-excel', icon: FileSpreadsheet, permission: 'catalog:product:create' },
       { name: 'Thuộc tính sản phẩm', href: '/inventory/attributes', icon: Layers, permission: 'catalog:unit:view' },
       { name: 'Sơ đồ & vị trí kho', href: '/inventory/locations', icon: MapPin, permission: 'inventory:storage-area:view' },
       { name: 'Trạng thái tồn kho', href: '/inventory/stock-status', icon: Boxes, permission: 'inventory:stock-keeping:view' },
