@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Search, ScanBarcode, UserPlus, CreditCard, Trash2, Plus, Minus, X,
   ArrowLeft, Image as ImageIcon, Gift, Smartphone, Landmark, Banknote,
@@ -164,13 +164,16 @@ export function PosTerminalPage() {
   const [selectedPosBranchId, setSelectedPosBranchId] = useState<string>('');
 
   const permissions = useAuthPermissions();
-  const canChangeBranch = user?.role === 'SUPER_ADMIN' || permissions.includes('pos:branch:change');
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const canChangeBranch = isSuperAdmin || (permissions.includes('pos:branch:change') && !user?.branchId);
 
   const { activeBranchId, activeBranchName, isBranchUnassigned } = useMemo(() => {
-    // Ưu tiên: 1) user chọn thủ công trên POS, 2) branchId từ hồ sơ đăng nhập, 3) chi nhánh đầu tiên
     const userBranchId = user?.branchId ? String(user.branchId) : '';
     const defaultBranchId = userBranchId || (branches.length > 0 ? String(branches[0].id) : '1');
-    const targetId = selectedPosBranchId || defaultBranchId;
+    // Khóa cố định theo chi nhánh được gán nếu không phải Super Admin
+    const targetId = (!isSuperAdmin && userBranchId)
+      ? userBranchId
+      : (selectedPosBranchId || defaultBranchId);
 
     // Match chính xác bằng id hoặc branchCode — KHÔNG match theo tên
     const matched = (branches || []).find(
@@ -182,9 +185,9 @@ export function PosTerminalPage() {
     return {
       activeBranchId: resolvedId,
       activeBranchName: resolvedName,
-      isBranchUnassigned: !userBranchId && !selectedPosBranchId && user?.role !== 'SUPER_ADMIN',
+      isBranchUnassigned: !userBranchId && !selectedPosBranchId && !isSuperAdmin,
     };
-  }, [branches, user, selectedPosBranchId]);
+  }, [branches, user, selectedPosBranchId, isSuperAdmin]);
 
   // POS Sessions link
   const sessions = usePosSessionStore((s) => s.sessions);
@@ -439,7 +442,14 @@ export function PosTerminalPage() {
     const isOffline = usePosConfigStore.getState().enableOfflineMode;
 
     const singleList = (products || [])
-      .filter((p) => p.status !== 'INACTIVE' && (p as any).isActive !== false)
+      .filter((p) => {
+        if (p.status === 'INACTIVE' || (p as any).isActive === false) return false;
+        // Nếu sản phẩm chỉ định rõ ràng thuộc chi nhánh khác thì không hiển thị
+        if (p.branchId && String(p.branchId) !== String(activeBranchId) && p.branchId !== 'ALL') {
+          return false;
+        }
+        return true;
+      })
       .map((p) => {
         const cat = (categories || []).find((c) => 
           (c.categoryName && p.category && c.categoryName.trim().toLowerCase() === p.category.trim().toLowerCase()) ||
@@ -455,6 +465,7 @@ export function PosTerminalPage() {
         }
         const barcode = p.barcodes && p.barcodes.length > 0 ? p.barcodes[0] : (p.sku || String(p.id));
 
+        // Tồn kho chi nhánh: Tuyệt đối chỉ lấy từ số dư thực tế của chi nhánh đang hoạt động
         let branchSpecificStock = 0;
         if (branchStockMap[String(p.id)] !== undefined) {
           branchSpecificStock = branchStockMap[String(p.id)];
@@ -462,9 +473,8 @@ export function PosTerminalPage() {
           branchSpecificStock = branchStockMap[p.sku];
         } else if (p.branchStocks && p.branchStocks[activeBranchId] !== undefined) {
           branchSpecificStock = Number(p.branchStocks[activeBranchId]);
-        } else if (p.onHand !== undefined && Number(p.onHand) > 0) {
-          branchSpecificStock = Number(p.onHand);
         }
+        // Đã xóa bỏ fallback p.onHand để tránh hiển thị tồn kho từ các chi nhánh khác
         const stock = Math.max(0, branchSpecificStock);
 
         return {
@@ -817,7 +827,39 @@ export function PosTerminalPage() {
     return map;
   }, [productsList]);
 
-  const getStock = (id: string) => stockById.get(id) ?? 0;
+  const getStock = useCallback((id: string): number => {
+    // 1. Direct match in productsList map (standard product ID or combo ID)
+    if (stockById.has(id)) {
+      return stockById.get(id) ?? 0;
+    }
+
+    // 2. Check cart items for variant/sku details
+    const cartItem = items.find((i) => i.id === id);
+    if (cartItem) {
+      if (cartItem.productVariantId && branchStockMap[String(cartItem.productVariantId)] !== undefined) {
+        return Math.max(0, branchStockMap[String(cartItem.productVariantId)]);
+      }
+      if (cartItem.sku && branchStockMap[cartItem.sku] !== undefined) {
+        return Math.max(0, branchStockMap[cartItem.sku]);
+      }
+    }
+
+    // 3. Check if ID has pattern {productId}_var_{variantId}
+    if (id.includes('_var_')) {
+      const [baseId, varId] = id.split('_var_');
+      if (varId && branchStockMap[varId] !== undefined) {
+        return Math.max(0, branchStockMap[varId]);
+      }
+      if (baseId && stockById.has(baseId)) {
+        return stockById.get(baseId) ?? 0;
+      }
+      if (baseId && branchStockMap[baseId] !== undefined) {
+        return Math.max(0, branchStockMap[baseId]);
+      }
+    }
+
+    return 0;
+  }, [stockById, items, branchStockMap]);
 
   const [variantPickerProduct, setVariantPickerProduct] = useState<(PosProduct & { stock: number }) | null>(null);
   const [productVariants, setProductVariants] = useState<any[]>([]);
@@ -826,7 +868,14 @@ export function PosTerminalPage() {
   const handleAddProduct = async (product: (PosProduct & { stock: number })) => {
     if (product.category === 'Combo / Gói sản phẩm') {
       const inCart = items.find((i) => i.id === product.id)?.quantity ?? 0;
-      if (inCart >= product.stock) return;
+      if (product.stock <= 0) {
+        toast.error(`Combo "${product.name}" hiện không đủ tồn kho các nguyên liệu thành phần!`);
+        return;
+      }
+      if (inCart >= product.stock) {
+        toast.warning(`Combo "${product.name}" đã đạt số lượng tối đa có thể bán (${product.stock})!`);
+        return;
+      }
       addItem(product);
       return;
     }
@@ -844,7 +893,15 @@ export function PosTerminalPage() {
         const vId = String(v.id);
         const cartId = `${product.id}_var_${vId}`;
         const inCart = items.find((i) => i.id === cartId || i.id === product.id)?.quantity ?? 0;
-        if (inCart >= product.stock) return;
+        const vStock = branchStockMap[vId] !== undefined ? branchStockMap[vId] : product.stock;
+        if (vStock <= 0) {
+          toast.error(`Sản phẩm "${product.name}" hiện đã hết hàng tại chi nhánh!`);
+          return;
+        }
+        if (inCart >= vStock) {
+          toast.warning(`Sản phẩm "${product.name}" đã đạt số lượng tồn kho tối đa (${vStock})!`);
+          return;
+        }
         addItem({
           ...product,
           id: cartId,
@@ -862,7 +919,14 @@ export function PosTerminalPage() {
     }
 
     const inCart = items.find((i) => i.id === product.id)?.quantity ?? 0;
-    if (inCart >= product.stock) return;
+    if (product.stock <= 0) {
+      toast.error(`Sản phẩm "${product.name}" hiện đã hết hàng tại chi nhánh!`);
+      return;
+    }
+    if (inCart >= product.stock) {
+      toast.warning(`Sản phẩm "${product.name}" đã đạt số lượng tồn kho tối đa (${product.stock})!`);
+      return;
+    }
     addItem(product);
   };
 
@@ -871,9 +935,15 @@ export function PosTerminalPage() {
     const vId = String(variant.id);
     const cartItemId = `${variantPickerProduct.id}_var_${vId}`;
     const inCart = items.find((i) => i.id === cartItemId)?.quantity ?? 0;
-    const maxStock = variant.stock !== undefined ? Number(variant.stock) : variantPickerProduct.stock;
-    if (inCart >= maxStock) {
-      toast.warning('Số lượng trong giỏ đã đạt giới hạn tồn kho của biến thể này');
+    const vStock = branchStockMap[vId] !== undefined 
+      ? branchStockMap[vId] 
+      : (variant.stock !== undefined ? Number(variant.stock) : variantPickerProduct.stock);
+    if (vStock <= 0) {
+      toast.error(`Biến thể hiện đã hết hàng tại chi nhánh!`);
+      return;
+    }
+    if (inCart >= vStock) {
+      toast.warning(`Số lượng trong giỏ đã đạt giới hạn tồn kho tối đa (${vStock}) của biến thể này!`);
       return;
     }
     const variantDesc = variant.variantDescription || variant.variantCode || variant.sku || 'Biến thể';
@@ -894,7 +964,14 @@ export function PosTerminalPage() {
     const item = items.find((i) => i.id === id);
     if (!item) return;
     const stock = getStock(id);
-    if (item.quantity >= stock) return;
+    if (stock <= 0) {
+      toast.error(`Sản phẩm "${item.name}" hiện đã hết hàng trong kho!`);
+      return;
+    }
+    if (item.quantity >= stock) {
+      toast.warning(`Sản phẩm "${item.name}" đã đạt số lượng tồn kho tối đa (${stock}) tại chi nhánh!`);
+      return;
+    }
     updateQuantity(id, item.quantity + 1);
   };
 
@@ -905,6 +982,33 @@ export function PosTerminalPage() {
     if (next <= 0) removeItem(id);
     else updateQuantity(id, next);
   };
+
+  const validateCartStock = useCallback((): boolean => {
+    if (items.length === 0) {
+      toast.warning('Giỏ hàng đang trống! Vui lòng chọn sản phẩm trước.');
+      return false;
+    }
+    for (const item of items) {
+      const stock = getStock(item.id);
+      if (stock <= 0) {
+        toast.error(`Sản phẩm "${item.name}" hiện đã hết hàng trong kho (${stock}). Vui lòng xóa khỏi giỏ hàng trước khi thanh toán!`);
+        return false;
+      }
+      if (item.quantity > stock) {
+        toast.error(`Sản phẩm "${item.name}" có số lượng (${item.quantity}) vượt quá tồn kho khả dụng (${stock})! Vui lòng điều chỉnh lại.`);
+        return false;
+      }
+    }
+    return true;
+  }, [items, getStock]);
+
+  const handleOpenPayment = useCallback(() => {
+    if (!validateCartStock()) return;
+    const now = new Date();
+    const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
+    setCurrentOrderCode(code);
+    setIsPaymentOpen(true);
+  }, [validateCartStock, currentOrderCode]);
 
   // ── Filtered products ───────────────────────────────────────────────────────
   const debouncedSearchQuery = useDebounce(searchQuery, 200);
@@ -1125,6 +1229,7 @@ export function PosTerminalPage() {
 
   // ── Confirm payment ──────────────────────────────────────────────────────────
   const handleConfirmPayment = (directImmediate = false, withPrint = true) => {
+    if (!validateCartStock()) return;
     try {
       const user = useAuthStore.getState().user;
       const pay = displayPayments.find((d) => String(d?.id ?? '') === String(selectedPaymentId ?? ''));
@@ -1384,10 +1489,7 @@ export function PosTerminalPage() {
   };
 
   const handleDirectCashCheckout = (withPrint = true) => {
-    if (items.length === 0) {
-      toast.warning('Giỏ hàng đang trống! Vui lòng chọn sản phẩm trước.');
-      return;
-    }
+    if (!validateCartStock()) return;
 
     if (isCashPayment) {
       if (!cashGiven || cashGivenNum === 0) {
@@ -1475,26 +1577,16 @@ export function PosTerminalPage() {
         handlePrePrintBill();
       } else if (e.key === 'F8') {
         e.preventDefault();
-        if (items.length > 0) {
-          const now = new Date();
-          const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
-          setCurrentOrderCode(code);
-          setIsPaymentOpen(true);
-        } else {
-          toast.warning('Giỏ hàng đang trống! Vui lòng chọn sản phẩm trước.');
-        }
+        handleOpenPayment();
       } else if (e.key === 'F9') {
         e.preventDefault();
         if (isPaymentOpen && paymentState === 'idle') {
           handleConfirmPayment(false, true);
-        } else if (!isPaymentOpen && items.length > 0) {
+        } else if (!isPaymentOpen) {
           if (isCashPayment) {
             handleDirectCashCheckout(true);
           } else {
-            const now = new Date();
-            const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
-            setCurrentOrderCode(code);
-            setIsPaymentOpen(true);
+            handleOpenPayment();
           }
         }
       } else if (e.key === 'Escape') {
@@ -2104,24 +2196,69 @@ export function PosTerminalPage() {
                       className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-l-lg text-gray-600 dark:text-gray-400 transition-colors">
                       <Minus className="w-3 h-3" />
                     </button>
-                    <input
-                      type="number"
-                      min={1}
-                      value={item.quantity}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value, 10);
-                        if (isNaN(val) || val <= 0) return;
-                        const maxStock = getStock(item.id);
-                        const validQty = Math.min(val, maxStock > 0 ? maxStock : val);
-                        updateQuantity(item.id, validQty);
-                      }}
-                      className="w-10 text-center text-xs font-bold text-gray-900 dark:text-white bg-transparent focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded p-0 border-0"
-                    />
+                    {(() => {
+                      const maxStock = getStock(item.id);
+                      return (
+                        <input
+                          type="number"
+                          min={1}
+                          max={Math.max(1, maxStock)}
+                          value={item.quantity}
+                          onKeyDown={(e) => {
+                            if (e.key === 'ArrowUp') {
+                              if (maxStock <= 0) {
+                                e.preventDefault();
+                                toast.error(`Sản phẩm "${item.name}" hiện đã hết hàng trong kho!`);
+                                return;
+                              }
+                              if (item.quantity >= maxStock) {
+                                e.preventDefault();
+                                toast.warning(`Sản phẩm "${item.name}" đã đạt số lượng tồn kho tối đa (${maxStock})!`);
+                                return;
+                              }
+                            } else if (e.key === 'ArrowDown') {
+                              if (item.quantity <= 1) {
+                                e.preventDefault();
+                                return;
+                              }
+                            }
+                          }}
+                          onChange={(e) => {
+                            const rawVal = e.target.value;
+                            if (rawVal === '') return;
+                            const val = parseInt(rawVal, 10);
+                            if (isNaN(val) || val <= 0) {
+                              updateQuantity(item.id, 1);
+                              return;
+                            }
+                            if (maxStock > 0 && val > maxStock) {
+                              updateQuantity(item.id, maxStock);
+                              toast.warning(`Tồn kho "${item.name}" chỉ còn ${maxStock}. Đã điều chỉnh về tối đa (${maxStock})!`);
+                              return;
+                            }
+                            if (maxStock <= 0) {
+                              toast.error(`Sản phẩm "${item.name}" hiện đã hết hàng trong kho!`);
+                              updateQuantity(item.id, 1);
+                              return;
+                            }
+                            updateQuantity(item.id, val);
+                          }}
+                          onBlur={() => {
+                            if (!item.quantity || item.quantity <= 0) {
+                              updateQuantity(item.id, 1);
+                            } else if (maxStock > 0 && item.quantity > maxStock) {
+                              updateQuantity(item.id, maxStock);
+                            }
+                          }}
+                          className="w-10 text-center text-xs font-bold text-gray-900 dark:text-white bg-transparent focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded p-0 border-0"
+                        />
+                      );
+                    })()}
                     <button
                       type="button"
                       onClick={() => handleInc(item.id)}
-                      disabled={item.quantity >= getStock(item.id) && getStock(item.id) > 0}
-                      className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-r-lg text-gray-600 dark:text-gray-400 transition-colors">
+                      disabled={item.quantity >= getStock(item.id)}
+                      className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-r-lg text-gray-600 dark:text-gray-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                       <Plus className="w-3 h-3" />
                     </button>
                   </div>
@@ -2400,12 +2537,7 @@ export function PosTerminalPage() {
             </div>
             <button
               type="button"
-              onClick={() => {
-                const now = new Date();
-                const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
-                setCurrentOrderCode(code);
-                setIsPaymentOpen(true);
-              }}
+              onClick={handleOpenPayment}
               className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
             >
               Mở mã QR (F8)
@@ -2498,12 +2630,7 @@ export function PosTerminalPage() {
               <>
                 <button
                   type="button"
-                  onClick={() => {
-                    const now = new Date();
-                    const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
-                    setCurrentOrderCode(code);
-                    setIsPaymentOpen(true);
-                  }}
+                  onClick={handleOpenPayment}
                   disabled={items.length === 0}
                   className="px-3.5 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 font-bold text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
                   title="Mở bảng thanh toán chi tiết (F8)"
@@ -2525,12 +2652,7 @@ export function PosTerminalPage() {
             ) : selectedPayment?.id.toLowerCase().includes('qr') || (selectedPaymentConfig?.providerType as string) === 'BANK_TRANSFER' ? (
               <button
                 type="button"
-                onClick={() => {
-                  const now = new Date();
-                  const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
-                  setCurrentOrderCode(code);
-                  setIsPaymentOpen(true);
-                }}
+                onClick={handleOpenPayment}
                 disabled={items.length === 0}
                 className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-blue-600/30 cursor-pointer"
               >
@@ -2540,12 +2662,7 @@ export function PosTerminalPage() {
             ) : (
               <button
                 type="button"
-                onClick={() => {
-                  const now = new Date();
-                  const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
-                  setCurrentOrderCode(code);
-                  setIsPaymentOpen(true);
-                }}
+                onClick={handleOpenPayment}
                 disabled={items.length === 0}
                 className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-emerald-600/30 cursor-pointer"
               >

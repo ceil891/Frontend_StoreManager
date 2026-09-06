@@ -316,13 +316,13 @@ export function StockLedgerPage() {
                 className="font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs cursor-pointer"
               >
                 <option value="all">Tất cả biến động</option>
-                <option value="STOCK_IN">Nhập kho (STOCK IN)</option>
-                <option value="STOCK_OUT">Xuất kho (STOCK OUT)</option>
-                <option value="ADJUSTMENT_UP">Kiểm kê tăng (ADJUSTMENT UP)</option>
-                <option value="ADJUSTMENT_DOWN">Kiểm kê giảm (ADJUSTMENT DOWN)</option>
-                <option value="TRANSFER">Chuyển kho (TRANSFER)</option>
-                <option value="CUSTOMER_RETURN">Khách trả hàng (CUSTOMER RETURN)</option>
-                <option value="VENDOR_RETURN">Trả nhà cung cấp (VENDOR RETURN)</option>
+                <option value="STOCK_IN">Nhập kho </option>
+                <option value="STOCK_OUT">Xuất kho </option>
+                <option value="ADJUSTMENT_UP">Kiểm kê tăng </option>
+                <option value="ADJUSTMENT_DOWN">Kiểm kê giảm </option>
+                <option value="TRANSFER">Chuyển kho</option>
+                <option value="CUSTOMER_RETURN">Khách trả hàng</option>
+                <option value="VENDOR_RETURN">Trả nhà cung cấp </option>
               </select>
             </div>
 
@@ -554,7 +554,7 @@ export function StockLedgerPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Giá trị định giá (đ) *</label>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Giá trị định giá  *</label>
               <input
                 type="text"
                 value={(editingEntry.unitPrice ?? 0) === 0 ? '' : Math.round(editingEntry.unitPrice ?? 0).toLocaleString('vi-VN')}

@@ -180,8 +180,15 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
                   <input
                     type="number"
                     min={1}
-                    value={line.quantity}
-                    onChange={(e) => updateLine(line.id, { quantity: Math.max(1, parseFloat(e.target.value) || 1) })}
+                    value={line.quantity === 0 ? '' : (line.quantity ?? '')}
+                    placeholder="1"
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                      updateLine(line.id, { quantity: isNaN(val) ? 1 : val });
+                    }}
+                    onBlur={() => {
+                      if (!line.quantity || line.quantity < 1) updateLine(line.id, { quantity: 1 });
+                    }}
                     className="w-full px-2 py-1 text-xs border rounded-lg dark:bg-gray-900 dark:border-gray-600 font-bold"
                   />
                 </div>
@@ -192,8 +199,12 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
                   <input
                     type="number"
                     min={0}
-                    value={line.unitPrice}
-                    onChange={(e) => updateLine(line.id, { unitPrice: Math.max(0, parseFloat(e.target.value) || 0) })}
+                    value={line.unitPrice === 0 ? '' : (line.unitPrice ?? '')}
+                    placeholder="0"
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                      updateLine(line.id, { unitPrice: isNaN(val) ? 0 : Math.max(0, val) });
+                    }}
                     className="w-full px-2 py-1 text-xs border rounded-lg dark:bg-gray-900 dark:border-gray-600 font-bold text-emerald-600"
                   />
                 </div>
@@ -213,8 +224,12 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
                     <input
                       type="number"
                       min={0}
-                      value={line.discountValue || 0}
-                      onChange={(e) => updateLine(line.id, { discountValue: Math.max(0, parseFloat(e.target.value) || 0) })}
+                      value={line.discountValue === 0 ? '' : (line.discountValue ?? '')}
+                      placeholder="0"
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                        updateLine(line.id, { discountValue: isNaN(val) ? 0 : Math.max(0, val) });
+                      }}
                       className="w-full px-2 py-1 text-xs border rounded-lg dark:bg-gray-900 dark:border-gray-600"
                     />
                   </div>
@@ -227,10 +242,13 @@ export function OrderLinesEditor({ lines, onChange, currency = 'VND' }: OrderLin
                     type="number"
                     min={0}
                     max={100}
-                    value={line.taxRate || 0}
-                    onChange={(e) => updateLine(line.id, { taxRate: Math.max(0, parseFloat(e.target.value) || 0) })}
+                    value={line.taxRate === 0 ? '' : (line.taxRate ?? '')}
+                    placeholder="0"
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                      updateLine(line.id, { taxRate: isNaN(val) ? 0 : Math.min(100, Math.max(0, val)) });
+                    }}
                     className="w-full px-2 py-1 text-xs border rounded-lg dark:bg-gray-900 dark:border-gray-600"
-                    placeholder="%"
                   />
                 </div>
 

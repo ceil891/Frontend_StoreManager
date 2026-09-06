@@ -133,6 +133,7 @@ axiosClient.interceptors.response.use(
           const apiError = {
             code: res.errorCode || 'API_ERROR',
             message: res.message || 'Yêu cầu API không thành công',
+            errors: res.errors || null,
           };
           return Promise.reject(apiError);
         }
@@ -275,9 +276,10 @@ axiosClient.interceptors.response.use(
     }
 
     const apiError = {
-      code: errorBody?.errorCode || errorBody?.status || 'API_ERROR',
+      code: errorBody?.errorCode || 'API_ERROR',
       message: detailMsg || error.message || 'Đã xảy ra lỗi không xác định từ hệ thống.',
       traceId: traceId,
+      errors: errorBody?.errors || null,
     };
 
     return Promise.reject(apiError);
