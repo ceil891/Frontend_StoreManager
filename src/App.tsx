@@ -67,12 +67,57 @@ function AuthEventListener() {
   return null;
 }
 
+import { useIdleTimer } from './shared/hooks/useIdleTimer';
+import { IdleTimeoutModal } from './shared/components/common/IdleTimeoutModal';
+
+function IdleTimeoutWatcher() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const logout = useAuthStore((s) => s.logout);
+
+  const handleTimeout = async () => {
+    toast.warning('Phiên làm việc đã kết thúc do không có thao tác trong 15 phút.');
+    await logout();
+    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+      window.location.replace('/login');
+    }
+  };
+
+  const handleExplicitLogout = async () => {
+    await logout();
+    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+      window.location.replace('/login');
+    }
+  };
+
+  const isEnabled = isAuthenticated && typeof window !== 'undefined' && window.location.pathname !== '/login';
+
+  const { isWarning, remainingSeconds, resetTimer } = useIdleTimer({
+    timeoutMs: 15 * 60 * 1000, // 15 phút
+    warningTimeMs: 60 * 1000,  // 60 giây cảnh báo trước
+    onTimeout: handleTimeout,
+    enabled: isEnabled,
+  });
+
+  if (!isEnabled) return null;
+
+  return (
+    <IdleTimeoutModal
+      isOpen={isWarning}
+      remainingSeconds={remainingSeconds}
+      totalWarningSeconds={60}
+      onStayLoggedIn={resetTimer}
+      onLogout={handleExplicitLogout}
+    />
+  );
+}
+
 function App() {
   return (
     <GlobalErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <ThemeInitializer />
         <AuthEventListener />
+        <IdleTimeoutWatcher />
         <Toaster position="top-right" richColors />
         <AppRouter />
       </QueryClientProvider>

@@ -1207,11 +1207,61 @@ export const useInventoryStore = create<InventoryState>()(
           let branchStocksMap: Record<string, Record<string, number>> = {};
           let branchDetailsMap: Record<string, { branchId: string; branchName: string; quantity: number; available: number }[]> = {};
           try {
-            const stockRes = await axiosClient.get<any, any>('/inventories');
-            const stockList: any[] = Array.isArray(stockRes) ? stockRes : (stockRes?.data || stockRes?.content || stockRes || []);
-            if (stockList.length > 0) {
+            const [balancesRes, stockRes] = await Promise.allSettled([
+              axiosClient.get<any, any>('/inventories/balances'),
+              axiosClient.get<any, any>('/inventories')
+            ]);
+
+            // 1. Nạp tồn kho từ balances (hệ thống ERP/WMS InventoryBalance chuẩn)
+            if (balancesRes.status === 'fulfilled' && balancesRes.value) {
+              const resData = balancesRes.value;
+              const balancesList: any[] = Array.isArray(resData) ? resData : (resData?.data || resData?.content || []);
+              balancesList.forEach((b: any) => {
+                let pid = b.productId ? String(b.productId) : null;
+                if (!pid && b.sku) {
+                  const found = mapped.find(mp => mp.sku === b.sku);
+                  if (found) pid = found.id;
+                }
+                if (!pid && b.productVariantId) {
+                  const found = mapped.find(mp => (mp.variants || []).some((v: any) => String(v.id) === String(b.productVariantId)));
+                  if (found) pid = found.id;
+                }
+                if (!pid) pid = String(b.productVariantId || b.sku);
+
+                const branchId = String(b.branchId || 1);
+                const branchName = b.branchName ? b.branchName.trim() : `Chi nhánh ${branchId}`;
+                const qty = Number(b.availableQuantity ?? b.onHandQuantity ?? b.quantityPhysical ?? 0);
+                const avail = Number(b.availableQuantity ?? qty);
+
+                stockMap[pid] = (stockMap[pid] || 0) + qty;
+                if (!branchStocksMap[pid]) branchStocksMap[pid] = {};
+                branchStocksMap[pid][branchId] = (branchStocksMap[pid][branchId] || 0) + qty;
+
+                if (!branchDetailsMap[pid]) branchDetailsMap[pid] = [];
+                const existing = branchDetailsMap[pid].find(item => item.branchId === branchId);
+                if (existing) {
+                  existing.quantity += qty;
+                  existing.available += avail;
+                } else {
+                  branchDetailsMap[pid].push({
+                    branchId,
+                    branchName,
+                    quantity: qty,
+                    available: avail,
+                  });
+                }
+              });
+            }
+
+            // 2. Nạp tồn kho legacy từ /inventories (SizeInventory) cho các sản phẩm cũ chưa có trong balances
+            if (stockRes.status === 'fulfilled' && stockRes.value) {
+              const resData = stockRes.value;
+              const stockList: any[] = Array.isArray(resData) ? resData : (resData?.data || resData?.content || []);
               stockList.forEach((s: any) => {
                 const pid = String(s.productId);
+                if (stockMap[pid] !== undefined && stockMap[pid] > 0) {
+                  return; // Đã có tồn kho từ balances
+                }
                 const branchId = String(s.branchId || 1);
                 const branchName = s.branchName ? s.branchName.trim() : `Chi nhánh ${branchId}`;
                 const qty = Number(s.quantityPhysical ?? s.quantityOnHand ?? s.quantity ?? 0);
@@ -1232,38 +1282,6 @@ export const useInventoryStore = create<InventoryState>()(
                     branchName,
                     quantity: qty,
                     available: avail,
-                  });
-                }
-              });
-            } else {
-              const balancesRes = await axiosClient.get<any, any>('/inventories/balances');
-              const balancesList: any[] = Array.isArray(balancesRes) ? balancesRes : (balancesRes?.data || balancesRes?.content || balancesRes || []);
-              balancesList.forEach((b: any) => {
-                let pid = b.productId ? String(b.productId) : null;
-                if (!pid && b.sku) {
-                  const found = mapped.find(mp => mp.sku === b.sku);
-                  if (found) pid = found.id;
-                }
-                if (!pid) pid = String(b.productVariantId || b.sku);
-                const branchId = String(b.branchId || 1);
-                const branchName = b.branchName ? b.branchName.trim() : `Chi nhánh ${branchId}`;
-                const qty = Number(b.availableQuantity ?? b.onHandQuantity ?? b.quantityPhysical ?? 0);
-                
-                stockMap[pid] = (stockMap[pid] || 0) + qty;
-                if (!branchStocksMap[pid]) branchStocksMap[pid] = {};
-                branchStocksMap[pid][branchId] = (branchStocksMap[pid][branchId] || 0) + qty;
-
-                if (!branchDetailsMap[pid]) branchDetailsMap[pid] = [];
-                const existing = branchDetailsMap[pid].find(item => item.branchId === branchId);
-                if (existing) {
-                  existing.quantity += qty;
-                  existing.available += qty;
-                } else {
-                  branchDetailsMap[pid].push({
-                    branchId,
-                    branchName,
-                    quantity: qty,
-                    available: qty,
                   });
                 }
               });

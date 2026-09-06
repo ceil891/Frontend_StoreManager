@@ -258,10 +258,11 @@ export function ProductExcelImportPage() {
         .map((u) => {
           let uId = u.unitId;
           if (!uId || isNaN(Number(uId))) {
+            const rawUName = (u.unitName || '').trim().toLowerCase();
             const matched = unitsList.find(
               (item) =>
-                item.unitName.toLowerCase() === (u.unitName || '').toLowerCase() ||
-                (item.code && item.code.toLowerCase() === (u.unitName || '').toLowerCase())
+                (item.unitName || '').trim().toLowerCase() === rawUName ||
+                (item.code && (item.code || '').trim().toLowerCase() === rawUName)
             );
             if (matched && !isNaN(Number(matched.id))) {
               uId = Number(matched.id);
@@ -288,10 +289,11 @@ export function ProductExcelImportPage() {
 
       let finalBaseUnitId = row.resolvedBaseUnitId;
       if (!finalBaseUnitId || isNaN(Number(finalBaseUnitId))) {
+        const rawBase = (row.baseUnitName || '').trim().toLowerCase();
         const matched = unitsList.find(
           (item) =>
-            item.unitName.toLowerCase() === (row.baseUnitName || '').toLowerCase() ||
-            (item.code && item.code.toLowerCase() === (row.baseUnitName || '').toLowerCase())
+            (item.unitName || '').trim().toLowerCase() === rawBase ||
+            (item.code && (item.code || '').trim().toLowerCase() === rawBase)
         );
         if (matched && !isNaN(Number(matched.id))) {
           finalBaseUnitId = Number(matched.id);
@@ -305,10 +307,11 @@ export function ProductExcelImportPage() {
 
       let finalCatId = row.resolvedCategoryId;
       if (!finalCatId || isNaN(Number(finalCatId))) {
+        const rawCat = (row.categoryName || '').trim().toLowerCase();
         const matchedCat = categories.find(
           (c) =>
-            c.categoryName.toLowerCase() === (row.categoryName || '').toLowerCase() ||
-            (c.code && c.code.toLowerCase() === (row.categoryName || '').toLowerCase())
+            (c.categoryName || '').trim().toLowerCase() === rawCat ||
+            (c.code && (c.code || '').trim().toLowerCase() === rawCat)
         );
         if (matchedCat && !isNaN(Number(matchedCat.id))) {
           finalCatId = Number(matchedCat.id);
