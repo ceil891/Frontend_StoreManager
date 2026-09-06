@@ -268,7 +268,7 @@ export function CustomersPage() {
     setIsResettingPassword(true);
     try {
       await axiosClient.put(`/partnerarea/customers/${resetPasswordCustomer.id}/reset-password?newPassword=${encodeURIComponent(newPasswordInput)}`);
-      toast.success(`Đã cấp lại mật khẩu cho khách hàng "${resetPasswordCustomer.name}"!\nMật khẩu tạm thời: ${newPasswordInput}.\nKhách hàng sẽ phải đổi mật khẩu khi đăng nhập FE_Online.`);
+      toast.success(`Đã cấp lại mật khẩu và gửi email thông báo cho khách hàng "${resetPasswordCustomer.name}" thành công!`);
       setResetPasswordCustomer(null);
     } catch (err) {
       console.error(err);

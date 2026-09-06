@@ -93,7 +93,7 @@ export function UsersPage() {
     try {
       setIsSubmittingPasswordReset(true);
       await resetPassword(resetPasswordUser.id, newPasswordInput);
-      toast.success(`Đã cấp lại mật khẩu cho tài khoản ${resetPasswordUser.fullName} (${resetPasswordUser.userCode}) thành công!`);
+      toast.success(`Đã cấp lại mật khẩu và gửi email thông báo đến ${resetPasswordUser.emailAddress || resetPasswordUser.fullName} thành công!`);
       setResetPasswordUser(null);
     } catch (err: any) {
       toast.error(err.response?.data?.message || err.message || 'Lỗi khi cấp lại mật khẩu');
@@ -1488,7 +1488,7 @@ export function UsersPage() {
                 <KeyRound className="w-4 h-4 text-amber-600 shrink-0" /> Cấp lại mật khẩu đăng nhập
               </p>
               <p className="leading-relaxed">
-                Mật khẩu mới sẽ được cập nhật cho tài khoản <strong>{resetPasswordUser.fullName}</strong> ({resetPasswordUser.emailAddress || resetPasswordUser.userCode}).
+                Mật khẩu mới sẽ được cập nhật cho tài khoản <strong>{resetPasswordUser.fullName}</strong> ({resetPasswordUser.emailAddress || resetPasswordUser.userCode}) và hệ thống sẽ tự động gửi email thông báo mật khẩu mới đến hòm thư này.
                 Toàn bộ phiên làm việc cũ (Refresh Tokens) trên các thiết bị khác sẽ được tự động thu hồi ngay lập tức để bảo vệ tài khoản.
               </p>
             </div>
