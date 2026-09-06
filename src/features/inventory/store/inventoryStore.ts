@@ -690,6 +690,15 @@ export interface RackRecord {
   maxWeightKg?: number;
   maxVolumeM3?: number;
   maxPallet?: number;
+  heightM?: number;
+  levels?: number;
+  baysPerLevel?: number;
+  statusConfig?: string;
+  allowFood?: boolean;
+  allowCosmetics?: boolean;
+  allowElectronics?: boolean;
+  allowChemicals?: boolean;
+  allowHazmat?: boolean;
   description?: string;
   province?: string;
   district?: string;
@@ -1583,6 +1592,7 @@ export const useInventoryStore = create<InventoryState>()(
           const data: any = await axiosClient.get<any, any>('/inventories/transfers');
           const list = Array.isArray(data) ? data : (data?.content || data?.data || []);
           if (list.length > 0) {
+            const products = get().products;
             const mapped = list.map((item: any) => {
               const lines = item.transferLines || [];
               const totalUnits = lines.reduce((acc: number, line: any) => acc + (line.transferQuantity || 0), 0);
@@ -1590,6 +1600,29 @@ export const useInventoryStore = create<InventoryState>()(
               if (normalizedStatus === 'SHIPPED') normalizedStatus = 'IN_TRANSIT';
               else if (normalizedStatus === 'RECEIVED') normalizedStatus = 'COMPLETED';
               else if (normalizedStatus === 'PENDING_APPROVAL' || normalizedStatus === 'APPROVED') normalizedStatus = 'READY_TO_SHIP';
+
+              const mappedItems = lines.map((l: any) => {
+                const prod = products.find(
+                  (p) => String(p.id) === String(l.productId) || p.sku === l.productCode || p.name === l.productName
+                );
+                const unitPrice = Number(prod?.costPrice || prod?.price || 50000);
+                const qty = Number(l.transferQuantity || 0);
+                return {
+                  id: String(l.id || ''),
+                  productName: l.productName || prod?.name || 'Sản phẩm',
+                  variant: prod?.variants?.[0]?.name || 'Chuẩn',
+                  sku: l.productCode || prod?.sku || '',
+                  quantity: qty,
+                  unitPrice: unitPrice,
+                  amount: qty * unitPrice,
+                };
+              });
+
+              const computedValuation = mappedItems.reduce((acc: number, it: any) => acc + Number(it.amount || 0), 0);
+              const fallbackValuation = (totalUnits > 0 ? totalUnits : (item.totalUnits || 10)) * 50000;
+              const totalValuation = Number(item.totalValuation || 0) > 0
+                ? Number(item.totalValuation)
+                : (computedValuation > 0 ? computedValuation : fallbackValuation);
 
               return {
                 id: String(item.id),
@@ -1601,22 +1634,14 @@ export const useInventoryStore = create<InventoryState>()(
                 dispatchDate: formatApiDate(item.transferDate || item.createdAt),
                 estArrivalDate: formatApiDate(item.estArrivalDate),
                 totalUnits: totalUnits > 0 ? totalUnits : (item.totalUnits || 10),
-                totalValuation: item.totalValuation || 0,
+                totalValuation: totalValuation,
                 status: normalizedStatus as any,
                 logisticsPartner: item.logisticsPartner || 'Nội bộ (Đội xe công ty)',
                 trackingRef: item.trackingRef || '',
                 requestedBy: item.requestedBy || item.createdBy || 'System',
                 approvedBy: item.approvedBy || '',
                 notes: item.note || '',
-                items: lines.map((l: any) => ({
-                  id: String(l.id || ''),
-                  productName: l.productName || 'Sản phẩm',
-                  variant: '',
-                  sku: l.productCode || '',
-                  quantity: Number(l.transferQuantity || 0),
-                  unitPrice: 0,
-                  amount: 0,
-                })),
+                items: mappedItems,
               };
             }).sort((a: any, b: any) => Number(b.id) - Number(a.id));
             set({ stockTransfers: mapped });
@@ -3517,9 +3542,32 @@ export const useInventoryStore = create<InventoryState>()(
               branchName: item.branchName || '',
             }));
             set((state) => {
-              const backendIds = new Set(backendRacks.map(b => b.id));
-              const localOnly = state.racks.filter(r => !backendIds.has(r.id));
-              return { racks: [...backendRacks, ...localOnly] };
+              const merged = backendRacks.map((b) => {
+                const local = state.racks.find((r) => r.id === b.id || r.rackCode === b.rackCode);
+                return local
+                  ? {
+                      ...b,
+                      ...local,
+                      ...b,
+                      heightM: local.heightM ?? b.heightM,
+                      levels: local.levels ?? b.levels,
+                      baysPerLevel: local.baysPerLevel ?? b.baysPerLevel,
+                      province: local.province ?? b.province,
+                      district: local.district ?? b.district,
+                      ward: local.ward ?? b.ward,
+                      addressDetail: local.addressDetail ?? b.addressDetail,
+                      allowFood: local.allowFood ?? b.allowFood,
+                      allowCosmetics: local.allowCosmetics ?? b.allowCosmetics,
+                      allowElectronics: local.allowElectronics ?? b.allowElectronics,
+                      allowChemicals: local.allowChemicals ?? b.allowChemicals,
+                      allowHazmat: local.allowHazmat ?? b.allowHazmat,
+                      statusConfig: local.statusConfig ?? b.statusConfig,
+                    }
+                  : b;
+              });
+              const backendIds = new Set(backendRacks.map((b) => b.id));
+              const localOnly = state.racks.filter((r) => !backendIds.has(r.id));
+              return { racks: [...merged, ...localOnly] };
             });
           }
         } catch (error) {
@@ -3535,6 +3583,19 @@ export const useInventoryStore = create<InventoryState>()(
           maxWeightKg: rack.maxWeightKg || 500,
           maxVolumeM3: rack.maxVolumeM3 || 2.5,
           maxPallet: rack.maxPallet || 4,
+          heightM: rack.heightM || 3.5,
+          levels: rack.levels || 4,
+          baysPerLevel: rack.baysPerLevel || 5,
+          statusConfig: rack.statusConfig || 'ACTIVE',
+          allowFood: rack.allowFood !== false,
+          allowCosmetics: rack.allowCosmetics !== false,
+          allowElectronics: rack.allowElectronics !== false,
+          allowChemicals: !!rack.allowChemicals,
+          allowHazmat: !!rack.allowHazmat,
+          province: rack.province || '',
+          district: rack.district || '',
+          ward: rack.ward || '',
+          addressDetail: rack.addressDetail || '',
           description: rack.description || '',
           isActive: rack.isActive !== false,
           areaId: String(areaIdNum),

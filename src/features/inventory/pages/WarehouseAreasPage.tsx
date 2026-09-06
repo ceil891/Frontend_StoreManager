@@ -93,7 +93,7 @@ export function WarehouseAreasPage() {
       return;
     }
     const isDuplicate = racks.some(
-      (r) => r.rackCode.toLowerCase() === code.toLowerCase() && r.id !== editingItem.id
+      (r) => r.rackCode.toLowerCase() === code.toLowerCase() && String(r.id) !== String(editingItem.id ?? '')
     );
     setCodeStatus(isDuplicate ? 'duplicate' : 'valid');
   }, [editingItem.rackCode, racks, editingItem.id]);
@@ -160,7 +160,7 @@ export function WarehouseAreasPage() {
 
   const handleOpenEdit = (item: RackRecord) => {
     setModalMode('edit');
-    // Map existing properties and default mock values
+    // Map existing properties and preserve saved values
     const zone = warehouseZones.find(z => z.zoneCode === item.zoneCode);
     const branch = branches.find(b => b.name === item.branchName);
     const area = areas.find(a => a.areaCode === item.areaCode || a.areaName === item.areaName);
@@ -171,15 +171,19 @@ export function WarehouseAreasPage() {
       areaId: resolvedAreaId,
       branchId: branch ? String(branch.id) : (item.branchId || ''),
       zoneId: zone ? String(zone.id) : (item.zoneId || ''),
-      heightM: 3.5,
-      levels: 4,
-      baysPerLevel: 6,
-      statusConfig: item.isActive !== false ? 'ACTIVE' : 'LOCKED',
-      allowFood: true,
-      allowCosmetics: true,
-      allowElectronics: true,
-      allowChemicals: false,
-      allowHazmat: false,
+      heightM: item.heightM ?? 3.5,
+      levels: item.levels ?? 4,
+      baysPerLevel: item.baysPerLevel ?? 5,
+      statusConfig: (item.statusConfig as any) || (item.isActive !== false ? 'ACTIVE' : 'LOCKED'),
+      province: item.province || '',
+      district: item.district || '',
+      ward: item.ward || '',
+      addressDetail: item.addressDetail || '',
+      allowFood: item.allowFood !== false,
+      allowCosmetics: item.allowCosmetics !== false,
+      allowElectronics: item.allowElectronics !== false,
+      allowChemicals: !!item.allowChemicals,
+      allowHazmat: !!item.allowHazmat,
     });
     setIsModalOpen(true);
   };
@@ -198,7 +202,7 @@ export function WarehouseAreasPage() {
       toast.error('Vui lòng nhập đầy đủ Mã kệ và Tên kệ hàng!');
       return;
     }
-    if (codeStatus === 'duplicate') {
+    if (modalMode === 'create' && codeStatus === 'duplicate') {
       toast.error('Mã kệ hàng đã tồn tại!');
       return;
     }
@@ -219,9 +223,22 @@ export function WarehouseAreasPage() {
       zoneCode: matchedZone?.zoneCode || editingItem.zoneCode || 'ZONE-A',
       branchId: matchedBranch?.id ? String(matchedBranch.id) : (editingItem.branchId || '1'),
       branchName: matchedBranch?.name || editingItem.branchName || 'Chi nhánh Hà Nội',
+      province: editingItem.province || '',
+      district: editingItem.district || '',
+      ward: editingItem.ward || '',
+      addressDetail: editingItem.addressDetail || '',
       maxWeightKg: Number(editingItem.maxWeightKg || 0),
       maxVolumeM3: Number(editingItem.maxVolumeM3 || 0),
       maxPallet: Number(editingItem.maxPallet || 0),
+      heightM: Number(editingItem.heightM || 3.5),
+      levels: Number(editingItem.levels || 4),
+      baysPerLevel: Number(editingItem.baysPerLevel || 5),
+      statusConfig: editingItem.statusConfig || 'ACTIVE',
+      allowFood: editingItem.allowFood !== false,
+      allowCosmetics: editingItem.allowCosmetics !== false,
+      allowElectronics: editingItem.allowElectronics !== false,
+      allowChemicals: !!editingItem.allowChemicals,
+      allowHazmat: !!editingItem.allowHazmat,
       isActive: editingItem.statusConfig === 'ACTIVE' || editingItem.statusConfig === 'FULL',
       description: editingItem.description || '',
     };
@@ -898,7 +915,7 @@ export function WarehouseAreasPage() {
               <button 
                 type="submit" 
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition text-xs font-semibold shadow-sm"
-                disabled={isSaving || codeStatus === 'duplicate' || codeStatus === 'invalid_format'}
+                disabled={isSaving || (modalMode === 'create' && (codeStatus === 'duplicate' || codeStatus === 'invalid_format')) || (modalMode === 'edit' && codeStatus === 'invalid_format')}
               >
                 Lưu kệ hàng
               </button>

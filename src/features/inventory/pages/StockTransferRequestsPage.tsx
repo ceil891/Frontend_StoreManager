@@ -142,6 +142,24 @@ export function StockTransferRequestsPage() {
       );
     });
 
+    const bId = targetBranch ? String(targetBranch.id) : '';
+
+    // 1. Check branchStocks map
+    if (bId && targetProduct.branchStocks && targetProduct.branchStocks[bId] !== undefined) {
+      return targetProduct.branchStocks[bId];
+    }
+
+    // 2. Check branchStockDetails
+    if (targetProduct.branchStockDetails && targetProduct.branchStockDetails.length > 0) {
+      const detail = targetProduct.branchStockDetails.find(
+        (d) => (bId && String(d.branchId) === bId) || (d.branchName && d.branchName.toLowerCase().trim() === cleanSource)
+      );
+      if (detail) {
+        return detail.available ?? detail.quantity ?? 0;
+      }
+    }
+
+    // 3. Check inventories table
     if (inventories && inventories.length > 0) {
       const match = inventories.find((inv) => {
         const pMatch =
@@ -152,7 +170,7 @@ export function StockTransferRequestsPage() {
         if (!pMatch) return false;
 
         // Strictly match branch ID
-        if (targetBranch && String(inv.branchId) === String(targetBranch.id)) {
+        if (bId && String(inv.branchId) === bId) {
           return true;
         }
 
@@ -167,9 +185,11 @@ export function StockTransferRequestsPage() {
       if (match) {
         return match.quantityAvailable ?? match.quantityOnHand ?? 0;
       }
+    }
 
-      // If inventory list exists but no record matches this branch for this product, stock is 0
-      return 0;
+    // 4. Fallback if branchStocks has other branches but not this one
+    if (targetProduct.branchStocks && Object.keys(targetProduct.branchStocks).length > 0) {
+      return targetProduct.branchStocks[bId] || 0;
     }
 
     return targetProduct.onHand ?? 0;
@@ -856,12 +876,21 @@ export function StockTransferRequestsPage() {
                               onChange={(e) => handleSelectProductForLine(idx, e.target.value)}
                               className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-bold text-gray-900 dark:text-white"
                             >
-                              <option value="">-- Chọn sản phẩm --</option>
-                              {products.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name} ({p.sku})
-                                </option>
-                              ))}
+                              <option value="">-- Chọn sản phẩm ({products.length} sp) --</option>
+                              {[...products]
+                                .sort((a, b) => {
+                                  const stockA = getAvailableStockForBranch(a.id, editingHeader.sourceHub);
+                                  const stockB = getAvailableStockForBranch(b.id, editingHeader.sourceHub);
+                                  return stockB - stockA;
+                                })
+                                .map((p) => {
+                                  const avail = getAvailableStockForBranch(p.id, editingHeader.sourceHub);
+                                  return (
+                                    <option key={p.id} value={p.id}>
+                                      {p.name} ({p.sku}) — Tồn: {avail} {p.unit || 'sp'}
+                                    </option>
+                                  );
+                                })}
                             </select>
                           ) : (
                             <input
