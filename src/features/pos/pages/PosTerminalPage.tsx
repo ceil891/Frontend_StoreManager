@@ -648,7 +648,11 @@ export function PosTerminalPage() {
         id: existing.id,
         name: existing.name,
         phone: existing.phone,
+        customerCode: existing.customerCode,
         points: existing.loyaltyPoints || 0,
+        loyaltyPoints: existing.loyaltyPoints || 0,
+        creditLimit: existing.creditLimit || 0,
+        membershipRank: existing.loyaltyTier || 'BRONZE',
       });
       setIsQuickCustomerOpen(false);
       toast.info(`SĐT đã tồn tại trong hệ thống! Đã chọn khách hàng: ${existing.name}`);
@@ -694,7 +698,11 @@ export function PosTerminalPage() {
         id: actualId,
         name: saved?.name || cleanName,
         phone: saved?.phone || cleanPhone,
+        customerCode: saved?.customerCode || customerId,
         points: saved?.loyaltyPoints || 0,
+        loyaltyPoints: saved?.loyaltyPoints || 0,
+        creditLimit: saved?.creditLimit || 0,
+        membershipRank: saved?.loyaltyTier || 'BRONZE',
       });
       setUsedPoints(0);
       setIsQuickCustomerOpen(false);
@@ -929,10 +937,14 @@ export function PosTerminalPage() {
         id: found.id,
         name: found.name,
         phone: found.phone,
+        customerCode: found.customerCode,
         points: found.loyaltyPoints || 0,
+        loyaltyPoints: found.loyaltyPoints || 0,
+        creditLimit: found.creditLimit || 0,
+        membershipRank: found.loyaltyTier || 'BRONZE',
       });
       setUsedPoints(0);
-      toast.success(`Đã chọn thành viên: ${found.name} (${found.phone})`);
+      toast.success(`Đã chọn thành viên: ${found.name} (${found.phone}) - Điểm: ${(found.loyaltyPoints || 0).toLocaleString()} pt`);
     } else {
       toast.error('Không tìm thấy khách hàng. Vui lòng bấm "+ Thêm KH" để đăng ký mới!');
     }
@@ -1152,6 +1164,10 @@ export function PosTerminalPage() {
             orderCode: code,
             orderDate: new Date().toISOString(),
             customerId: activeCustomer?.id && !isNaN(Number(activeCustomer.id)) ? Number(activeCustomer.id) : null,
+            customerPhone: activeCustomer?.phone || '',
+            customerCode: activeCustomer?.customerCode || '',
+            loyaltyPointsUsed: usedPoints > 0 ? usedPoints : 0,
+            usedPoints: usedPoints > 0 ? usedPoints : 0,
             branchId: Number(branchId) || 1,
             customerName: customerDisplayName,
             date: dateStr,
@@ -1250,7 +1266,12 @@ export function PosTerminalPage() {
           // Tự động tích điểm cho Khách hàng & Ghi nhật ký Lịch sử Loyalty CRM
           if (activeCustomer) {
             try {
-              const earnedPoints = Math.floor((totalAmount / (loyaltyConfig?.earnRateAmount || 10000)) * (activeCustomer?.membershipRank === 'Thành viên Vàng' ? 1.5 : activeCustomer?.membershipRank === 'Thành viên Bạc' ? 1.2 : 1.0));
+              const rank = String(activeCustomer?.membershipRank || '').toUpperCase();
+              const rankMultiplier = (rank.includes('DIAMOND') || rank.includes('KIM CƯƠNG')) ? 2.0 :
+                                     (rank.includes('ELITE') || rank.includes('BẠCH KIM')) ? 1.8 :
+                                     (rank.includes('GOLD') || rank.includes('VÀNG')) ? 1.5 :
+                                     (rank.includes('SILVER') || rank.includes('BẠC')) ? 1.2 : 1.0;
+              const earnedPoints = Math.floor((totalAmountToPay / (loyaltyConfig?.earnRateAmount || 1000)) * rankMultiplier);
 
               if (earnedPoints > 0) {
                 useCrmStore.getState().addCustomerPoints(String(activeCustomer.id), earnedPoints, {
@@ -1263,7 +1284,7 @@ export function PosTerminalPage() {
                   refDocument: code,
                   date: dateStr,
                   balanceAfter: (activeCustomer.loyaltyPoints || 0) + earnedPoints,
-                  amount: Math.round(totalAmount),
+                  amount: Math.round(totalAmountToPay),
                   actionType: 'EARN',
                   createdAt: dateStr,
                 });
@@ -1326,6 +1347,8 @@ export function PosTerminalPage() {
           setCompletedPrintInvoice(printInvoicePayload);
           setPaymentState('idle');
           toast.success(`Thanh toán thành công đơn hàng ${code}!`);
+          setUsedPoints(0);
+          useCrmStore.getState().fetchCustomers().catch(() => {});
           if (tabs.length > 1) {
             closeTab(activeTabId);
           } else {

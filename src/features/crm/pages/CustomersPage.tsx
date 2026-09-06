@@ -22,17 +22,11 @@ import { validateCustomerForm } from '@/shared/utils/validators';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 
-const TIER_THRESHOLDS = {
-  BRONZE: 0,
-  SILVER: 200,
-  GOLD: 800,
-  DIAMOND: 4000,
-} as const;
-
-function calcTier(spent: number): CustomerProfile['loyaltyTier'] {
-  if (spent >= TIER_THRESHOLDS.DIAMOND) return 'DIAMOND';
-  if (spent >= TIER_THRESHOLDS.GOLD) return 'GOLD';
-  if (spent >= TIER_THRESHOLDS.SILVER) return 'SILVER';
+function calcTier(spent: number = 0, points: number = 0): CustomerProfile['loyaltyTier'] {
+  if (points >= 6000 || spent >= 50000000) return 'DIAMOND';
+  if (points >= 3000 || spent >= 25000000) return 'ELITE_CLUB';
+  if (points >= 1500 || spent >= 10000000) return 'GOLD';
+  if (points >= 500 || spent >= 3000000) return 'SILVER';
   return 'BRONZE';
 }
 
@@ -333,8 +327,8 @@ export function CustomersPage() {
       {
         accessorKey: 'loyaltyTier',
         header: 'Hạng thẻ',
-        cell: (info) => {
-          const tier = info.getValue() as string;
+        cell: ({ row }) => {
+          const tier = row.original.loyaltyTier || calcTier(row.original.lifetimeSpent || 0, row.original.loyaltyPoints || 0);
           return (
             <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${tierColors[tier] || tierColors.BRONZE}`}>
               <Award className="w-3 h-3" />
@@ -785,7 +779,7 @@ export function CustomersPage() {
                 <input
                   type="text"
                   readOnly
-                  value={tierLabel[calcTier(editingCustomer.lifetimeSpent ?? 0)]}
+                  value={tierLabel[editingCustomer.loyaltyTier || calcTier(editingCustomer.lifetimeSpent ?? 0, editingCustomer.loyaltyPoints ?? 0)] || 'Đồng'}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white text-sm cursor-not-allowed font-semibold text-primary"
                 />
               </div>
