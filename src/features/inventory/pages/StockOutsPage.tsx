@@ -8,6 +8,7 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore, type StockOutRecord, type StockOutDetailItem } from '@/features/inventory/store/inventoryStore';
 import { useAuthStore } from '@/features/auth/store/authStore';
+import { useBranchStore } from '@/features/system/store/branchStore';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { toast } from 'sonner';
 
@@ -42,7 +43,8 @@ const STATUS_MAP: Record<StockOutStatus | string, { label: string; cls: string }
 };
 
 export function StockOutsPage() {
-  const { stockOuts: data, fetchStockOuts, addStockOut, updateStockOut, deleteStockOut, products, fetchProducts } = useInventoryStore();
+  const { stockOuts: data, fetchStockOuts, addStockOut, updateStockOut, deleteStockOut, products, fetchProducts, inventories, fetchInventories } = useInventoryStore();
+  const { branches, fetchBranches } = useBranchStore();
   const currentUser = useAuthStore((s) => s.user);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -54,6 +56,7 @@ export function StockOutsPage() {
   // Dynamic API options
   const [branchesList, setBranchesList] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
+  const [suppliersList, setSuppliersList] = useState<any[]>([]);
 
   // Edit Form State
   const [editingItem, setEditingItem] = useState<Partial<StockOutRecord>>({});
@@ -67,6 +70,8 @@ export function StockOutsPage() {
         await Promise.all([
           fetchStockOuts(),
           fetchProducts(),
+          fetchBranches(),
+          fetchInventories(),
         ]);
       } catch (err) {
         console.error('Error fetching stock outs / products API:', err);
@@ -86,6 +91,16 @@ export function StockOutsPage() {
       })
       .catch(() => {});
 
+    // Fetch suppliers list from API
+    axiosClient.get('/partnerarea/suppliers?size=500')
+      .then((res: any) => {
+        const list = res.data?.content || res.content || res.data || res || [];
+        if (Array.isArray(list)) {
+          setSuppliersList(list);
+        }
+      })
+      .catch(() => {});
+
     // Fetch active users for creator dropdown
     axiosClient.get('/users?status=ACTIVE&size=200')
       .then((res: any) => {
@@ -95,7 +110,7 @@ export function StockOutsPage() {
         }
       })
       .catch(() => {});
-  }, [fetchStockOuts, fetchProducts]);
+  }, [fetchStockOuts, fetchProducts, fetchBranches, fetchInventories]);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -114,10 +129,76 @@ export function StockOutsPage() {
     return `PXK${String(count).padStart(6, '0')}`;
   };
 
+  const getAvailableStockForBranch = (productIdentifier: string | number, sourceBranchName?: string): number => {
+    if (!productIdentifier) return 0;
+    const targetProduct = products.find(
+      (p) =>
+        String(p.id) === String(productIdentifier) ||
+        p.name === String(productIdentifier) ||
+        p.sku === String(productIdentifier)
+    );
+    if (!targetProduct) return 0;
+    if (!sourceBranchName) return targetProduct.onHand ?? 0;
+
+    const cleanSource = sourceBranchName.toLowerCase().trim();
+    const targetBranch = branches.find((b) => {
+      const bName = (b.name || '').toLowerCase().trim();
+      const bCode = (b.branchCode || '').toLowerCase().trim();
+      return (
+        bName === cleanSource ||
+        cleanSource.includes(bName) ||
+        bName.includes(cleanSource) ||
+        (bCode && cleanSource.includes(bCode))
+      );
+    });
+
+    const bId = targetBranch ? String(targetBranch.id) : '';
+
+    // 1. Check branchStocks map
+    if (bId && targetProduct.branchStocks && targetProduct.branchStocks[bId] !== undefined) {
+      return targetProduct.branchStocks[bId];
+    }
+
+    // 2. Check branchStockDetails
+    if (targetProduct.branchStockDetails && targetProduct.branchStockDetails.length > 0) {
+      const detail = targetProduct.branchStockDetails.find(
+        (d) => (bId && String(d.branchId) === bId) || (d.branchName && d.branchName.toLowerCase().trim() === cleanSource)
+      );
+      if (detail) {
+        return detail.available ?? detail.quantity ?? 0;
+      }
+    }
+
+    // 3. Check inventories table
+    if (inventories && inventories.length > 0) {
+      const match = inventories.find((inv) => {
+        const pMatch =
+          String(inv.productId) === String(targetProduct.id) ||
+          (inv.productCode && inv.productCode === targetProduct.sku) ||
+          inv.productName === targetProduct.name;
+        if (!pMatch) return false;
+        if (bId && String(inv.branchId) === bId) return true;
+        const invBranch = (inv.branchName || '').toLowerCase().trim();
+        if (invBranch === cleanSource) return true;
+        if (targetBranch && invBranch === (targetBranch.name || '').toLowerCase().trim()) return true;
+        return false;
+      });
+      if (match) {
+        return match.quantityAvailable ?? match.quantityOnHand ?? 0;
+      }
+    }
+
+    if (targetProduct.branchStocks && Object.keys(targetProduct.branchStocks).length > 0) {
+      return targetProduct.branchStocks[bId] || 0;
+    }
+
+    return targetProduct.onHand ?? 0;
+  };
+
   const handleOpenCreate = () => {
     setModalMode('create');
     const nowStr = new Date().toISOString().slice(0, 16).replace('T', ' ');
-    const defaultBranch = branchesList.length > 0 ? (branchesList[0].branchName || branchesList[0].name) : '';
+    const defaultBranch = branchesList.length > 0 ? (branchesList[0].branchName || branchesList[0].name) : (branches[0]?.name || '');
     const defaultCreator = currentUser?.name || (usersList.length > 0 ? usersList[0].fullName || usersList[0].username : 'Nguyễn Văn A (Trưởng kho)');
 
     setEditingItem({
@@ -128,6 +209,12 @@ export function StockOutsPage() {
       creator: defaultCreator,
       status: StockOutStatus.CHO_XU_LY,
       notes: 'Xuất kho phục vụ đơn hàng bán lẻ POS & Đơn hàng Online.',
+      orderRefCode: '',
+      customerName: '',
+      supplierName: '',
+      originalReceiptRef: '',
+      cancelReason: 'Hàng hết hạn sử dụng',
+      approver: '',
     });
 
     const firstProduct = products.length > 0 ? products[0] : null;
@@ -150,7 +237,15 @@ export function StockOutsPage() {
 
   const handleOpenEdit = (item: StockOutRecord) => {
     setModalMode('edit');
-    setEditingItem(item);
+    setEditingItem({
+      ...item,
+      orderRefCode: item.orderRefCode || '',
+      customerName: item.customerName || '',
+      supplierName: item.supplierName || '',
+      originalReceiptRef: item.originalReceiptRef || '',
+      cancelReason: item.cancelReason || 'Hàng hết hạn sử dụng',
+      approver: item.approver || '',
+    });
     setEditingLines(item.items && item.items.length > 0 ? item.items : []);
     setIsModalOpen(true);
   };
@@ -228,6 +323,25 @@ export function StockOutsPage() {
       return;
     }
 
+    // Validate available stock
+    for (const line of editingLines) {
+      const avail = getAvailableStockForBranch(line.productName || line.sku, editingItem.warehouseName);
+      if (Number(line.quantity || 0) > avail) {
+        toast.error(`Sản phẩm "${line.productName}" có số lượng xuất (${line.quantity}) vượt quá tồn khả dụng (${avail}) tại kho "${editingItem.warehouseName || ''}"! Vui lòng điều chỉnh lại.`);
+        return;
+      }
+    }
+
+    if (editingItem.outType === StockOutType.TRA_NCC && !editingItem.supplierName?.trim()) {
+      toast.error('Vui lòng chọn hoặc nhập Nhà cung cấp đối với phiếu xuất trả hàng NCC!');
+      return;
+    }
+
+    if (editingItem.outType === StockOutType.HUY_HANG_HONG && !editingItem.cancelReason?.trim()) {
+      toast.error('Vui lòng chọn Lý do xuất hủy!');
+      return;
+    }
+
     const recordToSave: StockOutRecord = {
       id: editingItem.id || String(Date.now()),
       stockOutCode: editingItem.stockOutCode || generateNextStockOutCode(),
@@ -241,6 +355,13 @@ export function StockOutsPage() {
       totalValue: formTotals.totalValue,
       items: editingLines,
       notes: editingItem.notes || '',
+      orderRefCode: editingItem.orderRefCode || '',
+      customerName: editingItem.customerName || '',
+      supplierId: editingItem.supplierId,
+      supplierName: editingItem.supplierName || '',
+      originalReceiptRef: editingItem.originalReceiptRef || '',
+      cancelReason: editingItem.cancelReason || '',
+      approver: editingItem.approver || '',
     };
 
     try {
@@ -482,6 +603,42 @@ export function StockOutsPage() {
                   <span className="text-gray-400 text-[11px] block mb-0.5">Trạng thái</span>
                   <span className="font-bold text-gray-900 dark:text-white">{STATUS_MAP[selected.status]?.label}</span>
                 </div>
+                {selected.orderRefCode && (
+                  <div>
+                    <span className="text-gray-400 text-[11px] block mb-0.5">Mã đơn hàng POS</span>
+                    <span className="font-mono font-bold text-gray-900 dark:text-white">{selected.orderRefCode}</span>
+                  </div>
+                )}
+                {selected.customerName && (
+                  <div>
+                    <span className="text-gray-400 text-[11px] block mb-0.5">Khách hàng</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{selected.customerName}</span>
+                  </div>
+                )}
+                {selected.supplierName && (
+                  <div>
+                    <span className="text-gray-400 text-[11px] block mb-0.5">Nhà cung cấp</span>
+                    <span className="font-bold text-blue-600 dark:text-blue-400">{selected.supplierName}</span>
+                  </div>
+                )}
+                {selected.originalReceiptRef && (
+                  <div>
+                    <span className="text-gray-400 text-[11px] block mb-0.5">Phiếu nhập gốc</span>
+                    <span className="font-mono text-gray-800 dark:text-gray-200">{selected.originalReceiptRef}</span>
+                  </div>
+                )}
+                {selected.cancelReason && (
+                  <div>
+                    <span className="text-gray-400 text-[11px] block mb-0.5">Lý do xuất hủy</span>
+                    <span className="font-semibold text-rose-600 dark:text-rose-400">{selected.cancelReason}</span>
+                  </div>
+                )}
+                {selected.approver && (
+                  <div>
+                    <span className="text-gray-400 text-[11px] block mb-0.5">Người duyệt</span>
+                    <span className="font-medium text-gray-900 dark:text-white">{selected.approver}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -631,6 +788,124 @@ export function StockOutsPage() {
               </div>
             </div>
 
+            {/* Dynamic Fields by outType */}
+            {editingItem.outType === StockOutType.BAN_HANG && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 rounded-lg">
+                <div>
+                  <label className="block font-semibold text-emerald-900 dark:text-emerald-300 mb-1">
+                    Mã đơn hàng / Hóa đơn POS
+                  </label>
+                  <input
+                    type="text"
+                    value={editingItem.orderRefCode || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, orderRefCode: e.target.value })}
+                    placeholder="VD: ORD-2026-0012, POS-0921"
+                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-mono text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-emerald-900 dark:text-emerald-300 mb-1">
+                    Tên khách hàng
+                  </label>
+                  <input
+                    type="text"
+                    value={editingItem.customerName || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, customerName: e.target.value })}
+                    placeholder="VD: Khách lẻ POS, Anh Hùng - 0987xxx"
+                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+            )}
+
+            {editingItem.outType === StockOutType.TRA_NCC && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 rounded-lg">
+                <div>
+                  <label className="block font-semibold text-blue-900 dark:text-blue-300 mb-1">
+                    Nhà cung cấp *
+                  </label>
+                  {suppliersList.length > 0 ? (
+                    <select
+                      value={editingItem.supplierName || ''}
+                      onChange={(e) => {
+                        const s = suppliersList.find((item) => (item.supplierName || item.name) === e.target.value);
+                        setEditingItem({
+                          ...editingItem,
+                          supplierName: e.target.value,
+                          supplierId: s ? String(s.id) : undefined,
+                        });
+                      }}
+                      required
+                      className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-semibold text-xs"
+                    >
+                      <option value="">-- Chọn Nhà cung cấp --</option>
+                      {suppliersList.map((s) => (
+                        <option key={s.id} value={s.supplierName || s.name}>
+                          {s.supplierName || s.name} {s.code ? `(${s.code})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={editingItem.supplierName || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, supplierName: e.target.value })}
+                      placeholder="Nhập tên nhà cung cấp..."
+                      required
+                      className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold"
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className="block font-semibold text-blue-900 dark:text-blue-300 mb-1">
+                    Theo Phiếu nhập kho (GRN) gốc
+                  </label>
+                  <input
+                    type="text"
+                    value={editingItem.originalReceiptRef || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, originalReceiptRef: e.target.value })}
+                    placeholder="VD: GRN-2026-0089 (Không bắt buộc)"
+                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-mono text-xs"
+                  />
+                </div>
+              </div>
+            )}
+
+            {editingItem.outType === StockOutType.HUY_HANG_HONG && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/40 rounded-lg">
+                <div>
+                  <label className="block font-semibold text-rose-900 dark:text-rose-300 mb-1">
+                    Lý do xuất hủy *
+                  </label>
+                  <select
+                    value={editingItem.cancelReason || 'Hàng hết hạn sử dụng'}
+                    onChange={(e) => setEditingItem({ ...editingItem, cancelReason: e.target.value })}
+                    required
+                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-semibold text-xs text-rose-700 dark:text-rose-400"
+                  >
+                    <option value="Hàng hết hạn sử dụng">Hàng hết hạn sử dụng (Expired)</option>
+                    <option value="Hàng bị hỏng / vỡ / biến chất">Hàng bị hỏng / vỡ / biến chất</option>
+                    <option value="Hao hụt / thất thoát kiểm kê">Hao hụt / thất thoát kiểm kê</option>
+                    <option value="Lỗi từ phía nhà sản xuất">Lỗi từ phía nhà sản xuất</option>
+                    <option value="Xuất mẫu thử / Tiêu hủy định kỳ">Xuất mẫu thử / Tiêu hủy định kỳ</option>
+                    <option value="Lý do khác">Lý do khác</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-rose-900 dark:text-rose-300 mb-1">
+                    Người phê duyệt hủy
+                  </label>
+                  <input
+                    type="text"
+                    value={editingItem.approver || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, approver: e.target.value })}
+                    placeholder="VD: Ban giám đốc / Trưởng kho"
+                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1 flex items-center justify-between">
@@ -695,107 +970,128 @@ export function StockOutsPage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="text-gray-500 text-[10px] font-bold uppercase tracking-wider border-b">
-                    <th className="pb-1 w-48">Sản phẩm</th>
-                    <th className="pb-1 w-32">Variant</th>
+                    <th className="pb-1 w-44">Sản phẩm</th>
+                    <th className="pb-1 w-28">Variant</th>
                     <th className="pb-1">SKU / Barcode</th>
-                    <th className="pb-1 text-right w-20">Số lượng</th>
+                    <th className="pb-1 text-center w-24">Tồn khả dụng</th>
+                    <th className="pb-1 text-right w-24">Số lượng</th>
                     <th className="pb-1 text-right w-28">Đơn giá (đ)</th>
                     <th className="pb-1 text-right w-32">Thành tiền (đ)</th>
                     <th className="pb-1 w-8 text-center"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                  {editingLines.map((line, idx) => (
-                    <tr key={line.id || idx}>
-                      <td className="py-2 pr-2">
-                        {products.length > 0 ? (
-                          <select
-                            value={products.find((p) => p.name === line.productName)?.id || ''}
-                            onChange={(e) => handleSelectProductForLine(idx, e.target.value)}
-                            className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-bold text-gray-900 dark:text-white"
-                          >
-                            <option value="">-- Chọn sản phẩm --</option>
-                            {products.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name} ({p.sku})
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
+                  {editingLines.map((line, idx) => {
+                    const avail = getAvailableStockForBranch(line.productName || line.sku, editingItem.warehouseName);
+                    const isExceeded = Number(line.quantity || 0) > avail;
+                    return (
+                      <tr key={line.id || idx} className={isExceeded ? 'bg-rose-50/40 dark:bg-rose-950/20' : ''}>
+                        <td className="py-2 pr-2">
+                          {products.length > 0 ? (
+                            <select
+                              value={products.find((p) => p.name === line.productName)?.id || ''}
+                              onChange={(e) => handleSelectProductForLine(idx, e.target.value)}
+                              className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-bold text-gray-900 dark:text-white"
+                            >
+                              <option value="">-- Chọn sản phẩm --</option>
+                              {products.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} ({p.sku})
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              value={line.productName}
+                              onChange={(e) => handleUpdateLine(idx, 'productName', e.target.value)}
+                              className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-bold"
+                              placeholder="Nhập tên sản phẩm"
+                              required
+                            />
+                          )}
+                        </td>
+                        <td className="py-2 pr-2">
                           <input
                             type="text"
-                            value={line.productName}
-                            onChange={(e) => handleUpdateLine(idx, 'productName', e.target.value)}
-                            className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-bold"
-                            placeholder="Nhập tên sản phẩm"
+                            value={line.variant}
+                            onChange={(e) => handleUpdateLine(idx, 'variant', e.target.value)}
+                            className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs text-emerald-600 font-semibold"
+                            placeholder="Variant"
                             required
                           />
-                        )}
-                      </td>
-                      <td className="py-2 pr-2">
-                        <input
-                          type="text"
-                          value={line.variant}
-                          onChange={(e) => handleUpdateLine(idx, 'variant', e.target.value)}
-                          className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs text-emerald-600 font-semibold"
-                          placeholder="Variant"
-                          required
-                        />
-                      </td>
-                      <td className="py-2 pr-2">
-                        <input
-                          type="text"
-                          value={line.sku}
-                          onChange={(e) => handleUpdateLine(idx, 'sku', e.target.value)}
-                          className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-mono mb-1"
-                          placeholder="SKU"
-                          required
-                        />
-                        <input
-                          type="text"
-                          value={line.barcode || ''}
-                          onChange={(e) => handleUpdateLine(idx, 'barcode', e.target.value)}
-                          className="w-full p-1 bg-white dark:bg-gray-800 border rounded text-[10px] font-mono text-gray-400"
-                          placeholder="Barcode"
-                        />
-                      </td>
-                      <td className="py-2 pr-2">
-                        <input
-                          type="number"
-                          min={1}
-                          value={line.quantity}
-                          onChange={(e) => handleUpdateLine(idx, 'quantity', parseFloat(e.target.value) || 0)}
-                          className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-mono font-bold text-right"
-                          required
-                        />
-                      </td>
-                      <td className="py-2 pr-2">
-                        <input
-                          type="number"
-                          min={0}
-                          step={1000}
-                          value={line.unitPrice}
-                          onChange={(e) => handleUpdateLine(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-mono text-right"
-                          required
-                        />
-                      </td>
-                      <td className="py-2 text-right font-mono font-bold text-emerald-600">
-                        {formatCurrency(line.amount)}
-                      </td>
-                      <td className="py-2 text-center">
-                        {editingLines.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveLine(idx)}
-                            className="p-1 text-gray-400 hover:text-rose-600 rounded"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="py-2 pr-2">
+                          <input
+                            type="text"
+                            value={line.sku}
+                            onChange={(e) => handleUpdateLine(idx, 'sku', e.target.value)}
+                            className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-mono mb-1"
+                            placeholder="SKU"
+                            required
+                          />
+                          <input
+                            type="text"
+                            value={line.barcode || ''}
+                            onChange={(e) => handleUpdateLine(idx, 'barcode', e.target.value)}
+                            className="w-full p-1 bg-white dark:bg-gray-800 border rounded text-[10px] font-mono text-gray-400"
+                            placeholder="Barcode"
+                          />
+                        </td>
+                        <td className="py-2 px-1 text-center font-mono">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                            avail <= 0
+                              ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                              : avail < 10
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                          }`}>
+                            {avail} sp
+                          </span>
+                        </td>
+                        <td className="py-2 pr-2">
+                          <input
+                            type="number"
+                            min={1}
+                            value={line.quantity}
+                            onChange={(e) => handleUpdateLine(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                            className={`w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-mono font-bold text-right ${
+                              isExceeded ? 'border-rose-500 text-rose-600 focus:ring-rose-500 bg-rose-50/50 dark:bg-rose-950/30' : 'border-gray-300 dark:border-gray-600'
+                            }`}
+                            required
+                          />
+                          {isExceeded && (
+                            <span className="text-[10px] text-rose-500 block text-right font-medium mt-0.5">Vượt tồn ({avail})</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-2">
+                          <input
+                            type="number"
+                            min={0}
+                            step={1000}
+                            value={line.unitPrice}
+                            onChange={(e) => handleUpdateLine(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
+                            className="w-full p-1.5 bg-white dark:bg-gray-800 border rounded text-xs font-mono text-right"
+                            required
+                          />
+                        </td>
+                        <td className="py-2 text-right font-mono font-bold text-emerald-600">
+                          {formatCurrency(line.amount)}
+                        </td>
+                        <td className="py-2 text-center">
+                          {editingLines.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveLine(idx)}
+                              className="p-1 text-gray-400 hover:text-rose-600 rounded"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

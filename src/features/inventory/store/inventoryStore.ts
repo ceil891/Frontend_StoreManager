@@ -649,6 +649,14 @@ export interface WarehouseBinRecord {
   maxVolumeM3?: number;
   maxPallet?: number;
   status: 'EMPTY' | 'OCCUPIED' | 'FULL';
+  statusConfig?: string;
+  binType?: string;
+  allowFood?: boolean;
+  allowCosmetics?: boolean;
+  allowElectronics?: boolean;
+  allowChemicals?: boolean;
+  allowMixedSku?: boolean;
+  allowMixedLot?: boolean;
   description?: string;
   // Rack info
   rackId?: string;
@@ -890,6 +898,13 @@ export interface StockOutRecord {
   status: 'CHO_XU_LY' | 'DA_XUAT' | 'DA_HUY';
   items?: StockOutDetailItem[];
   notes?: string;
+  orderRefCode?: string;
+  customerName?: string;
+  supplierId?: string | number;
+  supplierName?: string;
+  originalReceiptRef?: string;
+  cancelReason?: string;
+  approver?: string;
 }
 
 export interface SupplierWarehouseRecord {
@@ -3389,14 +3404,32 @@ export const useInventoryStore = create<InventoryState>()(
               status: b.status || 'EMPTY',
               description: b.description || '',
             }));
-            set({ warehouseBins: bins });
+            set((state) => {
+              const merged = bins.map((b: any) => {
+                const local = state.warehouseBins.find((wb) => wb.id === b.id || wb.binCode === b.binCode);
+                return {
+                  ...b,
+                  statusConfig: local?.statusConfig ?? (b.status === 'LOCKED' ? 'LOCKED' : b.status === 'MAINTENANCE' ? 'MAINTENANCE' : b.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE'),
+                  binType: local?.binType ?? 'STORAGE',
+                  allowFood: local?.allowFood ?? true,
+                  allowCosmetics: local?.allowCosmetics ?? true,
+                  allowElectronics: local?.allowElectronics ?? false,
+                  allowChemicals: local?.allowChemicals ?? false,
+                  allowMixedSku: local?.allowMixedSku ?? true,
+                  allowMixedLot: local?.allowMixedLot ?? false,
+                };
+              });
+              const backendIds = new Set(bins.map((b: any) => b.id));
+              const localOnly = state.warehouseBins.filter((b) => !backendIds.has(b.id));
+              return { warehouseBins: [...merged, ...localOnly] };
+            });
           }
         } catch (error) {
           console.warn('Failed to fetch warehouse bins, preserving local state:', error);
         }
       },
       addWarehouseBin: async (bin: any) => {
-        const newBinRecord = {
+        const newBinRecord: WarehouseBinRecord = {
           id: bin.id || String(Date.now()),
           binCode: bin.binCode || `BIN-${Date.now().toString().slice(-4)}`,
           barcode: bin.barcode || `BAR-${bin.binCode || Date.now()}`,
@@ -3407,6 +3440,14 @@ export const useInventoryStore = create<InventoryState>()(
           maxVolumeM3: Number(bin.maxVolumeM3 || 2.5),
           maxPallet: Number(bin.maxPallet || 4),
           status: bin.status || 'EMPTY',
+          statusConfig: bin.statusConfig || 'ACTIVE',
+          binType: bin.binType || 'STORAGE',
+          allowFood: bin.allowFood !== false,
+          allowCosmetics: bin.allowCosmetics !== false,
+          allowElectronics: !!bin.allowElectronics,
+          allowChemicals: !!bin.allowChemicals,
+          allowMixedSku: bin.allowMixedSku !== false,
+          allowMixedLot: !!bin.allowMixedLot,
           description: bin.description || '',
         };
 
@@ -3432,7 +3473,7 @@ export const useInventoryStore = create<InventoryState>()(
       },
       updateWarehouseBin: async (id, data: any) => {
         set((state) => ({
-          warehouseBins: state.warehouseBins.map((b) => (b.id === id ? { ...b, ...data } : b)),
+          warehouseBins: state.warehouseBins.map((b) => (b.id === String(id) || b.id === id ? { ...b, ...data } : b)),
         }));
 
         try {
