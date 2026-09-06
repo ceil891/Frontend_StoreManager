@@ -268,6 +268,13 @@ export function PurchaseRequestsPage() {
     e.preventDefault();
     if (!editingItem.reason || !editingItem.estimatedTotal) return;
 
+    const todayStr = new Date().toISOString().split('T')[0];
+    const rawDate = editingItem.requestDate || todayStr;
+    if (rawDate < todayStr) {
+      toast.error('Ngày lập đề xuất không được nhỏ hơn ngày hôm nay');
+      return;
+    }
+
     try {
       const statusMap: Record<string, string> = {
         'CHỜ_DUYỆT': 'PENDING_APPROVAL',
@@ -653,12 +660,13 @@ export function PurchaseRequestsPage() {
         <form onSubmit={handleSave} className="space-y-4 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày lập đề xuất (Mặc định hôm nay) *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày lập đề xuất *</label>
               <input
                 type="date"
                 value={editingItem.requestDate || new Date().toISOString().split('T')[0]}
-                readOnly
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white cursor-not-allowed font-medium"
+                min={new Date().toISOString().split('T')[0]}
+                onChange={(e) => setEditingItem({ ...editingItem, requestDate: e.target.value })}
+                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-medium"
                 required
               />
             </div>
@@ -695,7 +703,7 @@ export function PurchaseRequestsPage() {
                 value={editingItem.proposedBy || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, proposedBy: e.target.value })}
                 className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 placeholder:italic"
-                placeholder="Nhập tên người đề xuất (VD: Nguyễn Văn A)..."
+                placeholder="Nhập họ và tên người đề xuất..."
                 required
               />
             </div>

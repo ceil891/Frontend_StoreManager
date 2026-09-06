@@ -240,11 +240,14 @@ export const purchaseService = {
 
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
-    const formatLocalDateTime = (dateStr?: string) => {
-      if (!dateStr) return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00:00`;
-      if (dateStr.includes('T') && !dateStr.includes('Z')) return dateStr;
+    const formatLocalDateTime = (dateStr?: string, isEnd = false) => {
+      if (!dateStr) return isEnd ? `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T23:59:59` : `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00:00`;
+      const clean = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+        return isEnd ? `${clean}T23:59:59` : `${clean}T00:00:00`;
+      }
       const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00:00`;
+      if (isNaN(d.getTime())) return isEnd ? `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T23:59:59` : `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00:00`;
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     };
 
@@ -253,21 +256,16 @@ export const purchaseService = {
       : `PO-${now.getFullYear()}-${Date.now().toString().slice(-5)}${Math.floor(10 + Math.random() * 90)}`;
 
     const rawStatus = (po.status as string) || 'DRAFT';
-    const isDraftOrPending =
-      rawStatus === 'DRAFT' ||
-      rawStatus === 'PENDING_APPROVAL' ||
-      rawStatus === 'BẢN NHÁP' ||
-      rawStatus === 'CHỜ DUYỆT';
 
     const payload = {
       poCode: uniquePoCode,
-      poDate: formatLocalDateTime(po.orderDate),
-      expectedDate: (po.estDeliveryDate || (po as any).expectedDeliveryDate || (po as any).expectedDate) ? formatLocalDateTime(po.estDeliveryDate || (po as any).expectedDeliveryDate || (po as any).expectedDate) : null,
+      poDate: formatLocalDateTime(po.orderDate, false),
+      expectedDate: (po.estDeliveryDate || (po as any).expectedDeliveryDate || (po as any).expectedDate) ? formatLocalDateTime(po.estDeliveryDate || (po as any).expectedDeliveryDate || (po as any).expectedDate, true) : null,
       supplierId: supplierId || 1,
       branchId: branchId || 1,
       status: rawStatus,
-      paymentStatus: isDraftOrPending ? 'UNPAID' : (po.paymentStatus || 'UNPAID'),
-      advanceAmount: isDraftOrPending ? 0 : Number((po as any).advanceAmount || 0),
+      paymentStatus: po.paymentStatus || 'UNPAID',
+      advanceAmount: Number((po as any).advanceAmount || 0),
       paymentTerms: po.paymentTerms || 'Net 30',
       shippingFee: Number(po.shippingFee || 0),
       note: po.notes || '',
@@ -319,29 +317,27 @@ export const purchaseService = {
 
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
-    const formatLocalDateTime = (dateStr?: string) => {
-      if (!dateStr) return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00:00`;
-      if (dateStr.includes('T') && !dateStr.includes('Z')) return dateStr;
+    const formatLocalDateTime = (dateStr?: string, isEnd = false) => {
+      if (!dateStr) return isEnd ? `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T23:59:59` : `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00:00`;
+      const clean = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+        return isEnd ? `${clean}T23:59:59` : `${clean}T00:00:00`;
+      }
       const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00:00`;
+      if (isNaN(d.getTime())) return isEnd ? `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T23:59:59` : `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00:00`;
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     };
 
     const rawStatus = (data.status as string) || 'DRAFT';
-    const isDraftOrPending =
-      rawStatus === 'DRAFT' ||
-      rawStatus === 'PENDING_APPROVAL' ||
-      rawStatus === 'BẢN NHÁP' ||
-      rawStatus === 'CHỜ DUYỆT';
 
     const payload = {
-      poDate: formatLocalDateTime(data.orderDate),
-      expectedDate: (data.estDeliveryDate || (data as any).expectedDeliveryDate || (data as any).expectedDate) ? formatLocalDateTime(data.estDeliveryDate || (data as any).expectedDeliveryDate || (data as any).expectedDate) : null,
+      poDate: formatLocalDateTime(data.orderDate, false),
+      expectedDate: (data.estDeliveryDate || (data as any).expectedDeliveryDate || (data as any).expectedDate) ? formatLocalDateTime(data.estDeliveryDate || (data as any).expectedDeliveryDate || (data as any).expectedDate, true) : null,
       supplierId: supplierId,
       branchId: branchId,
       status: rawStatus,
-      paymentStatus: isDraftOrPending ? 'UNPAID' : (data.paymentStatus || 'UNPAID'),
-      advanceAmount: isDraftOrPending ? 0 : Number((data as any).advanceAmount || 0),
+      paymentStatus: data.paymentStatus || 'UNPAID',
+      advanceAmount: Number((data as any).advanceAmount || 0),
       paymentTerms: data.paymentTerms !== undefined ? data.paymentTerms : undefined,
       shippingFee: data.shippingFee !== undefined ? Number(data.shippingFee) : undefined,
       note: data.notes || '',

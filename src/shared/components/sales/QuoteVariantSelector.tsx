@@ -25,27 +25,32 @@ export function QuoteVariantSelector({ value, onChange }: QuoteVariantSelectorPr
     const fetchVariants = async () => {
       setLoading(true);
       try {
-        const res = await axiosClient.get<any, any>('/catalog/variants');
-        const data = res?.data?.content || res?.data || res || [];
-        if (Array.isArray(data) && data.length > 0) {
-          setVariants(data);
-        } else {
-          // Fallback mock variants if API is empty
-          setVariants([
-            { id: '1', variantCode: 'VAR-PEPSI-330', sku: 'SKU-PEP-330', barcode: '893000000001', productName: 'Pepsi 330ml - Lon', unit: 'Lon', price: 10000, productId: '10' },
-            { id: '2', variantCode: 'VAR-PEPSI-15L', sku: 'SKU-PEP-15L', barcode: '893000000002', productName: 'Pepsi 1.5L - Chai', unit: 'Chai', price: 22000, productId: '10' },
-            { id: '3', variantCode: 'VAR-COCA-330', sku: 'SKU-COC-330', barcode: '893000000003', productName: 'Coca Cola 330ml - Lon', unit: 'Lon', price: 10500, productId: '11' },
-            { id: '4', variantCode: 'VAR-MILK-1L', sku: 'SKU-MILK-1L', barcode: '893000000004', productName: 'Sữa tươi Vinamilk 1L - Hộp', unit: 'Hộp', price: 35000, productId: '12' },
-          ]);
+        // First try fetching products
+        const res = await axiosClient.get<any, any>('/products?size=500');
+        const list = res?.data?.content || res?.content || (Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []));
+        if (Array.isArray(list) && list.length > 0) {
+          const mapped = list.map((p: any) => ({
+            id: String(p.id),
+            variantCode: p.productCode || p.barcode || `VAR-${p.id}`,
+            sku: p.productCode || p.sku || `SKU-${p.id}`,
+            barcode: p.barcode || '',
+            productName: p.name || p.productName || 'Sản phẩm',
+            unit: p.baseUnit?.unitName || p.unit || 'Cái',
+            price: Number(p.costPrice || p.importPrice || p.retailPrice || p.price || 0),
+            productId: String(p.id),
+          }));
+          setVariants(mapped);
+          return;
+        }
+
+        // Fallback to catalog variants if available
+        const varRes = await axiosClient.get<any, any>('/catalog/variants');
+        const varList = varRes?.data?.content || varRes?.data || varRes || [];
+        if (Array.isArray(varList) && varList.length > 0) {
+          setVariants(varList);
         }
       } catch (err) {
-        console.error(err);
-        setVariants([
-          { id: '1', variantCode: 'VAR-PEPSI-330', sku: 'SKU-PEP-330', barcode: '893000000001', productName: 'Pepsi 330ml - Lon', unit: 'Lon', price: 10000, productId: '10' },
-          { id: '2', variantCode: 'VAR-PEPSI-15L', sku: 'SKU-PEP-15L', barcode: '893000000002', productName: 'Pepsi 1.5L - Chai', unit: 'Chai', price: 22000, productId: '10' },
-          { id: '3', variantCode: 'VAR-COCA-330', sku: 'SKU-COC-330', barcode: '893000000003', productName: 'Coca Cola 330ml - Lon', unit: 'Lon', price: 10500, productId: '11' },
-          { id: '4', variantCode: 'VAR-MILK-1L', sku: 'SKU-MILK-1L', barcode: '893000000004', productName: 'Sữa tươi Vinamilk 1L - Hộp', unit: 'Hộp', price: 35000, productId: '12' },
-        ]);
+        console.error('Error fetching variants in QuoteVariantSelector:', err);
       } finally {
         setLoading(false);
       }

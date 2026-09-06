@@ -37,7 +37,9 @@ function normalizeCustomer(partial: Partial<CustomerProfile> & Pick<CustomerProf
     dateOfBirth: partial.dateOfBirth ?? '',
     creditLimit: partial.creditLimit ?? 0,
     groupId: partial.groupId ? String(partial.groupId) : '',
+    groupName: partial.groupName ?? '',
     areaId: partial.areaId ? String(partial.areaId) : '',
+    areaName: partial.areaName ?? '',
     isCreditBlocked: Boolean(partial.isCreditBlocked),
   };
 }
@@ -79,7 +81,9 @@ function mapCustomer(item: any): CustomerProfile {
     dateOfBirth: item.dob || item.dateOfBirth || '',
     creditLimit: Number(item.debtLimit || item.creditLimit || 0),
     groupId: item.groupId ? String(item.groupId) : '',
+    groupName: item.groupName || '',
     areaId: item.areaId ? String(item.areaId) : '',
+    areaName: item.areaName || '',
     isCreditBlocked: Boolean(item.isCreditBlocked),
   });
 }
@@ -102,53 +106,49 @@ export const crmService = {
   },
 
   async addCustomer(customer: CustomerInput): Promise<CustomerProfile> {
-    const form = toFormData({
+    const payload = {
       name: customer.name,
       phone: customer.phone,
-      email: customer.email,
-      address: customer.address,
-      customerCode: customer.customerCode,
-      note: customer.notes,
+      email: customer.email || undefined,
+      address: customer.address || undefined,
+      customerCode: customer.customerCode || undefined,
+      note: customer.notes || undefined,
       isActive: true,
-      dob: customer.dateOfBirth,
-      taxCode: customer.taxCode,
-      gender: customer.gender,
-      groupId: customer.groupId,
-      areaId: customer.areaId,
-      debtLimit: customer.creditLimit,
-      avatarUrl: customer.avatarUrl,
-    });
-    const res = await axiosClient.post<any, any>('/partnerarea/customers', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+      dob: customer.dateOfBirth || undefined,
+      taxCode: customer.taxCode || undefined,
+      gender: customer.gender || undefined,
+      groupId: customer.groupId ? Number(customer.groupId) : undefined,
+      areaId: customer.areaId ? Number(customer.areaId) : undefined,
+      debtLimit: customer.creditLimit !== undefined ? Number(customer.creditLimit) : 0,
+      avatarUrl: customer.avatarUrl || undefined,
+    };
+    const res = await axiosClient.post<any, any>('/partnerarea/customers', payload);
     const item = res?.data || res;
     return mapCustomer(item || { ...customer });
   },
 
   async updateCustomer(id: string, data: Partial<CustomerProfile>): Promise<Partial<CustomerProfile>> {
-    const form = toFormData({
+    const payload = {
       name: data.name,
       phone: data.phone,
-      email: data.email,
-      address: data.address,
-      customerCode: data.customerCode,
-      note: data.notes,
+      email: data.email || undefined,
+      address: data.address || undefined,
+      customerCode: data.customerCode || undefined,
+      note: data.notes || undefined,
       isActive: data.status ? data.status === 'ACTIVE' : true,
-      dob: data.dateOfBirth,
-      taxCode: data.taxCode,
-      gender: data.gender,
-      groupId: data.groupId,
-      areaId: data.areaId,
-      debtLimit: data.creditLimit,
-      avatarUrl: data.avatarUrl,
-      membershipRank: data.loyaltyTier,
-      points: data.loyaltyPoints,
-      totalSpend: data.lifetimeSpent,
-    });
-    const res = await axiosClient.put<any, any>(`/partnerarea/customers/${id}`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    return mapCustomer(res?.data || res || data);
+      dob: data.dateOfBirth || undefined,
+      taxCode: data.taxCode || undefined,
+      gender: data.gender || undefined,
+      groupId: data.groupId ? Number(data.groupId) : undefined,
+      areaId: data.areaId ? Number(data.areaId) : undefined,
+      debtLimit: data.creditLimit !== undefined ? Number(data.creditLimit) : undefined,
+      avatarUrl: data.avatarUrl || undefined,
+      membershipRank: data.loyaltyTier || undefined,
+      points: data.loyaltyPoints !== undefined ? Number(data.loyaltyPoints) : undefined,
+      totalSpend: data.lifetimeSpent !== undefined ? Number(data.lifetimeSpent) : undefined,
+    };
+    const res = await axiosClient.put<any, any>(`/partnerarea/customers/${id}`, payload);
+    return mapCustomer(res?.data || res || { id, ...data });
   },
 
   async deleteCustomer(id: string): Promise<void> {

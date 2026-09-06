@@ -130,6 +130,12 @@ export function CustomersPage() {
       registeredDate: new Date().toISOString().split('T')[0],
       lastActive: new Date().toISOString().split('T')[0],
       notes: '',
+      taxCode: '',
+      gender: 'OTHER',
+      dateOfBirth: '',
+      creditLimit: 0,
+      groupId: '',
+      areaId: '',
     });
     setIsModalOpen(true);
   };
@@ -137,7 +143,15 @@ export function CustomersPage() {
   const handleOpenEdit = (customer: CustomerProfile) => {
     setModalMode('edit');
     setIsAutoCode(false);
-    setEditingCustomer(customer);
+    setEditingCustomer({
+      ...customer,
+      taxCode: customer.taxCode || '',
+      gender: customer.gender || 'OTHER',
+      dateOfBirth: customer.dateOfBirth || '',
+      creditLimit: customer.creditLimit || 0,
+      groupId: customer.groupId ? String(customer.groupId) : '',
+      areaId: customer.areaId ? String(customer.areaId) : '',
+    });
     setIsModalOpen(true);
   };
 
@@ -172,6 +186,7 @@ export function CustomersPage() {
           taxCode:        editingCustomer.taxCode || '',
           gender:         editingCustomer.gender || 'OTHER',
           dateOfBirth:    editingCustomer.dateOfBirth || '',
+          creditLimit:    editingCustomer.creditLimit || 0,
           groupId:        editingCustomer.groupId ? (String(editingCustomer.groupId).match(/^\d+$/) ? Number(editingCustomer.groupId) : undefined) : undefined,
           areaId:         editingCustomer.areaId ? (String(editingCustomer.areaId).match(/^\d+$/) ? Number(editingCustomer.areaId) : undefined) : undefined,
           avatarUrl:      editingCustomer.avatarUrl?.trim() || '',
@@ -268,28 +283,42 @@ export function CustomersPage() {
       {
         accessorKey: 'customerCode',
         header: 'Mã KH',
-        cell: (info) => (
-          <span className="font-mono font-bold text-primary hover:underline">
-            {info.getValue() as string}
-          </span>
+        cell: ({ row }) => (
+          <div>
+            <span className="font-mono font-bold text-primary hover:underline block">
+              {row.original.customerCode}
+            </span>
+            {row.original.taxCode && (
+              <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono block">
+                MST: {row.original.taxCode}
+              </span>
+            )}
+          </div>
         ),
       },
       {
         accessorKey: 'name',
         header: 'Khách hàng',
-        cell: ({ row }) => (
-          <div className="flex items-center gap-3">
-            <UserAvatar
-              src={row.original.avatarUrl}
-              name={row.original.name}
-              size="md"
-            />
-            <div>
-              <p className="font-bold text-gray-900 dark:text-white hover:text-primary transition-colors">{row.original.name}</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">{row.original.phone}</p>
+        cell: ({ row }) => {
+          const genderText = row.original.gender === 'MALE' ? 'Nam' : row.original.gender === 'FEMALE' ? 'Nữ' : undefined;
+          return (
+            <div className="flex items-center gap-3">
+              <UserAvatar
+                src={row.original.avatarUrl}
+                name={row.original.name}
+                size="md"
+              />
+              <div>
+                <p className="font-bold text-gray-900 dark:text-white hover:text-primary transition-colors">{row.original.name}</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">
+                  {row.original.phone}
+                  {genderText && <span> • {genderText}</span>}
+                  {row.original.dateOfBirth && <span> • {row.original.dateOfBirth}</span>}
+                </p>
+              </div>
             </div>
-          </div>
-        ),
+          );
+        },
       },
       {
         accessorKey: 'email',
@@ -316,11 +345,18 @@ export function CustomersPage() {
       },
       {
         accessorKey: 'loyaltyPoints',
-        header: 'Điểm khả dụng',
-        cell: (info) => (
-          <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-            {(info.getValue() as number).toLocaleString()} điểm
-          </span>
+        header: 'Điểm & Hạn mức nợ',
+        cell: ({ row }) => (
+          <div>
+            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 block">
+              {(row.original.loyaltyPoints || 0).toLocaleString()} điểm
+            </span>
+            {(row.original.creditLimit !== undefined && row.original.creditLimit > 0) ? (
+              <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
+                Hạn mức: {(row.original.creditLimit).toLocaleString('vi-VN')} ₫
+              </span>
+            ) : null}
+          </div>
         ),
       },
       {
@@ -521,8 +557,8 @@ export function CustomersPage() {
               <div className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800 space-y-1">
                 <span className="text-gray-400 block font-semibold mb-1">TÀI CHÍNH & PHÂN LOẠI</span>
                 <p><span className="text-gray-500">Hạn mức nợ:</span> <span className="font-mono font-bold text-emerald-600">{(selectedCustomer.creditLimit || 0).toLocaleString('vi-VN')} ₫</span></p>
-                <p><span className="text-gray-500">Nhóm KH:</span> <span className="font-medium text-gray-900 dark:text-white">{selectedCustomer.groupId || 'Mặc định'}</span></p>
-                <p><span className="text-gray-500">Khu vực:</span> <span className="font-medium text-gray-900 dark:text-white">{selectedCustomer.areaId || 'Toàn quốc'}</span></p>
+                <p><span className="text-gray-500">Nhóm KH:</span> <span className="font-medium text-gray-900 dark:text-white">{selectedCustomer.groupName || dynamicGroups.find(g => String(g.id) === String(selectedCustomer.groupId))?.name || selectedCustomer.groupId || 'Mặc định'}</span></p>
+                <p><span className="text-gray-500">Khu vực:</span> <span className="font-medium text-gray-900 dark:text-white">{selectedCustomer.areaName || dynamicAreas.find(a => String(a.id) === String(selectedCustomer.areaId))?.name || selectedCustomer.areaId || 'Toàn quốc'}</span></p>
               </div>
             </div>
 

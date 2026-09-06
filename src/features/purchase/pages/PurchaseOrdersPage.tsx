@@ -238,9 +238,8 @@ export function PurchaseOrdersPage() {
 
     setIsSubmitting(true);
     try {
-      const isDraft = editingPO.status === 'DRAFT' || editingPO.status === 'PENDING_APPROVAL';
-      const finalPaymentStatus = isDraft ? 'UNPAID' : (editingPO.paymentStatus as any || 'UNPAID');
-      const finalAdvanceAmount = isDraft ? 0 : Number((editingPO as any).advanceAmount || 0);
+      const finalPaymentStatus = (editingPO.paymentStatus as any) || 'UNPAID';
+      const finalAdvanceAmount = Number((editingPO as any).advanceAmount || 0);
 
       if (modalMode === 'create') {
         const newPO: Omit<PurchaseOrderItem, 'id'> = {

@@ -62,7 +62,7 @@ export function PurchasePaymentsPage() {
     fetchUsers();
   }, [fetchUsers]);
 
-  const loggedInUser = currentUser?.name || currentUser?.email || 'Nhân viên kế toán';
+  const loggedInUser = currentUser?.fullName || currentUser?.name || (currentUser as any)?.username || currentUser?.email || 'Nhân viên kế toán';
 
   const [data, setData] = useState<PurchasePaymentRecord[]>([]);
   const [search, setSearch] = useState('');
@@ -389,8 +389,25 @@ export function PurchasePaymentsPage() {
         setSelected(updated);
       }
 
-      // 2. Synchronize PO paymentStatus to PAID in purchaseStore & Master Data
+      // 2. Synchronize PurchaseInvoice and PO paymentStatus to PAID in purchaseStore & Master Data
       const { purchaseOrders, updatePurchaseOrder, fetchPurchaseOrders } = usePurchaseStore.getState();
+
+      if (payment.invoiceCode) {
+        axiosClient.get('/purchase/invoices').then((res: any) => {
+          const invList = extractPageContent<any>(res);
+          const matchedInv = invList.find((i: any) => i.invoiceCode === payment.invoiceCode || `INV-MH-${i.id}` === payment.invoiceCode || String(i.id) === payment.invoiceCode);
+          if (matchedInv) {
+            axiosClient.put(`/purchase/invoices/${matchedInv.id}`, { ...matchedInv, status: 'DA_THANH_TOAN' }).catch(() => {});
+            const poToUpdate = purchaseOrders.find(
+              p => p.poNumber === matchedInv.poCode || (p as any).poCode === matchedInv.poCode || String(p.id) === String(matchedInv.poId)
+            );
+            if (poToUpdate) {
+              updatePurchaseOrder(poToUpdate.id, { paymentStatus: 'PAID' }).catch(() => {});
+            }
+          }
+        }).catch(() => {});
+      }
+
       const matchingPO = purchaseOrders.find(
         p => p.poNumber === payment.invoiceCode || (p as any).poCode === payment.invoiceCode || String(p.id) === String(payment.invoiceCode)
       );
@@ -400,7 +417,7 @@ export function PurchasePaymentsPage() {
       fetchPurchaseOrders().catch(() => {});
 
       await fetchMasterData();
-      toast.success(`Duyệt phiếu chi ${payment.paymentCode} thành công! Đã tự động cập nhật trạng thái đơn mua hàng.`);
+      toast.success(`Duyệt phiếu chi ${payment.paymentCode} thành công! Đã tự động cập nhật trạng thái hóa đơn & đơn mua hàng.`);
     } catch (err) {
       console.error(err);
       toast.error('Lỗi khi duyệt phiếu chi');
