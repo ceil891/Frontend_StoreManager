@@ -1893,11 +1893,11 @@ export const useInventoryStore = create<InventoryState>()(
       },
 
       addStockTransfer: async (transfer) => {
-        const id = (transfer as any).id || Date.now().toString();
-        const fullTransfer: StockTransferOrder = { id, ...transfer } as StockTransferOrder;
+        const tempId = (transfer as any).id || Date.now().toString();
+        const fullTransfer: StockTransferOrder = { id: tempId, ...transfer } as StockTransferOrder;
         const previousTransfers = get().stockTransfers;
         set((state) => ({
-          stockTransfers: [fullTransfer, ...state.stockTransfers.filter(s => s.id !== id)],
+          stockTransfers: [fullTransfer, ...state.stockTransfers.filter(s => s.id !== tempId)],
         }));
         try {
           const products = get().products;
@@ -1934,7 +1934,16 @@ export const useInventoryStore = create<InventoryState>()(
             note: transfer.notes || undefined,
             transferLines: transferLines,
           };
-          await axiosClient.post('/inventories/transfers', payload);
+          const res: any = await axiosClient.post('/inventories/transfers', payload);
+          const savedData = res?.data || res;
+          const realId = savedData?.id ? String(savedData.id) : null;
+          if (realId) {
+            set((state) => ({
+              stockTransfers: state.stockTransfers.map((s) => (s.id === tempId ? { ...s, id: realId } : s)),
+            }));
+          }
+          await get().fetchStockTransfers();
+          return realId || tempId;
         } catch (error) {
           set({ stockTransfers: previousTransfers });
           throw error;
@@ -1987,7 +1996,21 @@ export const useInventoryStore = create<InventoryState>()(
             note: data.notes !== undefined ? data.notes : existing?.notes,
             transferLines,
           };
-          await axiosClient.put(`/inventories/transfers/${id}`, payload);
+
+          const prevTransfers = get().stockTransfers;
+          let targetId = id;
+          if (String(id).length > 10) {
+            const found = prevTransfers.find((t) => t.id === id);
+            if (found?.transferNumber) {
+              await get().fetchStockTransfers();
+              const refreshed = get().stockTransfers.find(
+                (t) => t.transferNumber === found.transferNumber && String(t.id).length <= 10
+              );
+              if (refreshed) targetId = refreshed.id;
+            }
+          }
+
+          await axiosClient.put(`/inventories/transfers/${targetId}`, payload);
           await get().fetchStockTransfers();
         } catch (error) {
           console.error('Failed to update stock transfer:', error);
@@ -1996,7 +2019,19 @@ export const useInventoryStore = create<InventoryState>()(
       },
       deleteStockTransfer: async (id) => {
         try {
-          await axiosClient.delete(`/inventories/transfers/${id}`);
+          const prevTransfers = get().stockTransfers;
+          let targetId = id;
+          if (String(id).length > 10) {
+            const found = prevTransfers.find((t) => t.id === id);
+            if (found?.transferNumber) {
+              await get().fetchStockTransfers();
+              const refreshed = get().stockTransfers.find(
+                (t) => t.transferNumber === found.transferNumber && String(t.id).length <= 10
+              );
+              if (refreshed) targetId = refreshed.id;
+            }
+          }
+          await axiosClient.delete(`/inventories/transfers/${targetId}`);
           get().fetchStockTransfers();
         } catch (error) {
           console.error('Failed to delete stock transfer:', error);
@@ -2006,8 +2041,19 @@ export const useInventoryStore = create<InventoryState>()(
         const prevTransfers = get().stockTransfers;
         const prevProducts = get().products;
         try {
-          if (!isNaN(Number(id))) {
-            await axiosClient.post(`/inventories/transfers/${id}/receive`, { notes: notes || '' });
+          let targetId = id;
+          if (String(id).length > 10) {
+            const found = prevTransfers.find((t) => t.id === id);
+            if (found?.transferNumber) {
+              await get().fetchStockTransfers();
+              const refreshed = get().stockTransfers.find(
+                (t) => t.transferNumber === found.transferNumber && String(t.id).length <= 10
+              );
+              if (refreshed) targetId = refreshed.id;
+            }
+          }
+          if (!isNaN(Number(targetId))) {
+            await axiosClient.post(`/inventories/transfers/${targetId}/receive`, { notes: notes || '' });
           }
           await get().fetchStockTransfers();
           await get().fetchProducts();
@@ -2020,8 +2066,19 @@ export const useInventoryStore = create<InventoryState>()(
       approveStockTransfer: async (id) => {
         const prevTransfers = get().stockTransfers;
         try {
-          if (!isNaN(Number(id))) {
-            await axiosClient.post(`/inventories/transfers/${id}/approve`);
+          let targetId = id;
+          if (String(id).length > 10) {
+            const found = prevTransfers.find((t) => t.id === id);
+            if (found?.transferNumber) {
+              await get().fetchStockTransfers();
+              const refreshed = get().stockTransfers.find(
+                (t) => t.transferNumber === found.transferNumber && String(t.id).length <= 10
+              );
+              if (refreshed) targetId = refreshed.id;
+            }
+          }
+          if (!isNaN(Number(targetId))) {
+            await axiosClient.post(`/inventories/transfers/${targetId}/approve`);
           }
           await get().fetchStockTransfers();
         } catch (error) {
@@ -2034,8 +2091,19 @@ export const useInventoryStore = create<InventoryState>()(
         const prevTransfers = get().stockTransfers;
         const prevProducts = get().products;
         try {
-          if (!isNaN(Number(id))) {
-            await axiosClient.post(`/inventories/transfers/${id}/ship`);
+          let targetId = id;
+          if (String(id).length > 10) {
+            const found = prevTransfers.find((t) => t.id === id);
+            if (found?.transferNumber) {
+              await get().fetchStockTransfers();
+              const refreshed = get().stockTransfers.find(
+                (t) => t.transferNumber === found.transferNumber && String(t.id).length <= 10
+              );
+              if (refreshed) targetId = refreshed.id;
+            }
+          }
+          if (!isNaN(Number(targetId))) {
+            await axiosClient.post(`/inventories/transfers/${targetId}/ship`);
           }
           await get().fetchStockTransfers();
           await get().fetchProducts();
@@ -2049,8 +2117,19 @@ export const useInventoryStore = create<InventoryState>()(
         const prevTransfers = get().stockTransfers;
         const prevProducts = get().products;
         try {
-          if (!isNaN(Number(id))) {
-            await axiosClient.post(`/inventories/transfers/${id}/cancel`, { cancelReason });
+          let targetId = id;
+          if (String(id).length > 10) {
+            const found = prevTransfers.find((t) => t.id === id);
+            if (found?.transferNumber) {
+              await get().fetchStockTransfers();
+              const refreshed = get().stockTransfers.find(
+                (t) => t.transferNumber === found.transferNumber && String(t.id).length <= 10
+              );
+              if (refreshed) targetId = refreshed.id;
+            }
+          }
+          if (!isNaN(Number(targetId))) {
+            await axiosClient.post(`/inventories/transfers/${targetId}/cancel`, { cancelReason });
           }
           await get().fetchStockTransfers();
           await get().fetchProducts();

@@ -356,15 +356,22 @@ export function InventoryAdjustmentsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Người lập phiếu *</label>
-              <input
-                type="text"
-                value={editingItem.checkedBy || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, checkedBy: e.target.value })}
-                className="w-full p-2 border rounded"
-                placeholder="Tên nhân viên..."
-                required
-              />
+              <label className="block text-xs text-gray-500 mb-1 flex items-center justify-between">
+                <span>Người lập phiếu *</span>
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-0.5 font-medium">
+                  <Lock className="w-2.5 h-2.5" /> Khóa theo tài khoản
+                </span>
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={currentUser?.name || currentUser?.fullName || editingItem.checkedBy || 'Kiểm kho viên'}
+                  readOnly
+                  disabled
+                  className="w-full p-2 border rounded bg-gray-100 dark:bg-gray-900/80 cursor-not-allowed pl-8 text-xs font-medium text-gray-700 dark:text-gray-300"
+                />
+                <Lock className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
+              </div>
             </div>
           </div>
           <div>

@@ -2,7 +2,7 @@ import { Modal } from '@/shared/components/ui/Modal';
 import { useMemo, useState, useEffect } from 'react';
 import {
   Plus, Search, Eye, Edit, Trash2, Calendar, FileText, Download,
-  Printer, Package, Layers, DollarSign, Building, UserCheck, Tag, PlusCircle, X
+  Printer, Package, Layers, DollarSign, Building, UserCheck, Tag, PlusCircle, X, Lock
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -633,29 +633,22 @@ export function StockOutsPage() {
 
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Người lập phiếu *</label>
-                {usersList.length > 0 ? (
-                  <select
-                    value={editingItem.creator || currentUser?.name || ''}
-                    onChange={(e) => setEditingItem({ ...editingItem, creator: e.target.value })}
-                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-medium"
-                  >
-                    {usersList.map((u) => (
-                      <option key={u.id} value={u.fullName || u.username}>
-                        {u.fullName || u.username} ({u.role || 'User'})
-                      </option>
-                    ))}
-                  </select>
-                ) : (
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1 flex items-center justify-between">
+                  <span>Người lập phiếu *</span>
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-0.5 font-medium">
+                    <Lock className="w-2.5 h-2.5" /> Khóa theo tài khoản
+                  </span>
+                </label>
+                <div className="relative">
                   <input
                     type="text"
-                    value={editingItem.creator || currentUser?.name || 'Nguyễn Văn A (Trưởng kho)'}
-                    onChange={(e) => setEditingItem({ ...editingItem, creator: e.target.value })}
-                    required
-                    placeholder="Nhập tên người lập..."
-                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-medium"
+                    value={currentUser?.name || currentUser?.fullName || editingItem.creator || 'Quản lý kho'}
+                    readOnly
+                    disabled
+                    className="w-full p-2 bg-gray-100 dark:bg-gray-900/80 border border-gray-300 dark:border-gray-700 rounded-lg font-medium text-gray-700 dark:text-gray-300 cursor-not-allowed pl-8"
                   />
-                )}
+                  <Lock className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
+                </div>
               </div>
 
               <div>

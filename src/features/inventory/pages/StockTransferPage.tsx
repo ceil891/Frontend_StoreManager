@@ -1053,26 +1053,22 @@ export function StockTransferPage() {
               </div>
 
               <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Người lập phiếu *</label>
-                <input
-                  type="text"
-                  list="transfer-users-list"
-                  value={editingHeader.requestedBy || ''}
-                  onChange={(e) => setEditingHeader({ ...editingHeader, requestedBy: e.target.value })}
-                  placeholder="Nhập hoặc chọn người lập phiếu..."
-                  required
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
-                />
-                <datalist id="transfer-users-list">
-                  {users.map((u) => (
-                    <option key={u.id} value={u.fullName || u.emailAddress}>
-                      {u.fullName || u.emailAddress} ({u.assignedRole || 'Thủ kho'})
-                    </option>
-                  ))}
-                  <option value="Nguyễn Văn Hưng (Thủ kho)">Nguyễn Văn Hưng (Thủ kho)</option>
-                  <option value="Lưu Hữu Phước (Quản lý kho)">Lưu Hữu Phước (Quản lý kho)</option>
-                  <option value="Trần Thị Mai (Kế toán kho)">Trần Thị Mai (Kế toán kho)</option>
-                </datalist>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1 flex items-center justify-between">
+                  <span>Người lập phiếu *</span>
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-0.5 font-medium">
+                    <Lock className="w-2.5 h-2.5" /> Khóa cố định theo tài khoản
+                  </span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={currentUser?.name || currentUser?.fullName || editingHeader.requestedBy || 'System Admin'}
+                    readOnly
+                    disabled
+                    className="w-full p-2 bg-gray-100 dark:bg-gray-900/80 border border-gray-300 dark:border-gray-700 rounded-lg font-medium text-gray-700 dark:text-gray-300 cursor-not-allowed pl-8"
+                  />
+                  <Lock className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
+                </div>
               </div>
             </div>
 
