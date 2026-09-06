@@ -117,7 +117,7 @@ export function StockOutsPage() {
   const handleOpenCreate = () => {
     setModalMode('create');
     const nowStr = new Date().toISOString().slice(0, 16).replace('T', ' ');
-    const defaultBranch = branchesList.length > 0 ? (branchesList[0].branchName || branchesList[0].name) : 'Chi nhánh Hà Nội (Kho chính)';
+    const defaultBranch = branchesList.length > 0 ? (branchesList[0].branchName || branchesList[0].name) : '';
     const defaultCreator = currentUser?.name || (usersList.length > 0 ? usersList[0].fullName || usersList[0].username : 'Nguyễn Văn A (Trưởng kho)');
 
     setEditingItem({
@@ -625,11 +625,7 @@ export function StockOutsPage() {
                       </option>
                     ))
                   ) : (
-                    <>
-                      <option value="Chi nhánh Hà Nội (Kho chính)">Chi nhánh Hà Nội (Kho chính)</option>
-                      <option value="Tổng kho TP. Hồ Chí Minh">Tổng kho TP. Hồ Chí Minh</option>
-                      <option value="Chi nhánh Đà Nẵng">Chi nhánh Đà Nẵng</option>
-                    </>
+                    <option value="" disabled>Đang tải chi nhánh từ hệ thống...</option>
                   )}
                 </select>
               </div>

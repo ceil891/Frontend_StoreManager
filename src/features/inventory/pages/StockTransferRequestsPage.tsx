@@ -57,6 +57,11 @@ export function StockTransferRequestsPage() {
     fetchProducts,
     inventories,
     fetchInventories,
+    transferRequests: requests,
+    fetchTransferRequests,
+    addTransferRequest,
+    updateTransferRequest,
+    deleteTransferRequest,
   } = useInventoryStore();
 
   const { branches, fetchBranches } = useBranchStore();
@@ -75,52 +80,23 @@ export function StockTransferRequestsPage() {
   const [editingLines, setEditingLines] = useState<TransferRequestItem[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // State for transfer requests from API
-  const [requests, setRequests] = useState<TransferRequestRecord[]>([]);
-
   useEffect(() => {
     const loadApiData = async () => {
       try {
         await Promise.all([
           fetchStockTransfers(),
+          fetchTransferRequests(),
           fetchProducts(),
           fetchBranches(),
           fetchUsers(),
           fetchInventories(),
         ]);
-
-        const res: any = await axiosClient.get<any, any>('/inventories/transfers');
-        const list = Array.isArray(res) ? res : (res?.content || res?.data || []);
-        if (list && list.length > 0) {
-          const mapped: TransferRequestRecord[] = list.map((item: any) => ({
-            id: String(item.id),
-            requestCode: item.transferCode || `STR-2026-${String(item.id).padStart(3, '0')}`,
-            sourceHub: item.fromBranchName || 'Chi nhánh xuất',
-            destinationHub: item.toBranchName || 'Chi nhánh nhận',
-            priority: (item.priority || TransferPriority.MEDIUM) as TransferPriority,
-            reason: item.reason || item.note || 'Bổ sung tồn kho',
-            requestedBy: item.requestedBy || item.createdBy || currentUser?.name || currentUser?.email || 'System Admin',
-            requestDate: item.transferDate ? (item.transferDate.includes('T') ? item.transferDate.split('T')[0] : item.transferDate) : new Date().toISOString().split('T')[0],
-            expectedDate: item.estArrivalDate ? (item.estArrivalDate.includes('T') ? item.estArrivalDate.split('T')[0] : item.estArrivalDate) : '',
-            status: (item.status || TransferRequestStatus.PENDING_APPROVAL) as TransferRequestStatus,
-            notes: item.note || '',
-            items: (item.transferLines || []).map((l: any, idx: number) => ({
-              id: String(l.id || idx),
-              productName: l.productName || 'Sản phẩm',
-              variant: l.variantName || 'Mặc định',
-              sku: l.sku || '',
-              availableQuantity: l.availableQuantity || 0,
-              requestedQuantity: l.transferQuantity || l.requestedQuantity || 1,
-            })),
-          }));
-          setRequests(mapped);
-        }
       } catch (err) {
         console.warn('Failed to load transfer requests API:', err);
       }
     };
     loadApiData();
-  }, [fetchStockTransfers, fetchProducts, fetchBranches, fetchUsers, fetchInventories]);
+  }, [fetchStockTransfers, fetchTransferRequests, fetchProducts, fetchBranches, fetchUsers, fetchInventories]);
 
   const filtered = useMemo(() => {
     return requests.filter((item) => {
@@ -205,8 +181,8 @@ export function StockTransferRequestsPage() {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const defaultSource = branches.length > 0 ? branches[0].name : 'Chi nhánh Hà Nội (Kho chính)';
-    const defaultDest = branches.length > 1 ? branches[1].name : 'Chi nhánh TP. Hồ Chí Minh';
+    const defaultSource = branches.length > 0 ? branches[0].name : '';
+    const defaultDest = branches.length > 1 ? branches[1].name : (branches[0]?.name || '');
     const defaultUser = currentUser?.name || currentUser?.email || (users.length > 0 ? (users[0].fullName || users[0].emailAddress) : 'System Admin');
 
     setEditingHeader({
@@ -242,7 +218,12 @@ export function StockTransferRequestsPage() {
 
   const handleOpenEdit = (req: TransferRequestRecord) => {
     setModalMode('edit');
-    setEditingHeader(req);
+    let dest = req.destinationHub;
+    if (dest === req.sourceHub) {
+      const other = branches.find(b => b.name !== req.sourceHub);
+      dest = other ? other.name : (branches.length > 1 ? branches[1].name : req.destinationHub);
+    }
+    setEditingHeader({ ...req, destinationHub: dest });
     const linesWithBranchStock = (req.items || []).map((item) => ({
       ...item,
       availableQuantity: getAvailableStockForBranch(item.productName, req.sourceHub),
@@ -319,13 +300,12 @@ export function StockTransferRequestsPage() {
     }
 
     if (editingHeader.sourceHub === editingHeader.destinationHub) {
-      toast.error('Kho xuất và Kho nhận không được trùng nhau!');
+      toast.error('Kho xuất và Kho nhận không được trùng nhau! Vui lòng chọn kho nhận khác.');
       return;
     }
 
     if (formTotals.hasExceededStock) {
-      toast.error('Có sản phẩm có Số lượng yêu cầu vượt quá Tồn kho nguồn khả dụng!');
-      return;
+      toast.warning('Lưu ý: Có sản phẩm có số lượng yêu cầu vượt quá tồn kho khả dụng tại kho xuất.');
     }
 
     const newStatus = (targetStatus || editingHeader.status || TransferRequestStatus.DRAFT) as any;
@@ -369,76 +349,34 @@ export function StockTransferRequestsPage() {
       };
 
       if (modalMode === 'create') {
-        await axiosClient.post('/inventories/transfers', apiPayload);
+        await addTransferRequest(recordToSave);
         toast.success(`Đã tạo Yêu Cầu Chuyển Kho ${recordToSave.requestCode} thành công!`);
       } else {
-        if (recordToSave.id && !recordToSave.id.startsWith('req-')) {
-          await axiosClient.put(`/inventories/transfers/${recordToSave.id}`, apiPayload);
-        }
+        await updateTransferRequest(recordToSave.id, recordToSave);
         toast.success(`Đã cập nhật Yêu Cầu Chuyển Kho ${recordToSave.requestCode}!`);
       }
     } catch (err) {
-      console.warn('Save transfer request API info:', err);
+      console.warn('Save transfer request error:', err);
     }
-
-    setRequests((prev) => {
-      const exists = prev.some(r => r.id === recordToSave.id);
-      if (exists) {
-        return prev.map((item) => (item.id === recordToSave.id ? recordToSave : item));
-      }
-      return [recordToSave, ...prev];
-    });
 
     setIsModalOpen(false);
   };
 
-  const handleUpdateStatus = (req: TransferRequestRecord, nextStatus: string, label: string) => {
-    const updated = { ...req, status: nextStatus as any };
-    setRequests((prev) => prev.map((r) => (r.id === req.id ? updated : r)));
-    if (selected?.id === req.id) setSelected(updated);
+  const handleUpdateStatus = async (req: TransferRequestRecord, nextStatus: string, label: string) => {
+    await updateTransferRequest(req.id, { status: nextStatus as any });
+    if (selected?.id === req.id) setSelected({ ...req, status: nextStatus as any });
     toast.success(`Đã ${label} Yêu cầu chuyển kho ${req.requestCode}!`);
   };
 
-  // Convert approved request into Stock Transfer Execution
+  // Convert approved request into Stock Transfer Execution: navigate to transfers tab with request pre-selected
   const handleConvertToExecution = (req: TransferRequestRecord) => {
-    const executionOrder: any = {
-      id: `stx-${Date.now()}`,
-      transferNumber: `STX-2026-${Math.floor(500 + Math.random() * 500)}`,
-      requestRefCode: req.requestCode,
-      sourceHub: req.sourceHub,
-      destinationHub: req.destinationHub,
-      dispatchDate: new Date().toISOString().split('T')[0],
-      estArrivalDate: req.expectedDate || '',
-      totalUnits: req.items.reduce((acc, i) => acc + i.requestedQuantity, 0),
-      totalValuation: req.items.reduce((acc, i) => acc + i.requestedQuantity * 20000, 0),
-      status: 'READY_TO_SHIP',
-      logisticsPartner: 'Nội bộ (Đội xe công ty)',
-      trackingRef: '',
-      requestedBy: req.requestedBy,
-      approvedBy: 'Giám đốc kho (System Admin)',
-      notes: `Tạo từ Yêu cầu chuyển kho ${req.requestCode}`,
-      priority: req.priority,
-      items: req.items.map((i) => ({
-        id: `ex-${Date.now()}-${Math.random()}`,
-        productName: i.productName,
-        variant: i.variant,
-        sku: i.sku,
-        requestedQuantity: i.requestedQuantity,
-        quantity: i.requestedQuantity,
-        receivedQuantity: 0,
-        unitPrice: 20000,
-        amount: i.requestedQuantity * 20000,
-      })),
-    };
-
-    addStockTransfer(executionOrder);
-    toast.success(`Đã khởi tạo Phiếu Chuyển Kho ${executionOrder.transferNumber} từ Yêu cầu ${req.requestCode}!`);
-    navigate('/inventory/transfers');
+    toast.info(`Đang mở Phiếu Chuyển Kho cho ${req.requestCode}...`);
+    navigate(`/inventory/operations?tab=transfers&fromReq=${encodeURIComponent(req.requestCode)}`);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (deletingId) {
-      setRequests((prev) => prev.filter((r) => r.id !== deletingId));
+      await deleteTransferRequest(deletingId);
       toast.success('Đã xóa Yêu cầu chuyển kho!');
       setDeletingId(null);
       if (selected?.id === deletingId) setSelected(null);
@@ -815,7 +753,12 @@ export function StockTransferRequestsPage() {
                   value={editingHeader.sourceHub || ''}
                   onChange={(e) => {
                     const newSource = e.target.value;
-                    setEditingHeader({ ...editingHeader, sourceHub: newSource });
+                    let nextDest = editingHeader.destinationHub;
+                    if (newSource === nextDest) {
+                      const other = branches.find(b => b.name !== newSource);
+                      if (other) nextDest = other.name;
+                    }
+                    setEditingHeader({ ...editingHeader, sourceHub: newSource, destinationHub: nextDest });
                     setEditingLines((lines) =>
                       lines.map((l) => ({
                         ...l,
@@ -827,16 +770,12 @@ export function StockTransferRequestsPage() {
                 >
                   {branches.length > 0 ? (
                     branches.map((b) => (
-                      <option key={b.id} value={b.name}>
-                        {b.name} ({b.branchCode})
+                      <option key={b.id} value={b.name} disabled={b.name === editingHeader.destinationHub}>
+                        {b.name} ({b.branchCode}) {b.name === editingHeader.destinationHub ? '(Đang là kho nhận)' : ''}
                       </option>
                     ))
                   ) : (
-                    <>
-                      <option value="Chi nhánh Hà Nội (Kho chính)">Chi nhánh Hà Nội (Kho chính)</option>
-                      <option value="Tổng kho TP. Hồ Chí Minh">Tổng kho TP. Hồ Chí Minh</option>
-                      <option value="Chi nhánh Đà Nẵng">Chi nhánh Đà Nẵng</option>
-                    </>
+                    <option value="" disabled>Đang tải chi nhánh từ hệ thống...</option>
                   )}
                 </select>
               </div>
@@ -845,21 +784,25 @@ export function StockTransferRequestsPage() {
                 <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">Kho / Chi nhánh nhận *</label>
                 <select
                   value={editingHeader.destinationHub || ''}
-                  onChange={(e) => setEditingHeader({ ...editingHeader, destinationHub: e.target.value })}
+                  onChange={(e) => {
+                    const newDest = e.target.value;
+                    let nextSource = editingHeader.sourceHub;
+                    if (newDest === nextSource) {
+                      const other = branches.find(b => b.name !== newDest);
+                      if (other) nextSource = other.name;
+                    }
+                    setEditingHeader({ ...editingHeader, destinationHub: newDest, sourceHub: nextSource });
+                  }}
                   className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg font-bold text-emerald-600 dark:text-emerald-400"
                 >
                   {branches.length > 0 ? (
                     branches.map((b) => (
-                      <option key={b.id} value={b.name}>
-                        {b.name} ({b.branchCode})
+                      <option key={b.id} value={b.name} disabled={b.name === editingHeader.sourceHub}>
+                        {b.name} ({b.branchCode}) {b.name === editingHeader.sourceHub ? '(Đang là kho xuất)' : ''}
                       </option>
                     ))
                   ) : (
-                    <>
-                      <option value="Chi nhánh TP. Hồ Chí Minh">Chi nhánh TP. Hồ Chí Minh</option>
-                      <option value="Chi nhánh Hà Nội (Kho chính)">Chi nhánh Hà Nội (Kho chính)</option>
-                      <option value="Chi nhánh Đà Nẵng">Chi nhánh Đà Nẵng</option>
-                    </>
+                    <option value="" disabled>Đang tải chi nhánh từ hệ thống...</option>
                   )}
                 </select>
               </div>
@@ -1039,7 +982,7 @@ export function StockTransferRequestsPage() {
               Lưu Bản Nháp
             </button>
             <button
-              type="submit"
+              type="button"
               onClick={(e) => handleSaveRequest(e, TransferRequestStatus.PENDING_APPROVAL)}
               className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-md cursor-pointer"
             >
