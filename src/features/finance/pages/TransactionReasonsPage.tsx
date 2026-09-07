@@ -235,7 +235,7 @@ export function TransactionReasonsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mã lý do hạch toán kế toán (GL reason codes)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mã lý do hạch toán kế toán</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Thiết lập danh mục lý do giao dịch, liên kết mã tài khoản tổng hợp (General Ledger), và quản lý quy định kiểm duyệt chứng từ.</p>
           </div>
           <div className="flex items-center gap-3">

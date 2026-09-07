@@ -1,16 +1,20 @@
 import { useSearchParams } from 'react-router';
-import { UserCheck, Building, BadgeCheck, FileClock } from 'lucide-react';
+import { UserCheck, Building, BadgeCheck, FileClock, FileText, TrendingUp } from 'lucide-react';
 import { RoleGuard } from '@/routes/RoleGuard';
 import { UsersPage } from './UsersPage';
 import { DepartmentsPage } from './DepartmentsPage';
 import { PositionsPage } from './PositionsPage';
 import { ActivityLogsPage } from './ActivityLogsPage';
+import { EmployeeContractsPage } from './EmployeeContractsPage';
+import { KpiRecordsPage } from './KpiRecordsPage';
 
 const tabs = [
   { id: 'users', label: 'Nhân viên / Người dùng', icon: UserCheck, permission: 'system:user:view' },
   { id: 'departments', label: 'Phòng ban', icon: Building, permission: 'catalog:department:view' },
   { id: 'positions', label: 'Chức danh công việc', icon: BadgeCheck, permission: 'hr:position:view' },
-  { id: 'logs', label: 'Nhật ký hoạt động nhân viên', icon: FileClock, permission: 'hr:log:view' },
+  { id: 'contracts', label: 'Hợp đồng lao động', icon: FileText, permission: 'system:user:view' },
+  { id: 'kpis', label: 'Đánh giá KPI', icon: TrendingUp, permission: 'system:user:view' },
+  { id: 'logs', label: 'Nhật ký hoạt động', icon: FileClock, permission: 'hr:log:view' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];
@@ -34,7 +38,7 @@ export function HrEmployeesTabbedPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Hồ sơ Nhân sự</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Quản lý hồ sơ nhân viên, cơ cấu phòng ban, danh mục vị trí công việc và nhật ký thao tác nhân sự
+            Quản lý hồ sơ nhân viên, cơ cấu phòng ban, chức danh, hợp đồng lao động, đánh giá KPI và nhật ký hoạt động
           </p>
         </div>
       </div>
@@ -74,6 +78,16 @@ export function HrEmployeesTabbedPage() {
         {activeTab === 'positions' && (
           <RoleGuard requiredPermission="hr:position:view">
             <PositionsPage />
+          </RoleGuard>
+        )}
+        {activeTab === 'contracts' && (
+          <RoleGuard requiredPermission="system:user:view">
+            <EmployeeContractsPage />
+          </RoleGuard>
+        )}
+        {activeTab === 'kpis' && (
+          <RoleGuard requiredPermission="system:user:view">
+            <KpiRecordsPage />
           </RoleGuard>
         )}
         {activeTab === 'logs' && (

@@ -243,7 +243,7 @@ export function SupplierWarehousesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Danh sách kho hàng nhà cung cấp (Supplier Warehouses)</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Danh sách kho hàng nhà cung cấp</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Xem và quản lý vị trí kho bãi, loại kho, sức chứa, giờ vận hành và người phụ trách bốc xếp đối tác.
           </p>

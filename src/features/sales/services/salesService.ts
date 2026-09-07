@@ -17,7 +17,11 @@ export const salesService = {
       recipientName: item.recipientName || item.customerName || item.customer?.name || '',
       recipientPhone: item.recipientPhone || item.customerPhone || item.customer?.phone || '',
       shippingAddress: item.shippingAddress || '',
-      date: item.date || item.orderDate || item.createdAt ? (item.date || item.orderDate || item.createdAt).split('T')[0] : '',
+      date: item.orderDate
+        ? (item.orderDate.includes('T') ? item.orderDate.replace('T', ' ').slice(0, 16) : item.orderDate.slice(0, 16))
+        : (item.createdAt
+          ? (item.createdAt.includes('T') ? item.createdAt.replace('T', ' ').slice(0, 16) : item.createdAt.slice(0, 16))
+          : (item.date ? item.date.slice(0, 16) : '')),
       subTotal: Number(item.subTotal || 0),
       taxAmount: Number(item.taxAmount || 0),
       discountAmount: Number(item.discountAmount || 0),

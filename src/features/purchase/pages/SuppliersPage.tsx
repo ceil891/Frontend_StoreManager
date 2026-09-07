@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Filter, Eye, Building2, Phone, Mail, MapPin, Star, FileText, CheckCircle2, User, Edit, Trash2 } from 'lucide-react';
+import { Plus, Download, Search, Filter, Eye, Building2, Phone, Mail, MapPin, FileText, CheckCircle2, User, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -345,15 +345,6 @@ export function SuppliersPage() {
         ),
       },
       {
-        accessorKey: 'rating',
-        header: 'Đánh giá',
-        cell: (info) => (
-          <span className="inline-flex items-center gap-1 font-semibold text-amber-500 text-sm">
-            <Star className="w-3.5 h-3.5 fill-amber-500" /> {Number(info.getValue()).toFixed(1)}
-          </span>
-        ),
-      },
-      {
         accessorKey: 'status',
         header: 'Trạng thái',
         cell: (info) => {
@@ -568,12 +559,6 @@ export function SuppliersPage() {
             )}
 
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Đánh giá mức độ tin cậy:</span>
-                <span className="inline-flex items-center gap-1 font-bold text-amber-500">
-                  <Star className="w-4 h-4 fill-amber-500" /> {selectedSupplier.rating.toFixed(1)} / 5.0
-                </span>
-              </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Thời gian giao hàng dự kiến:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{selectedSupplier.leadTimeDays} ngày</span>

@@ -207,7 +207,7 @@ export function ChannelProductMappingPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Liên kết sản phẩm đa kênh (channel mapping)</h1>
+          <h1 className="text-2xl font-bold">Liên kết sản phẩm đa kênh</h1>
           <p className="text-sm text-gray-500">
             Xem và cấu hình liên kết mã sản phẩm SKU trên sàn TMĐT với mã SKU trong kho hàng POS, tự động đồng bộ số dư kho.
           </p>

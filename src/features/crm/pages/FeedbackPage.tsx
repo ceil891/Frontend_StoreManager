@@ -331,7 +331,7 @@ export function FeedbackPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ý kiến phản hồi & khảo sát NPS (customer feedback)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ý kiến phản hồi & khảo sát NPS</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Theo dõi đánh giá chất lượng dịch vụ, giám sát mức độ hài lòng và xử lý khiếu nại khách hàng. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">

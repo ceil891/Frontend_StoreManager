@@ -380,7 +380,7 @@ export function QuotesPage() {
               </span>
               {isExpired && (
                 <p className="text-[10px] text-red-500 font-bold flex items-center gap-0.5 mt-0.5">
-                  ⚠ Hết hạn hiệu lực
+                  Hết hạn hiệu lực
                 </p>
               )}
             </div>
@@ -698,7 +698,7 @@ export function QuotesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? '📋 Tạo báo giá bán hàng mới' : `⚙️ Chỉnh Sửa Báo Giá (Sẽ tự động tăng Revision lên v${(editingQuote.revision || 1) + 1})`}
+        title={modalMode === 'create' ? ' Tạo báo giá bán hàng mới' : `Chỉnh Sửa Báo Giá (Sẽ tự động tăng Revision lên v${(editingQuote.revision || 1) + 1})`}
         width="max-w-4xl"
       >
         <form onSubmit={handleSaveQuote} className="space-y-4">
@@ -884,12 +884,12 @@ export function QuotesPage() {
                     onChange={(e) => setEditingQuote({ ...editingQuote, status: e.target.value as any })}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-bold focus:ring-2 focus:ring-emerald-500"
                   >
-                    <option value="DRAFT">Nháp (Draft)</option>
-                    <option value="SENT">Đã gửi (Sent)</option>
-                    <option value="ACCEPTED">Đã chấp nhận (Accepted)</option>
-                    <option value="REJECTED">Từ chối (Rejected)</option>
-                    <option value="EXPIRED">Hết hạn (Expired)</option>
-                    <option value="CANCELLED">Đã hủy (Cancelled)</option>
+                    <option value="DRAFT">Nháp </option>
+                    <option value="SENT">Đã gửi </option>
+                    <option value="ACCEPTED">Đã chấp nhận </option>
+                    <option value="REJECTED">Từ chối </option>
+                    <option value="EXPIRED">Hết hạn </option>
+                    <option value="CANCELLED">Đã hủy</option>
                   </select>
                 </div>
                 <div>

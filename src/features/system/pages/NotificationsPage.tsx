@@ -272,7 +272,7 @@ export function NotificationsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Luật cảnh báo & gửi thông báo (event dispatcher)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Luật cảnh báo & gửi thông báo</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Định nghĩa các sự kiện kích hoạt (Hết kho, Biến động két tiền POS, Giao dịch lớn) và thiết lập kênh phân phối tin nhắn tương ứng.</p>
           </div>
           <div className="flex items-center gap-3">

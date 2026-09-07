@@ -135,7 +135,7 @@ export function WebhookLogsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Nhật ký gọi webhook TMĐT (webhook logs)</h1>
+          <h1 className="text-2xl font-bold">Nhật ký gọi webhook TMĐT</h1>
           <p className="text-sm text-gray-500">
             Theo dõi, phân tích các cuộc gọi API Webhook từ Shopee, Lazada, TikTok Shop truyền dữ liệu về hệ thống bán hàng đa kênh POS.
           </p>

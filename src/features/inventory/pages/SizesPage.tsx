@@ -208,7 +208,7 @@ export function SizesPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <Ruler className="w-6 h-6 text-primary" />
-              Quản lý kích thước (size)
+              Quản lý kích thước
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Quản lý danh mục kích cỡ sản phẩm theo nhóm ngành hàng (quần áo, giày dép, phụ kiện)

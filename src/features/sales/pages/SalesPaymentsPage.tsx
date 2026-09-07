@@ -269,7 +269,7 @@ export function SalesPaymentsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Thanh toán đơn bán (phiếu thu)</h1>
+          <h1 className="text-2xl font-bold">Thanh toán đơn bán</h1>
           <p className="text-sm text-gray-500">
             Quản lý các khoản thanh toán, giao dịch thu tiền từ khách hàng nhằm xác nhận doanh thu thực tế.
           </p>

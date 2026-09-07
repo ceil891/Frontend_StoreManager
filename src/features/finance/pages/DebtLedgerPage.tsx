@@ -550,7 +550,7 @@ export function DebtLedgerPage() {
                     <p className={`text-xs font-semibold uppercase tracking-wider ${
                       selectedDebt.totalDebt >= 0 ? 'text-emerald-800 dark:text-emerald-400' : 'text-purple-800 dark:text-purple-400'
                     }`}>
-                      {selectedDebt.totalDebt >= 0 ? 'Khoản phải thu (Khách hàng)' : 'Khoản phải trả (Nhà cung cấp)'}
+                      {selectedDebt.totalDebt >= 0 ? 'Khoản phải thu' : 'Khoản phải trả'}
                     </p>
                     <p className={`text-xl font-bold font-mono mt-0.5 ${
                       selectedDebt.totalDebt >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-purple-700 dark:text-purple-400'

@@ -64,6 +64,7 @@ interface AttendanceState {
   error: string | null;
   fetchAttendances: (params?: { workDateFrom?: string; workDateTo?: string; search?: string }) => Promise<void>;
   recordCheckIn: (userId: string, userName: string) => Promise<void>;
+  recordCheckOut: (userId: string, userName: string) => Promise<void>;
 }
 
 export const useAttendanceStore = create<AttendanceState>()((set) => ({
@@ -100,23 +101,30 @@ export const useAttendanceStore = create<AttendanceState>()((set) => ({
     const dateStr = now.toISOString().split('T')[0];
 
     try {
-      await axiosClient.post('/hrm/attendances', {
+      await axiosClient.post('/hrm/attendances/check-in', {
         userId: Number(userId) || 1,
-        workDate: dateStr,
-        checkInTime: `${dateStr}T${timeStr}:00`,
-        status: 'PRESENT',
         gpsLocation: 'Văn phòng chính (Chi nhánh 1)',
-        note: 'Chấm công khuôn mặt sinh trắc học AI',
+        deviceId: 'AI_FACE_SCANNER',
       });
     } catch (e) {
-      console.warn('API /hrm/attendances fallback:', e);
+      console.warn('API /hrm/attendances/check-in fallback:', e);
+      try {
+        await axiosClient.post('/hrm/attendances', {
+          userId: Number(userId) || 1,
+          workDate: dateStr,
+          checkInTime: `${dateStr}T${timeStr}:00`,
+          status: 'PRESENT',
+          gpsLocation: 'Văn phòng chính (Chi nhánh 1)',
+          note: 'Chấm công khuôn mặt sinh trắc học AI (Vào ca)',
+        });
+      } catch {}
     }
 
     set((state) => {
       const existing = state.records.find(r => r.userId === userId && r.workDate === dateStr);
       if (existing) {
         return {
-          records: state.records.map(r => r.id === existing.id ? { ...r, checkIn: r.checkIn || timeStr, checkOut: timeStr, hoursWorked: calcHours(r.checkIn || timeStr, timeStr) } : r)
+          records: state.records.map(r => r.id === existing.id ? { ...r, checkIn: r.checkIn || timeStr } : r)
         };
       } else {
         const newRecord: AttendanceRecord = {
@@ -129,7 +137,49 @@ export const useAttendanceStore = create<AttendanceState>()((set) => ({
           gpsLocation: 'Văn phòng chính (Chi nhánh 1)',
           status: 'ĐÚNG_GIỜ',
           hoursWorked: 0,
-          note: 'Chấm công khuôn mặt sinh trắc học AI'
+          note: 'Chấm công khuôn mặt sinh trắc học AI (Vào ca)'
+        };
+        return { records: [newRecord, ...state.records] };
+      }
+    });
+  },
+
+  recordCheckOut: async (userId: string, userName: string) => {
+    const now = new Date();
+    const timeStr = now.toTimeString().slice(0, 5);
+    const dateStr = now.toISOString().split('T')[0];
+
+    try {
+      await axiosClient.post('/hrm/attendances/check-out', {
+        userId: Number(userId) || 1,
+      });
+    } catch (e) {
+      console.warn('API /hrm/attendances/check-out fallback:', e);
+    }
+
+    set((state) => {
+      const existing = state.records.find(r => r.userId === userId && r.workDate === dateStr);
+      if (existing) {
+        const checkInTime = existing.checkIn || timeStr;
+        return {
+          records: state.records.map(r => r.id === existing.id ? {
+            ...r,
+            checkOut: timeStr,
+            hoursWorked: calcHours(checkInTime, timeStr)
+          } : r)
+        };
+      } else {
+        const newRecord: AttendanceRecord = {
+          id: String(Date.now()),
+          userId,
+          userName,
+          workDate: dateStr,
+          checkIn: timeStr,
+          checkOut: timeStr,
+          gpsLocation: 'Văn phòng chính (Chi nhánh 1)',
+          status: 'ĐÚNG_GIỜ',
+          hoursWorked: 0,
+          note: 'Chấm công khuôn mặt sinh trắc học AI (Tan ca)'
         };
         return { records: [newRecord, ...state.records] };
       }

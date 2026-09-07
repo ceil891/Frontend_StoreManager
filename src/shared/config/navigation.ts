@@ -36,6 +36,9 @@ import {
   BookOpen,
   Calendar,
   FileSpreadsheet,
+  Globe,
+  Route,
+  Share2,
 } from 'lucide-react';
 import type { RoleType } from '@/features/auth/types';
 
@@ -62,7 +65,7 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    group: 'Bán hàng (POS)',
+    group: 'Bán hàng POS',
     items: [
       { name: 'Màn hình POS', href: '/pos', icon: ShoppingCart, permission: 'pos:terminal:access' },
       { name: 'Ca làm việc POS', href: '/pos/sessions', icon: Activity, permission: 'pos:session:view' },
@@ -77,6 +80,12 @@ export const NAV_GROUPS: NavGroup[] = [
       { name: 'Khách hàng trả hàng', href: '/sales/returns', icon: RotateCcw, permission: 'sales:return-request:view' },
       { name: 'Công nợ phải thu', href: '/sales/receivables', icon: DollarSign, permission: 'sales:receivable:view' },
       { name: 'Giao nhận & xuất hàng', href: '/sales/deliveries', icon: PackageCheck, permission: 'sales:delivery-note:view' },
+    ],
+  },
+  {
+    group: 'Bán hàng đa kênh',
+    items: [
+      { name: 'Kênh & sàn liên kết', href: '/omnichannel', icon: Globe, permission: 'omnichannel:channel:view' },
     ],
   },
   {
@@ -111,7 +120,7 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    group: 'Khách hàng (CRM)',
+    group: 'Khách hàng',
     items: [
       { name: 'Danh sách khách hàng', href: '/crm/customers', icon: Users, permission: 'crm:customer:view' },
       { name: 'Hạng thành viên & điểm thưởng', href: '/crm/loyalty', icon: Shield, permission: 'crm:tier:view' },
@@ -124,7 +133,9 @@ export const NAV_GROUPS: NavGroup[] = [
     group: 'Vận chuyển & logistics',
     items: [
       { name: 'Đơn vị vận chuyển', href: '/logistics/partners', icon: Users, permission: 'logistics:shipper:view' },
+      { name: 'Đơn hàng & đóng gói', href: '/logistics/orders', icon: Package, permission: 'logistics:order:view' },
       { name: 'Quản lý vận đơn', href: '/logistics/deliveries', icon: Truck, permission: 'logistics:shipment:view' },
+      { name: 'Vận hành giao vận', href: '/logistics/operations', icon: Route, permission: 'logistics:method:view' },
     ],
   },
   {

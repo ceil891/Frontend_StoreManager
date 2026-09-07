@@ -164,17 +164,17 @@ export function StockKeepingPage() {
           const maxStock = Number(row.original.maxStock ?? 100);
 
           let badgeClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300';
-          let label = '🟢 An toàn';
+          let label = 'An toàn';
 
           if (onHand <= minStock) {
             badgeClass = 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 border border-red-200';
-            label = '🔴 Dưới định mức';
+            label = 'Dưới định mức';
           } else if (reorderPoint > 0 && onHand <= reorderPoint) {
             badgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200';
-            label = '🟡 Sắp hết / Cần đặt';
+            label = ' Sắp hết / Cần đặt';
           } else if (maxStock > 0 && onHand > maxStock) {
             badgeClass = 'bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200';
-            label = '🟠 Vượt định mức';
+            label = ' Vượt định mức';
           }
           return <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>{label}</span>;
         },
@@ -216,7 +216,7 @@ export function StockKeepingPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Quản lý mức tồn kho (stock keeping)</h1>
+          <h1 className="text-2xl font-bold">Quản lý mức tồn kho </h1>
           <p className="text-sm text-gray-500">
             Theo dõi lượng tồn kho thực tế của từng sản phẩm SKU, thiết lập cảnh báo dưới hạn định mức tối thiểu/tối đa.
           </p>
@@ -225,7 +225,7 @@ export function StockKeepingPage() {
           onClick={handleOpenCreate}
           className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition"
         >
-          <Plus className="w-4 h-4" /> Khai Báo Mức SKU Mới
+          <Plus className="w-4 h-4" /> Khai báo mức SKU mới
         </button>
       </div>
 

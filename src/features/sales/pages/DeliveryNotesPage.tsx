@@ -384,7 +384,7 @@ export function DeliveryNotesPage() {
         {[
           { key: 'ALL', label: 'Tất cả biên bản', count: data.length, color: 'text-gray-700' },
           { key: 'CHO_BAN_GIAO', label: 'Chờ bàn giao', count: data.filter(d => d.status === 'CHO_BAN_GIAO').length, color: 'text-blue-600' },
-          { key: 'DA_BAN_GIAO', label: 'Đã bàn giao (Khách ký)', count: data.filter(d => d.status === 'DA_BAN_GIAO').length, color: 'text-emerald-600 font-bold' },
+          { key: 'DA_BAN_GIAO', label: 'Đã bàn giao', count: data.filter(d => d.status === 'DA_BAN_GIAO').length, color: 'text-emerald-600 font-bold' },
           { key: 'BI_TU_CHOI', label: 'Khách từ chối nhận', count: data.filter(d => d.status === 'BI_TU_CHOI').length, color: 'text-rose-600 font-bold' },
         ].map((item) => (
           <button
@@ -617,7 +617,7 @@ export function DeliveryNotesPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border border-emerald-200 dark:border-emerald-900 bg-emerald-50/20 p-4 rounded-xl">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                    Người ký nhận (Khách hàng)
+                    Người ký nhận
                   </label>
                   <input
                     type="text"

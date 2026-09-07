@@ -350,7 +350,7 @@ export function WarehouseBinsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sơ đồ vị trí Ô kệ (Bins)</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sơ đồ vị trí ô kệ</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Quản lý chi tiết vị trí lưu trữ sản phẩm trong kho hàng (Rack &rarr; Level &rarr; Bay &rarr; Position).
           </p>

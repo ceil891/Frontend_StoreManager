@@ -11,6 +11,8 @@ import { resolveCustomerName } from '@/features/sales/store/salesHelpers';
 import { useCrmStore } from '@/features/crm/store/crmStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
 import { Building2 } from 'lucide-react';
+import { reportsApi } from '../api/reportsApi';
+import type { SalesReportData } from '../types/reports';
 
 interface SalesTransaction {
   id: string;
@@ -77,12 +79,30 @@ export function SalesReportPage() {
   const [selectedBranch, setSelectedBranch] = useState('all');
   const [activeTab, setActiveTab] = useState<'overview' | 'customer_products'>('overview');
   const [productSearch, setProductSearch] = useState('');
+  const [apiReport, setApiReport] = useState<SalesReportData | null>(null);
+  const [isLoadingReport, setIsLoadingReport] = useState(false);
 
   useEffect(() => {
     fetchSaleOrders();
     fetchCustomers();
     fetchBranches();
   }, [fetchSaleOrders, fetchCustomers, fetchBranches]);
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoadingReport(true);
+    reportsApi.getSalesReport({ period: dateRange, branchId: selectedBranch })
+      .then((data) => {
+        if (isMounted && data) {
+          setApiReport(data);
+        }
+      })
+      .catch((err) => console.warn('SalesReport API fallback:', err))
+      .finally(() => {
+        if (isMounted) setIsLoadingReport(false);
+      });
+    return () => { isMounted = false; };
+  }, [dateRange, selectedBranch]);
 
   // Filter orders by selected branch
   const filteredSaleOrders = useMemo(() => {
@@ -103,16 +123,16 @@ export function SalesReportPage() {
     (o) => o.status === 'COMPLETED' || (o.status === 'PENDING' && o.paymentStatus === 'PAID')
   );
 
-  const totalRevenueVnd = paidOrCompleted.reduce((sum, o) => sum + toVnd(o), 0);
-  const orderCount = filteredSaleOrders.length;
-  const aovVnd = orderCount ? Math.round(totalRevenueVnd / Math.max(paidOrCompleted.length, 1)) : 0;
+  const totalRevenueVnd = apiReport?.totalRevenue !== undefined ? Number(apiReport.totalRevenue) : paidOrCompleted.reduce((sum, o) => sum + toVnd(o), 0);
+  const orderCount = apiReport?.totalOrdersCount !== undefined ? Number(apiReport.totalOrdersCount) : filteredSaleOrders.length;
+  const aovVnd = apiReport?.averageOrderValue !== undefined ? Number(apiReport.averageOrderValue) : (orderCount ? Math.round(totalRevenueVnd / Math.max(paidOrCompleted.length, 1)) : 0);
 
   const kpiCards = useMemo(
     () => [
       {
-        title: 'Tổng doanh thu (ước tính)',
+        title: 'Tổng doanh thu (thực tế)',
         value: formatVnd(totalRevenueVnd),
-        trend: `${paidOrCompleted.length} đơn đã thu`,
+        trend: `${apiReport?.paidOrdersCount ?? paidOrCompleted.length} đơn đã thu`,
         isUp: true,
         icon: DollarSign,
         color: 'text-primary bg-primary/10 border-primary/20',
@@ -134,10 +154,17 @@ export function SalesReportPage() {
         color: 'text-amber-600 bg-amber-50 border-amber-100 dark:text-amber-400 dark:bg-amber-900/30 dark:border-amber-900/50',
       },
     ],
-    [totalRevenueVnd, orderCount, paidOrCompleted.length, saleOrders, aovVnd]
+    [totalRevenueVnd, orderCount, apiReport, paidOrCompleted.length, saleOrders, aovVnd]
   );
 
   const revenueChartData = useMemo(() => {
+    if (apiReport?.revenueTrend && apiReport.revenueTrend.length > 0) {
+      return apiReport.revenueTrend.map((t) => ({
+        date: t.date,
+        revenue: Math.round(Number(t.revenue) / 1000),
+        cost: Math.round(Number(t.cost) / 1000),
+      }));
+    }
     const buckets = new Map<string, number>();
     paidOrCompleted.forEach((o) => {
       const day = o.date.slice(0, 10);
@@ -150,9 +177,12 @@ export function SalesReportPage() {
       revenue: Math.round(revenue / 1000),
       cost: Math.round((revenue * 0.65) / 1000),
     }));
-  }, [paidOrCompleted, dateRange]);
+  }, [apiReport, paidOrCompleted, dateRange]);
 
   const topProducts = useMemo(() => {
+    if (apiReport?.topProducts && apiReport.topProducts.length > 0) {
+      return apiReport.topProducts.map(p => ({ name: p.name, sales: Number(p.sales) }));
+    }
     const counts = new Map<string, number>();
     filteredSaleOrders
       .filter((o) => (o.origin === 'POS' || o.origin === 'ONLINE') && o.itemsSummary)
@@ -166,16 +196,25 @@ export function SalesReportPage() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([name, sales]) => ({ name, sales }));
-  }, [filteredSaleOrders]);
+  }, [apiReport, filteredSaleOrders]);
 
-  const recentTransactions = useMemo(
-    () =>
-      [...filteredSaleOrders]
-        .sort((a, b) => b.date.localeCompare(a.date))
-        .slice(0, 10)
-        .map((o) => orderToTransaction(o, resolveCustomerName(o.customerId, customers))),
-    [filteredSaleOrders, customers]
-  );
+  const recentTransactions = useMemo<SalesTransaction[]>(() => {
+    if (apiReport?.recentTransactions && apiReport.recentTransactions.length > 0) {
+      return apiReport.recentTransactions.map((tx) => ({
+        id: tx.id,
+        customerName: tx.customerName,
+        store: tx.store,
+        amount: Number(tx.amount),
+        amountLabel: formatMoney(Number(tx.amount), 'VND'),
+        status: tx.status,
+        date: tx.date ? tx.date.slice(0, 16).replace('T', ' ') : 'Gần đây',
+      }));
+    }
+    return [...filteredSaleOrders]
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 10)
+      .map((o) => orderToTransaction(o, resolveCustomerName(o.customerId, customers)));
+  }, [apiReport, filteredSaleOrders, customers]);
 
   // Detailed breakdown of products sold per customer purchase
   const customerProductSales = useMemo<CustomerProductSaleRecord[]>(() => {
@@ -500,7 +539,7 @@ export function SalesReportPage() {
             </div>
 
             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Top sản phẩm (từ POS)</h3>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Top sản phẩm bán chạy</h3>
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={barData} layout="vertical" margin={{ top: 0, right: 0, left: 20, bottom: 0 }}>

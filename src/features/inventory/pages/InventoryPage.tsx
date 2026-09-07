@@ -410,7 +410,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
   const handleDeleteConfirm = async () => {
     if (!deletingProduct) return;
     if (deletingProduct.status === 'ACTIVE') {
-      toast.error(`❌ Không thể xóa "${deletingProduct.name}" vì đang ĐANG KINH DOANH.\nVui lòng chuyển trạng thái sang Ngừng kinh doanh trước khi xóa.`);
+      toast.error(` Không thể xóa "${deletingProduct.name}" vì đang kinh doanh.\nVui lòng chuyển trạng thái sang Ngừng kinh doanh trước khi xóa.`);
       setDeletingProduct(null);
       return;
     }
@@ -428,7 +428,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
         String(err?.response?.data?.message || '').toLowerCase().includes('cannot delete');
       if (isConstraint) {
         toast.error(
-          `❌ Không thể xóa sản phẩm "${deletingProduct.name}" do đã phát sinh Thẻ kho hoặc Đơn hàng. Hệ thống đề xuất chuyển trạng thái sang "Ngừng kinh doanh" thay vì xóa!`,
+          ` Không thể xóa sản phẩm "${deletingProduct.name}" do đã phát sinh Thẻ kho hoặc Đơn hàng. Hệ thống đề xuất chuyển trạng thái sang "Ngừng kinh doanh" thay vì xóa!`,
           { duration: 6000 }
         );
       } else {

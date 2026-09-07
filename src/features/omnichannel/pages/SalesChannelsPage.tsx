@@ -227,7 +227,7 @@ export function SalesChannelsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Quản lý kênh bán hàng đa kênh (sales channels)</h1>
+          <h1 className="text-2xl font-bold">Quản lý kênh bán hàng đa kênh</h1>
           <p className="text-sm text-gray-500">
             Tích hợp, cấu hình đồng bộ gian hàng trực tuyến trên các sàn TMĐT (Shopee, Lazada, TikTok) hoặc Website bán hàng của doanh nghiệp.
           </p>

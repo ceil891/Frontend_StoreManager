@@ -906,7 +906,7 @@ export function StockOutsPage() {
                 </div>
                 <div className="col-span-1 sm:col-span-2">
                   <label className="block font-semibold text-emerald-900 dark:text-emerald-300 mb-1">
-                    Địa chỉ nhận hàng (Khách hàng)
+                    Địa chỉ nhận hàng
                   </label>
                   <input
                     type="text"

@@ -13,6 +13,8 @@ import { useFinanceStore } from '@/features/finance/store/financeStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
 import { exportToCsv } from '@/shared/utils/exportCsv';
 import { toast } from 'sonner';
+import { reportsApi } from '../api/reportsApi';
+import type { FinanceReportData } from '../types/reports';
 
 interface ExpenseTransaction {
   id: string;
@@ -41,6 +43,7 @@ export function FinanceReportPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'debt'>('overview');
   const [period, setPeriod] = useState('2026');
   const [selectedBranch, setSelectedBranch] = useState('all');
+  const [apiFinance, setApiFinance] = useState<FinanceReportData | null>(null);
 
   const receipts = useFinanceStore((s) => s.receipts);
   const payments = useFinanceStore((s) => s.payments);
@@ -75,17 +78,19 @@ export function FinanceReportPage() {
     fetchDebts();
     fetchBranches();
 
-    const fetchProfitLoss = async () => {
-      try {
-        const res = await axiosClient.get<any, any>('/reports/profit-loss');
-        const data = res?.data || res;
+    reportsApi.getFinanceReport({ year: period })
+      .then((data) => {
+        if (data) setApiFinance(data);
+      })
+      .catch((err) => console.warn('Finance report API fallback:', err));
+
+    reportsApi.getProfitLossReport()
+      .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
           setFinanceData(data);
         }
-      } catch (error) {
-        console.error('Failed to fetch profit loss report:', error);
-      }
-    };
+      })
+      .catch((err) => console.warn('Profit loss report API fallback:', err));
 
     const fetchAging = async () => {
       try {
@@ -104,9 +109,8 @@ export function FinanceReportPage() {
       }
     };
 
-    fetchProfitLoss();
     fetchAging();
-  }, [fetchReceipts, fetchPayments, fetchDebts, fetchBranches]);
+  }, [fetchReceipts, fetchPayments, fetchDebts, fetchBranches, period]);
 
   // Filter receipts & payments by selected branch
   const filteredReceipts = useMemo(() => {
@@ -120,19 +124,19 @@ export function FinanceReportPage() {
   }, [payments, selectedBranch]);
 
   const kpis = useMemo(() => {
-    const totalReceiptAmt = filteredReceipts.reduce((sum, r) => sum + (r.amount || 0), 0);
-    const totalPaymentAmt = filteredPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+    const totalReceiptAmt = apiFinance?.totalReceiptAmount !== undefined ? Number(apiFinance.totalReceiptAmount) : filteredReceipts.reduce((sum, r) => sum + (r.amount || 0), 0);
+    const totalPaymentAmt = apiFinance?.totalPaymentAmount !== undefined ? Number(apiFinance.totalPaymentAmount) : filteredPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
 
     const totalIncome = totalReceiptAmt > 0 ? totalReceiptAmt : financeData.reduce((acc, curr) => acc + Number(curr.income), 0) * 1000000;
     const totalExpense = totalPaymentAmt > 0 ? totalPaymentAmt : financeData.reduce((acc, curr) => acc + Number(curr.expense), 0) * 1000000;
-    const totalProfit = totalIncome - totalExpense;
+    const totalProfit = apiFinance?.netCashFlow !== undefined ? Number(apiFinance.netCashFlow) : (totalIncome - totalExpense);
 
     return [
-      { title: 'Tổng thu (phiếu thu & bán hàng)', value: totalIncome.toLocaleString('vi-VN') + ' đ', trend: `${filteredReceipts.length} phiếu thu`, isUp: true, icon: Wallet, color: 'text-primary bg-primary/10 border-primary/20' },
-      { title: 'Tổng chi (phiếu chi & giá vốn)', value: totalExpense.toLocaleString('vi-VN') + ' đ', trend: `${filteredPayments.length} phiếu chi`, isUp: false, icon: CreditCard, color: 'text-rose-600 bg-rose-50 border-rose-100 dark:text-rose-400 dark:bg-rose-900/30 dark:border-rose-900/50' },
-      { title: 'Lợi nhuận gộp', value: totalProfit.toLocaleString('vi-VN') + ' đ', trend: 'Lợi nhuận thuần', isUp: totalProfit >= 0, icon: Activity, color: 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-900/50' },
+      { title: 'Tổng thu', value: totalIncome.toLocaleString('vi-VN') + ' đ', trend: `${apiFinance?.totalReceipts ?? filteredReceipts.length} phiếu thu`, isUp: true, icon: Wallet, color: 'text-primary bg-primary/10 border-primary/20' },
+      { title: 'Tổng chi', value: totalExpense.toLocaleString('vi-VN') + ' đ', trend: `${apiFinance?.totalPayments ?? filteredPayments.length} phiếu chi`, isUp: false, icon: CreditCard, color: 'text-rose-600 bg-rose-50 border-rose-100 dark:text-rose-400 dark:bg-rose-900/30 dark:border-rose-900/50' },
+      { title: 'Lợi nhuận gộp', value: totalProfit.toLocaleString('vi-VN') + ' đ', trend: 'Dòng tiền ròng', isUp: totalProfit >= 0, icon: Activity, color: 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-900/50' },
     ];
-  }, [filteredReceipts, filteredPayments, financeData]);
+  }, [apiFinance, filteredReceipts, filteredPayments, financeData]);
 
   // Debt KPIs
   const debtKpis = useMemo(() => {
@@ -572,7 +576,7 @@ export function FinanceReportPage() {
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Phân tích tuổi nợ (Debt Aging Analysis)</h3>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Phân tích tuổi nợ</h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Dư nợ theo thời gian đáo hạn (triệu VNĐ)</p>
                 </div>
                 <button

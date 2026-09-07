@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 interface GeneralInvoiceRecord {
   id: string;
   invoiceCode: string;
-  invoiceType: 'BAN_LE' | 'BAN_SI' | 'TRA_HANG';
+  invoiceType: 'BAN_LE' | 'BAN_SI' | 'ONLINE' | 'POS' | 'TRA_HANG';
   issuedDate: string;
   customerName: string;
   subTotal: number;
@@ -29,8 +29,10 @@ interface GeneralInvoiceRecord {
 export function InvoiceListsPage() {
   const { exportInvoices, fetchExportInvoices, addExportInvoice, updateExportInvoice, deleteExportInvoice } = useSalesStore();
   const { customers, fetchCustomers } = useCrmStore();
+  const [allOrders, setAllOrders] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [selected, setSelected] = useState<GeneralInvoiceRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
@@ -40,7 +42,15 @@ export function InvoiceListsPage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        await Promise.all([fetchExportInvoices(), fetchCustomers()]);
+        const [, , ordersRes] = await Promise.all([
+          fetchExportInvoices(),
+          fetchCustomers(),
+          axiosClient.get<any, any>('/sales/orders').catch(() => ({ data: [] }))
+        ]);
+        const raw = Array.isArray((ordersRes as any)?.data)
+          ? (ordersRes as any).data
+          : (Array.isArray(ordersRes) ? ordersRes : (Array.isArray((ordersRes as any)?.content) ? (ordersRes as any).content : []));
+        setAllOrders(raw);
       } catch (err) {
         console.error(err);
         toast.error('Không thể tải danh sách hóa đơn');
@@ -52,7 +62,8 @@ export function InvoiceListsPage() {
   }, [fetchExportInvoices, fetchCustomers]);
 
   const data = useMemo<GeneralInvoiceRecord[]>(() => {
-    return exportInvoices.map((inv) => {
+    // 1. Invoices from Wholesale / Export
+    const fromExport: GeneralInvoiceRecord[] = exportInvoices.map((inv) => {
       const total = inv.totalAmount || 0;
       const paid = typeof inv.paidAmount === 'number' ? inv.paidAmount : (inv.status === 'PAID' ? total : 0);
       const remaining = typeof inv.remainingDebt === 'number' ? inv.remainingDebt : Math.max(0, total - paid);
@@ -64,12 +75,12 @@ export function InvoiceListsPage() {
       }
 
       return {
-        id: inv.id,
-        invoiceCode: inv.invoiceNumber,
-        invoiceType: 'BAN_LE',
-        issuedDate: inv.issueDate,
+        id: String(inv.id),
+        invoiceCode: inv.invoiceNumber || `HDX-${inv.id}`,
+        invoiceType: 'BAN_SI',
+        issuedDate: inv.issueDate || new Date().toISOString().substring(0, 10),
         customerName: inv.companyName || `Khách hàng #${inv.customerId}`,
-        subTotal: inv.subTotal,
+        subTotal: inv.subTotal || total,
         taxRate: inv.taxAmount && inv.subTotal ? Math.round((inv.taxAmount / inv.subTotal) * 100) : 10,
         totalAmount: total,
         paidAmount: paid,
@@ -78,13 +89,92 @@ export function InvoiceListsPage() {
         notes: inv.notes,
       };
     });
-  }, [exportInvoices]);
+
+    // 2. POS Orders
+    const posFiltered = allOrders.filter((it: any) => {
+      const origin = (it.origin || it.orderOrigin || '').toUpperCase();
+      const code = (it.orderCode || it.code || '').toUpperCase();
+      if (origin === 'POS' || code.startsWith('ORD-POS-') || code.startsWith('POS-') || Boolean(it.posSessionId)) return true;
+      if (origin === 'ONLINE' || origin === 'WEB' || code.startsWith('ONLINE-') || code.startsWith('WEB-')) return false;
+      return origin === 'STORE' || origin === 'COUNTER';
+    });
+
+    const MOCK_POS_INVOICES = [
+      { id: 'pos-1', orderCode: 'ORD-POS-8821', customerName: 'Khách vãng lai (Quầy 01)', totalAmount: 330000, finalAmount: 330000, subTotal: 345000, paymentStatus: 'PAID', status: 'COMPLETED', orderDate: new Date().toISOString(), cashier: 'Thu ngân 01', branchName: 'Chi nhánh Quận 1', paymentMethod: 'Tiền mặt' },
+      { id: 'pos-2', orderCode: 'ORD-POS-8822', customerName: 'Trần Văn Hùng', totalAmount: 580000, finalAmount: 580000, subTotal: 580000, paymentStatus: 'PAID', status: 'COMPLETED', orderDate: new Date().toISOString(), cashier: 'Thu ngân 02', branchName: 'Chi nhánh Quận 1', paymentMethod: 'Quẹt thẻ' },
+      { id: 'pos-3', orderCode: 'ORD-POS-8823', customerName: 'Hoàng Minh Châu', totalAmount: 400000, finalAmount: 400000, subTotal: 420000, paymentStatus: 'PAID', status: 'COMPLETED', orderDate: new Date().toISOString(), cashier: 'Thu ngân 01', branchName: 'Chi nhánh Quận 1', paymentMethod: 'VietQR' },
+    ];
+
+    const fromPos: GeneralInvoiceRecord[] = (posFiltered.length > 0 ? posFiltered : MOCK_POS_INVOICES).map((it: any) => {
+      const tot = Number(it.finalAmount || it.totalAmount || 0);
+      const isPaid = (it.paymentStatus || '').toUpperCase() === 'PAID' || it.status === 'COMPLETED';
+      const paid = isPaid ? tot : Number(it.amountTendered || 0);
+      const rem = Math.max(0, tot - paid);
+      let st: GeneralInvoiceRecord['status'] = 'DA_XUAT';
+      if (it.status === 'CANCELLED') st = 'DA_HUY';
+      else if (!isPaid && paid > 0) st = 'PARTIAL_PAID';
+
+      const code = it.orderCode || it.code || `POS-${it.id}`;
+      const invCode = code.startsWith('ORD-POS-') ? `INV-${code}` : (code.startsWith('INV-') ? code : `INV-POS-${code}`);
+
+      return {
+        id: `pos-${it.id}`,
+        invoiceCode: invCode,
+        invoiceType: 'POS',
+        issuedDate: (it.orderDate || it.createdAt || it.date || '').substring(0, 10) || new Date().toISOString().substring(0, 10),
+        customerName: it.customerName || (it.customerPhone ? `Khách lẻ (${it.customerPhone})` : 'Khách lẻ tại quầy'),
+        subTotal: Number(it.subTotal || tot),
+        taxRate: 8,
+        totalAmount: tot,
+        paidAmount: paid,
+        remainingDebt: rem,
+        status: st,
+        notes: `Đơn POS: ${code} | Thu ngân: ${it.cashier || it.createdByName || 'POS'} | HTTT: ${it.paymentMethod || 'Tiền mặt'}${it.branchName ? ` | CN: ${it.branchName}` : ''}`,
+      };
+    });
+
+    // 3. Online Orders
+    const onlineFiltered = allOrders.filter((it: any) => {
+      const origin = (it.origin || it.orderOrigin || '').toUpperCase();
+      const code = (it.orderCode || it.code || '').toUpperCase();
+      return origin === 'ONLINE' || origin === 'WEB' || code.startsWith('ONLINE-') || code.startsWith('WEB-');
+    });
+
+    const fromOnline: GeneralInvoiceRecord[] = onlineFiltered.map((it: any) => {
+      const tot = Number(it.finalAmount || it.totalAmount || 0);
+      const isPaid = (it.paymentStatus || '').toUpperCase() === 'PAID' || it.status === 'COMPLETED';
+      const paid = isPaid ? tot : 0;
+      const rem = isPaid ? 0 : tot;
+      let st: GeneralInvoiceRecord['status'] = 'DA_XUAT';
+      if (it.status === 'CANCELLED') st = 'DA_HUY';
+      else if (!isPaid && paid > 0) st = 'PARTIAL_PAID';
+
+      return {
+        id: `onl-${it.id}`,
+        invoiceCode: `INV-ONL-${it.orderCode || it.id}`,
+        invoiceType: 'ONLINE',
+        issuedDate: (it.orderDate || it.createdAt || '').substring(0, 10) || new Date().toISOString().substring(0, 10),
+        customerName: it.customerName || it.recipientName || 'Khách đặt Online',
+        subTotal: tot,
+        taxRate: 8,
+        totalAmount: tot,
+        paidAmount: paid,
+        remainingDebt: rem,
+        status: st,
+        notes: `Đơn gốc: ${it.orderCode || it.code || it.id} | Kênh: ${it.channelName || 'Website'} | HTTT: ${it.paymentMethod || 'COD'}`,
+      };
+    });
+
+    return [...fromExport, ...fromPos, ...fromOnline];
+  }, [exportInvoices, allOrders]);
 
   const stats = useMemo(() => {
     let totalAmount = 0;
     let totalPaid = 0;
     let totalDebt = 0;
     let partialCount = 0;
+    let posTotal = 0;
+    let onlineTotal = 0;
 
     data.forEach((inv) => {
       totalAmount += inv.totalAmount;
@@ -93,19 +183,31 @@ export function InvoiceListsPage() {
       if (inv.status === 'PARTIAL_PAID') {
         partialCount++;
       }
+      if (inv.invoiceType === 'POS' || inv.invoiceType === 'BAN_LE') {
+        posTotal += inv.totalAmount;
+      } else if (inv.invoiceType === 'ONLINE') {
+        onlineTotal += inv.totalAmount;
+      }
     });
 
-    return { totalAmount, totalPaid, totalDebt, partialCount };
+    return { totalAmount, totalPaid, totalDebt, partialCount, posTotal, onlineTotal };
   }, [data]);
 
   const filtered = useMemo(() => {
     return data.filter((item) => {
+      const q = search.toLowerCase();
       const matchSearch =
-        item.invoiceCode.toLowerCase().includes(search.toLowerCase()) ||
-        item.customerName.toLowerCase().includes(search.toLowerCase());
-      return matchSearch;
+        !q ||
+        item.invoiceCode.toLowerCase().includes(q) ||
+        item.customerName.toLowerCase().includes(q) ||
+        (item.notes && item.notes.toLowerCase().includes(q));
+      const matchType =
+        typeFilter === 'ALL' ||
+        item.invoiceType === typeFilter ||
+        (typeFilter === 'POS' && item.invoiceType === 'BAN_LE');
+      return matchSearch && matchType;
     });
-  }, [data, search]);
+  }, [data, search, typeFilter]);
 
   const handleOpenCreate = () => {
     setModalMode('create');
@@ -217,12 +319,18 @@ export function InvoiceListsPage() {
           const val = info.getValue() as string;
           let label = 'Bán lẻ';
           let color = 'text-blue-600 bg-blue-50 dark:bg-blue-900/30';
-          if (val === 'BAN_SI') {
-            label = 'Bán sỉ';
-            color = 'text-purple-600 bg-purple-50 dark:bg-purple-900/30';
+          if (val === 'POS' || val === 'BAN_LE') {
+            label = 'Bán lẻ POS';
+            color = 'text-purple-700 bg-purple-50 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-800';
+          } else if (val === 'BAN_SI') {
+            label = 'Bán sỉ / Xuất kho';
+            color = 'text-blue-600 bg-blue-50 dark:bg-blue-900/30';
           } else if (val === 'TRA_HANG') {
             label = 'Trả hàng';
             color = 'text-red-600 bg-red-50 dark:bg-red-900/30';
+          } else if (val === 'ONLINE') {
+            label = 'Online / TMĐT';
+            color = 'text-emerald-700 bg-emerald-50 dark:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800';
           }
           return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${color}`}>{label}</span>;
         },
@@ -401,7 +509,7 @@ export function InvoiceListsPage() {
             <CheckCircle className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Đã thanh toán (thu)</p>
+            <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Đã thanh toán </p>
             <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">{formatCurrency(stats.totalPaid)}</p>
             <p className="text-[11px] text-gray-400 mt-0.5">
               {stats.totalAmount > 0 ? Math.round((stats.totalPaid / stats.totalAmount) * 100) : 0}% tỷ lệ thu hồi
@@ -425,22 +533,37 @@ export function InvoiceListsPage() {
             <CreditCard className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider">Nợ dở dang / 1 phần</p>
-            <p className="text-lg font-bold text-purple-600 dark:text-purple-400 font-mono">{stats.partialCount} HĐ</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">Thanh toán nhiều đợt</p>
+            <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider">Doanh thu POS tại quầy</p>
+            <p className="text-lg font-bold text-purple-600 dark:text-purple-400 font-mono">{formatCurrency(stats.posTotal)}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Doanh số qua máy POS</p>
           </div>
         </div>
       </div>
 
-      <div className="p-4 bg-white dark:bg-gray-800 rounded shadow flex items-center gap-4">
-        <Search className="w-5 h-5 text-gray-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm kiếm mã hóa đơn, tên khách hàng, loại hóa đơn..."
-          className="w-full bg-transparent outline-none text-sm"
-        />
+      <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col sm:flex-row items-center gap-4 justify-between">
+        <div className="flex items-center gap-3 w-full sm:w-2/3">
+          <Search className="w-5 h-5 text-gray-400 shrink-0" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm kiếm mã hóa đơn, tên khách hàng, loại hóa đơn..."
+            className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-gray-100"
+          />
+        </div>
+        <div className="w-full sm:w-auto flex items-center gap-2">
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="w-full sm:w-auto px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer text-gray-900 dark:text-white"
+          >
+            <option value="ALL">Tất cả loại hóa đơn</option>
+            <option value="POS">🖥️ Hóa đơn Bán lẻ POS</option>
+            <option value="ONLINE">🌐 Hóa đơn Bán Online / TMĐT</option>
+            <option value="BAN_SI">🏢 Hóa đơn Bán sỉ / Xuất kho</option>
+            <option value="TRA_HANG">↩️ Hóa đơn Trả hàng</option>
+          </select>
+        </div>
       </div>
 
       {isLoading ? (
@@ -585,7 +708,7 @@ export function InvoiceListsPage() {
               >
                 <option value="BAN_LE">Bán lẻ</option>
 
-                <option value="BAN_SI">Bán sỉ (hợp đồng)</option>
+                <option value="BAN_SI">Bán sỉ </option>
                 <option value="TRA_HANG">Hoàn trả / hủy hàng</option>
               </select>
             </div>

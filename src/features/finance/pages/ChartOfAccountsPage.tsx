@@ -227,7 +227,7 @@ export default function ChartOfAccountsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hệ thống tài khoản kế toán (chart of accounts)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hệ thống tài khoản kế toán</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Danh mục các tài khoản kế toán dùng để ghi nhận các nghiệp vụ kinh tế tài chính phát sinh.</p>
           </div>
           <div className="flex gap-3">

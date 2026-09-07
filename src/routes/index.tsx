@@ -134,8 +134,10 @@ const CrmSupportTabbedPage = lz(() => import('@/features/crm/pages/CrmSupportTab
 const LogisticsPartnersPage = lz(() => import('@/features/logistics/pages/LogisticsPartnersPage'), 'LogisticsPartnersPage');
 const LogisticsOrdersTabbedPage = lz(() => import('@/features/logistics/pages/LogisticsOrdersTabbedPage'), 'LogisticsOrdersTabbedPage');
 const LogisticsDeliveriesTabbedPage = lz(() => import('@/features/logistics/pages/LogisticsDeliveriesTabbedPage'), 'LogisticsDeliveriesTabbedPage');
+const LogisticsOperationsTabbedPage = lz(() => import('@/features/logistics/pages/LogisticsOperationsTabbedPage'), 'LogisticsOperationsTabbedPage');
 
 // 8.1 Omnichannel Containers
+const OmnichannelTabbedPage = lz(() => import('@/features/omnichannel/pages/OmnichannelTabbedPage'), 'OmnichannelTabbedPage');
 const SalesChannelsPage = lz(() => import('@/features/omnichannel/pages/SalesChannelsPage'), 'SalesChannelsPage');
 const ChannelProductMappingPage = lz(() => import('@/features/omnichannel/pages/ChannelProductMappingPage'), 'ChannelProductMappingPage');
 const WebhookLogsPage = lz(() => import('@/features/omnichannel/pages/WebhookLogsPage'), 'WebhookLogsPage');
@@ -155,6 +157,7 @@ const PayrollPage = lz(() => import('@/features/hr/pages/PayrollPage'), 'Payroll
 // 11. System Containers
 const SystemOrganizationTabbedPage = lz(() => import('@/features/system/pages/SystemOrganizationTabbedPage'), 'SystemOrganizationTabbedPage');
 const SystemConfigTabbedPage = lz(() => import('@/features/system/pages/SystemConfigTabbedPage'), 'SystemConfigTabbedPage');
+const SystemSecurityTabbedPage = lz(() => import('@/features/system/pages/SystemSecurityTabbedPage'), 'SystemSecurityTabbedPage');
 const NotificationsPage = lz(() => import('@/features/system/pages/NotificationsPage'), 'NotificationsPage');
 
 // Helper for protected child route
@@ -204,7 +207,7 @@ function ForbiddenPage() {
         </div>
 
         <h1 className="text-2xl font-black text-gray-900 dark:text-white mb-2">
-          Truy cập bị từ chối (403)
+          Truy cập bị từ chối
         </h1>
 
         <p className="text-sm text-gray-600 dark:text-gray-300 mb-3 leading-relaxed">
@@ -282,7 +285,10 @@ const router = createBrowserRouter([
           { path: 'sales/online', element: <LegacyRedirect targetCanonical="/sales/orders" defaultTab="online" /> },
           { path: 'sales/quotes', element: <LegacyRedirect targetCanonical="/sales/orders" defaultTab="quotes" /> },
           { path: 'sales/offers', element: <LegacyRedirect targetCanonical="/sales/orders" defaultTab="offers" /> },
+          { path: 'sales/market', element: <LegacyRedirect targetCanonical="/sales/orders" defaultTab="market" /> },
+          { path: 'sales/market-orders', element: <LegacyRedirect targetCanonical="/sales/orders" defaultTab="market" /> },
           { path: 'sales/invoices-list', element: <LegacyRedirect targetCanonical="/sales/invoices" defaultTab="retail" /> },
+          { path: 'sales/online-invoices', element: <LegacyRedirect targetCanonical="/sales/invoices" defaultTab="online" /> },
           { path: 'sales/invoice-lists', element: <LegacyRedirect targetCanonical="/sales/invoices" defaultTab="list" /> },
           { path: 'sales/returns-list', element: <LegacyRedirect targetCanonical="/sales/returns" defaultTab="requests" /> },
           { path: 'sales/returns-history', element: <LegacyRedirect targetCanonical="/sales/returns" defaultTab="history" /> },
@@ -391,22 +397,28 @@ const router = createBrowserRouter([
           { path: 'logistics/partners', ...protect(<LogisticsPartnersPage />, 'logistics:shipper:view') },
           { path: 'logistics/orders', ...protect(<LogisticsOrdersTabbedPage />, 'logistics:order:view') },
           { path: 'logistics/deliveries', ...protect(<LogisticsDeliveriesTabbedPage />, 'logistics:shipment:view') },
+          { path: 'logistics/operations', ...protect(<LogisticsOperationsTabbedPage />, 'logistics:method:view') },
 
           // ── 7.1 Omnichannel Canonical Routes ───────────────────────
-          { path: 'omnichannel/channels', ...protect(<SalesChannelsPage />, 'omnichannel:channel:view') },
-          { path: 'omnichannel/mapping', ...protect(<ChannelProductMappingPage />, 'omnichannel:mapping:view') },
-          { path: 'omnichannel/webhooks', ...protect(<WebhookLogsPage />, 'omnichannel:webhook:view') },
+          { path: 'omnichannel', ...protect(<OmnichannelTabbedPage />, 'omnichannel:channel:view') },
+          { path: 'omnichannel/channels', element: <LegacyRedirect targetCanonical="/omnichannel" defaultTab="channels" /> },
+          { path: 'omnichannel/mapping', element: <LegacyRedirect targetCanonical="/omnichannel" defaultTab="mapping" /> },
+          { path: 'omnichannel/webhooks', element: <LegacyRedirect targetCanonical="/omnichannel" defaultTab="webhooks" /> },
 
           // Logistics Legacy Redirects
           { path: 'logistics/shippers', element: <LegacyRedirect targetCanonical="/logistics/partners" defaultTab="shippers" /> },
           { path: 'logistics/carriers', element: <LegacyRedirect targetCanonical="/logistics/partners" defaultTab="carriers" /> },
           { path: 'logistics/batches', element: <LegacyRedirect targetCanonical="/logistics/orders" defaultTab="batches" /> },
           { path: 'logistics/packing-lists', element: <LegacyRedirect targetCanonical="/logistics/orders" defaultTab="packing-lists" /> },
-          { path: 'logistics/notes', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="notes" /> },
+          { path: 'logistics/notes', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="shipments" /> },
           { path: 'logistics/shipments', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="shipments" /> },
-          { path: 'logistics/delivery-notes', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="delivery-notes" /> },
-          { path: 'logistics/attempts', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="delivery-notes" /> },
-          { path: 'logistics/pod', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="delivery-notes" /> },
+          { path: 'logistics/trips', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="trips" /> },
+          { path: 'logistics/cod', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="cod" /> },
+          { path: 'logistics/methods', element: <LegacyRedirect targetCanonical="/logistics/operations" defaultTab="methods" /> },
+          { path: 'logistics/vehicles', element: <LegacyRedirect targetCanonical="/logistics/operations" defaultTab="vehicles" /> },
+          { path: 'logistics/delivery-notes', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="shipments" /> },
+          { path: 'logistics/attempts', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="shipments" /> },
+          { path: 'logistics/pod', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="shipments" /> },
 
           // ── 8. Reports Canonical Routes (4 Routes) ───────────────
           { path: 'reports/sales', ...protect(<SalesReportPage />, 'reports:sales:view') },
@@ -437,11 +449,17 @@ const router = createBrowserRouter([
           { path: 'system/config', ...protect(<SystemConfigTabbedPage />, 'system:config:view') },
 
           // System Legacy Redirects
+          { path: 'system/security', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="device-sessions" /> },
           { path: 'system/notifications', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="notifications" /> },
           { path: 'system/branches', element: <LegacyRedirect targetCanonical="/system/organization" defaultTab="branches" /> },
           { path: 'system/banners', element: <LegacyRedirect targetCanonical="/system/organization" defaultTab="banners" /> },
           { path: 'system/settings', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="settings" /> },
-          { path: 'system/vat', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="settings" /> },
+          { path: 'system/parameters', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="parameters" /> },
+          { path: 'system/vat', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="vat" /> },
+          { path: 'system/print-templates', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="print-templates" /> },
+          { path: 'system/error-logs', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="error-logs" /> },
+          { path: 'system/device-sessions', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="device-sessions" /> },
+          { path: 'system/password-history', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="password-history" /> },
           { path: 'system/permissions', element: <LegacyRedirect targetCanonical="/hr/roles-permissions" defaultTab="permissions" /> },
         ],
       },

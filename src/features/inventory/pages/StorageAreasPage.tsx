@@ -190,7 +190,7 @@ export function StorageAreasPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bãi kho lưu trữ (Storage Areas)</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bãi kho lưu trữ</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Xem và cấu hình các bãi kho lưu trữ chính trực thuộc các phân khu (Zones) trong kho của từng chi nhánh.
           </p>

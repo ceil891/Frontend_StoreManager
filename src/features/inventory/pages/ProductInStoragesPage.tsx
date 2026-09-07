@@ -157,7 +157,7 @@ export function ProductInStoragesPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Vị trí lưu kho sản phẩm (ô kệ / bin)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Vị trí lưu kho sản phẩm</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Quản lý vị trí lưu trữ thực tế của từng sản phẩm theo phân khu và ô kệ trong kho
             </p>

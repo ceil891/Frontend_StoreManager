@@ -504,7 +504,7 @@ export function ImportReceiptsPage() {
     () => [
       {
         accessorKey: 'grnNumber',
-        header: 'Phiếu nhập kho (GRN)',
+        header: 'Quản lý phiếu nhập kho ',
         cell: (info) => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 hover:underline">{info.getValue() as string}</span>,
       },
       {
@@ -620,7 +620,7 @@ export function ImportReceiptsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu nhập kho (GRN)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý phiếu nhập kho </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Ghi nhận và kiểm duyệt các đợt hàng nhập kho từ nhà cung cấp. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
@@ -1137,7 +1137,7 @@ export function ImportReceiptsPage() {
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <Package className="w-4 h-4 text-emerald-600 animate-pulse" />
-                Chi tiết mặt hàng & QC Phân bổ vị trí (WMS)
+                Chi tiết mặt hàng & QC Phân bổ vị trí
               </h3>
               <button
                 type="button"

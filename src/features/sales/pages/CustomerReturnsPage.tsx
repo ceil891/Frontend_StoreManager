@@ -841,7 +841,7 @@ export function CustomerReturnsPage() {
           <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
-                <Box className="w-4 h-4" /> 2. Chi tiết danh sách sản phẩm trả (Được giới hạn theo Đơn Gốc)
+                <Box className="w-4 h-4" /> 2. Chi tiết danh sách sản phẩm trả
               </h3>
             </div>
 
@@ -987,11 +987,11 @@ export function CustomerReturnsPage() {
           {/* SECTION 4: TIẾP NHẬN & PHÂN BỔ KHO */}
           <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
-              <Building2 className="w-4 h-4" /> 4. Tiếp nhận & Phân bổ kho nhập lại (API Branch, WMS Zone & Rack)
+              <Building2 className="w-4 h-4" /> 4. Tiếp nhận & Phân bổ kho nhập lại
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chi nhánh nhận hoàn (API) *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chi nhánh nhận hoàn *</label>
                 <select
                   value={editing.returnBranchId || (branches[0]?.id ? String(branches[0].id) : '1')}
                   onChange={(e) => {

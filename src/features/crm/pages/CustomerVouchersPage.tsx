@@ -723,7 +723,7 @@ export function CustomerVouchersPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Ticket className="w-7 h-7 text-primary" />Sổ cái voucher khách hàng (Customer Voucher Ledger)
+              <Ticket className="w-7 h-7 text-primary" />Sổ cái voucher khách hàng
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Quản lý toàn bộ voucher đã phát hành cho khách hàng. Bấm "Chi tiết" để xem toàn bộ ví voucher sở hữu của khách hàng.

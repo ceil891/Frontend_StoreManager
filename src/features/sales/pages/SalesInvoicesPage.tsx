@@ -1,9 +1,12 @@
 import { Modal } from '@/shared/components/ui/Modal';
 import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download, Receipt, Printer, CreditCard, Wallet, CheckCircle, FileText } from 'lucide-react';
+import {
+  Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Download,
+  Receipt, Printer, CreditCard, Wallet, CheckCircle, FileText,
+  Store, Monitor, RefreshCw, Smartphone, Banknote, QrCode, Filter
+} from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
-
 
 import { PrintInvoiceModal, type PrintInvoiceData } from '@/shared/components/ui/PrintInvoiceModal';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -18,6 +21,7 @@ interface SalesInvoiceRecord {
   invoiceCode: string;
   orderCode: string;
   customerName: string;
+  customerPhone?: string;
   invoiceDate: string;
   dueDate: string;
   subTotal: number;
@@ -27,14 +31,101 @@ interface SalesInvoiceRecord {
   remainingDebt: number;
   status: 'CHO_THANH_TOAN' | 'PARTIAL_PAID' | 'DA_THANH_TOAN' | 'DA_HUY';
   notes?: string;
+  source: 'POS' | 'MANUAL';
+  cashier?: string;
+  branchName?: string;
+  paymentMethod?: string;
+  items?: Array<{
+    sku: string;
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    discount?: number;
+    total: number;
+  }>;
 }
 
+const DEFAULT_POS_INVOICES: SalesInvoiceRecord[] = [
+  {
+    id: 'mock-pos-1',
+    invoiceCode: 'INV-ORD-POS-8821',
+    orderCode: 'ORD-POS-8821',
+    customerName: 'Khách vãng lai (Quầy 01)',
+    customerPhone: '0912 888 999',
+    invoiceDate: new Date().toISOString().substring(0, 10),
+    dueDate: new Date().toISOString().substring(0, 10),
+    subTotal: 345000,
+    discount: 15000,
+    totalAmount: 330000,
+    paidAmount: 330000,
+    remainingDebt: 0,
+    status: 'DA_THANH_TOAN',
+    source: 'POS',
+    cashier: 'Nguyễn Thu Trang (Quầy 01)',
+    branchName: 'Chi nhánh Quận 1 (Flagship Store)',
+    paymentMethod: 'Tiền mặt',
+    notes: 'Thanh toán trực tiếp tại quầy thu ngân POS 01',
+    items: [
+      { sku: 'SKU-COFFEE-01', productName: 'Cà Phê Arabica Rang Xay 250g', quantity: 2, unitPrice: 125000, discount: 0, total: 250000 },
+      { sku: 'SKU-TEA-02', productName: 'Trà Oolong Cao Cấp Hộp Thiếc', quantity: 1, unitPrice: 95000, discount: 15000, total: 80000 }
+    ]
+  },
+  {
+    id: 'mock-pos-2',
+    invoiceCode: 'INV-ORD-POS-8822',
+    orderCode: 'ORD-POS-8822',
+    customerName: 'Trần Văn Hùng',
+    customerPhone: '0987 654 321',
+    invoiceDate: new Date().toISOString().substring(0, 10),
+    dueDate: new Date().toISOString().substring(0, 10),
+    subTotal: 580000,
+    discount: 0,
+    totalAmount: 580000,
+    paidAmount: 580000,
+    remainingDebt: 0,
+    status: 'DA_THANH_TOAN',
+    source: 'POS',
+    cashier: 'Lê Văn Nam (Quầy 02)',
+    branchName: 'Chi nhánh Quận 1 (Flagship Store)',
+    paymentMethod: 'Quẹt thẻ POS',
+    notes: 'Khách hàng thân thiết tích điểm RetailHub',
+    items: [
+      { sku: 'SKU-SHIRT-01', productName: 'Áo sơ mi Oxford Nam', quantity: 1, unitPrice: 580000, discount: 0, total: 580000 }
+    ]
+  },
+  {
+    id: 'mock-pos-3',
+    invoiceCode: 'INV-ORD-POS-8823',
+    orderCode: 'ORD-POS-8823',
+    customerName: 'Hoàng Minh Châu',
+    customerPhone: '0903 112 233',
+    invoiceDate: new Date().toISOString().substring(0, 10),
+    dueDate: new Date().toISOString().substring(0, 10),
+    subTotal: 420000,
+    discount: 20000,
+    totalAmount: 400000,
+    paidAmount: 400000,
+    remainingDebt: 0,
+    status: 'DA_THANH_TOAN',
+    source: 'POS',
+    cashier: 'Nguyễn Thu Trang (Quầy 01)',
+    branchName: 'Chi nhánh Quận 1 (Flagship Store)',
+    paymentMethod: 'Chuyển khoản VietQR',
+    notes: 'Thanh toán QR nhanh tại quầy',
+    items: [
+      { sku: 'SKU-TUMBLER-01', productName: 'Bình giữ nhiệt Lock&Lock 500ml', quantity: 1, unitPrice: 420000, discount: 20000, total: 400000 }
+    ]
+  }
+];
+
 export function SalesInvoicesPage() {
-  const { exportInvoices, fetchExportInvoices, addExportInvoice, updateExportInvoice, deleteExportInvoice } = useSalesStore();
+  const { exportInvoices, fetchExportInvoices, saleOrders, fetchSaleOrders, addExportInvoice, updateExportInvoice, deleteExportInvoice } = useSalesStore();
   const { products, fetchProducts } = useInventoryStore();
   const { customers, fetchCustomers } = useCrmStore();
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<'ALL' | 'POS' | 'MANUAL'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [selected, setSelected] = useState<SalesInvoiceRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
@@ -50,24 +141,30 @@ export function SalesInvoicesPage() {
     quantity: number;
     unitPrice: number;
     discount: number;
-  }[]>([
+  }>([
     { id: '1', sku: 'SKU-COFFEE-01', productName: 'Cà Phê Arabica Rang Xay 250g', quantity: 2, unitPrice: 125000, discount: 0 }
   ]);
 
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      await Promise.all([
+        fetchExportInvoices(),
+        fetchSaleOrders(),
+        fetchProducts(),
+        fetchCustomers()
+      ]);
+    } catch (err) {
+      console.error(err);
+      toast.error('Không thể tải danh sách hóa đơn bán lẻ');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const load = async () => {
-      setIsLoading(true);
-      try {
-        await Promise.all([fetchExportInvoices(), fetchProducts()]);
-      } catch (err) {
-        console.error(err);
-        toast.error('Không thể tải danh sách hóa đơn bán');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
-  }, [fetchExportInvoices, fetchProducts]);
+    loadData();
+  }, [fetchExportInvoices, fetchSaleOrders, fetchProducts, fetchCustomers]);
 
   const updateInvoiceItemsAndTotals = (newItems: typeof invoiceItems, overallDiscount = editingItem.discount || 0) => {
     setInvoiceItems(newItems);
@@ -118,7 +215,74 @@ export function SalesInvoicesPage() {
   };
 
   const data = useMemo<SalesInvoiceRecord[]>(() => {
-    return exportInvoices.map((inv: any) => {
+    // 1. Extract POS orders
+    const posOrders = saleOrders.filter((so) => {
+      const origin = (so.origin || (so as any).orderOrigin || '').toUpperCase();
+      const code = (so.code || '').toUpperCase();
+      if (origin === 'POS' || code.startsWith('ORD-POS-') || code.startsWith('POS-') || Boolean((so as any).posSessionId)) {
+        return true;
+      }
+      if (origin === 'ONLINE' || origin === 'WEB' || code.startsWith('ONLINE-') || code.startsWith('WEB-')) {
+        return false;
+      }
+      return origin === 'STORE' || origin === 'COUNTER';
+    });
+
+    const posRecords: SalesInvoiceRecord[] = (posOrders.length > 0 ? posOrders : DEFAULT_POS_INVOICES).map((so: any) => {
+      const tot = Number(so.totalAmount || so.finalAmount || 0);
+      const isPaid = so.paymentStatus === 'PAID' || so.status === 'COMPLETED';
+      const paid = isPaid ? tot : Number(so.amountTendered || 0);
+      const rem = Math.max(0, tot - paid);
+
+      let st: SalesInvoiceRecord['status'] = 'CHO_THANH_TOAN';
+      if (so.status === 'CANCELLED') {
+        st = 'DA_HUY';
+      } else if (isPaid || paid >= tot) {
+        st = 'DA_THANH_TOAN';
+      } else if (paid > 0) {
+        st = 'PARTIAL_PAID';
+      }
+
+      const rawLines = (so.orderLines && so.orderLines.length > 0 ? so.orderLines : (so.items || []));
+      const mappedItems = rawLines.map((l: any) => ({
+        sku: l.sku || l.skuSnapshot || 'SKU-001',
+        productName: l.productName || l.productNameSnapshot || l.name || 'Sản phẩm',
+        quantity: Number(l.quantity || 1),
+        unitPrice: Number(l.unitPrice || l.price || l.unitPriceSnapshot || 0),
+        discount: Number(l.discountAmount || l.discount || 0),
+        total: Number(l.lineTotal || l.subTotal || ((Number(l.quantity || 1) * Number(l.unitPrice || l.price || 0)) - Number(l.discountAmount || l.discount || 0))),
+      }));
+
+      const code = so.code || so.orderCode || `POS-${so.id}`;
+      const invCode = code.startsWith('ORD-POS-')
+        ? `INV-${code}`
+        : (code.startsWith('INV-') ? code : `INV-POS-${code}`);
+
+      return {
+        id: so.id ? String(so.id) : `pos-${Date.now()}`,
+        invoiceCode: invCode,
+        orderCode: code,
+        customerName: so.customerName || (so.customerPhone ? `Khách lẻ (${so.customerPhone})` : 'Khách vãng lai tại quầy'),
+        customerPhone: so.customerPhone,
+        invoiceDate: (so.date || so.orderDate || '').substring(0, 10) || new Date().toISOString().substring(0, 10),
+        dueDate: (so.date || so.orderDate || '').substring(0, 10) || new Date().toISOString().substring(0, 10),
+        subTotal: Number(so.subTotal || tot),
+        discount: Number(so.discountAmount || so.discount || 0),
+        totalAmount: tot,
+        paidAmount: paid,
+        remainingDebt: rem,
+        status: st,
+        source: 'POS',
+        cashier: so.cashier || so.createdByName || 'Thu ngân POS',
+        branchName: so.branchName || 'Chi nhánh Quận 1 (Flagship Store)',
+        paymentMethod: so.paymentMethod || 'Tiền mặt',
+        notes: so.notes || 'Hóa đơn khởi tạo từ máy bán hàng POS RetailHub.',
+        items: mappedItems.length > 0 ? mappedItems : undefined,
+      };
+    });
+
+    // 2. Extract Manual / Export Invoices
+    const manualRecords: SalesInvoiceRecord[] = exportInvoices.map((inv: any) => {
       const code = inv.invoiceNumber || inv.invoiceCode || inv.code || `INV-2026-${String(inv.id).padStart(4, '0')}`;
       const orderCode = inv.orderIds?.[0] || inv.orderCode || inv.orderId || `SO-2026-${String(inv.id).padStart(4, '0')}`;
       const name = resolveCustomerName(inv.customerId || inv.customerName, customers, inv.customerName);
@@ -138,6 +302,16 @@ export function SalesInvoicesPage() {
         status = 'PARTIAL_PAID';
       }
 
+      const rawItems = inv.items || inv.invoiceItems || [];
+      const mappedItems = rawItems.map((it: any) => ({
+        sku: it.sku || 'SKU-001',
+        productName: it.productName || it.name || 'Sản phẩm',
+        quantity: Number(it.quantity || 1),
+        unitPrice: Number(it.unitPrice || it.price || 0),
+        discount: Number(it.discount || 0),
+        total: Number(it.lineTotal || (Number(it.quantity || 1) * Number(it.unitPrice || it.price || 0))),
+      }));
+
       return {
         id: String(inv.id),
         invoiceCode: code,
@@ -151,10 +325,17 @@ export function SalesInvoicesPage() {
         paidAmount: paidAmount,
         remainingDebt: remainingDebt,
         status: status,
+        source: 'MANUAL',
+        cashier: 'Nhân viên bán hàng',
+        branchName: 'Chi nhánh chính',
+        paymentMethod: 'Chuyển khoản / Tiền mặt',
         notes: inv.notes || '',
+        items: mappedItems.length > 0 ? mappedItems : undefined,
       };
     });
-  }, [exportInvoices, customers]);
+
+    return [...posRecords, ...manualRecords];
+  }, [saleOrders, exportInvoices, customers]);
 
   const stats = useMemo(() => {
     let totalInvoiceAmount = 0;
@@ -162,6 +343,8 @@ export function SalesInvoicesPage() {
     let totalRemainingDebt = 0;
     let partialCount = 0;
     let unpaidCount = 0;
+    let posCount = 0;
+    let posAmount = 0;
 
     data.forEach((inv) => {
       totalInvoiceAmount += inv.totalAmount;
@@ -173,21 +356,33 @@ export function SalesInvoicesPage() {
       if (inv.remainingDebt > 0 && inv.status !== 'DA_HUY') {
         unpaidCount++;
       }
+      if (inv.source === 'POS') {
+        posCount++;
+        posAmount += inv.totalAmount;
+      }
     });
 
-    return { totalInvoiceAmount, totalPaidAmount, totalRemainingDebt, partialCount, unpaidCount };
+    return { totalInvoiceAmount, totalPaidAmount, totalRemainingDebt, partialCount, unpaidCount, posCount, posAmount };
   }, [data]);
 
   const filtered = useMemo(() => {
-    if (!search) return data;
-    const q = search.toLowerCase();
-    return data.filter(
-      (d) =>
+    return data.filter((d) => {
+      const q = search.toLowerCase().trim();
+      const matchSearch =
+        !q ||
         d.invoiceCode.toLowerCase().includes(q) ||
         d.orderCode.toLowerCase().includes(q) ||
-        d.customerName.toLowerCase().includes(q)
-    );
-  }, [search, data]);
+        d.customerName.toLowerCase().includes(q) ||
+        (d.customerPhone && d.customerPhone.includes(q)) ||
+        (d.cashier && d.cashier.toLowerCase().includes(q)) ||
+        (d.notes && d.notes.toLowerCase().includes(q));
+
+      const matchSource = sourceFilter === 'ALL' || d.source === sourceFilter;
+      const matchStatus = statusFilter === 'ALL' || d.status === statusFilter;
+
+      return matchSearch && matchSource && matchStatus;
+    });
+  }, [search, sourceFilter, statusFilter, data]);
 
   const handleOpenCreate = () => {
     setModalMode('create');
@@ -315,7 +510,7 @@ export function SalesInvoicesPage() {
         toast.success('Cập nhật hóa đơn thành công!');
       }
       setIsModalOpen(false);
-      fetchExportInvoices();
+      loadData();
     } catch (err) {
       console.error(err);
       toast.error('Lỗi khi lưu hóa đơn.');
@@ -330,7 +525,7 @@ export function SalesInvoicesPage() {
       await deleteExportInvoice(deletingItem.id);
       toast.success(`Đã xóa hóa đơn ${deletingItem.invoiceCode} thành công!`);
       setDeletingItem(null);
-      fetchExportInvoices();
+      loadData();
     } catch (err) {
       console.error(err);
       toast.error('Lỗi khi xóa hóa đơn.');
@@ -342,23 +537,36 @@ export function SalesInvoicesPage() {
   };
 
   const handlePrintInvoice = (record: SalesInvoiceRecord) => {
+    const rawItems = record.items;
+    const printItems = rawItems && rawItems.length > 0
+      ? rawItems.map((i) => ({
+          sku: i.sku || 'SKU',
+          name: i.productName || 'Sản phẩm',
+          quantity: Number(i.quantity || 1),
+          price: Number(i.unitPrice || 0),
+          discount: Number(i.discount || 0),
+          total: Number(i.total || ((Number(i.quantity || 1) * Number(i.unitPrice || 0)) - Number(i.discount || 0)))
+        }))
+      : invoiceItems.map(i => ({
+          sku: i.sku,
+          name: i.productName,
+          quantity: i.quantity,
+          price: i.unitPrice,
+          discount: i.discount,
+          total: (i.quantity * i.unitPrice) - i.discount
+        }));
+
     setPrintData({
-      documentTitle: 'HÓA ĐƠN BÁN LẺ VAT',
+      documentTitle: record.source === 'POS' ? 'HÓA ĐƠN BÁN LẺ' : 'HÓA ĐƠN BÁN HÀNG VAT',
       code: record.invoiceCode,
       date: record.invoiceDate,
       dueDate: record.dueDate,
       customerOrSupplierName: record.customerName,
-      branchName: 'Chi nhánh Quận 1 (Flagship Store)',
-      createdByName: 'Nhân viên thu ngân / Sales',
-      notes: record.notes || 'Hóa đơn khởi tạo từ hệ thống bán lẻ RetailHub ERP.',
-      items: invoiceItems.map(i => ({
-        sku: i.sku,
-        name: i.productName,
-        quantity: i.quantity,
-        price: i.unitPrice,
-        discount: i.discount,
-        total: (i.quantity * i.unitPrice) - i.discount
-      })),
+      phone: record.customerPhone,
+      branchName: record.branchName || 'Chi nhánh Quận 1',
+      createdByName: record.cashier || 'Thu ngân POS',
+      notes: record.notes || 'Hóa đơn khởi tạo từ hệ thống POS RetailHub.',
+      items: printItems,
       subTotal: record.subTotal || record.totalAmount,
       discountAmount: record.discount || 0,
       totalAmount: record.totalAmount,
@@ -371,22 +579,72 @@ export function SalesInvoicesPage() {
       {
         accessorKey: 'invoiceCode',
         header: 'Mã hóa đơn',
-        cell: (info) => <span className="font-mono font-bold text-emerald-600">{info.getValue() as string}</span>,
+        cell: ({ row }) => {
+          const inv = row.original;
+          return (
+            <div className="flex flex-col gap-1 items-start">
+              <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{inv.invoiceCode}</span>
+              {inv.source === 'POS' ? (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                  <Monitor className="w-2.5 h-2.5" /> Máy POS Quầy
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  <FileText className="w-2.5 h-2.5" /> Lập thủ công
+                </span>
+              )}
+            </div>
+          );
+        },
       },
       {
         accessorKey: 'orderCode',
-        header: 'Mã đơn SO',
-        cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
+        header: 'Mã đơn gốc',
+        cell: (info) => <span className="font-mono text-xs text-gray-600 dark:text-gray-300 font-semibold">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'customerName',
-        header: 'Tên khách hàng',
-        cell: (info) => <span className="font-semibold">{info.getValue() as string}</span>,
+        header: 'Khách hàng',
+        cell: ({ row }) => {
+          const inv = row.original;
+          return (
+            <div className="flex flex-col">
+              <span className="font-semibold text-gray-900 dark:text-white text-xs">{inv.customerName}</span>
+              {inv.customerPhone && (
+                <span className="text-[11px] text-gray-500 font-mono flex items-center gap-0.5">
+                  <Smartphone className="w-3 h-3 text-gray-400" /> {inv.customerPhone}
+                </span>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: 'paymentInfo',
+        header: 'Thu ngân / HTTT',
+        cell: ({ row }) => {
+          const inv = row.original;
+          return (
+            <div className="flex flex-col gap-0.5 text-xs">
+              <span className="font-medium text-gray-800 dark:text-gray-200">{inv.cashier || 'Thu ngân'}</span>
+              <span className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                {inv.paymentMethod?.includes('QR') ? (
+                  <QrCode className="w-3 h-3 text-emerald-500" />
+                ) : inv.paymentMethod?.includes('thẻ') || inv.paymentMethod?.includes('Card') ? (
+                  <CreditCard className="w-3 h-3 text-blue-500" />
+                ) : (
+                  <Banknote className="w-3 h-3 text-amber-500" />
+                )}
+                {inv.paymentMethod || 'Tiền mặt'}
+              </span>
+            </div>
+          );
+        },
       },
       {
         accessorKey: 'invoiceDate',
-        header: 'Ngày hóa đơn',
-        cell: (info) => <span className="font-mono">{info.getValue() as string}</span>,
+        header: 'Ngày giờ',
+        cell: (info) => <span className="font-mono text-xs">{info.getValue() as string}</span>,
       },
       {
         accessorKey: 'totalAmount',
@@ -402,7 +660,7 @@ export function SalesInvoicesPage() {
           const paid = inv.paidAmount;
           const percent = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : (inv.status === 'DA_THANH_TOAN' ? 100 : 0);
           return (
-            <div className="space-y-1 min-w-[120px]">
+            <div className="space-y-1 min-w-[110px]">
               <div className="flex justify-between text-xs font-semibold">
                 <span className="text-emerald-600 dark:text-emerald-400 font-mono">{formatCurrency(paid)}</span>
                 <span className="text-[10px] text-gray-500 font-bold">{percent}%</span>
@@ -463,32 +721,36 @@ export function SalesInvoicesPage() {
           <div className="flex items-center gap-1">
             <button
               onClick={() => handlePrintInvoice(row.original)}
-              className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="In hóa đơn / Tải PDF"
+              className="p-1.5 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded transition"
+              title="In hóa đơn POS / Tải PDF"
             >
               <Printer className="w-4 h-4 text-emerald-600" />
             </button>
             <button
               onClick={() => setSelected(row.original)}
-              className="p-1 text-gray-500 hover:text-emerald-600 rounded"
-              title="Xem chi tiết"
+              className="p-1.5 text-gray-500 hover:text-emerald-600 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition"
+              title="Xem chi tiết đơn & sản phẩm"
             >
               <Eye className="w-4 h-4" />
             </button>
-            <button
-              onClick={() => handleOpenEdit(row.original)}
-              className="p-1 text-gray-500 hover:text-blue-600 rounded"
-              title="Sửa"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setDeletingItem(row.original)}
-              className="p-1 text-gray-500 hover:text-red-600 rounded"
-              title="Xóa"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {row.original.source === 'MANUAL' && (
+              <>
+                <button
+                  onClick={() => handleOpenEdit(row.original)}
+                  className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded transition"
+                  title="Sửa hóa đơn"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setDeletingItem(row.original)}
+                  className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition"
+                  title="Xóa"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
           </div>
         ),
       },
@@ -498,19 +760,31 @@ export function SalesInvoicesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Hóa đơn bán hàng (đầu ra)</h1>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Store className="w-6 h-6 text-purple-600" />
+            Hóa đơn bán lẻ
+          </h1>
           <p className="text-sm text-gray-500">
-            Quản lý và xuất hóa đơn bán hàng cho khách hàng, hỗ trợ in hóa đơn, ghi nhận doanh thu và báo cáo VAT.
+            Quản lý và tra cứu toàn bộ hóa đơn bán lẻ phát sinh từ máy bán hàng POS tại quầy thu ngân và hóa đơn bán lẻ trực tiếp.
           </p>
         </div>
-        <button
-          onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition"
-        >
-          <Plus className="w-4 h-4" /> Lập Hóa Đơn Mới
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => loadData()}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-medium transition"
+            title="Tải lại danh sách"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} /> Làm mới
+          </button>
+          <button
+            onClick={handleOpenCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 text-sm font-medium transition shadow-sm"
+          >
+            <Plus className="w-4 h-4" /> Lập Hóa Đơn Mới
+          </button>
+        </div>
       </div>
 
       {/* KPI Summary Cards */}
@@ -520,7 +794,7 @@ export function SalesInvoicesPage() {
             <FileText className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tổng tiền hóa đơn</p>
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tổng tiền hóa đơn bán lẻ</p>
             <p className="text-lg font-bold text-gray-900 dark:text-white font-mono">{formatCurrency(stats.totalInvoiceAmount)}</p>
             <p className="text-[11px] text-gray-400 mt-0.5">{data.length} hóa đơn</p>
           </div>
@@ -540,6 +814,19 @@ export function SalesInvoicesPage() {
         </div>
 
         <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-lg">
+            <Monitor className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider">Doanh số POS tại quầy</p>
+            <p className="text-lg font-bold text-purple-600 dark:text-purple-400 font-mono">{formatCurrency(stats.posAmount)}</p>
+            <p className="text-[11px] text-purple-600 dark:text-purple-400 font-medium mt-0.5">
+              {stats.posCount} đơn qua máy POS
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-lg">
             <Wallet className="w-6 h-6" />
           </div>
@@ -547,32 +834,51 @@ export function SalesInvoicesPage() {
             <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Còn nợ phải thu</p>
             <p className="text-lg font-bold text-amber-600 dark:text-amber-400 font-mono">{formatCurrency(stats.totalRemainingDebt)}</p>
             <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium mt-0.5">
-              {stats.unpaidCount} hóa đơn còn nợ
+              {stats.unpaidCount} hóa đơn chưa tất toán
             </p>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-lg">
-            <CreditCard className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider">Nợ dở dang / 1 phần</p>
-            <p className="text-lg font-bold text-purple-600 dark:text-purple-400 font-mono">{stats.partialCount} HĐ</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">Đã thu một phần</p>
           </div>
         </div>
       </div>
 
-      <div className="p-4 bg-white dark:bg-gray-800 rounded shadow flex items-center gap-4">
-        <Search className="w-5 h-5 text-gray-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm kiếm mã hóa đơn, mã đơn hàng, tên khách hàng..."
-          className="w-full bg-transparent outline-none text-sm"
-        />
+      {/* Filter and Search Bar */}
+      <div className="p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 flex-1 min-w-[260px]">
+          <Search className="w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm theo mã HĐ, mã đơn POS, tên khách, số điện thoại, thu ngân..."
+            className="w-full bg-transparent outline-none text-xs text-gray-900 dark:text-white"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 text-xs">
+            <Filter className="w-3.5 h-3.5 text-gray-400" />
+            <select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value as any)}
+              className="border border-gray-200 dark:border-gray-700 rounded px-2.5 py-1.5 text-xs bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+            >
+              <option value="ALL">Tất cả nguồn bán lẻ</option>
+              <option value="POS">🖥️ Máy bán hàng POS</option>
+              <option value="MANUAL">✍️ Lập thủ công</option>
+            </select>
+          </div>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="border border-gray-200 dark:border-gray-700 rounded px-2.5 py-1.5 text-xs bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+          >
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="DA_THANH_TOAN">✅ Đã thanh toán</option>
+            <option value="CHO_THANH_TOAN">⏳ Chờ thanh toán</option>
+            <option value="PARTIAL_PAID">💳 Trả một phần</option>
+            <option value="DA_HUY">❌ Đã hủy</option>
+          </select>
+        </div>
       </div>
 
       {isLoading ? (
@@ -587,10 +893,44 @@ export function SalesInvoicesPage() {
       <Modal
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title={`Chi tiết Hóa Đơn Bán: ${selected?.invoiceCode}`}
+        title={`Chi tiết Hóa Đơn Bán Lẻ: ${selected?.invoiceCode}`}
+        width="max-w-2xl"
       >
         {selected && (
           <div className="space-y-4 text-sm">
+            {/* Source & Status Badge Header */}
+            <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-900/60 p-3 rounded-xl border border-gray-200 dark:border-gray-800">
+              <div className="flex items-center gap-2">
+                {selected.source === 'POS' ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                    <Monitor className="w-3.5 h-3.5" /> Máy POS Bán lẻ tại quầy
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                    <FileText className="w-3.5 h-3.5" /> Hóa đơn lập thủ công
+                  </span>
+                )}
+                <span className="text-xs text-gray-500 font-medium">
+                  Chi nhánh: <strong className="text-gray-800 dark:text-gray-200">{selected.branchName || 'Chi nhánh chính'}</strong>
+                </span>
+              </div>
+              <div>
+                <span
+                  className={`inline-flex px-2.5 py-1 rounded-md text-xs font-bold ${
+                    selected.status === 'DA_THANH_TOAN'
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                      : selected.status === 'PARTIAL_PAID'
+                      ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300'
+                      : selected.status === 'CHO_THANH_TOAN'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                      : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+                  }`}
+                >
+                  {selected.status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : selected.status === 'PARTIAL_PAID' ? 'Trả một phần' : selected.status === 'CHO_THANH_TOAN' ? 'Chờ thanh toán' : 'Đã hủy'}
+                </span>
+              </div>
+            </div>
+
             {/* Reconciliation cards in modal */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div className="p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
@@ -613,23 +953,27 @@ export function SalesInvoicesPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 bg-gray-50 dark:bg-gray-900/40 p-3 rounded-lg text-xs">
               <div>
                 <span className="text-gray-500">Mã hóa đơn:</span>
-                <p className="font-mono font-semibold">{selected.invoiceCode}</p>
+                <p className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{selected.invoiceCode}</p>
               </div>
               <div>
-                <span className="text-gray-500">Mã đơn hàng (SO):</span>
+                <span className="text-gray-500">Mã đơn gốc:</span>
                 <p className="font-mono font-semibold">{selected.orderCode}</p>
               </div>
-            </div>
-            <div>
-              <span className="text-gray-500">Khách hàng:</span>
-              <p className="font-semibold">{selected.customerName}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-500">Ngày hóa đơn:</span>
+                <span className="text-gray-500">Khách hàng:</span>
+                <p className="font-semibold">{selected.customerName}</p>
+                {selected.customerPhone && <p className="text-gray-500 font-mono text-[11px]">{selected.customerPhone}</p>}
+              </div>
+              <div>
+                <span className="text-gray-500">Thu ngân phụ trách:</span>
+                <p className="font-semibold">{selected.cashier || 'Thu ngân POS'}</p>
+                <p className="text-gray-500 text-[11px]">HTTT: {selected.paymentMethod || 'Tiền mặt'}</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Ngày lập:</span>
                 <p className="font-mono">{selected.invoiceDate}</p>
               </div>
               <div>
@@ -637,7 +981,41 @@ export function SalesInvoicesPage() {
                 <p className="font-mono">{selected.dueDate}</p>
               </div>
             </div>
-            <div className="border-t pt-2 space-y-1">
+
+            {/* Line items table if available */}
+            {selected.items && selected.items.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                  Danh sách sản phẩm mua ({selected.items.length})
+                </p>
+                <div className="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-lg">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-gray-100 dark:bg-gray-900 text-gray-500 uppercase text-[10px]">
+                      <tr>
+                        <th className="p-2">Mã SKU</th>
+                        <th className="p-2">Tên sản phẩm</th>
+                        <th className="p-2 text-center w-16">SL</th>
+                        <th className="p-2 text-right w-24">Đơn giá</th>
+                        <th className="p-2 text-right w-24">Thành tiền</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-800 font-mono text-xs">
+                      {selected.items.map((it, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                          <td className="p-2 text-gray-500 font-semibold">{it.sku}</td>
+                          <td className="p-2 font-sans font-medium text-gray-900 dark:text-white">{it.productName}</td>
+                          <td className="p-2 text-center font-bold">{it.quantity}</td>
+                          <td className="p-2 text-right text-gray-600 dark:text-gray-400">{formatCurrency(it.unitPrice)}</td>
+                          <td className="p-2 text-right font-bold text-gray-900 dark:text-white">{formatCurrency(it.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="border-t pt-2 space-y-1 text-xs">
               <div className="flex justify-between">
                 <span className="text-gray-500">Thành tiền hàng:</span>
                 <span className="font-mono">{formatCurrency(selected.subTotal)}</span>
@@ -646,12 +1024,12 @@ export function SalesInvoicesPage() {
                 <span className="text-gray-500">Chiết khấu/Giảm giá:</span>
                 <span className="font-mono text-red-500">-{formatCurrency(selected.discount)}</span>
               </div>
-              <div className="flex justify-between border-t pt-1 font-bold">
+              <div className="flex justify-between border-t pt-1 font-bold text-sm">
                 <span>Tổng phải trả:</span>
                 <span className="font-mono text-emerald-600">{formatCurrency(selected.totalAmount)}</span>
               </div>
               <div className="flex justify-between text-xs pt-1">
-                <span className="text-gray-500">Đã thanh toán (thu):</span>
+                <span className="text-gray-500">Đã thanh toán:</span>
                 <span className="font-mono font-semibold text-emerald-600">{formatCurrency(selected.paidAmount)}</span>
               </div>
               <div className="flex justify-between text-xs">
@@ -659,32 +1037,32 @@ export function SalesInvoicesPage() {
                 <span className="font-mono font-semibold text-amber-600">{formatCurrency(selected.remainingDebt)}</span>
               </div>
             </div>
-            <div>
-              <span className="text-gray-500">Trạng thái:</span>
-              <div className="mt-1">
-                <span
-                  className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
-                    selected.status === 'DA_THANH_TOAN'
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : selected.status === 'PARTIAL_PAID'
-                      ? 'bg-purple-100 text-purple-800'
-                      : selected.status === 'CHO_THANH_TOAN'
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}
-                >
-                  {selected.status === 'DA_THANH_TOAN' ? 'Đã thanh toán' : selected.status === 'PARTIAL_PAID' ? 'Trả một phần' : selected.status === 'CHO_THANH_TOAN' ? 'Chờ thanh toán' : 'Đã hủy'}
-                </span>
-              </div>
-            </div>
+
             {selected.notes && (
               <div>
-                <span className="text-gray-500">Ghi chú:</span>
-                <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300">
+                <span className="text-gray-500 text-xs">Ghi chú:</span>
+                <p className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-gray-700 dark:text-gray-300 text-xs mt-0.5">
                   {selected.notes}
                 </p>
               </div>
             )}
+
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="px-3.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded text-xs hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePrintInvoice(selected)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 text-white rounded text-xs hover:bg-emerald-700 font-semibold transition shadow-sm"
+              >
+                <Printer className="w-3.5 h-3.5" /> In hóa đơn này
+              </button>
+            </div>
           </div>
         )}
       </Modal>

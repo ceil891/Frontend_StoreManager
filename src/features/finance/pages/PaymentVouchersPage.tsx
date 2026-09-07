@@ -141,6 +141,12 @@ export function PaymentVouchersPage() {
     e.preventDefault();
     if (!editingVoucher.voucherNumber || !editingVoucher.payeeName) return;
 
+    const todayStr = new Date().toISOString().substring(0, 10);
+    if (editingVoucher.paymentDate && editingVoucher.paymentDate > todayStr) {
+      toast.error('Ngày lập phiếu chi không được lớn hơn ngày thực tế hiện tại!');
+      return;
+    }
+
     if (modalMode === 'create') {
       try {
         await addPayment({
@@ -280,7 +286,7 @@ export function PaymentVouchersPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu chi & dòng tiền ra (Payment Vouchers)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu chi & dòng tiền ra</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Kiểm soát chi phí hoạt động, thanh toán tiền hàng NCC và đối soát giảm trừ công nợ.</p>
           </div>
           <div className="flex items-center gap-3">
@@ -557,13 +563,26 @@ export function PaymentVouchersPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày lập phiếu</label>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Ngày lập phiếu {modalMode === 'edit' && <span className="text-amber-600 dark:text-amber-400 font-normal">(Cố định không được sửa)</span>}
+              </label>
               <input
                 type="date"
                 value={editingVoucher.paymentDate || ''}
                 onChange={(e) => setEditingVoucher({ ...editingVoucher, paymentDate: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono"
+                disabled={modalMode === 'edit'}
+                max={new Date().toISOString().substring(0, 10)}
+                className={`w-full px-3 py-2 border rounded-lg text-sm font-mono ${
+                  modalMode === 'edit'
+                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 cursor-not-allowed border-gray-200 dark:border-gray-700'
+                    : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-red-500'
+                }`}
               />
+              {modalMode === 'edit' && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
+                  🔒 Không được phép thay đổi thời gian của chứng từ đã lập.
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Trạng thái phê duyệt</label>

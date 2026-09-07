@@ -407,7 +407,7 @@ export function WarehouseAreasPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Layout className="w-6 h-6 text-emerald-600" />
-            Hệ thống kệ hàng WMS (Racks)
+            Hệ thống kệ hàng WMS
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Thiết lập sơ đồ vật lý, quy tắc ngành hàng và giới hạn tải trọng của các dãy kệ hàng (Racks) trong kho.

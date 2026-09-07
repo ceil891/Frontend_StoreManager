@@ -41,19 +41,24 @@ export function PayrollPage() {
   }, [fetchPayrolls, fetchUsers]);
 
   const data: PayrollItem[] = useMemo(() => {
-    return storePayrolls.map((p) => ({
-      id: p.id,
-      userId: p.employeeName || 'U001',
-      userName: p.employeeName,
-      department: 'Nhân sự / Kinh doanh',
-      periodMonth: Number((p.payrollMonth || '').split('-')[1] || new Date().getMonth() + 1),
-      periodYear: Number((p.payrollMonth || '').split('-')[0] || new Date().getFullYear()),
-      baseSalary: Number(p.baseSalary) || 0,
-      allowance: (Number(p.allowances) || 0) + (Number(p.kpiBonus) || 0),
-      deduction: Number(p.deductions) || 0,
-      netSalary: Number(p.netSalary) || ((Number(p.baseSalary) || 0) + (Number(p.allowances) || 0) + (Number(p.kpiBonus) || 0) - (Number(p.deductions) || 0)),
-      status: p.status === 'PAID' ? 'ĐÃ_CHI_TRẢ' : 'CHƯA_CHI_TRẢ',
-    }));
+    return storePayrolls.map((p) => {
+      const parts = (p.payrollMonth || '').split('-');
+      const pYear = (p as any).periodYear || Number(parts[0]) || new Date().getFullYear();
+      const pMonth = (p as any).periodMonth || Number(parts[1]) || (new Date().getMonth() + 1);
+      return {
+        id: p.id,
+        userId: (p as any).userId ? String((p as any).userId) : (p.employeeName || 'U001'),
+        userName: p.employeeName || 'Nhân viên',
+        department: (p as any).department || 'Nhân sự / Kinh doanh',
+        periodMonth: pMonth,
+        periodYear: pYear,
+        baseSalary: Number(p.baseSalary) || 0,
+        allowance: (Number(p.allowances) || 0) + (Number(p.kpiBonus) || 0),
+        deduction: Number(p.deductions) || 0,
+        netSalary: Number(p.netSalary) || ((Number(p.baseSalary) || 0) + (Number(p.allowances) || 0) + (Number(p.kpiBonus) || 0) - (Number(p.deductions) || 0)),
+        status: p.status === 'PAID' ? 'ĐÃ_CHI_TRẢ' : 'CHƯA_CHI_TRẢ',
+      };
+    });
   }, [storePayrolls]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Tất cả');
@@ -76,7 +81,8 @@ export function PayrollPage() {
     const defaultUser = users[0];
     setForm({
       userName: defaultUser ? (defaultUser.fullName || defaultUser.email || (defaultUser as any).username) : '',
-      userId: defaultUser ? String(defaultUser.id) : '',
+      userId: defaultUser ? String(defaultUser.id) : '1',
+      department: (defaultUser as any)?.departmentName || 'Nhân sự / Kinh doanh',
       periodMonth: new Date().getMonth() + 1,
       periodYear: new Date().getFullYear(),
       baseSalary: 10000000,
@@ -91,12 +97,18 @@ export function PayrollPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const net = (form.baseSalary || 0) + (form.allowance || 0) - (form.deduction || 0);
-    const monthStr = `${form.periodYear || new Date().getFullYear()}-${String(form.periodMonth || 1).padStart(2, '0')}`;
+    const pMonth = Number(form.periodMonth) || (new Date().getMonth() + 1);
+    const pYear = Number(form.periodYear) || new Date().getFullYear();
+    const monthStr = `${pYear}-${String(pMonth).padStart(2, '0')}`;
     
     const payload = {
       payrollCode: form.id ? undefined : `PR-${Date.now().toString().slice(-4)}`,
+      userId: form.userId ? Number(form.userId) : (users[0]?.id || 1),
       employeeName: form.userName || 'Nhân viên',
+      department: form.department || 'Nhân sự / Kinh doanh',
       payrollMonth: monthStr,
+      periodMonth: pMonth,
+      periodYear: pYear,
       baseSalary: form.baseSalary || 0,
       allowances: form.allowance || 0,
       kpiBonus: 0,
@@ -264,6 +276,32 @@ export function PayrollPage() {
               <input value={form.department || ''} onChange={e => setForm({ ...form, department: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500" />
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Kỳ lương (Tháng) *</label>
+              <select
+                value={form.periodMonth || (new Date().getMonth() + 1)}
+                onChange={e => setForm({ ...form, periodMonth: Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
+              >
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                  <option key={m} value={m}>Tháng {m}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Năm *</label>
+              <input
+                type="number"
+                value={form.periodYear || new Date().getFullYear()}
+                onChange={e => setForm({ ...form, periodYear: Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 font-mono"
+                required
+              />
+            </div>
+          </div>
+
           <div className="grid grid-cols-3 gap-4">
             <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lương cơ bản</label>
               <input type="number" value={form.baseSalary||0} onChange={e=>setForm({...form,baseSalary:+e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>

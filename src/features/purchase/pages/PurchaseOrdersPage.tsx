@@ -424,7 +424,7 @@ export function PurchaseOrdersPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Đơn đặt hàng mua (Purchase Orders)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Đơn đặt hàng mua</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Tạo đơn đặt hàng mua sỉ, theo dõi tiến độ giao hàng và ngân sách thu mua. Nhấp vào dòng để xem chi tiết.</p>
           </div>
           <div className="flex items-center gap-3">
@@ -1045,7 +1045,7 @@ export function PurchaseOrdersPage() {
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
                     <Building2 className="w-4 h-4 text-emerald-600 animate-pulse" />
-                    Chi tiết các sản phẩm đặt mua (PO Line Items)
+                    Chi tiết các sản phẩm đặt mua
                   </h3>
                   {editingPO.supplierName && (
                     <span className="text-[11px] text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800 font-medium">
