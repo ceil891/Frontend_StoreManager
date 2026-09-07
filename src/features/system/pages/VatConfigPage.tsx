@@ -290,7 +290,7 @@ export function VatConfigPage() {
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bảng cấu hình biểu thuế & Luật tài phán (VAT)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bảng cấu hình biểu thuế & Luật tài phán</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Cấu hình biểu thuế suất giá trị gia tăng đa vùng miền, tích hợp tài khoản kế toán ghi nợ GL và xuất bản biểu thuế nội bộ doanh nghiệp.</p>
           </div>
           <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-none shrink-0">

@@ -558,7 +558,7 @@ export function PurchaseReturnsUnifiedPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 dark:border-gray-800 pb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <RotateCcw className="w-6 h-6 text-emerald-600" /> Quản lý Trả hàng Nhà Cung Cấp (RTV)
+            <RotateCcw className="w-6 h-6 text-emerald-600" /> Quản lý Trả hàng Nhà Cung Cấp
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Quy trình xuất trả hàng lỗi, theo dõi đóng gói xuất kho (RTP) và cấn trừ công nợ bồi hoàn với Nhà cung cấp.

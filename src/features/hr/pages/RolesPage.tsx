@@ -269,7 +269,7 @@ export function RolesPage() {
         <span>&gt;</span>
         <span>Hệ thống</span>
         <span>&gt;</span>
-        <span>Quản lý Nhân sự (HRM)</span>
+        <span>Quản lý Nhân sự </span>
         <span>&gt;</span>
         <span className="text-gray-900 dark:text-white font-semibold">Phân quyền</span>
       </nav>
@@ -280,7 +280,7 @@ export function RolesPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
             <Shield className="w-8 h-8 text-primary" /> Quản lý Vai trò & Phân quyền
           </h1>
-          <p className="text-gray-500 mt-1">Cấu hình quyền truy cập và chức năng cho các nhóm người dùng trong hệ thống (Enterprise IAM).</p>
+          <p className="text-gray-500 mt-1">Cấu hình quyền truy cập và chức năng cho các nhóm người dùng trong hệ thống.</p>
         </div>
 
         <div className="flex items-center gap-3">

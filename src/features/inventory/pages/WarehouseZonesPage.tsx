@@ -356,7 +356,7 @@ export function WarehouseZonesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Danh sách phân khu kho (Zones)</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Danh sách phân khu kho</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Quản lý và quy hoạch các khu vực phân kho theo chi nhánh, điều kiện bảo quản nhiệt độ và sức chứa.
           </p>

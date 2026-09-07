@@ -46,7 +46,7 @@ export function PermissionsPage() {
     setModalMode('create');
     setEditingItem({
       permissionCode: '',
-      module: 'Bán hàng (POS)',
+      module: 'Bán hàng POS',
       description: '',
       status: 'KÍCH_HOẠT',
       tenantId: 'tenant-1',
@@ -304,7 +304,7 @@ export function PermissionsPage() {
               value={editingItem.module || ''}
               onChange={(e) => setEditingItem({ ...editingItem, module: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
-              placeholder="Ví dụ: Bán hàng (POS), Kho vận"
+              placeholder="Ví dụ: Bán hàng POS, Kho vận"
               required
             />
           </div>

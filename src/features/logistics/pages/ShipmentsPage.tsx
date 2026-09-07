@@ -1087,7 +1087,7 @@ export function ShipmentsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Package className="w-7 h-7 text-primary" /> Quản lý danh sách vận đơn (Shipments)
+            <Package className="w-7 h-7 text-primary" /> Quản lý danh sách vận đơn
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Quản lý vận đơn hàng hóa, mã tracking, thông tin người gửi/nhận, tiền thu hộ COD và cước phí.

@@ -324,7 +324,7 @@ export function ReceivablesPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Công nợ phải thu (khách hàng)</h1>
+          <h1 className="text-2xl font-bold">Công nợ phải thu</h1>
           <p className="text-sm text-gray-500">
             Theo dõi nợ mua hàng của khách đối tác, đối chiếu hạn mức nợ, cảnh báo nợ xấu và quá hạn thanh toán.
           </p>
@@ -337,7 +337,7 @@ export function ReceivablesPage() {
           <div>
             <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <Clock className="w-5 h-5 text-blue-600" />
-              Phân tích Tuổi nợ Khách hàng (Aging Bucket Analysis)
+              Phân tích Tuổi nợ Khách hàng
             </h3>
             <p className="text-xs text-gray-500 mt-0.5">
               Phân loại dư nợ theo chu kỳ quá hạn thực tế để kiểm soát rủi ro dòng tiền
@@ -444,9 +444,9 @@ export function ReceivablesPage() {
         <span className="text-gray-500 dark:text-gray-400 font-medium shrink-0">Lọc nhanh công nợ:</span>
         {[
           { id: 'all', label: 'Tất cả đối tác', count: presetCounts.all, color: 'text-gray-700 dark:text-gray-200' },
-          { id: 'has_debt', label: 'Có nợ hiện tại (> 0)', count: presetCounts.has_debt, color: 'text-blue-600 dark:text-blue-400' },
+          { id: 'has_debt', label: 'Có nợ hiện tại', count: presetCounts.has_debt, color: 'text-blue-600 dark:text-blue-400' },
           { id: 'over_limit', label: 'Vượt hạn mức nợ', count: presetCounts.over_limit, color: 'text-amber-600 dark:text-amber-400' },
-          { id: 'overdue_90d', label: 'Nợ quá hạn > 90 ngày (Nợ xấu)', count: presetCounts.overdue_90d, color: 'text-rose-600 dark:text-rose-400' },
+          { id: 'overdue_90d', label: 'Nợ quá hạn > 90 ngày', count: presetCounts.overdue_90d, color: 'text-rose-600 dark:text-rose-400' },
           { id: 'credit_blocked', label: 'Đang bị khóa nợ', count: presetCounts.credit_blocked, color: 'text-purple-600 dark:text-purple-400' },
         ].map((tab) => {
           const active = filterPreset === tab.id;

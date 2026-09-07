@@ -15,6 +15,10 @@ const tabs = [
   { id: 'stock-outs', label: 'Xuất kho', icon: ArrowUpRight, permission: 'inventory:stock-out:view' },
   { id: 'transfers', label: 'Chuyển kho', icon: ArrowRightLeft, permission: 'inventory:transfer:view' },
   { id: 'transfer-requests', label: 'Yêu cầu chuyển kho', icon: FileQuestion, permission: 'inventory:transfer-request:view' },
+  { id: 'adjustments', label: 'Cân chỉnh kho', icon: Sliders, permission: 'inventory:adjustment:view' },
+  { id: 'checks', label: 'Kiểm kê kho', icon: CheckSquare, permission: 'inventory:check:view' },
+  { id: 'returns', label: 'Trả hàng NCC', icon: CornerUpLeft, permission: 'inventory:supplier-return:view' },
+  { id: 'cancel', label: 'Xuất hủy', icon: Trash2, permission: 'inventory:cancel:view' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];
@@ -38,7 +42,7 @@ export function InventoryOperationsTabbedPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Thao tác & nghiệp vụ kho</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Quản lý các nghiệp vụ nhập kho, xuất kho, điều chuyển kho và phê duyệt yêu cầu chuyển kho
+            Quản lý các nghiệp vụ nhập kho, xuất kho, điều chuyển, cân chỉnh, kiểm kê và xử lý hàng hóa
           </p>
         </div>
       </div>
@@ -83,6 +87,26 @@ export function InventoryOperationsTabbedPage() {
         {activeTab === 'transfer-requests' && (
           <RoleGuard requiredPermission="inventory:transfer-request:view">
             <StockTransferRequestsPage />
+          </RoleGuard>
+        )}
+        {activeTab === 'adjustments' && (
+          <RoleGuard requiredPermission="inventory:adjustment:view">
+            <InventoryAdjustmentsPage />
+          </RoleGuard>
+        )}
+        {activeTab === 'checks' && (
+          <RoleGuard requiredPermission="inventory:check:view">
+            <InventoryCheckPage />
+          </RoleGuard>
+        )}
+        {activeTab === 'returns' && (
+          <RoleGuard requiredPermission="inventory:supplier-return:view">
+            <ReturnToSupplierPage />
+          </RoleGuard>
+        )}
+        {activeTab === 'cancel' && (
+          <RoleGuard requiredPermission="inventory:cancel:view">
+            <CancelIssuePage />
           </RoleGuard>
         )}
       </div>

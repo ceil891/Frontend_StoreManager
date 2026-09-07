@@ -13,6 +13,8 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
 
+import { faceApiService } from '../services/faceApiService';
+
 const statusBadgeStyles = {
   ACTIVE: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200',
   SUSPENDED: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-red-200 animate-pulse',
@@ -43,14 +45,27 @@ export function UsersPage() {
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [faceScanUser, setFaceScanUser] = useState<SystemUserRecord | null>(null);
   const [scanStep, setScanStep] = useState<number>(0);
+  const [faceAiStatus, setFaceAiStatus] = useState<string>('');
+  const [isFaceDetected, setIsFaceDetected] = useState<boolean>(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const scanIntervalRef = useRef<any>(null);
 
   const stopCameraStream = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
+  };
+
+  const stopCameraAndAi = () => {
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
+    stopCameraStream();
+    setIsFaceDetected(false);
+    setFaceAiStatus('');
   };
 
   // Quick Role & Branch Change Modal State
@@ -147,9 +162,85 @@ export function UsersPage() {
     }
   };
 
+  const handleStartFaceScan = async () => {
+    if (!faceScanUser) return;
+    setScanStep(1);
+    setFaceAiStatus('Đang khởi động Camera & nạp mô hình AI...');
+    setIsFaceDetected(false);
 
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } }
+        });
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.warn('Camera stream fallback:', e);
+      setFaceAiStatus('Không thể truy cập Camera. Vui lòng cấp quyền!');
+      return;
+    }
 
+    try {
+      setFaceAiStatus('Đang tải mô hình nhận diện khuôn mặt...');
+      await faceApiService.loadModels();
+      setFaceAiStatus('Vui lòng nhìn thẳng vào khung hình camera...');
+    } catch (e) {
+      setFaceAiStatus('Lỗi tải mô hình AI. Vui lòng kiểm tra kết nối mạng!');
+      return;
+    }
 
+    let stableCount = 0;
+    scanIntervalRef.current = setInterval(async () => {
+      if (!videoRef.current || videoRef.current.paused || videoRef.current.ended) return;
+
+      try {
+        const detection = await faceApiService.detectFaceAndDescriptor(videoRef.current);
+        if (!detection) {
+          setFaceAiStatus('Chưa phát hiện khuôn mặt. Vui lòng nhìn thẳng vào camera...');
+          setIsFaceDetected(false);
+          stableCount = 0;
+          return;
+        }
+
+        setIsFaceDetected(true);
+        stableCount++;
+
+        if (stableCount < 2) {
+          setFaceAiStatus('Đã phát hiện khuôn mặt! Giữ nguyên tư thế...');
+          return;
+        }
+
+        setFaceAiStatus('Trích xuất vector sinh trắc học thành công!');
+        if (scanIntervalRef.current) {
+          clearInterval(scanIntervalRef.current);
+          scanIntervalRef.current = null;
+        }
+
+        faceApiService.saveFaceDescriptor(String(faceScanUser.id), faceScanUser.fullName, detection.descriptor);
+
+        setTimeout(() => {
+          stopCameraAndAi();
+          setScanStep(2);
+          const updated = {
+            ...faceScanUser,
+            faceEnrolled: true,
+          };
+          updateUser(updated);
+          if (selectedUser?.id === faceScanUser.id) {
+            setSelectedUser(updated);
+          }
+          toast.success(`Đăng ký khuôn mặt AI cho ${faceScanUser.fullName} thành công!`);
+        }, 600);
+      } catch (err) {
+        console.error('Lỗi khi quét khuôn mặt:', err);
+      }
+    }, 400);
+  };
 
   // Filter states
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -1250,20 +1341,20 @@ export function UsersPage() {
         </div>
       </Modal>
 
-      {/* Modal: Quét & Đăng ký khuôn mặt */}
+      {/* Modal: Quét & Đăng ký khuôn mặt AI */}
       <Modal
         isOpen={!!faceScanUser}
         onClose={() => {
-          stopCameraStream();
+          stopCameraAndAi();
           setFaceScanUser(null);
         }}
-        title={faceScanUser?.faceEnrolled ? 'Cập nhật nhận diện khuôn mặt sinh trắc học' : 'Đăng ký nhận diện khuôn mặt sinh trắc học'}
-        width="max-w-md"
+        title={faceScanUser?.faceEnrolled ? 'Cập nhật nhận diện khuôn mặt sinh trắc học AI' : 'Đăng ký nhận diện khuôn mặt sinh trắc học AI'}
+        width="max-w-xl"
       >
         {faceScanUser && (
           <div className="space-y-6">
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Thiết lập dữ liệu sinh trắc học khuôn mặt cho nhân viên <strong>{faceScanUser.fullName}</strong>. Dữ liệu này dùng để xác thực điểm danh ca làm việc và ký duyệt quầy quỹ.
+              Thiết lập dữ liệu sinh trắc học khuôn mặt AI cho nhân viên <strong>{faceScanUser.fullName}</strong>. Hệ thống sẽ trích xuất vector đặc trưng 128 chiều để tự động điểm danh ca làm việc.
             </p>
 
             {scanStep === 0 && (
@@ -1272,85 +1363,72 @@ export function UsersPage() {
                   <Scan className="w-8 h-8" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-gray-900 dark:text-white">Yêu cầu truy cập Camera</h4>
+                  <h4 className="font-bold text-gray-900 dark:text-white">Yêu cầu truy cập Camera & AI</h4>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-[280px]">
-                    Hệ thống sẽ kết nối với camera thiết bị để bắt đầu quy trình quét nhận diện 3D.
+                    Hệ thống sẽ kết nối với camera thiết bị và nạp mô hình AI để quét trích xuất vector khuôn mặt.
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={async () => {
-                    setScanStep(1);
-                    try {
-                      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                        const stream = await navigator.mediaDevices.getUserMedia({
-                          video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 480 } }
-                        });
-                        streamRef.current = stream;
-                        if (videoRef.current) {
-                          videoRef.current.srcObject = stream;
-                          videoRef.current.play().catch(() => {});
-                        }
-                      }
-                    } catch (e) {
-                      console.warn('Camera stream fallback:', e);
-                    }
-
-                    setTimeout(() => {
-                      stopCameraStream();
-                      setScanStep(2);
-                      const updated = {
-                        ...faceScanUser,
-                        faceEnrolled: true,
-                      };
-                      updateUser(updated);
-                      if (selectedUser?.id === faceScanUser.id) {
-                        setSelectedUser(updated);
-                      }
-                      toast.success(`Đăng ký khuôn mặt cho ${faceScanUser.fullName} thành công!`);
-                    }, 3500);
-                  }}
+                  onClick={handleStartFaceScan}
                   className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-white text-sm font-semibold rounded-xl shadow-sm transition-all flex items-center gap-2"
                 >
-                  <Scan className="w-4 h-4" /> Cho phép & Bắt đầu quét
+                  <Scan className="w-4 h-4" /> Cho phép & Bắt đầu quét AI
                 </button>
               </div>
             )}
 
             {scanStep === 1 && (
-              <div className="relative aspect-square max-w-[260px] mx-auto rounded-full overflow-hidden bg-black border-4 border-primary shadow-xl flex items-center justify-center">
-                {/* Live video feed */}
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="absolute inset-0 w-full h-full object-cover"
-                />
-                <div
-                  className="absolute inset-0 bg-cover bg-center filter grayscale contrast-125 opacity-40 -z-10"
-                  style={{ backgroundImage: `url(${faceScanUser.avatarUrl})` }}
-                />
-                
-                {/* Hiệu ứng quét nhận diện */}
-                <div className="absolute inset-0 bg-gradient-to-b from-primary/0 via-primary/20 to-primary/0 animate-bounce pointer-events-none" />
-                <div className="absolute inset-3 rounded-full border-2 border-dashed border-primary/40 animate-spin pointer-events-none" />
-                
-                {/* Khung ngắm diện tích mặt 3D */}
-                <div className="absolute w-44 h-44 rounded-full border border-primary/80 flex items-center justify-center pointer-events-none">
-                  <div className="w-4 h-4 border-t-2 border-l-2 border-primary absolute top-0 left-0" />
-                  <div className="w-4 h-4 border-t-2 border-r-2 border-primary absolute top-0 right-0" />
-                  <div className="w-4 h-4 border-b-2 border-l-2 border-primary absolute bottom-0 left-0" />
-                  <div className="w-4 h-4 border-b-2 border-r-2 border-primary absolute bottom-0 right-0" />
+              <div className="py-2">
+                <div className={`relative aspect-square w-full max-w-[360px] sm:max-w-[420px] mx-auto rounded-full overflow-hidden bg-black border-4 shadow-2xl flex items-center justify-center transition-colors duration-300 ${isFaceDetected ? 'border-emerald-500 ring-4 ring-emerald-500/30' : 'border-amber-400'}`}>
+                  {/* Live video feed */}
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
                   
-                  <span className="text-[10px] text-primary font-mono tracking-widest uppercase bg-black/60 px-2 py-0.5 rounded border border-primary/40 animate-pulse">
-                    Scanning 3D Face...
-                  </span>
+                  {/* Hiệu ứng quét nhận diện */}
+                  <div className="absolute inset-0 bg-gradient-to-b from-primary/0 via-primary/20 to-primary/0 animate-bounce pointer-events-none" />
+                  <div className="absolute inset-3 rounded-full border-2 border-dashed border-primary/40 animate-spin pointer-events-none" />
+                  
+                  {/* Khung ngắm diện tích mặt 3D */}
+                  <div className="absolute w-60 h-60 sm:w-72 sm:h-72 rounded-full border border-primary/80 flex items-center justify-center pointer-events-none">
+                    <div className="w-8 h-8 border-t-2 border-l-2 border-primary absolute top-0 left-0" />
+                    <div className="w-8 h-8 border-t-2 border-r-2 border-primary absolute top-0 right-0" />
+                    <div className="w-8 h-8 border-b-2 border-l-2 border-primary absolute bottom-0 left-0" />
+                    <div className="w-8 h-8 border-b-2 border-r-2 border-primary absolute bottom-0 right-0" />
+                    
+                    <span className="text-xs text-white font-mono tracking-widest uppercase bg-black/60 px-3 py-1 rounded border border-primary/40 animate-pulse">
+                      {isFaceDetected ? 'Face Locked' : 'Searching Face...'}
+                    </span>
+                  </div>
+
+                  <div className="absolute bottom-5 left-1/2 -translate-x-1/2 bg-black/75 px-4 py-1.5 rounded-full text-xs text-white font-mono flex items-center gap-2 shadow-lg">
+                    <div className={`w-2.5 h-2.5 rounded-full ${isFaceDetected ? 'bg-emerald-500 animate-ping' : 'bg-amber-400 animate-pulse'}`} />
+                    <span>{isFaceDetected ? 'AI: DETECTED' : 'AI: SCANNING'}</span>
+                  </div>
                 </div>
 
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 px-3 py-1 rounded-full text-[11px] text-white font-mono flex items-center gap-1.5 shadow-md">
-                  <div className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
-                  <span>REC: BIOMETRIC_CAM</span>
+                <div className="mt-5 text-center">
+                  <p className={`text-sm sm:text-base transition-colors ${isFaceDetected ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-gray-600 dark:text-gray-300 font-medium'}`}>
+                    {faceAiStatus || 'Vui lòng nhìn thẳng vào camera...'}
+                  </p>
+                </div>
+
+                <div className="flex justify-center mt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      stopCameraAndAi();
+                      setScanStep(0);
+                    }}
+                    className="px-4 py-1.5 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-medium"
+                  >
+                    Hủy bỏ & Thử lại
+                  </button>
                 </div>
               </div>
             )}
@@ -1361,15 +1439,15 @@ export function UsersPage() {
                   <ShieldCheck className="w-8 h-8" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-emerald-800 dark:text-emerald-400">Đăng ký hoàn tất!</h4>
+                  <h4 className="font-bold text-emerald-800 dark:text-emerald-400">Đăng ký khuôn mặt AI thành công!</h4>
                   <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-1 max-w-[280px]">
-                    Dữ liệu sinh trắc học khuôn mặt của nhân viên đã được mã hóa và lưu vào hệ thống bảo mật.
+                    Vector sinh trắc học 128 chiều của nhân viên đã được trích xuất và kích hoạt cho máy chấm công.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
-                    stopCameraStream();
+                    stopCameraAndAi();
                     setFaceScanUser(null);
                   }}
                   className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-all"

@@ -11,15 +11,15 @@ export function LocationsPage() {
   const tabs = [
     { id: 'storage-areas', label: 'Khu vực lưu trữ', icon: MapPin },
     { id: 'warehouse-areas', label: 'Vị trí kho', icon: Store },
-    { id: 'zones', label: 'Phân khu (Zone)', icon: Grid },
-    { id: 'bins', label: 'Ô kệ (Bin)', icon: Layers },
+    { id: 'zones', label: 'Phân khu', icon: Grid },
+    { id: 'bins', label: 'Ô kệ', icon: Layers },
   ] as const;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sơ đồ Kho & Vị trí (WMS)</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sơ đồ kho & vị trí</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Quản lý khu vực, vị trí, phân khu và ô kệ lưu trữ trong hệ thống kho hàng
           </p>

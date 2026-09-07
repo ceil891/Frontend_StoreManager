@@ -1,24 +1,22 @@
 import { useSearchParams } from 'react-router';
-import { ReceiptVouchersPage } from './ReceiptVouchersPage';
-import { PaymentVouchersPage } from './PaymentVouchersPage';
-import { OperatingCostsPage } from './OperatingCostsPage';
-import CostCentersPage from './CostCentersPage';
+import { Share2, Link2, Terminal } from 'lucide-react';
 import { RoleGuard } from '@/routes/RoleGuard';
-import { ArrowDownLeft, ArrowUpRight, DollarSign, PieChart } from 'lucide-react';
+import { SalesChannelsPage } from './SalesChannelsPage';
+import { ChannelProductMappingPage } from './ChannelProductMappingPage';
+import { WebhookLogsPage } from './WebhookLogsPage';
 
 const tabs = [
-  { id: 'receipts', label: 'Phiếu thu tiền', icon: ArrowDownLeft, permission: 'finance:receipt:view' },
-  { id: 'payments', label: 'Phiếu chi tiền', icon: ArrowUpRight, permission: 'finance:payment:view' },
-  { id: 'costs', label: 'Chi phí vận hành', icon: DollarSign, permission: 'finance:cost:view' },
-  { id: 'cost-centers', label: 'Trung tâm chi phí', icon: PieChart, permission: 'finance:cost-center:view' },
+  { id: 'channels', label: 'Kênh bán hàng', icon: Share2, permission: 'omnichannel:channel:view' },
+  { id: 'mapping', label: 'Liên kết SKU & Sản phẩm', icon: Link2, permission: 'omnichannel:mapping:view' },
+  { id: 'webhooks', label: 'Nhật ký Webhook', icon: Terminal, permission: 'omnichannel:webhook:view' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];
 
-export function VouchersTabbedPage() {
+export function OmnichannelTabbedPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTabParam = searchParams.get('tab') as TabId | null;
-  const activeTab = tabs.some(t => t.id === activeTabParam) ? (activeTabParam as TabId) : 'receipts';
+  const activeTab = tabs.some(t => t.id === activeTabParam) ? (activeTabParam as TabId) : 'channels';
 
   const handleTabChange = (tabId: TabId) => {
     setSearchParams((prev) => {
@@ -32,9 +30,9 @@ export function VouchersTabbedPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Thu / Chi & Chi phí</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bán hàng Đa kênh</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Theo dõi tất cả giao dịch phiếu thu, phiếu chi, chi phí vận hành và trung tâm chi phí trong toàn hệ thống
+            Quản lý kết nối các sàn thương mại điện tử (Shopee, TikTok Shop, Lazada), đồng bộ kho và nhật ký webhook
           </p>
         </div>
       </div>
@@ -61,24 +59,19 @@ export function VouchersTabbedPage() {
       </div>
 
       <div>
-        {activeTab === 'receipts' && (
-          <RoleGuard requiredPermission="finance:receipt:view">
-            <ReceiptVouchersPage />
+        {activeTab === 'channels' && (
+          <RoleGuard requiredPermission="omnichannel:channel:view">
+            <SalesChannelsPage />
           </RoleGuard>
         )}
-        {activeTab === 'payments' && (
-          <RoleGuard requiredPermission="finance:payment:view">
-            <PaymentVouchersPage />
+        {activeTab === 'mapping' && (
+          <RoleGuard requiredPermission="omnichannel:mapping:view">
+            <ChannelProductMappingPage />
           </RoleGuard>
         )}
-        {activeTab === 'costs' && (
-          <RoleGuard requiredPermission="finance:cost:view">
-            <OperatingCostsPage />
-          </RoleGuard>
-        )}
-        {activeTab === 'cost-centers' && (
-          <RoleGuard requiredPermission="finance:cost-center:view">
-            <CostCentersPage />
+        {activeTab === 'webhooks' && (
+          <RoleGuard requiredPermission="omnichannel:webhook:view">
+            <WebhookLogsPage />
           </RoleGuard>
         )}
       </div>
@@ -86,4 +79,4 @@ export function VouchersTabbedPage() {
   );
 }
 
-export default VouchersTabbedPage;
+export default OmnichannelTabbedPage;

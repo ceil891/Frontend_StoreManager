@@ -10,6 +10,8 @@ import { useCrmStore } from '@/features/crm/store/crmStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
 import { exportToCsv } from '@/shared/utils/exportCsv';
 import { toast } from 'sonner';
+import { reportsApi } from '../api/reportsApi';
+import type { CrmReportData } from '../types/reports';
 
 const TIER_COLORS: Record<string, string> = {
   DIAMOND: '#818CF8',
@@ -42,6 +44,8 @@ interface TopCustomer {
 export function CrmReportPage() {
   const [period, setPeriod] = useState('6m');
   const [selectedBranch, setSelectedBranch] = useState('all');
+  const [apiCrm, setApiCrm] = useState<CrmReportData | null>(null);
+
   const customers = useCrmStore((s) => s.customers);
   const fetchCustomers = useCrmStore((s) => s.fetchCustomers);
   const branches = useBranchStore((s) => s.branches);
@@ -50,6 +54,12 @@ export function CrmReportPage() {
   useEffect(() => {
     fetchCustomers();
     fetchBranches();
+
+    reportsApi.getCrmReport()
+      .then((data) => {
+        if (data) setApiCrm(data);
+      })
+      .catch((err) => console.warn('CRM report API fallback:', err));
   }, [fetchCustomers, fetchBranches]);
 
   // Filter customers by branch / channel
@@ -69,6 +79,17 @@ export function CrmReportPage() {
 
   // Real Tier Breakdown
   const customerTiers = useMemo(() => {
+    if (apiCrm?.tierDistribution && apiCrm.tierDistribution.length > 0) {
+      return apiCrm.tierDistribution.map(t => {
+        const rank = t.tier.toUpperCase();
+        return {
+          name: TIER_NAMES[rank] || rank,
+          value: Number(t.count),
+          color: TIER_COLORS[rank] || '#6366F1',
+        };
+      });
+    }
+
     const counts = new Map<string, number>();
     filteredCustomers.forEach((c) => {
       const rank = getTierCode(c);
@@ -88,10 +109,22 @@ export function CrmReportPage() {
       value: count,
       color: TIER_COLORS[rank] || '#6366F1',
     }));
-  }, [filteredCustomers]);
+  }, [apiCrm, filteredCustomers]);
 
   // Real Top Customers by Total Spent or Points
   const topCustomers = useMemo<TopCustomer[]>(() => {
+    if (apiCrm?.topCustomers && apiCrm.topCustomers.length > 0) {
+      return apiCrm.topCustomers.map(c => ({
+        id: c.id,
+        name: c.name,
+        phone: c.phone || 'Chưa cập nhật',
+        tier: TIER_NAMES[c.tier.toUpperCase()] || c.tier,
+        totalSpent: Number(c.totalSpent),
+        points: Number(c.points),
+        lastVisit: c.lastVisit || 'Gần đây',
+      }));
+    }
+
     return [...filteredCustomers]
       .sort((a, b) => getSpentAmount(b) - getSpentAmount(a))
       .map((c) => {
@@ -106,11 +139,11 @@ export function CrmReportPage() {
           lastVisit: getLastVisitDate(c),
         };
       });
-  }, [filteredCustomers]);
+  }, [apiCrm, filteredCustomers]);
 
   // Growth Trend (real or scaled)
   const growthData = useMemo(() => {
-    const total = filteredCustomers.length;
+    const total = apiCrm?.totalCustomers !== undefined ? Number(apiCrm.totalCustomers) : filteredCustomers.length;
     return [
       { month: 'T1', newCustomer: Math.max(1, Math.round(total * 0.2)), returningCustomer: Math.max(1, Math.round(total * 0.4)) },
       { month: 'T2', newCustomer: Math.max(1, Math.round(total * 0.3)), returningCustomer: Math.max(1, Math.round(total * 0.5)) },
@@ -120,16 +153,16 @@ export function CrmReportPage() {
       { month: 'T6', newCustomer: Math.max(3, Math.round(total * 0.8)), returningCustomer: Math.max(4, Math.round(total * 0.9)) },
       { month: 'T7', newCustomer: total, returningCustomer: total },
     ];
-  }, [filteredCustomers]);
+  }, [apiCrm, filteredCustomers]);
 
   // Real KPIs
   const kpis = useMemo(() => {
-    const totalCust = filteredCustomers.length;
-    const loyalCount = filteredCustomers.filter((c) => {
+    const totalCust = apiCrm?.totalCustomers !== undefined ? Number(apiCrm.totalCustomers) : filteredCustomers.length;
+    const loyalCount = apiCrm?.activeLoyalCustomers !== undefined ? Number(apiCrm.activeLoyalCustomers) : filteredCustomers.filter((c) => {
       const r = getTierCode(c);
       return r !== 'BRONZE' && r !== 'REGULAR';
     }).length;
-    const totalSpendAll = filteredCustomers.reduce((sum, c) => sum + getSpentAmount(c), 0);
+    const totalSpendAll = apiCrm?.totalSpend !== undefined ? Number(apiCrm.totalSpend) : filteredCustomers.reduce((sum, c) => sum + getSpentAmount(c), 0);
 
     return [
       {
@@ -157,7 +190,7 @@ export function CrmReportPage() {
         color: 'text-rose-600 bg-rose-50 border-rose-100 dark:text-rose-400 dark:bg-rose-900/30 dark:border-rose-900/50',
       },
     ];
-  }, [filteredCustomers]);
+  }, [apiCrm, filteredCustomers]);
 
   const columns = useMemo<ColumnDef<TopCustomer>[]>(
     () => [

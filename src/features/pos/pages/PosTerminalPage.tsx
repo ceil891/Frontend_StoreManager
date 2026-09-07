@@ -28,6 +28,9 @@ import { toast } from 'sonner';
 
 import { crmService } from '@/features/crm/services/crmService';
 import type { CustomerVoucherRecord, VoucherRecord } from '@/features/crm/store/crmStore';
+import { QrPaymentModal } from '../components/QrPaymentModal';
+import { playPaymentSuccessSound } from '@/shared/utils/soundEffects';
+import { useFinanceStore } from '@/features/finance/store/financeStore';
 
 // ─── POS Vouchers ─────────────────────────────────────────────
 
@@ -51,7 +54,7 @@ function iconForProvider(t?: string): LucideIcon {
       return CreditCard;
     case 'BANK_TRANSFER_QR':
     case 'BANK_TRANSFER':
-      return Landmark;
+      return QrCode;
     case 'QR_EWALLET':
     case 'E_WALLET':
       return Smartphone;
@@ -65,8 +68,8 @@ function iconForProvider(t?: string): LucideIcon {
 const FALLBACK_PAYMENTS: DisplayPayment[] = [
   { id: 'fb-cash', label: 'Tiền mặt', icon: Banknote, isCash: true },
   { id: 'fb-card', label: 'Thẻ tín dụng/ghi nợ', icon: CreditCard, isCash: false },
-  { id: 'fb-transfer', label: 'Chuyển khoản', icon: Landmark, isCash: false },
-  { id: 'fb-ewallet', label: 'Ví điện tử (Momo/ZaloPay)', icon: Smartphone, isCash: false },
+  { id: 'fb-transfer', label: 'Chuyển khoản VietQR', icon: QrCode, isCash: false },
+  { id: 'fb-ewallet', label: 'Ví điện tử MoMo', icon: Smartphone, isCash: false },
 ];
 
 const fmt = (n: number) => n.toLocaleString('vi-VN') + 'đ';
@@ -606,12 +609,20 @@ export function PosTerminalPage() {
       return FALLBACK_PAYMENTS;
     }
 
-    return active.map((m) => ({
-      id: String(m.id),
-      label: m.methodName,
-      icon: iconForProvider(m.providerType),
-      isCash: m.providerType === 'CASH_DRAWER' || (m.providerType as any) === 'CASH',
-    }));
+    return active.map((m) => {
+      const label = m.methodName
+        .replace(/\(VietQR\)/i, 'VietQR')
+        .replace(/\(COD\)/i, '')
+        .replace(/\(POS\)/i, '')
+        .replace(/\(khách hàng\)/i, '')
+        .trim();
+      return {
+        id: String(m.id),
+        label,
+        icon: iconForProvider(m.providerType),
+        isCash: m.providerType === 'CASH_DRAWER' || (m.providerType as any) === 'CASH',
+      };
+    });
   }, [paymentMethodsFromConfig, activeBranchId]);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -751,8 +762,15 @@ export function PosTerminalPage() {
 
   // Payment modal
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [paymentState, setPaymentState] = useState<'idle' | 'processing' | 'success'>('idle');
   const [currentOrderCode, setCurrentOrderCode] = useState('');
+
+  const corporateBankAccounts = useFinanceStore((s) => s.bankAccounts);
+  const fetchBankAccounts = useFinanceStore((s) => s.fetchBankAccounts);
+  useEffect(() => {
+    fetchBankAccounts();
+  }, [fetchBankAccounts]);
 
   // Print Invoice Modal
   const [isPrintInvoiceOpen, setIsPrintInvoiceOpen] = useState(false);
@@ -820,6 +838,40 @@ export function PosTerminalPage() {
 
   const selectedPayment = displayPayments.find((d) => String(d?.id) === String(selectedPaymentId)) ?? displayPayments[0];
   const isCashPayment = selectedPayment?.isCash ?? true;
+
+  const isQrPayment = useMemo(() => {
+    if (!selectedPayment) return false;
+    if (selectedPayment.isCash) return false;
+    const pId = String(selectedPayment.id || '').toLowerCase();
+    const pLabel = String(selectedPayment.label || '').toLowerCase();
+    const provType = String(selectedPaymentConfig?.providerType || '').toUpperCase();
+    const mCode = String(selectedPaymentConfig?.methodCode || '').toUpperCase();
+    const mName = String(selectedPaymentConfig?.methodName || '').toLowerCase();
+
+    return (
+      pId.includes('qr') ||
+      pId.includes('transfer') ||
+      pId.includes('ewallet') ||
+      pLabel.includes('qr') ||
+      pLabel.includes('vietqr') ||
+      pLabel.includes('chuyển khoản') ||
+      pLabel.includes('momo') ||
+      pLabel.includes('vnpay') ||
+      pLabel.includes('zalopay') ||
+      provType === 'BANK_TRANSFER_QR' ||
+      provType === 'BANK_TRANSFER' ||
+      provType === 'QR_EWALLET' ||
+      provType === 'E_WALLET' ||
+      mCode.includes('QR') ||
+      mCode.includes('MOMO') ||
+      mCode.includes('VNPAY') ||
+      mCode.includes('ZALO') ||
+      mName.includes('qr') ||
+      mName.includes('chuyển khoản') ||
+      mName.includes('momo') ||
+      mName.includes('vnpay')
+    );
+  }, [selectedPayment, selectedPaymentConfig]);
 
   const stockById = useMemo(() => {
     const map = new Map<string, number>();
@@ -1007,8 +1059,12 @@ export function PosTerminalPage() {
     const now = new Date();
     const code = currentOrderCode || `ORD-POS-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`;
     setCurrentOrderCode(code);
-    setIsPaymentOpen(true);
-  }, [validateCartStock, currentOrderCode]);
+    if (isQrPayment) {
+      setIsQrModalOpen(true);
+    } else {
+      setIsPaymentOpen(true);
+    }
+  }, [validateCartStock, currentOrderCode, isQrPayment]);
 
   // ── Filtered products ───────────────────────────────────────────────────────
   const debouncedSearchQuery = useDebounce(searchQuery, 200);
@@ -1451,6 +1507,7 @@ export function PosTerminalPage() {
 
           setCompletedPrintInvoice(printInvoicePayload);
           setPaymentState('idle');
+          playPaymentSuccessSound();
           toast.success(`Thanh toán thành công đơn hàng ${code}!`);
           setUsedPoints(0);
           useCrmStore.getState().fetchCustomers().catch(() => {});
@@ -1461,6 +1518,7 @@ export function PosTerminalPage() {
           }
           setVoucherError('');
           setIsPaymentOpen(false);
+          setIsQrModalOpen(false);
           setCurrentOrderCode('');
           if (withPrint) {
             setIsPrintInvoiceOpen(true);
@@ -1580,9 +1638,12 @@ export function PosTerminalPage() {
         handleOpenPayment();
       } else if (e.key === 'F9') {
         e.preventDefault();
-        if (isPaymentOpen && paymentState === 'idle') {
+        if (isQrModalOpen) {
+          setIsQrModalOpen(false);
+          handleConfirmPayment(true, true);
+        } else if (isPaymentOpen && paymentState === 'idle') {
           handleConfirmPayment(false, true);
-        } else if (!isPaymentOpen) {
+        } else if (!isPaymentOpen && !isQrModalOpen) {
           if (isCashPayment) {
             handleDirectCashCheckout(true);
           } else {
@@ -1590,7 +1651,9 @@ export function PosTerminalPage() {
           }
         }
       } else if (e.key === 'Escape') {
-        if (isShortcutsGuideOpen) {
+        if (isQrModalOpen) {
+          setIsQrModalOpen(false);
+        } else if (isShortcutsGuideOpen) {
           setIsShortcutsGuideOpen(false);
         } else if (isDiscountModalOpen) {
           setIsDiscountModalOpen(false);
@@ -1608,10 +1671,10 @@ export function PosTerminalPage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
-    items.length, isPaymentOpen, paymentState, isShortcutsGuideOpen,
+    items.length, isPaymentOpen, isQrModalOpen, isQrPayment, paymentState, isShortcutsGuideOpen,
     isQuickCustomerOpen, isDiscountModalOpen, isOrderNoteModalOpen,
     isCashPayment, cashGiven, cashGivenNum, totalAmountToPay, orderDiscountType,
-    orderDiscountValue, orderNote
+    orderDiscountValue, orderNote, handleOpenPayment
   ]);
 
 
@@ -2370,7 +2433,6 @@ export function PosTerminalPage() {
           </div>
           <div className="grid grid-cols-2 gap-1.5">
             {displayPayments.map((m) => {
-              const Icon = m.icon;
               const isDebtMethod = m.id.toLowerCase().includes('debt') || m.id.toLowerCase().includes('no') || m.label.toLowerCase().includes('nợ') || m.label.toLowerCase().includes('công nợ');
               const isBlocked = !!(activeCustomer && isCustomerCreditBlocked(activeCustomer.id) && isDebtMethod);
               const isSelected = selectedPaymentId === m.id;
@@ -2387,7 +2449,7 @@ export function PosTerminalPage() {
                     }
                     setSelectedPaymentId(m.id);
                   }}
-                  className={`flex items-center gap-2 py-2 px-2 rounded-xl border text-left transition-all cursor-pointer min-h-[46px] ${
+                  className={`flex items-center justify-center py-2 px-2.5 rounded-xl border text-center transition-all cursor-pointer min-h-[44px] ${
                     isBlocked
                       ? 'opacity-40 bg-gray-100 dark:bg-gray-800 border-gray-200 text-gray-400 cursor-not-allowed'
                       : isSelected
@@ -2396,8 +2458,7 @@ export function PosTerminalPage() {
                   }`}
                   title={isBlocked ? 'Khách hàng bị khóa nợ' : m.label}
                 >
-                  <Icon className={`w-4 h-4 shrink-0 ${isSelected ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500'}`} />
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0">
                     <span className="text-[11px] leading-tight font-semibold line-clamp-2 break-words whitespace-normal block">
                       {m.label}
                     </span>
@@ -2417,7 +2478,6 @@ export function PosTerminalPage() {
             {/* Input tiền khách đưa */}
             <div className="flex items-center gap-1.5">
               <div className="relative flex-1">
-                <Calculator className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
                   type="text"
                   inputMode="numeric"
@@ -2428,7 +2488,7 @@ export function PosTerminalPage() {
                     const digits = e.target.value.replace(/\D/g, '');
                     setCashGiven(digits === '' ? '' : parseInt(digits, 10).toLocaleString('vi-VN'));
                   }}
-                  className="w-full pl-8 pr-2.5 py-1.5 border border-emerald-300 dark:border-emerald-800 rounded-lg text-xs font-mono font-bold bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-850 disabled:cursor-not-allowed"
+                  className="w-full px-3 py-1.5 border border-emerald-300 dark:border-emerald-800 rounded-lg text-xs font-mono font-bold bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-850 disabled:cursor-not-allowed"
                 />
               </div>
               <button
@@ -2438,7 +2498,7 @@ export function PosTerminalPage() {
                 className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
                 title="Khách đưa vừa đúng số tiền đơn hàng"
               >
-                ✓ Đủ tiền
+                Đủ tiền
               </button>
               {cashGivenNum > 0 && (
                 <button
@@ -2447,7 +2507,7 @@ export function PosTerminalPage() {
                   className="px-2 py-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950/50 dark:hover:text-red-400 text-gray-600 dark:text-gray-300 rounded-lg text-xs font-bold transition-colors shrink-0 cursor-pointer"
                   title="Xóa số tiền đã nhập"
                 >
-                  ✕ Xóa
+                  Xóa
                 </button>
               )}
             </div>
@@ -2526,22 +2586,56 @@ export function PosTerminalPage() {
               </div>
             )}
           </div>
-        ) : selectedPayment?.id.toLowerCase().includes('qr') || (selectedPaymentConfig?.providerType as string) === 'BANK_TRANSFER' ? (
-          <div className="p-2.5 bg-blue-50/60 dark:bg-blue-950/20 border-b border-blue-100 dark:border-blue-900/40 shrink-0 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <QrCode className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+        ) : isQrPayment ? (
+          <div className="p-2.5 bg-gradient-to-br from-blue-50/80 via-emerald-50/30 to-teal-50/80 dark:from-blue-950/40 dark:via-emerald-950/20 dark:to-teal-950/30 border-b border-blue-200 dark:border-blue-900/50 shrink-0 space-y-2">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold text-gray-900 dark:text-white">Chuyển khoản VietQR</p>
-                <p className="text-[10px] text-gray-500">Mã QR động tự động điền số tiền</p>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-gray-900 dark:text-white">
+                    {selectedPayment?.label || 'Chuyển khoản VietQR'}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
+                    Napas 247
+                  </span>
+                </div>
+                <p className="text-[10px] text-gray-500">Mã QR động tự động điền {fmt(totalAmountToPay)}</p>
+              </div>
+              <button
+                type="button"
+                disabled={items.length === 0}
+                onClick={handleOpenPayment}
+                className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
+              >
+                Mở QR (F8)
+              </button>
+            </div>
+
+            {/* Account snippet & Mini Preview */}
+            <div className="bg-white/90 dark:bg-gray-800/90 rounded-xl p-2 border border-blue-100 dark:border-blue-900/40 flex items-center justify-between text-xs">
+              <div className="min-w-0 pr-2">
+                <p className="text-[10px] text-gray-400 font-medium">Tài khoản thụ hưởng:</p>
+                <p className="font-mono font-bold text-blue-700 dark:text-blue-400 truncate text-xs">
+                  {selectedPaymentConfig?.bankAccount || corporateBankAccounts[0]?.accountNumber || '0383868888'}
+                  <span className="text-[10px] text-gray-500 font-sans font-normal ml-1">
+                    ({selectedPaymentConfig?.bankName || corporateBankAccounts[0]?.bankName || 'MBBank'})
+                  </span>
+                </p>
+                <p className="text-[10px] text-gray-600 dark:text-gray-300 truncate font-semibold">
+                  {selectedPaymentConfig?.bankAccountName || corporateBankAccounts[0]?.accountName || 'CONG TY CP BAN LE RETAILHUB'}
+                </p>
+              </div>
+              <div
+                onClick={handleOpenPayment}
+                className="w-12 h-12 bg-white rounded-lg border border-blue-200 dark:border-blue-800 p-1 flex items-center justify-center shrink-0 cursor-pointer shadow-xs hover:border-blue-500 hover:scale-105 transition"
+                title="Bấm để mở mã QR toàn màn hình"
+              >
+                <img
+                  src={`https://img.vietqr.io/image/${(selectedPaymentConfig?.bankName || 'MB').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) || 'MB'}-${selectedPaymentConfig?.bankAccount || corporateBankAccounts[0]?.accountNumber || '0383868888'}-qr_only.png?amount=${totalAmountToPay}&addInfo=${encodeURIComponent(`POS ${currentOrderCode}`)}`}
+                  alt="Mini QR"
+                  className="w-full h-full object-contain"
+                />
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleOpenPayment}
-              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
-            >
-              Mở mã QR (F8)
-            </button>
           </div>
         ) : (
           <div className="p-2 bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-800 shrink-0 text-center text-xs text-gray-500 font-medium">
@@ -2554,12 +2648,11 @@ export function PosTerminalPage() {
           {/* Voucher input */}
           <div className="flex gap-1.5">
             <div className="relative flex-1">
-              <Tag className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
               <input
                 type="text" placeholder="Nhập mã voucher..."
                 value={voucherCode} onChange={e => setVoucherCode(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleApplyVoucher()}
-                className="w-full pl-8 pr-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none"
+                className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none"
               />
             </div>
             <button onClick={handleApplyVoucher}
@@ -2571,7 +2664,7 @@ export function PosTerminalPage() {
           {appliedVoucher && (
             <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-lg px-2 py-1 text-xs">
               <span className="font-bold text-emerald-700 dark:text-emerald-300">
-                🏷️ {appliedVoucher.code} — {appliedVoucher.type === 'PERCENT' ? `-${appliedVoucher.value}%` : `-${fmt(appliedVoucher.value)}`}
+                {appliedVoucher.code} — {appliedVoucher.type === 'PERCENT' ? `-${appliedVoucher.value}%` : `-${fmt(appliedVoucher.value)}`}
               </span>
               <button onClick={() => { setAppliedVoucher(null); setVoucherError(''); }}
                 className="text-gray-400 hover:text-red-500 font-bold ml-2">✕</button>
@@ -2618,7 +2711,7 @@ export function PosTerminalPage() {
             </div>
             {activeCustomer && (
               <div className="flex justify-between items-center text-xs text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800/60 mt-1">
-                <span className="flex items-center gap-1">🎁 Tích điểm:</span>
+                <span>Tích điểm:</span>
                 <span className="font-mono text-emerald-600 dark:text-emerald-400 font-black">+{Math.floor((totalAmount / (loyaltyConfig?.earnRateAmount || 10000)) * (activeCustomer?.membershipRank === 'Thành viên Vàng' ? 1.5 : activeCustomer?.membershipRank === 'Thành viên Bạc' ? 1.2 : 1.0))} điểm</span>
               </div>
             )}
@@ -2632,41 +2725,38 @@ export function PosTerminalPage() {
                   type="button"
                   onClick={handleOpenPayment}
                   disabled={items.length === 0}
-                  className="px-3.5 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 font-bold text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
+                  className="px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 font-bold text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shrink-0 cursor-pointer shadow-xs"
                   title="Mở bảng thanh toán chi tiết (F8)"
                 >
-                  <CreditCard className="w-4 h-4" />
-                  <span>F8</span>
+                  F8
                 </button>
                 <button
                   type="button"
                   onClick={() => handleDirectCashCheckout(true)}
                   disabled={items.length === 0}
-                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-emerald-600/30 cursor-pointer"
+                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-emerald-600/30 cursor-pointer"
                   title="Thanh toán tiền mặt & in hóa đơn ngay lập tức (F9)"
                 >
-                  <Printer className="w-4 h-4" />
                   THANH TOÁN & IN (F9)
                 </button>
               </>
-            ) : selectedPayment?.id.toLowerCase().includes('qr') || (selectedPaymentConfig?.providerType as string) === 'BANK_TRANSFER' ? (
+            ) : isQrPayment ? (
               <button
                 type="button"
                 onClick={handleOpenPayment}
                 disabled={items.length === 0}
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-blue-600/30 cursor-pointer"
+                className="flex-1 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-blue-600/30 cursor-pointer"
+                title="Mở mã QR động để khách quét thanh toán (F8)"
               >
-                <QrCode className="w-5 h-5" />
-                HIỂN THỊ MÃ QR THANH TOÁN (F8)
+                QUÉT MÃ QR THANH TOÁN (F8)
               </button>
             ) : (
               <button
                 type="button"
                 onClick={handleOpenPayment}
                 disabled={items.length === 0}
-                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-emerald-600/30 cursor-pointer"
+                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-black text-sm tracking-wide flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-emerald-600/30 cursor-pointer"
               >
-                <CheckCircle2 className="w-5 h-5" />
                 XÁC NHẬN THANH TOÁN (F8)
               </button>
             )}
@@ -3289,6 +3379,23 @@ export function PosTerminalPage() {
         isOpen={isPrintInvoiceOpen}
         onClose={() => setIsPrintInvoiceOpen(false)}
         data={completedPrintInvoice}
+      />
+
+      {/* DEDICATED FINTECH QR PAYMENT MODAL */}
+      <QrPaymentModal
+        isOpen={isQrModalOpen}
+        onClose={() => setIsQrModalOpen(false)}
+        onConfirmPayment={() => {
+          setIsQrModalOpen(false);
+          handleConfirmPayment(true, true);
+        }}
+        amount={totalAmountToPay}
+        orderCode={currentOrderCode || `ORD-POS-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`}
+        paymentConfig={selectedPaymentConfig}
+        methodLabel={selectedPayment?.label}
+        branchName={activeBranchName}
+        customerName={activeCustomer?.name}
+        corporateBankAccounts={corporateBankAccounts}
       />
 
       {/* ORDER DISCOUNT MODAL (F4) */}

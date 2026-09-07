@@ -36,6 +36,12 @@ function formatOrderTotal(o: SaleOrder): string {
   return formatMoney(o.totalAmount, 'VND');
 }
 
+const getLocalNowFormatted = (): string => {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+};
+
 export function SaleOrdersPage() {
   const { saleOrders: data, addSaleOrder, updateSaleOrder, deleteSaleOrder, fetchSaleOrders } = useSalesStore();
 
@@ -131,7 +137,7 @@ export function SaleOrdersPage() {
     setEditingOrder({
       code: `ORD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       customerId: WALK_IN_CUSTOMER_ID,
-      date: new Date().toISOString().slice(0, 16).replace('T', ' '),
+      date: getLocalNowFormatted(),
       subTotal: 0,
       taxAmount: 0,
       discountAmount: 0,
@@ -230,7 +236,7 @@ export function SaleOrdersPage() {
         const newOrder: Omit<SaleOrder, 'id'> = {
           code: editingOrder.code,
           customerId: editingOrder.customerId,
-          date: editingOrder.date || new Date().toISOString().slice(0, 16).replace('T', ' '),
+          date: editingOrder.date || getLocalNowFormatted(),
           ...payload,
           status: editingOrder.status as any || 'PENDING',
           paymentStatus: editingOrder.paymentStatus as any || 'UNPAID',
@@ -363,8 +369,22 @@ export function SaleOrdersPage() {
       },
       {
         accessorKey: 'date',
-        header: 'Ngày tạo',
-        cell: (info) => <span className="text-gray-500 text-sm">{info.getValue() as string}</span>,
+        header: 'Thời gian tạo',
+        cell: (info) => {
+          const val = info.getValue() as string;
+          if (!val) return '—';
+          const match = val.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
+          if (match) {
+            const [, y, m, d, h, min] = match;
+            return h && min ? (
+              <div>
+                <span className="font-semibold text-gray-900 dark:text-white text-sm">{h}:{min}</span>
+                <span className="text-gray-400 text-xs block">{d}/${m}/${y}</span>
+              </div>
+            ) : <span className="text-gray-600 dark:text-gray-300 text-sm">{d}/${m}/${y}</span>;
+          }
+          return <span className="text-gray-500 text-sm">{val}</span>;
+        },
       },
       {
         accessorKey: 'customerName',
@@ -765,7 +785,7 @@ export function SaleOrdersPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng (CRM) *</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng *</label>
                   <SearchLookupModal
                     title="Chọn Khách Hàng"
                     iconType="user"

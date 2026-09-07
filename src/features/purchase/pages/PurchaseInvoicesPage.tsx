@@ -552,7 +552,7 @@ export function PurchaseInvoicesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hóa đơn mua hàng (nguồn vào)</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hóa đơn mua hàng</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Quản lý hóa đơn VAT đầu vào từ các nhà cung cấp, đối chiếu số tiền đã thanh toán và công nợ còn lại.
           </p>

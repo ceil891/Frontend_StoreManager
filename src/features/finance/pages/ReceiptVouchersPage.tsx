@@ -72,50 +72,104 @@ export function ReceiptVouchersPage() {
   const [fundsList, setFundsList] = useState<FundAccountOption[]>([]);
 
   const fetchMasterData = async () => {
-    // 1. Fetch Customers from real API
-    axiosClient.get('/partnerarea/customers?size=500').then((res: any) => {
-      const list = extractPageContent<any>(res);
-      const mapped: CustomerOption[] = list.map((c: any, idx: number) => ({
-        id: c.id || idx + 1,
-        name: c.name || c.fullName || c.customerName || 'Khách hàng',
-        phone: c.phone || c.phoneNumber || '',
-        code: c.code || c.customerCode || `CUST-${idx + 1}`,
-        debt: Number(c.debtBalance || c.debt || 0),
-      }));
-      setCustomersList(mapped);
-    }).catch(() => setCustomersList([]));
+    try {
+      const [custRes, invRes, debtRes, fundRes] = await Promise.allSettled([
+        axiosClient.get('/partnerarea/customers?size=500'),
+        axiosClient.get('/sales/invoices?size=500'),
+        axiosClient.get('/finance/debt-ledgers'),
+        axiosClient.get('/finance/bank-accounts'),
+      ]);
 
-    // 2. Fetch Sales Invoices (hóa đơn bán hàng còn công nợ)
-    axiosClient.get('/sales/invoices?size=500').then((res: any) => {
-      const list = extractPageContent<any>(res);
-      const mapped: SalesInvoiceOption[] = list.map((inv: any) => {
+      const rawInvoices = invRes.status === 'fulfilled' ? extractPageContent<any>(invRes.value) : [];
+      const rawDebts = debtRes.status === 'fulfilled' ? ((debtRes.value as any)?.data || debtRes.value || []) : [];
+      const debtsList = Array.isArray(rawDebts) ? rawDebts : (rawDebts.content || []);
+
+      const invoiceMap = new Map<string, SalesInvoiceOption>();
+      const customerDebtMap = new Map<string, number>();
+
+      // From Sales Invoices
+      rawInvoices.forEach((inv: any) => {
         const code = inv.invoiceCode || inv.code || `INV-${inv.id}`;
         const total = Number(inv.totalAmount || inv.total || 0);
         const paid = Number(inv.paidAmount || 0);
         const remaining = Math.max(0, total - paid);
-        return {
-          code,
-          customerName: inv.customerName || inv.customer?.name || '',
-          totalAmount: total,
-          paidAmount: paid,
-          remainingDebt: remaining,
-        };
-      });
-      setInvoicesList(mapped);
-    }).catch(() => setInvoicesList([]));
+        const customerName = inv.customerName || inv.customer?.name || '';
 
-    // 3. Fetch Fund/Bank accounts from real API
-    axiosClient.get('/finance/bank-accounts').then((res: any) => {
-      const list = Array.isArray(res) ? res : (res?.content || []);
-      const mapped: FundAccountOption[] = list.map((f: any) => ({
-        id: f.id,
-        name: `[${f.bankName || 'NGÂN HÀNG'}] ${f.accountHolder || f.accountName || ''} - ${f.accountNumber || ''}`,
-        type: 'BANK' as const,
-        accountNumber: f.accountNumber || '',
-        balance: Number(f.currentBalance || f.balance || 0),
-      }));
-      setFundsList(mapped);
-    }).catch(() => setFundsList([]));
+        if (remaining > 0) {
+          invoiceMap.set(code, {
+            code,
+            customerName,
+            totalAmount: total,
+            paidAmount: paid,
+            remainingDebt: remaining,
+          });
+          if (customerName) {
+            customerDebtMap.set(customerName, (customerDebtMap.get(customerName) || 0) + remaining);
+          }
+        }
+      });
+
+      // From Customer Debt Ledgers (công nợ ghi nhận từ Sổ nợ)
+      debtsList.forEach((dl: any) => {
+        if (dl.entityType === 'CUSTOMER' && !dl.isDeleted) {
+          const balance = Number(dl.balance !== undefined ? dl.balance : (dl.increase || 0));
+          if (balance > 0) {
+            const refCode = dl.refCode || `DEBT-${dl.id}`;
+            const customerName = dl.entityName || dl.partnerName || '';
+
+            if (!invoiceMap.has(refCode)) {
+              invoiceMap.set(refCode, {
+                code: refCode,
+                customerName,
+                totalAmount: Number(dl.increase || balance),
+                paidAmount: Number(dl.decrease || 0),
+                remainingDebt: balance,
+              });
+            }
+            if (customerName) {
+              customerDebtMap.set(customerName, Math.max(customerDebtMap.get(customerName) || 0, balance));
+            }
+          }
+        }
+      });
+
+      setInvoicesList(Array.from(invoiceMap.values()));
+
+      // Customers
+      if (custRes.status === 'fulfilled') {
+        const rawCust = extractPageContent<any>(custRes.value);
+        const mappedCust: CustomerOption[] = rawCust.map((c: any, idx: number) => {
+          const name = c.name || c.fullName || c.customerName || 'Khách hàng';
+          const backendDebt = Number(c.debtBalance !== undefined ? c.debtBalance : (c.debt || 0));
+          const computedDebt = customerDebtMap.get(name) || 0;
+          const finalDebt = backendDebt > 0 ? backendDebt : computedDebt;
+          return {
+            id: c.id || idx + 1,
+            name,
+            phone: c.phone || c.phoneNumber || '',
+            code: c.code || c.customerCode || `CUST-${idx + 1}`,
+            debt: finalDebt,
+          };
+        });
+        setCustomersList(mappedCust);
+      }
+
+      // Fund/Bank accounts
+      if (fundRes.status === 'fulfilled') {
+        const rawFund = (fundRes.value as any)?.data || fundRes.value || [];
+        const list = Array.isArray(rawFund) ? rawFund : (rawFund?.content || []);
+        const mapped: FundAccountOption[] = list.map((f: any) => ({
+          id: f.id,
+          name: `[${f.bankName || 'NGÂN HÀNG'}] ${f.accountHolder || f.accountName || ''} - ${f.accountNumber || ''}`,
+          type: 'BANK' as const,
+          accountNumber: f.accountNumber || '',
+          balance: Number(f.currentBalance || f.balance || 0),
+        }));
+        setFundsList(mapped);
+      }
+    } catch (err) {
+      console.error('Failed to fetch master data:', err);
+    }
   };
 
   useEffect(() => {
@@ -130,6 +184,7 @@ export function ReceiptVouchersPage() {
   );
 
   const handleOpenCreate = () => {
+    fetchMasterData();
     setModalMode('create');
     setIsAutoCode(true);
     const defaultFund = fundsList[0]?.name || '';
@@ -165,13 +220,17 @@ export function ReceiptVouchersPage() {
   const handleSelectInvoice = (invCode: string) => {
     const matched = invoicesList.find(i => i.code === invCode);
     if (matched) {
+      const matchedCustomer = customersList.find(c => c.name === matched.customerName);
+      if (matchedCustomer && matchedCustomer.debt === 0 && matched.remainingDebt > 0) {
+        setCustomersList(prev => prev.map(c => c.id === matchedCustomer.id ? { ...c, debt: matched.remainingDebt } : c));
+      }
       setEditingVoucher(prev => ({
         ...prev,
         referenceDoc: invCode,
         payerName: matched.customerName,
         amount: matched.remainingDebt,
       }));
-      toast.info(`Đã liên kết Hóa đơn ${invCode}. Khách hàng: ${matched.customerName} - Dư nợ: ${matched.remainingDebt.toLocaleString('vi-VN')} ₫`);
+      toast.info(`Đã liên kết Hóa đơn ${invCode}. Khách hàng: ${matched.customerName} - Dư nợ: ${(matchedCustomer?.debt || matched.remainingDebt).toLocaleString('vi-VN')} ₫`);
     } else {
       setEditingVoucher(prev => ({ ...prev, referenceDoc: invCode }));
     }
@@ -196,6 +255,12 @@ export function ReceiptVouchersPage() {
     const recAmount = Number(editingVoucher.amount) || 0;
     if (recAmount <= 0) {
       toast.error('Số tiền thu phải lớn hơn 0 ₫');
+      return;
+    }
+
+    const todayStr = new Date().toISOString().substring(0, 10);
+    if (editingVoucher.receivedDate && editingVoucher.receivedDate > todayStr) {
+      toast.error('Ngày lập phiếu không được lớn hơn ngày thực tế hiện tại!');
       return;
     }
 
@@ -340,7 +405,7 @@ export function ReceiptVouchersPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu thu & dòng tiền vào (Receipt Vouchers)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Phiếu thu & dòng tiền vào</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Ghi nhận dòng tiền thu bán hàng, thu hồi công nợ khách hàng và hạch toán tự động tăng số dư Quỹ tiền mặt / Ngân hàng.
             </p>
@@ -607,14 +672,27 @@ export function ReceiptVouchersPage() {
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Ngày lập phiếu thu *</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                Ngày lập phiếu thu * {modalMode === 'edit' && <span className="text-amber-600 dark:text-amber-400 font-normal">(Cố định không được sửa)</span>}
+              </label>
               <input
                 type="date"
                 value={editingVoucher.receivedDate || ''}
                 onChange={(e) => setEditingVoucher({ ...editingVoucher, receivedDate: e.target.value })}
-                className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-semibold"
+                disabled={modalMode === 'edit'}
+                max={new Date().toISOString().substring(0, 10)}
+                className={`w-full p-2 border rounded font-semibold ${
+                  modalMode === 'edit'
+                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 cursor-not-allowed border-gray-200 dark:border-gray-700'
+                    : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white border-gray-300 dark:border-gray-700'
+                }`}
                 required
               />
+              {modalMode === 'edit' && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
+                  🔒 Không được phép thay đổi thời gian của chứng từ đã lập.
+                </p>
+              )}
             </div>
           </div>
 

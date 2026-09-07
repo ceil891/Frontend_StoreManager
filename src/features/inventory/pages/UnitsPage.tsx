@@ -349,7 +349,7 @@ export function UnitsPage() {
               <Sparkles className="w-5 h-5 text-primary shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-bold text-gray-900 dark:text-white text-sm">
-                  Sơ đồ cây phân cấp Đơn vị tính nhiều tầng (Hierarchical Tree)
+                  Sơ đồ cây phân cấp Đơn vị tính nhiều tầng
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   Mỗi nhóm đo lường được tổ chức theo cấp bậc quy đổi từ Đơn vị gốc (Cấp 1) đến Đơn vị bán sỉ/đóng gói lớn hơn (Cấp 2, Cấp 3, Cấp 4).

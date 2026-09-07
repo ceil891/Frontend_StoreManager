@@ -253,7 +253,7 @@ export function InventoryAdjustmentsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Phiếu cân bằng & điều chỉnh kho (adjustments)</h1>
+          <h1 className="text-2xl font-bold">Phiếu cân bằng & điều chỉnh kho </h1>
           <p className="text-sm text-gray-500">
             Ghi nhận chênh lệch số liệu kiểm kho thực tế so với sổ sách, cập nhật thẻ kho tự động.
           </p>
@@ -262,7 +262,7 @@ export function InventoryAdjustmentsPage() {
           onClick={handleOpenCreate}
           className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition"
         >
-          <Plus className="w-4 h-4" /> Lập Phiếu Điều Chỉnh
+          <Plus className="w-4 h-4" /> Lập phiếu điều chỉnh
         </button>
       </div>
 

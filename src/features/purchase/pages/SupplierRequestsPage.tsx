@@ -542,7 +542,7 @@ export function SupplierRequestsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Yêu cầu báo giá nhà cung cấp (RFQ)</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Yêu cầu báo giá nhà cung cấp</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Tạo và gửi yêu cầu báo giá (Requests for Quotation) hàng loạt tới các Nhà cung cấp để so sánh giá cạnh tranh & quy đổi sang PO 1-Click.
           </p>

@@ -8,6 +8,8 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import type { ColumnDef } from '@tanstack/react-table';
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
+import { reportsApi } from '../api/reportsApi';
+import type { InventoryReportData } from '../types/reports';
 
 const CATEGORY_COLORS = ['#6366F1', '#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#14B8A6'];
 
@@ -22,6 +24,8 @@ interface LowStockItem {
 
 export function InventoryReportPage() {
   const [storeSelect, setStoreSelect] = useState('all');
+  const [apiInventory, setApiInventory] = useState<InventoryReportData | null>(null);
+  const [isLoadingApi, setIsLoadingApi] = useState(false);
 
   const products = useInventoryStore((s) => s.products);
   const categories = useInventoryStore((s) => s.categories);
@@ -36,6 +40,22 @@ export function InventoryReportPage() {
     fetchBranches();
   }, [fetchProducts, fetchCategories, fetchBranches]);
 
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoadingApi(true);
+    reportsApi.getInventoryReport({ branchId: storeSelect })
+      .then((data) => {
+        if (isMounted && data) {
+          setApiInventory(data);
+        }
+      })
+      .catch((err) => console.warn('InventoryReport API fallback:', err))
+      .finally(() => {
+        if (isMounted) setIsLoadingApi(false);
+      });
+    return () => { isMounted = false; };
+  }, [storeSelect]);
+
   // Filter products by selected branch
   const filteredProducts = useMemo(() => {
     if (storeSelect === 'all') return products;
@@ -47,6 +67,13 @@ export function InventoryReportPage() {
 
   // Real Category Stock calculation
   const categoryStock = useMemo(() => {
+    if (apiInventory?.categoryStock && apiInventory.categoryStock.length > 0) {
+      return apiInventory.categoryStock.map((c, idx) => ({
+        name: c.name,
+        value: Number(c.value),
+        color: CATEGORY_COLORS[idx % CATEGORY_COLORS.length],
+      }));
+    }
     const map = new Map<string, number>();
     filteredProducts.forEach((p) => {
       const cat = (p as any).categoryName || p.category || 'Khác';
@@ -67,20 +94,36 @@ export function InventoryReportPage() {
       value,
       color: CATEGORY_COLORS[idx % CATEGORY_COLORS.length],
     }));
-  }, [filteredProducts, categories]);
+  }, [apiInventory, filteredProducts, categories]);
 
   // Real Top Stocked / Distribution chart
   const stockDistribution = useMemo(() => {
+    if (apiInventory?.topStocked && apiInventory.topStocked.length > 0) {
+      return apiInventory.topStocked.map(t => ({
+        name: t.name,
+        stock: Number(t.stock),
+      }));
+    }
     return filteredProducts
       .slice(0, 5)
       .map((p) => ({
         name: p.name.length > 18 ? p.name.slice(0, 18) + '...' : p.name,
         stock: p.onHand ?? 20,
       }));
-  }, [filteredProducts]);
+  }, [apiInventory, filteredProducts]);
 
   // Real Low Stock / Inventory Status Items
   const lowStockItems = useMemo<LowStockItem[]>(() => {
+    if (apiInventory?.lowStockItems && apiInventory.lowStockItems.length > 0) {
+      return apiInventory.lowStockItems.map(item => ({
+        sku: item.sku,
+        name: item.name,
+        category: item.category,
+        currentStock: Number(item.currentStock),
+        minStock: Number(item.minStock),
+        supplier: item.supplier,
+      }));
+    }
     return filteredProducts.map((p) => ({
       sku: (p as any).productCode || (p as any).code || p.sku || `SKU-${p.id}`,
       name: p.name,
@@ -89,43 +132,50 @@ export function InventoryReportPage() {
       minStock: p.minStock ?? 5,
       supplier: p.brand || 'Chính hãng',
     }));
-  }, [filteredProducts]);
+  }, [apiInventory, filteredProducts]);
 
   // Real KPI Calculations
   const kpis = useMemo(() => {
-    const totalValue = filteredProducts.reduce(
-      (sum, p) => sum + (p.onHand || 0) * (p.costPrice || (p as any).basePrice || 0),
-      0
-    );
-    const lowStockCount = filteredProducts.filter((p) => (p.onHand ?? 0) <= (p.minStock ?? 5)).length;
+    const totalVal = apiInventory?.totalInventoryValue !== undefined
+      ? Number(apiInventory.totalInventoryValue)
+      : filteredProducts.reduce(
+          (sum, p) => sum + (p.onHand || 0) * (p.costPrice || (p as any).basePrice || 0),
+          0
+        );
+    const lowCount = apiInventory?.lowStockCount !== undefined
+      ? Number(apiInventory.lowStockCount)
+      : filteredProducts.filter((p) => (p.onHand ?? 0) <= (p.minStock ?? 5)).length;
+    const totalProd = apiInventory?.totalProductsCount !== undefined
+      ? Number(apiInventory.totalProductsCount)
+      : filteredProducts.length;
 
     return [
       {
         title: 'Tổng giá trị tồn kho',
-        value: totalValue > 0 ? `${totalValue.toLocaleString('vi-VN')} đ` : 'Chưa cập nhật',
-        trend: `${filteredProducts.length} sản phẩm`,
+        value: totalVal > 0 ? `${totalVal.toLocaleString('vi-VN')} đ` : 'Chưa cập nhật',
+        trend: `${totalProd} sản phẩm`,
         isUp: true,
         icon: Archive,
         color: 'text-primary bg-primary/10 border-primary/20',
       },
       {
         title: 'Sản phẩm tồn thấp',
-        value: `${lowStockCount} sản phẩm`,
-        trend: lowStockCount > 0 ? 'Cần nhập thêm' : 'Tồn kho ổn định',
-        isUp: lowStockCount === 0,
+        value: `${lowCount} sản phẩm`,
+        trend: lowCount > 0 ? 'Cần nhập thêm' : 'Tồn kho ổn định',
+        isUp: lowCount === 0,
         icon: AlertTriangle,
         color: 'text-amber-600 bg-amber-50 border-amber-100 dark:text-amber-400 dark:bg-amber-900/30 dark:border-amber-900/50',
       },
       {
         title: 'Tổng số mặt hàng',
-        value: `${filteredProducts.length} sản phẩm`,
-        trend: `${categories.length} danh mục`,
+        value: `${totalProd.toLocaleString('vi-VN')} SKU`,
+        trend: 'Đang quản lý',
         isUp: true,
         icon: Package,
         color: 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-900/50',
       },
     ];
-  }, [filteredProducts, categories]);
+  }, [apiInventory, filteredProducts]);
 
   const columns = useMemo<ColumnDef<LowStockItem>[]>(
     () => [

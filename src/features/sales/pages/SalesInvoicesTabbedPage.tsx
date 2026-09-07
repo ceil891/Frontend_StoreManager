@@ -1,13 +1,17 @@
 import { useSearchParams } from 'react-router';
 import { ExportInvoicesPage } from './ExportInvoicesPage';
 import { SalesInvoicesPage } from './SalesInvoicesPage';
+import { OnlineInvoicesPage } from './OnlineInvoicesPage';
+import { SalesReturnInvoicesPage } from './SalesReturnInvoicesPage';
 import { InvoiceListsPage } from './InvoiceListsPage';
 import { RoleGuard } from '@/routes/RoleGuard';
-import { ClipboardList, FileText, ListOrdered } from 'lucide-react';
+import { ClipboardList, FileText, Globe, ListOrdered, RotateCcw } from 'lucide-react';
 
 const tabs = [
   { id: 'export', label: 'Xuất Hóa đơn bán', icon: ClipboardList, permission: 'sales:invoice:view' },
   { id: 'retail', label: 'Danh sách Hóa đơn bán lẻ', icon: FileText, permission: 'sales:invoice-retail:view' },
+  { id: 'online', label: 'Danh sách Hóa đơn Online', icon: Globe, permission: 'sales:invoice:view' },
+  { id: 'returns', label: 'Quản lý Trả hàng & Hoàn tiền', icon: RotateCcw, permission: 'sales:invoice:view' },
   { id: 'list', label: 'Bảng kê Hóa đơn', icon: ListOrdered, permission: 'sales:invoice-list:view' },
 ] as const;
 
@@ -32,7 +36,7 @@ export function SalesInvoicesTabbedPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Hóa đơn Bán hàng</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Theo dõi hóa đơn xuất kho, hóa đơn bán lẻ và bảng kê chi tiết hóa đơn
+            Theo dõi hóa đơn xuất kho VAT, hóa đơn bán lẻ POS, hóa đơn TMĐT online, quản lý trả hàng hoàn tiền và bảng kê chi tiết
           </p>
         </div>
       </div>
@@ -67,6 +71,16 @@ export function SalesInvoicesTabbedPage() {
         {activeTab === 'retail' && (
           <RoleGuard requiredPermission="sales:invoice-retail:view">
             <SalesInvoicesPage />
+          </RoleGuard>
+        )}
+        {activeTab === 'online' && (
+          <RoleGuard requiredPermission="sales:invoice:view">
+            <OnlineInvoicesPage />
+          </RoleGuard>
+        )}
+        {activeTab === 'returns' && (
+          <RoleGuard requiredPermission="sales:invoice:view">
+            <SalesReturnInvoicesPage />
           </RoleGuard>
         )}
         {activeTab === 'list' && (

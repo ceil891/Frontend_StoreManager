@@ -6,7 +6,7 @@ import { PurchaseInvoicesPage } from './PurchaseInvoicesPage';
 
 const tabs = [
   { id: 'receipts', label: 'Nhận hàng nhà cung cấp', icon: PackageCheck, permission: 'purchase:delivery:view' },
-  { id: 'invoices', label: 'Hóa đơn mua hàng (nguồn vào)', icon: ClipboardList, permission: 'purchase:invoice:view' },
+  { id: 'invoices', label: 'Hóa đơn mua hàng', icon: ClipboardList, permission: 'purchase:invoice:view' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];

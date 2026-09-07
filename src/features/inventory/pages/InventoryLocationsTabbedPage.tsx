@@ -49,7 +49,7 @@ export function InventoryLocationsTabbedPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sơ đồ & vị trí kho</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Quản lý cơ sở kho (kho cửa hàng, kho nhà cung cấp) và cấu trúc vị trí chi tiết (khu vực, dãy, ô / kệ)
+            Quản lý cơ sở kho  và cấu trúc vị trí chi tiết
           </p>
         </div>
       </div>

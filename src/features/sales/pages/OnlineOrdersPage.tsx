@@ -3,7 +3,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import {
   ShoppingBag, Search, Eye, Filter, RefreshCw, CheckCircle2, Clock, Truck, Package, XCircle,
-  TrendingUp, ArrowUpRight, DollarSign, Printer, User, Phone, MapPin, Building2
+  TrendingUp, ArrowUpRight, DollarSign, Printer, User, Phone, MapPin, Building2, QrCode, AlertCircle, Check
 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 
@@ -29,7 +29,7 @@ export interface OnlineOrder {
   shippingAddress: string;
   totalAmount: number;
   paymentMethod: 'VietQR' | 'COD' | 'Thẻ ATM/Visa' | 'Chuyển khoản';
-  paymentStatus: 'Đã thanh toán' | 'Chờ thanh toán COD' | 'Đã hoàn tiền';
+  paymentStatus: 'Đã thanh toán' | 'Chờ thanh toán COD' | 'Chờ xác nhận CK' | 'Đã hoàn tiền';
   fulfillmentStatus: 'CHO_XAC_NHAN' | 'DANG_DONG_GOI' | 'DA_GIAO_NTVC' | 'GIAO_THANH_CONG' | 'DA_HUY';
   branchId?: string | number;
   branchName?: string;
@@ -41,6 +41,28 @@ export interface OnlineOrder {
   itemsCount: number;
   items: { productName: string; sku: string; quantity: number; price: number }[];
 }
+
+export const formatOrderDateTime = (dateStr?: any): string => {
+  if (!dateStr) return '—';
+  try {
+    const s = String(dateStr).trim();
+    const match = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    if (match) {
+      const [, y, m, d, h, min] = match;
+      return `${h}:${min} ${d}/${m}/${y}`;
+    }
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return String(dateStr);
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${hours}:${minutes} ${day}/${month}/${year}`;
+  } catch {
+    return String(dateStr);
+  }
+};
 
 export const mapBackendToFulfillmentStatus = (status: string): OnlineOrder['fulfillmentStatus'] => {
   const st = (status || '').toUpperCase();
@@ -207,31 +229,55 @@ export function OnlineOrdersPage() {
           return true;
         });
 
-        realOrders = onlineRaw.map((item: any) => ({
-          id: String(item.id),
-          orderCode: item.orderCode || item.code || `ONLINE-${item.id}`,
-          customerName: item.customerName || item.customer?.name || item.recipientName || 'Khách đặt Online',
-          customerPhone: item.customerPhone || item.customer?.phone || item.recipientPhone || '—',
-          shippingAddress: item.shippingAddress || item.address || 'Giao tận nơi',
-          totalAmount: Number(item.totalAmount || item.finalAmount || 0),
-          paymentMethod: (item.paymentMethod === 'MOMO' || item.paymentMethod === 'VIETQR') ? 'VietQR' : (item.paymentMethod || 'COD') as any,
-          paymentStatus: (item.status === 'COMPLETED' || item.status === 'DELIVERED' || item.paymentStatus === 'PAID') ? 'Đã thanh toán' : 'Chờ thanh toán COD',
-          fulfillmentStatus: mapBackendToFulfillmentStatus(item.status),
-          branchId: item.branchId || item.branch?.id,
-          branchName: item.branchName || item.branch?.branchName || (item.branchId ? `Chi nhánh ${item.branchId}` : undefined),
-          carrier: item.carrier || (item.status === 'PENDING' ? '' : 'Viettel Post'),
-          trackingCode: item.trackingCode || (item.status === 'PENDING' ? '' : `VTP-${item.id}`),
-          shipperName: item.shipperName || '',
-          shipperPhone: item.shipperPhone || '',
-          createdDate: item.createdAt ? new Date(item.createdAt).toISOString().replace('T', ' ').substring(0, 16) : (item.orderDate ? String(item.orderDate).substring(0, 10) : new Date().toISOString().substring(0, 10)),
-          itemsCount: item.details?.length || (item.items?.length || 1),
-          items: (item.details || item.items || []).map((d: any) => ({
-            productName: d.productNameSnapshot || d.productName || 'Sản phẩm',
-            sku: d.variantCode || d.skuSnapshot || d.sku || 'SKU',
-            quantity: Number(d.quantity || 1),
-            price: Number(d.unitPriceSnapshot || d.unitPrice || d.price || 0)
-          }))
-        }));
+        realOrders = onlineRaw.map((item: any) => {
+          const rawPm = (item.paymentMethod || item.paymentMethodCode || '').toUpperCase();
+          let pm: OnlineOrder['paymentMethod'] = 'COD';
+          if (rawPm.includes('VIETQR') || rawPm.includes('QR')) {
+            pm = 'VietQR';
+          } else if (rawPm.includes('BANK') || rawPm.includes('CK') || rawPm.includes('CHUYEN') || rawPm.includes('TRANSFER')) {
+            pm = 'Chuyển khoản';
+          } else if (rawPm.includes('ATM') || rawPm.includes('VISA') || rawPm.includes('CARD')) {
+            pm = 'Thẻ ATM/Visa';
+          } else {
+            pm = 'COD';
+          }
+
+          const rawPs = (item.paymentStatus || '').toUpperCase();
+          let ps: OnlineOrder['paymentStatus'] = 'Chờ thanh toán COD';
+          if (rawPs === 'PAID' || item.status === 'COMPLETED' || item.status === 'DELIVERED') {
+            ps = 'Đã thanh toán';
+          } else if (pm === 'VietQR' || pm === 'Chuyển khoản') {
+            ps = 'Chờ xác nhận CK';
+          } else {
+            ps = 'Chờ thanh toán COD';
+          }
+
+          return {
+            id: String(item.id),
+            orderCode: item.orderCode || item.code || `ONLINE-${item.id}`,
+            customerName: item.customerName || item.customer?.name || item.recipientName || 'Khách đặt Online',
+            customerPhone: item.customerPhone || item.customer?.phone || item.recipientPhone || '—',
+            shippingAddress: item.shippingAddress || item.address || 'Giao tận nơi',
+            totalAmount: Number(item.totalAmount || item.finalAmount || 0),
+            paymentMethod: pm,
+            paymentStatus: ps,
+            fulfillmentStatus: mapBackendToFulfillmentStatus(item.status),
+            branchId: item.branchId || item.branch?.id,
+            branchName: item.branchName || item.branch?.branchName || (item.branchId ? `Chi nhánh ${item.branchId}` : undefined),
+            carrier: item.carrier || (item.status === 'PENDING' ? '' : 'Viettel Post'),
+            trackingCode: item.trackingCode || (item.status === 'PENDING' ? '' : `VTP-${item.id}`),
+            shipperName: item.shipperName || '',
+            shipperPhone: item.shipperPhone || '',
+            createdDate: formatOrderDateTime(item.orderDate || item.createdAt),
+            itemsCount: item.details?.length || (item.items?.length || 1),
+            items: (item.details || item.items || []).map((d: any) => ({
+              productName: d.productNameSnapshot || d.productName || 'Sản phẩm',
+              sku: d.variantCode || d.skuSnapshot || d.sku || 'SKU',
+              quantity: Number(d.quantity || 1),
+              price: Number(d.unitPriceSnapshot || d.unitPrice || d.price || 0)
+            }))
+          };
+        });
       }
     } catch (err) {
       console.warn('Backend order list fetch failed:', err);
@@ -298,7 +344,7 @@ export function OnlineOrdersPage() {
   const handleUpdateStatus = async (
     orderId: string,
     newStatus: OnlineOrder['fulfillmentStatus'],
-    extraData?: { branchId?: string | number; branchName?: string; carrier?: string; trackingCode?: string; shipperName?: string; shipperPhone?: string }
+    extraData?: { branchId?: string | number; branchName?: string; carrier?: string; trackingCode?: string; shipperName?: string; shipperPhone?: string; paymentStatus?: string }
   ) => {
     const backendStatus = mapFulfillmentToBackendStatus(newStatus);
 
@@ -309,6 +355,7 @@ export function OnlineOrdersPage() {
       if (extraData?.trackingCode) params.trackingCode = extraData.trackingCode;
       if (extraData?.shipperName) params.shipperName = extraData.shipperName;
       if (extraData?.shipperPhone) params.shipperPhone = extraData.shipperPhone;
+      if (extraData?.paymentStatus) params.paymentStatus = extraData.paymentStatus;
 
       await axiosClient.put(`/sales/orders/${orderId}/status`, null, { params });
     } catch (err: any) {
@@ -318,6 +365,7 @@ export function OnlineOrdersPage() {
     }
 
     const isSuccess = newStatus === 'GIAO_THANH_CONG';
+    const isPaid = isSuccess || extraData?.paymentStatus === 'PAID';
 
     setOrders((prev) =>
       prev.map((o) => {
@@ -325,7 +373,7 @@ export function OnlineOrdersPage() {
           return {
             ...o,
             fulfillmentStatus: newStatus,
-            paymentStatus: isSuccess ? 'Đã thanh toán' : o.paymentStatus,
+            paymentStatus: isPaid ? 'Đã thanh toán' : o.paymentStatus,
             branchId: extraData?.branchId !== undefined ? extraData.branchId : o.branchId,
             branchName: extraData?.branchName || o.branchName,
             carrier: extraData?.carrier || (newStatus === 'CHO_XAC_NHAN' ? 'Chưa chọn (Chờ đóng gói)' : o.carrier || 'Viettel Post'),
@@ -344,7 +392,7 @@ export function OnlineOrdersPage() {
           ? {
               ...prev,
               fulfillmentStatus: newStatus,
-              paymentStatus: isSuccess ? 'Đã thanh toán' : prev.paymentStatus,
+              paymentStatus: isPaid ? 'Đã thanh toán' : prev.paymentStatus,
               branchId: extraData?.branchId !== undefined ? extraData.branchId : prev.branchId,
               branchName: extraData?.branchName || prev.branchName,
               carrier: extraData?.carrier || (newStatus === 'CHO_XAC_NHAN' ? 'Chưa chọn (Chờ đóng gói)' : prev.carrier || 'Viettel Post'),
@@ -371,8 +419,33 @@ export function OnlineOrdersPage() {
     toast.success(`Đã cập nhật trạng thái đơn hàng: ${labelMap[newStatus]}`);
   };
 
+  const handleApprovePayment = async (orderId: string) => {
+    try {
+      await axiosClient.put(`/sales/orders/${orderId}/status`, null, {
+        params: {
+          status: 'PENDING',
+          paymentStatus: 'PAID'
+        }
+      });
+
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, paymentStatus: 'Đã thanh toán' } : o));
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder(prev => prev ? { ...prev, paymentStatus: 'Đã thanh toán' } : null);
+      }
+      toast.success('Duyệt đơn thành công! Đã xác nhận khách thanh toán chuyển khoản.');
+    } catch (err: any) {
+      console.error('Approve payment failed:', err);
+      toast.error(err?.response?.data?.message || 'Không thể duyệt thanh toán đơn hàng');
+    }
+  };
+
   const handleOpenAssignBranchModal = () => {
     if (!selectedOrder) return;
+    const isBankTransfer = selectedOrder.paymentMethod === 'VietQR' || selectedOrder.paymentMethod === 'Chuyển khoản';
+    if (isBankTransfer && selectedOrder.paymentStatus !== 'Đã thanh toán') {
+      toast.error('Đơn hàng thanh toán Chuyển khoản (VietQR) cần được [Duyệt đơn (Xác nhận đã nhận chuyển khoản)] trước khi duyệt kho và phân bổ đóng gói!');
+      return;
+    }
     if (selectedOrder.branchId) {
       setSelectedBranchId(String(selectedOrder.branchId));
     } else if (branches.length > 0) {
@@ -385,6 +458,11 @@ export function OnlineOrdersPage() {
   const handleConfirmAssignBranch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrder) return;
+    const isBankTransfer = selectedOrder.paymentMethod === 'VietQR' || selectedOrder.paymentMethod === 'Chuyển khoản';
+    if (isBankTransfer && selectedOrder.paymentStatus !== 'Đã thanh toán') {
+      toast.error('Đơn hàng thanh toán Chuyển khoản chưa được xác nhận thanh toán!');
+      return;
+    }
     const branch = branches.find(b => String(b.id) === String(selectedBranchId));
     const branchName = branch ? branch.branchName : 'Chi nhánh AuraMart';
 
@@ -480,12 +558,38 @@ export function OnlineOrdersPage() {
                 price: Number(d.unitPriceSnapshot || d.unitPrice || 0)
               }))
             : [];
+
+          const rawPm = (data.paymentMethod || data.paymentMethodCode || selectedOrder.paymentMethod || '').toUpperCase();
+          let resolvedPm: OnlineOrder['paymentMethod'] = 'COD';
+          if (rawPm.includes('VIETQR') || rawPm.includes('QR')) {
+            resolvedPm = 'VietQR';
+          } else if (rawPm.includes('BANK') || rawPm.includes('CK') || rawPm.includes('CHUYEN') || rawPm.includes('TRANSFER')) {
+            resolvedPm = 'Chuyển khoản';
+          } else if (rawPm.includes('ATM') || rawPm.includes('VISA') || rawPm.includes('CARD')) {
+            resolvedPm = 'Thẻ ATM/Visa';
+          } else {
+            resolvedPm = 'COD';
+          }
+
+          const rawPs = (data.paymentStatus || '').toUpperCase();
+          let resolvedPs: OnlineOrder['paymentStatus'] = 'Chờ thanh toán COD';
+          if (rawPs === 'PAID' || data.status === 'COMPLETED' || data.status === 'DELIVERED') {
+            resolvedPs = 'Đã thanh toán';
+          } else if (resolvedPm === 'VietQR' || resolvedPm === 'Chuyển khoản') {
+            resolvedPs = 'Chờ xác nhận CK';
+          } else {
+            resolvedPs = 'Chờ thanh toán COD';
+          }
+
           setSelectedOrder(prev => prev && prev.id === selectedOrder.id ? {
             ...prev,
             customerName: data.customerName || prev.customerName,
             customerPhone: data.customerPhone || prev.customerPhone,
             shippingAddress: data.shippingAddress || prev.shippingAddress,
             totalAmount: Number(data.totalAmount || prev.totalAmount),
+            paymentMethod: resolvedPm,
+            paymentStatus: resolvedPs,
+            createdDate: formatOrderDateTime(data.orderDate || data.createdAt || prev.createdDate),
             branchId: data.branchId || data.branch?.id || prev.branchId,
             branchName: data.branchName || data.branch?.branchName || prev.branchName,
             items: fetchedItems.length > 0 ? fetchedItems : prev.items
@@ -518,6 +622,56 @@ export function OnlineOrdersPage() {
       ),
     },
     {
+      accessorKey: 'totalAmount',
+      header: 'Tổng tiền',
+      cell: ({ row }) => (
+        <div className="font-bold text-gray-900 dark:text-white">
+          {row.original.totalAmount.toLocaleString('vi-VN')} đ
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'paymentMethod',
+      header: 'Phương thức thanh toán',
+      cell: ({ row }) => {
+        const isCK = row.original.paymentMethod === 'VietQR' || row.original.paymentMethod === 'Chuyển khoản';
+        const isPaid = row.original.paymentStatus === 'Đã thanh toán';
+
+        return (
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5">
+              {isCK ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  <QrCode className="w-3 h-3 text-blue-600 shrink-0" />
+                  Chuyển khoản VietQR
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                  <DollarSign className="w-3 h-3 text-emerald-600 shrink-0" />
+                  COD (Tiền mặt)
+                </span>
+              )}
+            </div>
+            <div>
+              {isPaid ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="w-3 h-3 shrink-0" /> Đã thanh toán
+                </span>
+              ) : isCK ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                  <Clock className="w-3 h-3 shrink-0" /> Chờ xác nhận CK
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                  Thu tiền khi nhận hàng
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
       accessorKey: 'branchName',
       header: 'Chi nhánh đóng gói',
       cell: ({ row }) => {
@@ -541,18 +695,6 @@ export function OnlineOrdersPage() {
       },
     },
     {
-      accessorKey: 'totalAmount',
-      header: 'Tổng tiền',
-      cell: ({ row }) => (
-        <div>
-          <div className="font-bold text-gray-900 dark:text-white">
-            {row.original.totalAmount.toLocaleString('vi-VN')} đ
-          </div>
-          <div className="text-[11px] text-emerald-600 dark:text-emerald-400">{row.original.paymentMethod}</div>
-        </div>
-      ),
-    },
-    {
       accessorKey: 'fulfillmentStatus',
       header: 'Trạng thái xử lý',
       cell: ({ row }) => getStatusBadge(row.original.fulfillmentStatus),
@@ -574,19 +716,38 @@ export function OnlineOrdersPage() {
     {
       accessorKey: 'createdDate',
       header: 'Thời gian đặt',
-      cell: ({ row }) => <span className="text-xs text-gray-500 dark:text-gray-400">{row.original.createdDate}</span>,
+      cell: ({ row }) => <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">{row.original.createdDate}</span>,
     },
     {
       id: 'actions',
       header: 'Thao tác',
-      cell: ({ row }) => (
-        <button
-          onClick={() => setSelectedOrder(row.original)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 rounded-lg transition-colors cursor-pointer"
-        >
-          <Eye className="w-3.5 h-3.5" /> Chi tiết
-        </button>
-      ),
+      cell: ({ row }) => {
+        const isCK = row.original.paymentMethod === 'VietQR' || row.original.paymentMethod === 'Chuyển khoản';
+        const needsApproval = isCK && row.original.paymentStatus !== 'Đã thanh toán' && row.original.fulfillmentStatus !== 'DA_HUY';
+
+        return (
+          <div className="flex items-center gap-1.5">
+            {needsApproval && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleApprovePayment(row.original.id);
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors cursor-pointer shadow-sm"
+                title="Xác nhận đã nhận chuyển khoản"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" /> Duyệt CK
+              </button>
+            )}
+            <button
+              onClick={() => setSelectedOrder(row.original)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 rounded-lg transition-colors cursor-pointer"
+            >
+              <Eye className="w-3.5 h-3.5" /> Chi tiết
+            </button>
+          </div>
+        );
+      },
     },
   ], []);
 
@@ -733,6 +894,23 @@ export function OnlineOrdersPage() {
               <div>{getStatusBadge(selectedOrder.fulfillmentStatus)}</div>
             </div>
 
+            {/* Alert Banner for pending Bank Transfer */}
+            {(selectedOrder.paymentMethod === 'VietQR' || selectedOrder.paymentMethod === 'Chuyển khoản') &&
+             selectedOrder.paymentStatus !== 'Đã thanh toán' && (
+              <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/30 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                  <p className="font-bold text-sm">⚠️ Cần duyệt đơn xác nhận thanh toán chuyển khoản trước khi duyệt kho!</p>
+                  <p>
+                    Đơn hàng này chọn hình thức thanh toán <strong>Chuyển khoản ngân hàng (VietQR)</strong>.
+                    Vui lòng kiểm tra biến động số dư tài khoản ngân hàng và bấm nút{' '}
+                    <span className="font-bold text-emerald-700 dark:text-emerald-400">"Duyệt đơn (Đã nhận chuyển khoản)"</span>{' '}
+                    phía dưới để xác nhận tiền về trước khi chọn chi nhánh đóng gói.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Fulfillment Branch Section */}
             <div className="p-4 rounded-xl border border-indigo-100 dark:border-indigo-950/60 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-2">
               <div className="flex justify-between items-center">
@@ -815,9 +993,26 @@ export function OnlineOrdersPage() {
                     </p>
                   </div>
                 )}
-                <p className="text-xs text-gray-500 pt-1 border-t border-gray-100 dark:border-gray-800">
-                  Thanh toán: {selectedOrder.paymentMethod} ({selectedOrder.paymentStatus})
-                </p>
+                <div className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500">Hình thức thanh toán:</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {selectedOrder.paymentMethod === 'VietQR' || selectedOrder.paymentMethod === 'Chuyển khoản'
+                        ? 'Chuyển khoản VietQR'
+                        : selectedOrder.paymentMethod}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500">Trạng thái thanh toán:</span>
+                    <span className={`font-bold ${
+                      selectedOrder.paymentStatus === 'Đã thanh toán'
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-amber-600 dark:text-amber-400'
+                    }`}>
+                      {selectedOrder.paymentStatus}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -905,6 +1100,18 @@ export function OnlineOrdersPage() {
               >
                 <Printer className="w-4 h-4" /> In phiếu đóng gói
               </button>
+
+              {/* Bank Transfer Approval Button */}
+              {(selectedOrder.paymentMethod === 'VietQR' || selectedOrder.paymentMethod === 'Chuyển khoản') &&
+               selectedOrder.paymentStatus !== 'Đã thanh toán' &&
+               selectedOrder.fulfillmentStatus !== 'DA_HUY' && (
+                <button
+                  onClick={() => handleApprovePayment(selectedOrder.id)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold cursor-pointer shadow-sm transition-all"
+                >
+                  <CheckCircle2 className="w-4 h-4" /> Duyệt đơn (Đã nhận chuyển khoản)
+                </button>
+              )}
 
               {/* Step 1: Confirm & Choose Branch to Pack */}
               {selectedOrder.fulfillmentStatus === 'CHO_XAC_NHAN' && (

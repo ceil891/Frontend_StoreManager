@@ -101,6 +101,7 @@ export function CustomersPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingCustomer, setEditingCustomer] = useState<Partial<CustomerProfile>>({});
   const [deletingCustomer, setDeletingCustomer] = useState<CustomerProfile | null>(null);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const filtered = data.filter((item) => {
     const matchesSearch =
@@ -115,6 +116,7 @@ export function CustomersPage() {
   const handleOpenCreate = () => {
     setModalMode('create');
     setIsAutoCode(true);
+    setFormErrors({});
     setEditingCustomer({
       customerCode: `CUST-${Math.floor(10000 + Math.random() * 90000)}`,
       name: '', phone: '', email: '', address: '',
@@ -137,6 +139,7 @@ export function CustomersPage() {
   const handleOpenEdit = (customer: CustomerProfile) => {
     setModalMode('edit');
     setIsAutoCode(false);
+    setFormErrors({});
     setEditingCustomer({
       ...customer,
       taxCode: customer.taxCode || '',
@@ -162,10 +165,12 @@ export function CustomersPage() {
     });
 
     if (!validation.isValid) {
+      setFormErrors(validation.errors);
       const firstError = Object.values(validation.errors)[0];
       toast.error(firstError);
       return;
     }
+    setFormErrors({});
 
     const autoTier = calcTier(editingCustomer.lifetimeSpent ?? 0);
 
@@ -467,7 +472,7 @@ export function CustomersPage() {
           <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <Star className="w-4 h-4 text-blue-400" />
-              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Khách VIP (Kim Cương & Vàng)</h3>
+              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Khách hàng VIP</h3>
             </div>
             <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{vipCount}</p>
           </div>
@@ -653,11 +658,17 @@ export function CustomersPage() {
                   <input
                     type="text"
                     value={editingCustomer.name || ''}
-                    onChange={(e) => setEditingCustomer({ ...editingCustomer, name: e.target.value })}
+                    onChange={(e) => {
+                      setEditingCustomer({ ...editingCustomer, name: e.target.value });
+                      if (formErrors.name) setFormErrors(prev => ({ ...prev, name: '' }));
+                    }}
                     placeholder="Ví dụ: Nguyễn Văn A"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 ${
+                      formErrors.name ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 dark:border-gray-600 focus:ring-primary focus:border-primary'
+                    }`}
                     required
                   />
+                  {formErrors.name && <p className="text-xs text-red-500 mt-1">{formErrors.name}</p>}
                 </div>
               </div>
 
@@ -667,11 +678,17 @@ export function CustomersPage() {
                   <input
                     type="text"
                     value={editingCustomer.phone || ''}
-                    onChange={(e) => setEditingCustomer({ ...editingCustomer, phone: e.target.value })}
+                    onChange={(e) => {
+                      setEditingCustomer({ ...editingCustomer, phone: e.target.value });
+                      if (formErrors.phone) setFormErrors(prev => ({ ...prev, phone: '' }));
+                    }}
                     placeholder="09xx xxx xxx"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary font-mono"
+                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 font-mono ${
+                      formErrors.phone ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 dark:border-gray-600 focus:ring-primary'
+                    }`}
                     required
                   />
+                  {formErrors.phone && <p className="text-xs text-red-500 mt-1">{formErrors.phone}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Địa chỉ Email</label>
@@ -684,10 +701,14 @@ export function CustomersPage() {
                         ...p,
                         email,
                       }));
+                      if (formErrors.email) setFormErrors(prev => ({ ...prev, email: '' }));
                     }}
                     placeholder="email@example.com"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 ${
+                      formErrors.email ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 dark:border-gray-600 focus:ring-primary'
+                    }`}
                   />
+                  {formErrors.email && <p className="text-xs text-red-500 mt-1">{formErrors.email}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã số thuế</label>
@@ -719,9 +740,15 @@ export function CustomersPage() {
                   <input
                     type="date"
                     value={editingCustomer.dateOfBirth || ''}
-                    onChange={(e) => setEditingCustomer({ ...editingCustomer, dateOfBirth: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary"
+                    onChange={(e) => {
+                      setEditingCustomer({ ...editingCustomer, dateOfBirth: e.target.value });
+                      if (formErrors.dateOfBirth) setFormErrors(prev => ({ ...prev, dateOfBirth: '' }));
+                    }}
+                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 ${
+                      formErrors.dateOfBirth ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 dark:border-gray-600 focus:ring-primary'
+                    }`}
                   />
+                  {formErrors.dateOfBirth && <p className="text-xs text-red-500 mt-1">{formErrors.dateOfBirth}</p>}
                 </div>
               </div>
 

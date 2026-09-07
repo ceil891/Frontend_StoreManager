@@ -26,6 +26,25 @@ const sCfg: Record<string, { label: string; cls: string }> = {
   CHỜ_DUYỆT: { label: 'Chờ duyệt', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
 };
 
+const formatDateVN = (dateStr?: string | null): string => {
+  if (!dateStr) return '—';
+  try {
+    const cleanStr = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+    const parts = cleanStr.split('-');
+    if (parts.length === 3 && parts[0].length === 4) {
+      return `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+    }
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+  } catch {}
+  return dateStr;
+};
+
 export function LeaveRequestsPage() {
   const {
     leaveRequests: storeRequests,
@@ -43,19 +62,25 @@ export function LeaveRequestsPage() {
   }, [fetchLeaveRequests, fetchUsers]);
 
   const data: LeaveItem[] = useMemo(() => {
-    return storeRequests.map((r) => ({
-      id: r.id,
-      userId: r.employeeName || 'U001',
-      userName: r.employeeName,
-      startDate: r.startDate,
-      endDate: r.endDate,
-      days: r.totalDays,
-      leaveType: r.leaveType === 'ANNUAL' ? 'Nghỉ phép năm' : r.leaveType === 'SICK' ? 'Nghỉ ốm' : r.leaveType === 'MATERNITY' ? 'Nghỉ thai sản' : 'Việc riêng',
-      reason: r.reason,
-      approvedBy: r.approvedBy || 'Chưa duyệt',
-      status: r.status === 'APPROVED' ? 'ĐÃ_DUYỆT' : r.status === 'REJECTED' ? 'TỪ_CHỐI' : 'CHỜ_DUYỆT',
-    }));
-  }, [storeRequests]);
+    return storeRequests.map((r) => {
+      const foundUser = users.find(u => String(u.id) === String((r as any).userId) || (r.employeeName && u.fullName?.toLowerCase() === r.employeeName.toLowerCase()));
+      const userCode = foundUser?.userCode || (r as any).userCode || (foundUser ? `NV-${foundUser.id}` : (r.requestCode ? `Mã: ${r.requestCode}` : `NV-${r.id}`));
+      const displayName = foundUser?.fullName || r.employeeName || 'Nhân viên';
+
+      return {
+        id: r.id,
+        userId: userCode,
+        userName: displayName,
+        startDate: r.startDate,
+        endDate: r.endDate,
+        days: r.totalDays,
+        leaveType: r.leaveType === 'ANNUAL' ? 'Nghỉ phép năm' : r.leaveType === 'SICK' ? 'Nghỉ ốm' : r.leaveType === 'MATERNITY' ? 'Nghỉ thai sản' : 'Việc riêng',
+        reason: r.reason,
+        approvedBy: r.approvedBy || 'Chưa duyệt',
+        status: r.status === 'APPROVED' ? 'ĐÃ_DUYỆT' : r.status === 'REJECTED' ? 'TỪ_CHỐI' : 'CHỜ_DUYỆT',
+      };
+    });
+  }, [storeRequests, users]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Tất cả');
   const [selected, setSelected] = useState<LeaveItem|null>(null);
@@ -88,9 +113,11 @@ export function LeaveRequestsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const lType = form.leaveType === 'Nghỉ ốm' ? 'SICK' : form.leaveType === 'Nghỉ thai sản' ? 'MATERNITY' : form.leaveType === 'Việc riêng' ? 'UNPAID' : 'ANNUAL';
+    const selectedUser = users.find(u => String(u.id) === String(form.userId));
     await addLeaveRequest({
       requestCode: `NP-${Date.now().toString().slice(-4)}`,
-      employeeName: form.userName || 'Nhân viên',
+      userId: form.userId ? Number(form.userId) : undefined,
+      employeeName: selectedUser?.fullName || form.userName || 'Nhân viên',
       leaveType: lType as any,
       startDate: form.startDate || new Date().toISOString().split('T')[0],
       endDate: form.endDate || new Date().toISOString().split('T')[0],
@@ -123,8 +150,8 @@ export function LeaveRequestsPage() {
   const columns = useMemo<ColumnDef<LeaveItem>[]>(()=>[
     {accessorKey:'userName',header:'Nhân viên',cell:({row})=><div><p className="font-medium text-gray-900 dark:text-white">{row.original.userName}</p><p className="text-xs text-gray-400">{row.original.userId}</p></div>},
     {accessorKey:'leaveType',header:'Loại nghỉ',cell:info=><span className="text-sm font-medium text-gray-700 dark:text-gray-300">{info.getValue() as string}</span>},
-    {accessorKey:'startDate',header:'Từ ngày',cell:info=><span className="text-sm text-gray-500 font-mono">{info.getValue() as string}</span>},
-    {accessorKey:'endDate',header:'Đến ngày',cell:info=><span className="text-sm text-gray-500 font-mono">{info.getValue() as string}</span>},
+    {accessorKey:'startDate',header:'Từ ngày',cell:info=><span className="text-sm text-gray-700 dark:text-gray-300 font-mono">{formatDateVN(info.getValue() as string)}</span>},
+    {accessorKey:'endDate',header:'Đến ngày',cell:info=><span className="text-sm text-gray-700 dark:text-gray-300 font-mono">{formatDateVN(info.getValue() as string)}</span>},
     {accessorKey:'days',header:'Số ngày',cell:info=><span className="font-bold text-gray-900 dark:text-white">{info.getValue() as number} ngày</span>},
     {accessorKey:'status',header:'Trạng thái',cell:info=>{const s=sCfg[info.getValue() as string];return <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${s?.cls}`}>{s?.label}</span>;}},
     {id:'actions',header:'Thao tác',cell:({row})=>(
@@ -173,7 +200,7 @@ export function LeaveRequestsPage() {
               <div><p className="text-xs text-gray-500">Loại nghỉ phép</p><p className="font-bold text-blue-800 dark:text-blue-300">{selected.leaveType}</p></div>
             </div>
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border">
-              {[['Nhân viên',selected.userName],['Từ ngày',selected.startDate],['Đến ngày',selected.endDate],['Số ngày nghỉ',`${selected.days} ngày`],['Người phê duyệt',selected.approvedBy||'Chưa duyệt']].map(([l,v])=>(
+              {[['Nhân viên',selected.userName],['Từ ngày',formatDateVN(selected.startDate)],['Đến ngày',formatDateVN(selected.endDate)],['Số ngày nghỉ',`${selected.days} ngày`],['Người phê duyệt',selected.approvedBy||'Chưa duyệt']].map(([l,v])=>(
                 <div key={l} className="flex justify-between text-sm"><span className="text-gray-500">{l}:</span><span className="font-semibold text-gray-900 dark:text-white">{v}</span></div>
               ))}
               <div className="border-t pt-2"><p className="text-xs text-gray-400 mb-1">Lý do xin nghỉ:</p><p className="text-sm text-gray-700 dark:text-gray-300 italic">{selected.reason}</p></div>
@@ -189,21 +216,21 @@ export function LeaveRequestsPage() {
             {users.length > 0 ? (
               <select
                 required
-                value={form.userName || ''}
+                value={form.userId || ''}
                 onChange={(e) => {
-                  const u = users.find(usr => (usr.fullName || usr.email || (usr as any).username) === e.target.value);
+                  const u = users.find(usr => String(usr.id) === e.target.value);
                   setForm({
                     ...form,
-                    userName: e.target.value,
-                    userId: u ? String(u.id) : '',
+                    userId: e.target.value,
+                    userName: u?.fullName || '',
                   });
                 }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"
               >
                 <option value="">-- Chọn nhân viên --</option>
                 {users.map(u => (
-                  <option key={u.id} value={u.fullName || u.email || (u as any).username}>
-                    {u.fullName || u.email || (u as any).username} ({u.email || (u as any).username})
+                  <option key={u.id} value={u.id}>
+                    {u.userCode ? `[${u.userCode}] ` : ''}{u.fullName} ({u.email || (u as any).username})
                   </option>
                 ))}
               </select>

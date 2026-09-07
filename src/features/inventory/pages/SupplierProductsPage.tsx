@@ -233,7 +233,7 @@ export function SupplierProductsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Danh mục mặt hàng nhà cung cấp (vendor catalog)</h1>
+          <h1 className="text-2xl font-bold">Danh mục mặt hàng nhà cung cấp</h1>
           <p className="text-sm text-gray-500">
             Quản lý và thiết lập mức giá nhập, số lượng mua tối thiểu (MOQ) và thời gian giao hàng thỏa thuận từ các nhà cung cấp đối với từng sản phẩm.
           </p>

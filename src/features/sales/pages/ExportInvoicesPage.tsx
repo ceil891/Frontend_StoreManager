@@ -23,15 +23,31 @@ export function ExportInvoicesPage() {
   const canManage = usePermission('sales:invoices:manage');
   const customers = useCrmStore((s) => s.customers);
   const currentBranch = useBranchStore((s) => s.currentBranch);
-  const { exportInvoices, addExportInvoice, updateExportInvoice, deleteExportInvoice, fetchExportInvoices } = useSalesStore();
-  const { products, fetchProducts } = useInventoryStore();
+  const {
+    exportInvoices,
+    addExportInvoice,
+    updateExportInvoice,
+    deleteExportInvoice,
+    fetchExportInvoices,
+    saleOrders,
+    fetchSaleOrders,
+    customerReturns,
+    fetchCustomerReturns,
+  } = useSalesStore();
+  const { products, fetchProducts, categories, fetchCategories } = useInventoryStore();
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       try {
-        await Promise.all([fetchExportInvoices(), fetchProducts()]);
+        await Promise.all([
+          fetchExportInvoices(),
+          fetchProducts(),
+          fetchSaleOrders?.(),
+          fetchCustomerReturns?.(),
+          fetchCategories?.(),
+        ]);
       } catch (err) {
         console.error(err);
         toast.error('Không thể tải danh sách hóa đơn xuất');
@@ -40,7 +56,7 @@ export function ExportInvoicesPage() {
       }
     };
     load();
-  }, [fetchExportInvoices, fetchProducts]);
+  }, [fetchExportInvoices, fetchProducts, fetchSaleOrders, fetchCustomerReturns, fetchCategories]);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ISSUED' | 'PAID' | 'PARTIAL' | 'OVERDUE' | 'CANCELLED'>('ALL');
@@ -53,8 +69,29 @@ export function ExportInvoicesPage() {
   const [editing, setEditing] = useState<Partial<ExportInvoiceItem>>({});
   const [deleting, setDeleting] = useState<ExportInvoiceItem | null>(null);
 
+  // 4 Special Purpose Form States
+  type InvoicePurpose = 'B2B' | 'POS_VAT' | 'SYSTEM_FALLBACK' | 'RETURN_ADJUST';
+  const [invoicePurpose, setInvoicePurpose] = useState<InvoicePurpose>('B2B');
+  const [channelOrigin, setChannelOrigin] = useState<string>('DIRECT');
+  const [searchRefCode, setSearchRefCode] = useState<string>('');
+  const [isSupplementaryVat, setIsSupplementaryVat] = useState<boolean>(false);
+
+  // Helper to generate clean invoice code and prevent duplicate prefixes (e.g. INV-RET-RET-2026-9613)
+  const generateCleanInvoiceCode = (purpose: InvoicePurpose, rawRefCode?: string): string => {
+    const year = new Date().getFullYear();
+    const rand = Math.floor(100 + Math.random() * 900);
+    if (purpose === 'B2B') return `INV-B2B-${year}-${rand}`;
+    if (purpose === 'POS_VAT') return `INV-VAT-${year}-${rand}`;
+    if (purpose === 'SYSTEM_FALLBACK') return `INV-FBK-${year}-${rand}`;
+    if (purpose === 'RETURN_ADJUST') {
+      const clean = (rawRefCode || '').trim().replace(/^(INV-)?(RET-)+/, '');
+      return clean ? `INV-RET-${clean}` : `INV-RET-${year}-${rand}`;
+    }
+    return `INV-${year}-${rand}`;
+  };
+
   // Helper to get default taxRate from product or category
-  const getProductTaxRate = (prod?: ProductInventory): number => {
+  const getProductTaxRate = (prod?: any): number => {
     if (!prod) return 0.08;
     if (prod.vatRate !== undefined) return Number(prod.vatRate);
     const tc = prod.taxClass;
@@ -62,7 +99,7 @@ export function ExportInvoicesPage() {
     if (tc === 'VAT_5') return 0.05;
     if (tc === 'VAT_8') return 0.08;
     if (tc === 'VAT_10') return 0.10;
-    const cat = categories.find(c => c.categoryName === prod.category || (prod.categoryId && String(c.id) === String(prod.categoryId)));
+    const cat = (categories || []).find(c => c.categoryName === prod.category || (prod.categoryId && String(c.id) === String(prod.categoryId)));
     if (cat?.taxClass === 'VAT_0' || cat?.taxClass === 'EXEMPT') return 0;
     if (cat?.taxClass === 'VAT_5') return 0.05;
     if (cat?.taxClass === 'VAT_8') return 0.08;
@@ -103,7 +140,7 @@ export function ExportInvoicesPage() {
   const handleAddInvoiceItem = () => {
     const p = products[0];
     const initialRate = getProductTaxRate(p);
-    const lineSub = Math.max(0, 1 * (p?.price || 100000) - 0);
+    const lineSub = p ? (p.price || 100000) : 100000;
     const newItem = {
       id: Date.now().toString(),
       productId: p ? Number(p.id) : 1,
@@ -151,10 +188,92 @@ export function ExportInvoicesPage() {
     recalculateTotals(updated);
   };
 
+  // Tra cứu đơn gốc theo 4 mục đích
+  const handleLookupOriginalOrder = (code: string) => {
+    const q = code.trim().toUpperCase();
+    if (!q) return;
+
+    // Search in saleOrders, exportInvoices, customerReturns
+    const matchedSO = (saleOrders || []).find(so => (so.code || '').toUpperCase() === q || `SO-${so.id}` === q || (so as any).orderCode === q);
+    const matchedInv = (exportInvoices || []).find(inv => (inv.invoiceNumber || '').toUpperCase() === q || inv.id === q);
+    const matchedRet = (customerReturns || []).find(cr => (cr.returnCode || '').toUpperCase() === q);
+
+    if (matchedRet) {
+      const cleanCode = matchedRet.returnCode.replace(/^(INV-)?(RET-)+/, '');
+      const cust = customers.find(c => String(c.id) === String(matchedRet.customerId));
+      setInvoicePurpose('RETURN_ADJUST');
+      setEditing(prev => ({
+        ...prev,
+        invoiceNumber: `INV-RET-${cleanCode}`,
+        customerId: String(matchedRet.customerId || '1'),
+        taxId: cust?.taxCode || '—',
+        billingAddress: cust?.address || '—',
+        companyName: cust?.name || 'Khách hàng',
+        orderIds: [matchedRet.orderCode || matchedRet.returnCode],
+        totalAmount: Number(matchedRet.refundAmount || 0),
+        subtotal: Math.round(Number(matchedRet.refundAmount || 0) / 1.08),
+        vatAmount: Number(matchedRet.refundAmount || 0) - Math.round(Number(matchedRet.refundAmount || 0) / 1.08),
+        status: 'PAID',
+        notes: `Hóa đơn điều chỉnh giảm trừ tiền hàng cho phiếu trả ${matchedRet.returnCode}`,
+      }));
+      toast.success(`Đã nạp phiếu trả hàng ${matchedRet.returnCode}, sinh mã chuẩn: INV-RET-${cleanCode}`);
+      return;
+    }
+
+    if (matchedSO) {
+      const cust = customers.find(c => String(c.id) === String(matchedSO.customerId));
+      const isPos = !((matchedSO.code || '').includes('ONLINE') || (matchedSO.code || '').includes('WEB'));
+      if (invoicePurpose === 'POS_VAT') {
+        setIsSupplementaryVat(true);
+      }
+      setEditing(prev => ({
+        ...prev,
+        customerId: matchedSO.customerId || String(cust?.id || '1'),
+        taxId: cust?.taxCode || '—',
+        billingAddress: cust?.address || '—',
+        companyName: cust?.name || matchedSO.customerName || 'Khách hàng',
+        orderIds: [matchedSO.code],
+        totalAmount: Number(matchedSO.totalAmount || 0),
+        subtotal: Math.round(Number(matchedSO.totalAmount || 0) / 1.08),
+        vatAmount: Number(matchedSO.totalAmount || 0) - Math.round(Number(matchedSO.totalAmount || 0) / 1.08),
+        status: isPos ? 'PAID' : 'ISSUED',
+        notes: invoicePurpose === 'POS_VAT'
+          ? `Xuất bù hóa đơn VAT cho đơn hàng bán lẻ POS: ${matchedSO.code}`
+          : `Hóa đơn bán hàng tham chiếu đơn: ${matchedSO.code}`,
+      }));
+      toast.success(`Đã nạp đơn hàng ${matchedSO.code} (${cust?.name || 'Khách hàng'})`);
+      return;
+    }
+
+    if (matchedInv) {
+      const cust = customers.find(c => String(c.id) === String(matchedInv.customerId));
+      setEditing(prev => ({
+        ...prev,
+        customerId: matchedInv.customerId,
+        taxId: matchedInv.taxId || cust?.taxCode || '—',
+        billingAddress: matchedInv.billingAddress || cust?.address || '—',
+        companyName: cust?.name || matchedInv.companyName || 'Doanh nghiệp',
+        orderIds: [matchedInv.invoiceNumber],
+        totalAmount: matchedInv.totalAmount,
+        subtotal: matchedInv.subtotal || matchedInv.subTotal,
+        vatAmount: matchedInv.vatAmount || matchedInv.taxAmount,
+        status: matchedInv.status,
+      }));
+      toast.success(`Đã nạp thông tin từ hóa đơn: ${matchedInv.invoiceNumber}`);
+      return;
+    }
+
+    toast.error(`Không tìm thấy đơn hàng / hóa đơn / phiếu trả với mã: ${code}`);
+  };
+
+  // Unified Dashboard KPI Calculations:
+  // Tổng Doanh Thu = Tổng HD Sỉ/B2B + Tổng HD POS Lẻ + Tổng HD Online - Tổng HD Trả Hàng (RET)
+  // Còn Nợ Phải Thu = Công nợ B2B chưa trả + Đơn Online Ship COD chưa gạch nợ + Đơn POS ghi nợ
   const stats = useMemo(() => {
-    let totalInvoiceAmount = 0;
-    let totalPaidAmount = 0;
-    let totalRemainingDebt = 0;
+    let b2bTotal = 0;
+    let b2bPaid = 0;
+    let b2bDebt = 0;
+    let returnsDeduction = 0;
     let partialCount = 0;
     let unpaidCount = 0;
 
@@ -162,10 +281,15 @@ export function ExportInvoicesPage() {
       const total = inv.totalAmount || 0;
       const paid = typeof inv.paidAmount === 'number' ? inv.paidAmount : (inv.status === 'PAID' ? total : 0);
       const remaining = typeof inv.remainingDebt === 'number' ? inv.remainingDebt : Math.max(0, total - paid);
+      const invNum = inv.invoiceNumber || '';
 
-      totalInvoiceAmount += total;
-      totalPaidAmount += paid;
-      totalRemainingDebt += remaining;
+      if (invNum.startsWith('INV-RET-') || (inv as any).isReturnInvoice) {
+        returnsDeduction += total;
+      } else if (!(inv as any).isSupplementaryVat) {
+        b2bTotal += total;
+        b2bPaid += paid;
+        b2bDebt += remaining;
+      }
 
       if (inv.status === 'PARTIAL_PAID' || (paid > 0 && remaining > 0)) {
         partialCount++;
@@ -175,8 +299,32 @@ export function ExportInvoicesPage() {
       }
     });
 
-    return { totalInvoiceAmount, totalPaidAmount, totalRemainingDebt, partialCount, unpaidCount };
-  }, [exportInvoices]);
+    const posOrders = (saleOrders || []).filter(so => !((so.code || '').includes('ONLINE') || (so.code || '').includes('WEB')));
+    const posTotal = posOrders.reduce((sum, so) => sum + (Number(so.totalAmount) || 0), 0);
+    const posDebt = posOrders.reduce((sum, so) => sum + Math.max(0, (Number(so.totalAmount) || 0) - (Number(so.paidAmount) || (Number(so.totalAmount) || 0))), 0);
+
+    const onlineOrders = (saleOrders || []).filter(so => (so.code || '').includes('ONLINE') || (so.code || '').includes('WEB'));
+    const onlineTotal = onlineOrders.reduce((sum, so) => sum + (Number(so.totalAmount) || 0), 0);
+    const onlinePendingCod = onlineOrders.filter(so => so.status !== 'COMPLETED').reduce((sum, so) => sum + (Number(so.totalAmount) || 0), 0);
+
+    const unifiedTotalRevenue = b2bTotal + posTotal + onlineTotal - returnsDeduction;
+    const unifiedTotalDebt = b2bDebt + posDebt + onlinePendingCod;
+
+    return {
+      totalInvoiceAmount: unifiedTotalRevenue,
+      totalPaidAmount: b2bPaid + (posTotal - posDebt),
+      totalRemainingDebt: unifiedTotalDebt,
+      b2bTotal,
+      posTotal,
+      onlineTotal,
+      returnsDeduction,
+      b2bDebt,
+      posDebt,
+      onlinePendingCod,
+      partialCount,
+      unpaidCount,
+    };
+  }, [exportInvoices, saleOrders]);
 
   const counts = useMemo(() => {
     return {
@@ -225,6 +373,11 @@ export function ExportInvoicesPage() {
 
   const handleOpenCreate = () => {
     setModalMode('create');
+    setInvoicePurpose('B2B');
+    setChannelOrigin('DIRECT');
+    setSearchRefCode('');
+    setIsSupplementaryVat(false);
+
     const p = products[0];
     const initialRate = getProductTaxRate(p);
     const lineSub = p ? (p.price || 100000) : 100000;
@@ -243,7 +396,7 @@ export function ExportInvoicesPage() {
     const sub = initialItems.reduce((acc, it) => acc + it.quantity * it.unitPrice, 0);
     const vat = initialItems.reduce((acc, it) => acc + (it.taxAmount || 0), 0);
     setEditing({
-      invoiceNumber: `INV-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      invoiceNumber: generateCleanInvoiceCode('B2B'),
       customerId: '',
       taxId: '',
       billingAddress: '',
@@ -255,7 +408,7 @@ export function ExportInvoicesPage() {
       totalAmount: sub + vat,
       status: 'ISSUED',
       paymentTerms: 'Net 30',
-      notes: '',
+      notes: 'Hóa đơn Bán sỉ / B2B',
     });
     setIsModalOpen(true);
   };
@@ -304,7 +457,7 @@ export function ExportInvoicesPage() {
     e.preventDefault();
     if (!editing.invoiceNumber || !editing.customerId) return;
     if (editing.taxId && editing.taxId.trim() !== '' && editing.taxId !== '—' && !isValidVietnameseTaxId(editing.taxId)) {
-      toast.error('Mã số thuế không đúng định dạng. Cần 10 chữ số (doanh nghiệp) hoặc 13 chữ số (VD: 0101234567-001)!');
+      toast.error('Mã số thuế không đúng định dạng. Cần 10 chữ số  hoặc 13 chữ số');
       return;
     }
     const subtotal = Number(editing.subtotal) || 0;
@@ -551,7 +704,7 @@ export function ExportInvoicesPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hóa đơn xuất bán (Export Invoices)</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hóa đơn xuất bán </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Quản lý hóa đơn VAT điện tử xuất bán sỉ và doanh nghiệp. Nhấp vào dòng để xem chi tiết.
             </p>
@@ -578,23 +731,25 @@ export function ExportInvoicesPage() {
         {/* KPI Cards: Thống kê xuất bán, Đã thu, Còn nợ */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg">
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg shrink-0">
               <Building2 className="w-6 h-6" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tổng tiền xuất bán</p>
-              <p className="text-lg font-bold text-gray-900 dark:text-white font-mono">{formatMoney(stats.totalInvoiceAmount, 'VND')}</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">{exportInvoices.length} hóa đơn phát hành</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-white font-mono truncate">{formatMoney(stats.totalInvoiceAmount, 'VND')}</p>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 leading-tight">
+                Sỉ: {formatMoney(stats.b2bTotal, 'VND')} + POS: {formatMoney(stats.posTotal, 'VND')} + Online: {formatMoney(stats.onlineTotal, 'VND')}{stats.returnsDeduction > 0 ? ` - Trả: ${formatMoney(stats.returnsDeduction, 'VND')}` : ''}
+              </p>
             </div>
           </div>
 
           <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-lg">
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-lg shrink-0">
               <CheckCircle className="w-6 h-6" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Đã thu tiền</p>
-              <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">{formatMoney(stats.totalPaidAmount, 'VND')}</p>
+              <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono truncate">{formatMoney(stats.totalPaidAmount, 'VND')}</p>
               <p className="text-[11px] text-gray-400 mt-0.5">
                 {stats.totalInvoiceAmount > 0 ? Math.round((stats.totalPaidAmount / stats.totalInvoiceAmount) * 100) : 0}% tỷ lệ thu hồi
               </p>
@@ -602,14 +757,14 @@ export function ExportInvoicesPage() {
           </div>
 
           <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
-            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-lg">
+            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-lg shrink-0">
               <Wallet className="w-6 h-6" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Còn nợ phải thu</p>
-              <p className="text-lg font-bold text-amber-600 dark:text-amber-400 font-mono">{formatMoney(stats.totalRemainingDebt, 'VND')}</p>
-              <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium mt-0.5">
-                {stats.unpaidCount} hóa đơn còn nợ
+              <p className="text-lg font-bold text-amber-600 dark:text-amber-400 font-mono truncate">{formatMoney(stats.totalRemainingDebt, 'VND')}</p>
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium mt-0.5 leading-tight">
+                B2B: {formatMoney(stats.b2bDebt, 'VND')} | COD: {formatMoney(stats.onlinePendingCod, 'VND')} | POS: {formatMoney(stats.posDebt, 'VND')}
               </p>
             </div>
           </div>
@@ -917,10 +1072,170 @@ export function ExportInvoicesPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === 'create' ? 'Thêm hóa đơn xuất' : 'Sửa hóa đơn'}
+        title={modalMode === 'create' ? 'Lập Hóa Đơn Bán Hàng (Mục Đích Đặc Biệt & B2B)' : 'Sửa hóa đơn'}
         size="erp"
       >
         <form onSubmit={handleSave} className="space-y-4">
+          {/* PHẦN 1: THÔNG TIN CHUNG & MỤC ĐÍCH TẠO */}
+          <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 space-y-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 block">
+              1. Thông tin chung & Mục đích tạo hóa đơn (*)
+            </span>
+
+            {/* Radio 4 Cases */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+              <label className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs font-semibold cursor-pointer transition-colors ${
+                invoicePurpose === 'B2B'
+                  ? 'bg-blue-50 dark:bg-blue-950/50 border-blue-400 text-blue-800 dark:text-blue-300'
+                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300'
+              }`}>
+                <input
+                  type="radio"
+                  name="invPurpose"
+                  checked={invoicePurpose === 'B2B'}
+                  onChange={() => {
+                    setInvoicePurpose('B2B');
+                    setIsSupplementaryVat(false);
+                    setEditing(prev => ({
+                      ...prev,
+                      invoiceNumber: generateCleanInvoiceCode('B2B'),
+                      notes: 'Hóa đơn Bán sỉ / B2B'
+                    }));
+                  }}
+                  className="text-blue-600"
+                />
+                <span>Hóa đơn Bán sỉ / B2B</span>
+              </label>
+
+              <label className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs font-semibold cursor-pointer transition-colors ${
+                invoicePurpose === 'POS_VAT'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-400 text-emerald-800 dark:text-emerald-300'
+                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300'
+              }`}>
+                <input
+                  type="radio"
+                  name="invPurpose"
+                  checked={invoicePurpose === 'POS_VAT'}
+                  onChange={() => {
+                    setInvoicePurpose('POS_VAT');
+                    setIsSupplementaryVat(true);
+                    setEditing(prev => ({
+                      ...prev,
+                      invoiceNumber: generateCleanInvoiceCode('POS_VAT'),
+                      notes: 'Xuất bù hóa đơn VAT cho đơn hàng bán lẻ cũ'
+                    }));
+                  }}
+                  className="text-emerald-600"
+                />
+                <span>Xuất bù VAT (Đơn lẻ cũ)</span>
+              </label>
+
+              <label className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs font-semibold cursor-pointer transition-colors ${
+                invoicePurpose === 'SYSTEM_FALLBACK'
+                  ? 'bg-amber-50 dark:bg-amber-950/50 border-amber-400 text-amber-800 dark:text-amber-300'
+                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300'
+              }`}>
+                <input
+                  type="radio"
+                  name="invPurpose"
+                  checked={invoicePurpose === 'SYSTEM_FALLBACK'}
+                  onChange={() => {
+                    setInvoicePurpose('SYSTEM_FALLBACK');
+                    setIsSupplementaryVat(false);
+                    setEditing(prev => ({
+                      ...prev,
+                      invoiceNumber: generateCleanInvoiceCode('SYSTEM_FALLBACK'),
+                      notes: 'Nhập bù sự cố hệ thống (Sập API sàn/mất mạng)'
+                    }));
+                  }}
+                  className="text-amber-600"
+                />
+                <span>Nhập bù sự cố (Fallback)</span>
+              </label>
+
+              <label className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs font-semibold cursor-pointer transition-colors ${
+                invoicePurpose === 'RETURN_ADJUST'
+                  ? 'bg-red-50 dark:bg-red-950/50 border-red-400 text-red-800 dark:text-red-300'
+                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300'
+              }`}>
+                <input
+                  type="radio"
+                  name="invPurpose"
+                  checked={invoicePurpose === 'RETURN_ADJUST'}
+                  onChange={() => {
+                    setInvoicePurpose('RETURN_ADJUST');
+                    setIsSupplementaryVat(false);
+                    setEditing(prev => ({
+                      ...prev,
+                      invoiceNumber: generateCleanInvoiceCode('RETURN_ADJUST'),
+                      notes: 'Hóa đơn điều chỉnh giảm trừ tiền hàng / hoàn tiền (Return Invoice)'
+                    }));
+                  }}
+                  className="text-red-600"
+                />
+                <span>Hóa đơn Trả / Giảm tiền</span>
+              </label>
+            </div>
+
+            {/* Channel origin and lookup bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+              <div>
+                <label className="block text-[11px] font-medium text-gray-500 mb-1">Kênh / Nguồn gốc:</label>
+                <select
+                  value={channelOrigin}
+                  onChange={(e) => setChannelOrigin(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg"
+                >
+                  <option value="DIRECT">Bán trực tiếp (Direct B2B)</option>
+                  <option value="POS_ERROR">POS lỗi kết nối / Quầy bán</option>
+                  <option value="SHOPEE_ERROR">Shopee lỗi API</option>
+                  <option value="WEBSITE_SYNC">Website lỗi đồng bộ</option>
+                </select>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-medium text-gray-500 mb-1">Mã đơn gốc tham chiếu (Nếu có):</label>
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    placeholder="VD: SO-2026-0001, ORD-POS-8821, RET-2026-9613..."
+                    value={searchRefCode}
+                    onChange={(e) => setSearchRefCode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleLookupOriginalOrder(searchRefCode);
+                      }
+                    }}
+                    className="flex-1 px-2.5 py-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg font-mono font-medium"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleLookupOriginalOrder(searchRefCode)}
+                    className="px-3 py-1.5 text-xs font-semibold text-white bg-gray-800 hover:bg-gray-900 rounded-lg cursor-pointer flex items-center gap-1"
+                  >
+                    <Search className="w-3.5 h-3.5" /> Tra cứu
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Explanation banner */}
+            {invoicePurpose === 'POS_VAT' && (
+              <div className="p-2 rounded bg-emerald-100/60 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 text-[11px] flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span><strong>Chống trùng doanh thu:</strong> Doanh thu đã được máy POS ghi nhận trước đó, hóa đơn này chỉ phục vụ xuất chứng từ VAT cho doanh nghiệp và không cộng dồn doanh thu 2 lần.</span>
+              </div>
+            )}
+            {invoicePurpose === 'RETURN_ADJUST' && (
+              <div className="p-2 rounded bg-red-100/60 dark:bg-red-950/60 text-red-900 dark:text-red-200 text-[11px] flex items-center gap-1.5">
+                <RotateCcw className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                <span><strong>Giảm trừ công nợ & doanh thu:</strong> Hóa đơn giảm trừ (Return Invoice) sinh mã chuẩn <code>INV-RET-xxxx</code> (đã khử hoàn toàn lỗi lặp tiền tố RET-RET).</span>
+              </div>
+            )}
+          </div>
+
+          {/* PHẦN 2: THÔNG TIN KHÁCH HÀNG & PHÁP NHÂN */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Số hóa đơn *</label>
@@ -944,7 +1259,7 @@ export function ExportInvoicesPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng (CRM) *</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Khách hàng / Doanh nghiệp (CRM) *</label>
             <CustomerSelect
               value={editing.customerId || ''}
               onChange={(customerId) => {
@@ -954,6 +1269,7 @@ export function ExportInvoicesPage() {
                   customerId,
                   taxId: found?.taxCode || prev.taxId,
                   billingAddress: found?.address || prev.billingAddress,
+                  companyName: found?.name || prev.companyName,
                 }));
               }}
               allowWalkIn={false}
@@ -964,7 +1280,7 @@ export function ExportInvoicesPage() {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
-                  Mã số thuế (Tự động từ khách hàng)
+                  Mã số thuế (MST)
                 </label>
                 {editing.taxId && editing.taxId !== '—' && (
                   isValidVietnameseTaxId(editing.taxId) ? (
@@ -991,7 +1307,7 @@ export function ExportInvoicesPage() {
               />
               {editing.taxId && editing.taxId !== '—' && !isValidVietnameseTaxId(editing.taxId) && (
                 <p className="text-[11px] text-red-500 mt-1">
-                  MST chuẩn gồm 10 số (công ty) hoặc 13 số (chi nhánh, VD: 0101234567-001).
+                  MST chuẩn gồm 10 số hoặc 13 số.
                 </p>
               )}
             </div>
@@ -1007,13 +1323,13 @@ export function ExportInvoicesPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Order IDs tham chiếu</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã đơn hàng / Hợp đồng tham chiếu</label>
             <input
               type="text"
               value={(editing.orderIds || []).join(', ')}
               onChange={(e) => setEditing({ ...editing, orderIds: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-sm font-mono"
-              placeholder="SO-001, SO-002"
+              placeholder="SO-001, SO-002, ORD-POS-..."
             />
           </div>
 
