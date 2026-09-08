@@ -31,12 +31,15 @@ export function ProductWarrantiesPage() {
     addProductWarranty,
     updateProductWarranty,
     deleteProductWarranty,
+    customers,
+    fetchCustomers,
     isLoading,
   } = useCrmStore();
 
   useEffect(() => {
     fetchProductWarranties();
-  }, [fetchProductWarranties]);
+    fetchCustomers();
+  }, [fetchProductWarranties, fetchCustomers]);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
@@ -396,13 +399,18 @@ export function ProductWarrantiesPage() {
           </div>
           <div>
             <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">Khách hàng *</label>
-            <input
-              type="text"
+            <select
               value={editingItem.customerName || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, customerName: e.target.value })}
+              onChange={(e) => {
+                const customer = customers.find(c => c.name === e.target.value);
+                setEditingItem({ ...editingItem, customerName: e.target.value, customerPhone: customer?.phone || '' });
+              }}
               className="w-full px-3 py-2 border rounded text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
               required
-            />
+            >
+              <option value="">-- Chọn khách hàng --</option>
+              {customers.map(customer => <option key={customer.id} value={customer.name}>{customer.name}{customer.phone ? ` - ${customer.phone}` : ''}</option>)}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

@@ -240,7 +240,7 @@ export function AttendancePage() {
           return;
         }
 
-        // Mode 1: Auto detection
+        // Mode 1: Auto detection (Tự động nhận diện)
         if (!selectedUserId || selectedUserId === 'auto') {
           if (enrolledFaces.length === 0) {
             setFaceAiStatus('Chưa có dữ liệu khuôn mặt nào được đăng ký. Vui lòng chọn nhân viên chỉ định hoặc đăng ký tại mục Hồ sơ nhân sự!');
@@ -273,8 +273,14 @@ export function AttendancePage() {
 
               setTimeout(async () => {
                 stopCameraAndAi();
-                setScanStep(2);
-                await processAttendanceForUser(String(foundUser.id), foundUser.fullName);
+                try {
+                  await processAttendanceForUser(String(foundUser.id), foundUser.fullName);
+                  setScanStep(2);
+                } catch (error) { // ĐÃ SỬA: Bắt biến error
+                  setScanStep(0);
+                  // ĐÃ SỬA: Hiển thị lỗi từ backend thay vì text cứng
+                  toast.error(error.message || 'Lỗi khi ghi nhận chấm công.');
+                }
               }, 600);
             }
           } else {
@@ -283,7 +289,7 @@ export function AttendancePage() {
             consecutiveMatchCount = 0;
           }
         } else {
-          // Mode 2: Specific employee selected
+          // Mode 2: Specific employee selected (Chọn nhân viên cụ thể)
           const targetUser = users.find(u => String(u.id) === String(selectedUserId));
           if (!targetUser) {
             setFaceAiStatus('Không tìm thấy thông tin nhân viên đã chọn!');
@@ -292,19 +298,8 @@ export function AttendancePage() {
 
           const hasEnrolled = faceApiService.getFaceDescriptor(String(targetUser.id));
           if (!hasEnrolled) {
-            // First-time auto enrollment on the fly!
-            setFaceAiStatus(`Đang tự động đăng ký dữ liệu khuôn mặt cho ${targetUser.fullName}...`);
-            faceApiService.saveFaceDescriptor(String(targetUser.id), targetUser.fullName, detection.descriptor);
-            if (scanIntervalRef.current) {
-              clearInterval(scanIntervalRef.current);
-              scanIntervalRef.current = null;
-            }
-            setMatchedUser({ id: String(targetUser.id), fullName: targetUser.fullName, similarity: 100 });
-            setTimeout(async () => {
-              stopCameraAndAi();
-              setScanStep(2);
-              await processAttendanceForUser(String(targetUser.id), targetUser.fullName);
-            }, 600);
+            setFaceAiStatus(`Chưa có dữ liệu khuôn mặt của ${targetUser.fullName}. Hãy đăng ký khuôn mặt trước khi ${attendanceAction === 'CHECK_OUT' ? 'tan ca' : 'vào ca'}.`);
+            setIsFaceMatched(false);
             return;
           }
 
@@ -323,8 +318,14 @@ export function AttendancePage() {
 
               setTimeout(async () => {
                 stopCameraAndAi();
-                setScanStep(2);
-                await processAttendanceForUser(String(targetUser.id), targetUser.fullName);
+                try {
+                  await processAttendanceForUser(String(targetUser.id), targetUser.fullName);
+                  setScanStep(2);
+                } catch (error) { // ĐÃ SỬA: Bắt biến error
+                  setScanStep(0);
+                  // ĐÃ SỬA: Hiển thị lỗi từ backend thay vì text cứng
+                  toast.error(error.message || 'Lỗi khi ghi nhận chấm công.');
+                }
               }, 600);
             }
           } else {
@@ -379,11 +380,15 @@ export function AttendancePage() {
                 type="button"
                 onClick={async (e) => {
                   e.stopPropagation();
-                  await recordCheckOut(row.original.userId, row.original.userName);
-                  toast.success(`Đã ghi nhận Tan ca (Giờ ra) cho ${row.original.userName}!`);
+                  // Tan ca luôn yêu cầu quét lại khuôn mặt, không ghi nhận trực tiếp từ bảng.
+                  setModalTab('ATTENDANCE');
+                  setAttendanceAction('CHECK_OUT');
+                  setSelectedUserId(String(row.original.userId));
+                  setScanStep(0);
+                  setFaceCheckInOpen(true);
                 }}
                 className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-xs"
-                title="Bấm để ghi nhận giờ ra ca (Check-out) ngay bây giờ"
+                title="Quét khuôn mặt để xác thực và ghi nhận tan ca"
               >
                 <LogOut className="w-3 h-3" />
                 Tan ca
@@ -509,6 +514,7 @@ export function AttendancePage() {
         onClose={() => {
           stopCameraAndAi();
           setFaceCheckInOpen(false);
+          fetchAttendances();
         }}
         title={modalTab === 'ATTENDANCE' ? 'Chấm công nhận diện khuôn mặt sinh trắc học AI' : 'Đăng ký khuôn mặt nhân sự mới'}
         width="max-w-3xl"
