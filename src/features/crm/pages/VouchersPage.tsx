@@ -623,9 +623,10 @@ export function VouchersPage() {
               <input
                 type="date"
                 required
-                value={formData.startDate}
-                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                readOnly
+                disabled
+                value={new Date().toISOString().split('T')[0]}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-sm cursor-not-allowed"
               />
             </div>
             <div>

@@ -149,6 +149,18 @@ export function InventoryPage() {
   const [deletingBulkProducts, setDeletingBulkProducts] = useState<{ rows: ProductInventory[], clear: () => void } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingGallery, setIsUploadingGallery] = useState(false);
+  const [galleryUrlInput, setGalleryUrlInput] = useState('');
+  const [activePreviewImage, setActivePreviewImage] = useState<string>('');
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; title?: string; index?: number; total?: number } | null>(null);
+
+  useEffect(() => {
+    if (selectedProduct) {
+      setActivePreviewImage(selectedProduct.mainImage || (selectedProduct.galleryImages && selectedProduct.galleryImages[0]) || '');
+    } else {
+      setActivePreviewImage('');
+    }
+  }, [selectedProduct]);
 
   const filtered = useMemo(() => {
     return data.filter((item) => {
@@ -248,7 +260,11 @@ function generateSkuCode(existingSkus: string[] = []): string {
   const handleOpenEdit = async (product: ProductInventory) => {
     setModalMode('edit');
     setActiveModalTab('basic');
-    setEditingProduct({ ...product, variants: product.variants || [] });
+    setEditingProduct({ 
+      ...product, 
+      galleryImages: product.galleryImages ? [...product.galleryImages] : [],
+      variants: product.variants || [] 
+    });
     try {
       const units = await fetchProductUnits(product.id);
       setEditingUnits(units.filter(u => !u.isBaseUnit));
@@ -305,7 +321,8 @@ function generateSkuCode(existingSkus: string[] = []): string {
       unit: editingProduct.unit || 'Cái',
       weight: editingProduct.weight || '',
       location: editingProduct.location || '',
-      onHand: Math.max(0, Number(editingProduct.onHand) || 0),
+      // New products must enter stock through a receiving document, never via the catalog form.
+      onHand: modalMode === 'create' ? 0 : Math.max(0, Number(editingProduct.onHand) || 0),
       status: editingProduct.status as any || 'ACTIVE',
       description: editingProduct.description || '',
       mainImage: editingProduct.mainImage || '',
@@ -328,7 +345,6 @@ function generateSkuCode(existingSkus: string[] = []): string {
         toast.success(`Đã tạo thành công sản phẩm: ${payload.name}`);
       } else if (editingProduct.id) {
         await updateProduct(editingProduct.id, payload);
-        toast.success(`Đã cập nhật sản phẩm: ${payload.name}`);
         
         try {
           const dbUnits = await fetchProductUnits(editingProduct.id);
@@ -360,6 +376,14 @@ function generateSkuCode(existingSkus: string[] = []): string {
           }
         } catch (unitErr) {
           console.error('Failed to sync product units on update:', unitErr);
+        }
+
+        if (selectedProduct && selectedProduct.id === editingProduct.id) {
+          setSelectedProduct(prev => prev ? ({
+            ...prev,
+            ...payload,
+            galleryImages: payload.galleryImages || [],
+          }) : null);
         }
 
         toast.success(`Đã cập nhật sản phẩm ${payload.name} thành công!`);
@@ -506,6 +530,71 @@ function generateSkuCode(existingSkus: string[] = []): string {
     }
   };
 
+  const uploadGalleryImages = async (files: File[]) => {
+    if (!files || files.length === 0) return;
+    const currentList = editingProduct.galleryImages || [];
+    if (currentList.length >= 5) {
+      toast.error('Mỗi sản phẩm chỉ được tối đa 5 ảnh phụ!');
+      return;
+    }
+    const availableSlots = 5 - currentList.length;
+    const filesToUpload = files.slice(0, availableSlots);
+
+    setIsUploadingGallery(true);
+    const toastId = toast.loading(`Đang tải lên ${filesToUpload.length} ảnh phụ...`);
+
+    try {
+      const uploadedUrls: string[] = [];
+      for (const file of filesToUpload) {
+        try {
+          const compressed = await compressImage(file, { maxWidth: 1400, quality: 0.82 });
+          const formData = new FormData();
+          formData.append('file', compressed);
+          formData.append('folder', 'products');
+          const response: any = await axiosClient.post('/uploads/image', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          const url = response?.data?.imageUrl || response?.imageUrl || response?.url || response?.data?.url || (typeof response?.data === 'string' ? response.data : null);
+          if (url) {
+            uploadedUrls.push(url);
+          }
+        } catch (singleErr) {
+          console.error('Lỗi khi tải lên 1 ảnh phụ:', singleErr);
+        }
+      }
+
+      if (uploadedUrls.length > 0) {
+        setEditingProduct(prev => ({
+          ...prev,
+          galleryImages: [...(prev.galleryImages || []), ...uploadedUrls],
+        }));
+        toast.success(`Đã tải lên ${uploadedUrls.length} ảnh phụ thành công!`, { id: toastId });
+      } else {
+        toast.error('Không thể tải ảnh phụ lên máy chủ. Vui lòng kiểm tra lại!', { id: toastId });
+      }
+    } catch (err: any) {
+      console.error('Lỗi tổng thể khi tải ảnh phụ:', err);
+      toast.error('Có lỗi xảy ra khi tải ảnh phụ!', { id: toastId });
+    } finally {
+      setIsUploadingGallery(false);
+    }
+  };
+
+  const handleAddGalleryUrl = () => {
+    const trimmed = galleryUrlInput.trim();
+    if (!trimmed) return;
+    if ((editingProduct.galleryImages || []).length >= 5) {
+      toast.error('Mỗi sản phẩm chỉ được tối đa 5 ảnh phụ!');
+      return;
+    }
+    setEditingProduct(prev => ({
+      ...prev,
+      galleryImages: [...(prev.galleryImages || []), trimmed],
+    }));
+    setGalleryUrlInput('');
+    toast.success('Đã thêm URL ảnh phụ thành công!');
+  };
+
   // Unit management — nested API /products/{id}/units
   const handleAddUnit = () => {
     setEditingUnits([...editingUnits, {
@@ -597,21 +686,33 @@ function generateSkuCode(existingSkus: string[] = []): string {
       {
         accessorKey: 'name',
         header: 'Tên sản phẩm',
-        cell: ({ row }) => (
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-900 border border-gray-150 dark:border-gray-700 shrink-0 flex items-center justify-center shadow-inner">
-              {row.original.mainImage ? (
-                <img src={row.original.mainImage} alt={row.original.name} className="w-full h-full object-cover" />
-              ) : (
-                <ImageIcon className="w-5 h-5 text-gray-400 opacity-50" />
-              )}
+        cell: ({ row }) => {
+          const displayImg = row.original.mainImage || (row.original.galleryImages && row.original.galleryImages[0]) || '';
+          const galleryCount = (row.original.galleryImages || []).length;
+          return (
+            <div className="flex items-center gap-3">
+              <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-900 border border-gray-150 dark:border-gray-700 shrink-0 flex items-center justify-center shadow-inner">
+                {displayImg ? (
+                  <img src={displayImg} alt={row.original.name} className="w-full h-full object-cover" />
+                ) : (
+                  <ImageIcon className="w-5 h-5 text-gray-400 opacity-50" />
+                )}
+                {galleryCount > 0 && (
+                  <span 
+                    className="absolute bottom-0 right-0 bg-indigo-600/90 text-white text-[8px] font-bold px-1 rounded-tl-md leading-tight shadow-sm"
+                    title={`Sản phẩm có ${galleryCount} ảnh phụ`}
+                  >
+                    +{galleryCount}
+                  </span>
+                )}
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900 dark:text-white">{row.original.name}</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">{row.original.brand}</p>
+              </div>
             </div>
-            <div>
-              <p className="font-semibold text-gray-900 dark:text-white">{row.original.name}</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">{row.original.brand}</p>
-            </div>
-          </div>
-        ),
+          );
+        },
       },
       {
         accessorKey: 'category',
@@ -931,15 +1032,40 @@ function generateSkuCode(existingSkus: string[] = []): string {
             <div className="flex flex-col md:flex-row gap-6">
               {/* Product Image */}
               <div className="w-full md:w-1/3 aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 border border-gray-200/60 dark:border-gray-700/60 flex items-center justify-center shrink-0 shadow-inner relative group">
-                {selectedProduct.mainImage ? (
-                  <img src={selectedProduct.mainImage} alt={selectedProduct.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                {(activePreviewImage || selectedProduct.mainImage) ? (
+                  <div 
+                    className="relative w-full h-full cursor-zoom-in group"
+                    onClick={() => {
+                      const allImgs = [selectedProduct.mainImage, ...(selectedProduct.galleryImages || [])].filter(Boolean) as string[];
+                      const cur = activePreviewImage || selectedProduct.mainImage || '';
+                      const idx = allImgs.indexOf(cur);
+                      setLightboxImage({
+                        url: cur,
+                        title: selectedProduct.name,
+                        index: idx >= 0 ? idx + 1 : 1,
+                        total: allImgs.length,
+                      });
+                    }}
+                    title="Nhấn để phóng to ảnh xem chi tiết"
+                  >
+                    <img 
+                      src={activePreviewImage || selectedProduct.mainImage} 
+                      alt={selectedProduct.name} 
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
+                      <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/75 text-white text-xs font-bold px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg backdrop-blur-sm">
+                        <Eye className="w-4 h-4" /> Xem chi tiết ảnh
+                      </span>
+                    </div>
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center gap-2 text-gray-400">
                     <ImageIcon className="w-10 h-10 opacity-50" />
                     <span className="text-xs font-medium">Chưa có ảnh</span>
                   </div>
                 )}
-                <div className="absolute top-3 right-3">
+                <div className="absolute top-3 right-3 pointer-events-none">
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest backdrop-blur-md shadow-sm ${
                     selectedProduct.status === 'ACTIVE' 
                       ? 'bg-emerald-500/90 text-white' 
@@ -1004,19 +1130,70 @@ function generateSkuCode(existingSkus: string[] = []): string {
             {/* Gallery Images List */}
             {selectedProduct.galleryImages && selectedProduct.galleryImages.length > 0 && (
               <div className="pt-2">
-                <span className="text-[11px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest block mb-3">Thư viện ảnh ({selectedProduct.galleryImages.length})</span>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[11px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest block">
+                    Thư viện ảnh phụ ({selectedProduct.galleryImages.length})
+                  </span>
+                  <span className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
+                    Nhấp vào ảnh để xem chi tiết / đổi góc nhìn
+                  </span>
+                </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 snap-x">
-                  {selectedProduct.galleryImages.map((img, idx) => (
-                    <a 
-                      key={idx}
-                      href={img}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-20 h-20 rounded-xl overflow-hidden border border-gray-200/80 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 shrink-0 hover:scale-105 hover:shadow-md hover:border-indigo-300 transition-all snap-start"
+                  {/* Thumbnail Ảnh chính */}
+                  {selectedProduct.mainImage && (
+                    <button
+                      type="button"
+                      onClick={() => setActivePreviewImage(selectedProduct.mainImage!)}
+                      className={`relative w-20 h-20 rounded-xl overflow-hidden border-2 bg-gray-50 dark:bg-gray-900 shrink-0 transition-all snap-start group cursor-pointer ${
+                        (activePreviewImage === selectedProduct.mainImage || !activePreviewImage)
+                          ? 'border-indigo-600 ring-2 ring-indigo-500/30 scale-95 shadow-md'
+                          : 'border-gray-200 dark:border-gray-700 opacity-70 hover:opacity-100'
+                      }`}
+                      title="Xem ảnh chính"
                     >
-                      <img src={img} alt={`${selectedProduct.name} gallery ${idx}`} className="w-full h-full object-cover" />
-                    </a>
-                  ))}
+                      <img src={selectedProduct.mainImage} alt="Main image" className="w-full h-full object-cover" />
+                      <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] font-bold px-1 rounded">Chính</span>
+                    </button>
+                  )}
+                  {/* Thumbnails Ảnh phụ */}
+                  {selectedProduct.galleryImages.map((img, idx) => {
+                    const isSelected = activePreviewImage === img;
+                    const allImgs = [selectedProduct.mainImage, ...(selectedProduct.galleryImages || [])].filter(Boolean) as string[];
+                    const imgIdx = allImgs.indexOf(img);
+                    return (
+                      <div 
+                        key={idx}
+                        onClick={() => setActivePreviewImage(img)}
+                        className={`relative w-20 h-20 rounded-xl overflow-hidden border-2 bg-gray-50 dark:bg-gray-900 shrink-0 transition-all snap-start group cursor-pointer ${
+                          isSelected
+                            ? 'border-indigo-600 ring-2 ring-indigo-500/30 scale-95 shadow-md'
+                            : 'border-gray-200 dark:border-gray-700 opacity-80 hover:opacity-100'
+                        }`}
+                        title={`Ảnh phụ ${idx + 1} - Nhấn để đổi góc nhìn, hoặc nhấn biểu tượng mắt để phóng to`}
+                      >
+                        <img src={img} alt={`${selectedProduct.name} gallery ${idx + 1}`} className="w-full h-full object-cover" />
+                        <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] font-bold px-1 rounded">Ảnh {idx + 1}</span>
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLightboxImage({
+                                url: img,
+                                title: `${selectedProduct.name} (Ảnh phụ ${idx + 1})`,
+                                index: imgIdx >= 0 ? imgIdx + 1 : idx + 2,
+                                total: allImgs.length,
+                              });
+                            }}
+                            className="p-1.5 bg-white/90 hover:bg-white text-gray-800 rounded-full shadow-lg transition-all hover:scale-110"
+                            title="Phóng to ảnh xem chi tiết"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1403,7 +1580,7 @@ function generateSkuCode(existingSkus: string[] = []): string {
                     className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-indigo-200 dark:border-indigo-700 rounded-xl text-sm font-black text-indigo-700 dark:text-indigo-400 focus:ring-2 focus:ring-indigo-500/50 uppercase shadow-sm appearance-none"
                   >
                     {unitsList.length > 0 ? (
-                      unitsList.map(u => <option key={u.id} value={u.unitName}>{u.unitName} ({u.code})</option>)
+                      unitsList.map(u => <option key={u.id} value={u.unitName}>{u.unitName}</option>)
                     ) : (
                       <option value={editingProduct.unit}>{editingProduct.unit}</option>
                     )}
@@ -1414,8 +1591,9 @@ function generateSkuCode(existingSkus: string[] = []): string {
                   <input
                     type="number"
                     value={editingProduct.onHand || 0}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, onHand: parseInt(e.target.value) || 0 })}
-                    className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-500/50 shadow-sm"
+                    readOnly
+                    aria-readonly="true"
+                    className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-500 cursor-not-allowed shadow-sm"
                   />
                 </div>
               </div>
@@ -1603,50 +1781,100 @@ function generateSkuCode(existingSkus: string[] = []): string {
 
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <label className="block text-sm font-bold text-gray-900 dark:text-white">Thư viện ảnh phụ</label>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-900 dark:text-white">Thư viện ảnh phụ</label>
+                    <p className="text-xs text-gray-400 mt-0.5">Tải lên tối đa 5 hình ảnh chi tiết của sản phẩm để hiển thị trên website bán hàng.</p>
+                  </div>
                   <span className="text-xs font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-1 rounded-lg">{(editingProduct.galleryImages || []).length} / 5 ảnh</span>
                 </div>
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap gap-3 mb-4">
                   {(editingProduct.galleryImages || []).map((img, idx) => (
                     <div key={idx} className="relative w-24 h-24 bg-gray-50 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden group shadow-sm">
-                      <img src={img} alt={`Gallery preview ${idx}`} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextGallery = (editingProduct.galleryImages || []).filter((_, i) => i !== idx);
-                          setEditingProduct({ ...editingProduct, galleryImages: nextGallery });
-                        }}
-                        className="absolute top-1.5 right-1.5 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 hover:bg-red-600 hover:scale-110 active:scale-95 transition-all shadow-lg"
-                        title="Xóa ảnh phụ"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+                      <img src={img} alt={`Gallery preview ${idx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setLightboxImage({
+                            url: img,
+                            title: `Ảnh phụ ${idx + 1} / ${(editingProduct.galleryImages || []).length}`,
+                            index: idx + 1,
+                            total: (editingProduct.galleryImages || []).length
+                          })}
+                          className="p-1.5 bg-white/90 hover:bg-white text-gray-800 rounded-full shadow-lg opacity-0 group-hover:opacity-100 hover:scale-110 active:scale-95 transition-all"
+                          title="Xem chi tiết ảnh phóng to"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextGallery = (editingProduct.galleryImages || []).filter((_, i) => i !== idx);
+                            setEditingProduct({ ...editingProduct, galleryImages: nextGallery });
+                          }}
+                          className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 hover:scale-110 active:scale-95 transition-all"
+                          title="Xóa ảnh phụ"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
-                  <label className="w-24 h-24 bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-indigo-400 transition-colors group">
-                    <Plus className="w-6 h-6 text-gray-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-1" />
-                    <span className="text-[10px] font-bold text-gray-400 group-hover:text-indigo-500">Thêm ảnh</span>
+
+                  {(editingProduct.galleryImages || []).length < 5 && (
+                    <label className={`w-24 h-24 bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-indigo-400 transition-colors group relative ${isUploadingGallery ? 'opacity-60 pointer-events-none' : ''}`}>
+                      {isUploadingGallery ? (
+                        <>
+                          <Loader2 className="w-6 h-6 text-indigo-500 animate-spin mb-1" />
+                          <span className="text-[10px] font-bold text-indigo-500">Đang tải...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-6 h-6 text-gray-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-1" />
+                          <span className="text-[10px] font-bold text-gray-400 group-hover:text-indigo-500">Thêm ảnh</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        disabled={isUploadingGallery}
+                        className="hidden"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []);
+                          if (files.length > 0) {
+                            uploadGalleryImages(files);
+                          }
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+                  <label className="block text-[10px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Hoặc thêm ảnh phụ từ URL trực tiếp</label>
+                  <div className="flex gap-2">
                     <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={(e) => {
-                        const files = Array.from(e.target.files || []);
-                        files.forEach((file) => {
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setEditingProduct((prev) => ({
-                              ...prev,
-                              galleryImages: [...(prev.galleryImages || []), reader.result as string],
-                            }));
-                          };
-                          reader.readAsDataURL(file);
-                        });
+                      type="text"
+                      value={galleryUrlInput}
+                      onChange={(e) => setGalleryUrlInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddGalleryUrl();
+                        }
                       }}
+                      placeholder="https://example.com/gallery-image.jpg"
+                      className="flex-1 px-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-mono focus:ring-2 focus:ring-indigo-500/50 transition-all"
                     />
-                  </label>
+                    <button
+                      type="button"
+                      onClick={handleAddGalleryUrl}
+                      className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 dark:text-indigo-300 rounded-xl text-xs font-bold transition-all"
+                    >
+                      Thêm URL
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1943,6 +2171,65 @@ function generateSkuCode(existingSkus: string[] = []): string {
           </div>
         </div>
       </Modal>
+
+      {/* FULLSCREEN IMAGE DETAIL / LIGHTBOX MODAL */}
+      {lightboxImage && (
+        <div 
+          className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-fade-in select-none"
+          onClick={() => setLightboxImage(null)}
+        >
+          {/* Top Bar */}
+          <div className="absolute top-4 left-4 right-4 flex items-center justify-between text-white z-10">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-bold bg-white/20 px-3.5 py-1.5 rounded-full backdrop-blur-sm shadow-md">
+                {lightboxImage.title || 'Chi tiết hình ảnh'}
+              </span>
+              {lightboxImage.total && lightboxImage.total > 1 && (
+                <span className="text-xs font-semibold text-gray-300 bg-white/10 px-2.5 py-1 rounded-full">
+                  {lightboxImage.index} / {lightboxImage.total}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href={lightboxImage.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                download
+                onClick={(e) => e.stopPropagation()}
+                className="p-2.5 bg-white/10 hover:bg-white/25 text-white rounded-full transition-colors shadow-md flex items-center gap-1.5 text-xs font-semibold"
+                title="Mở ảnh gốc trong tab mới"
+              >
+                <Download className="w-4 h-4" /> Mở gốc
+              </a>
+              <button
+                type="button"
+                onClick={() => setLightboxImage(null)}
+                className="p-2.5 bg-white/10 hover:bg-red-600 text-white rounded-full transition-colors shadow-md"
+                title="Đóng (ESC)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Main Large Image */}
+          <div 
+            className="max-w-4xl max-h-[82vh] flex items-center justify-center overflow-hidden rounded-2xl shadow-2xl p-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img 
+              src={lightboxImage.url} 
+              alt={lightboxImage.title || 'Chi tiết ảnh'} 
+              className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl transition-all"
+            />
+          </div>
+
+          <p className="text-xs text-gray-400 mt-4">
+            Nhấp vùng trống bên ngoài hoặc biểu tượng ✕ để đóng
+          </p>
+        </div>
+      )}
     </>
   );
 }

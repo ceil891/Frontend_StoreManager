@@ -1347,7 +1347,19 @@ export const useInventoryStore = create<InventoryState>()(
             isActive: item.isActive !== false && item.is_active !== false && item.status !== 'INACTIVE',
             description: item.description || '',
             mainImage: item.mainImageUrl || item.mainImage || item.imageUrl || '',
-            galleryImages: [],
+            galleryImages: (() => {
+              if (!item.galleryImages) return [];
+              if (Array.isArray(item.galleryImages)) return item.galleryImages;
+              if (typeof item.galleryImages === 'string' && item.galleryImages.trim()) {
+                try {
+                  const parsed = JSON.parse(item.galleryImages);
+                  return Array.isArray(parsed) ? parsed : [item.galleryImages];
+                } catch {
+                  return item.galleryImages.split(',').map((s: string) => s.trim()).filter(Boolean);
+                }
+              }
+              return [];
+            })(),
             barcodes: item.barcode ? [item.barcode] : [],
             reorderPoint: Number(item.reorderPoint || 0),
             minStock: Number(item.minStock || 0),
@@ -2399,7 +2411,7 @@ export const useInventoryStore = create<InventoryState>()(
             reorderPoint: product.reorderPoint || 0,
             minStock: product.minStock || 0,
             maxStock: product.maxStock || 0,
-            galleryImages: JSON.stringify(product.galleryImages || []),
+            galleryImages: Array.isArray(product.galleryImages) ? JSON.stringify(product.galleryImages) : (typeof product.galleryImages === 'string' ? product.galleryImages : '[]'),
             variants: structuredVariants,
             initialStocks: initialStocks,
             isSerialTracked: product.isSerialTracked !== undefined ? product.isSerialTracked : false,
@@ -2441,6 +2453,19 @@ export const useInventoryStore = create<InventoryState>()(
           const unitObj = data.unit ? get().unitsList.find(u => u.unitName === data.unit || u.code === data.unit) : undefined;
           const baseUnitId = unitObj ? Number(unitObj.id) : ((data as any)?.baseUnitId || (currentProd as any)?.baseUnitId || (get().unitsList[0]?.id ? Number(get().unitsList[0].id) : 1));
 
+          const formattedGallery = (() => {
+            if (data.galleryImages !== undefined) {
+              if (Array.isArray(data.galleryImages)) return JSON.stringify(data.galleryImages);
+              if (typeof data.galleryImages === 'string') return data.galleryImages;
+              return '[]';
+            }
+            if (currentProd?.galleryImages !== undefined) {
+              if (Array.isArray(currentProd.galleryImages)) return JSON.stringify(currentProd.galleryImages);
+              if (typeof currentProd.galleryImages === 'string') return currentProd.galleryImages;
+            }
+            return undefined;
+          })();
+
           const payload = {
             productCode: data.sku ?? currentProd?.sku,
             name: data.name ?? currentProd?.name,
@@ -2457,7 +2482,7 @@ export const useInventoryStore = create<InventoryState>()(
             reorderPoint: data.reorderPoint !== undefined ? data.reorderPoint : currentProd?.reorderPoint,
             minStock: data.minStock !== undefined ? data.minStock : currentProd?.minStock,
             maxStock: data.maxStock !== undefined ? data.maxStock : currentProd?.maxStock,
-            galleryImages: data.galleryImages ? JSON.stringify(data.galleryImages) : (currentProd?.galleryImages ? JSON.stringify(currentProd.galleryImages) : undefined),
+            galleryImages: formattedGallery,
             variants: data.variants ? JSON.stringify(data.variants) : undefined,
             isSerialTracked: data.isSerialTracked !== undefined ? data.isSerialTracked : currentProd?.isSerialTracked,
             warrantyPeriodMonths: data.warrantyPeriodMonths !== undefined ? data.warrantyPeriodMonths : currentProd?.warrantyPeriodMonths,
@@ -2481,6 +2506,17 @@ export const useInventoryStore = create<InventoryState>()(
               .filter(u => u.unitId > 0),
           };
           await axiosClient.put(`/products/${id}`, payload);
+          set((state) => ({
+            products: state.products.map(p => (String(p.id) === String(id) || p.sku === data.sku) ? {
+              ...p,
+              ...data,
+              galleryImages: Array.isArray(data.galleryImages) 
+                ? data.galleryImages 
+                : (typeof data.galleryImages === 'string' 
+                    ? (() => { try { return JSON.parse(data.galleryImages); } catch { return [data.galleryImages]; } })() 
+                    : p.galleryImages),
+            } : p)
+          }));
           await get().fetchProducts();
         } catch (error) {
           console.error('Failed to update product:', error);

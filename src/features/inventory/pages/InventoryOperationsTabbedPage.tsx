@@ -1,24 +1,16 @@
 import { useSearchParams } from 'react-router';
-import { ArrowDownLeft, ArrowUpRight, ArrowRightLeft, FileQuestion, Sliders, CheckSquare, CornerUpLeft, Trash2 } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ArrowRightLeft, FileQuestion } from 'lucide-react';
 import { RoleGuard } from '@/routes/RoleGuard';
 import { ImportReceiptsPage } from './ImportReceiptsPage';
 import { StockOutsPage } from './StockOutsPage';
 import { StockTransferPage } from './StockTransferPage';
 import { StockTransferRequestsPage } from './StockTransferRequestsPage';
-import { InventoryAdjustmentsPage } from './InventoryAdjustmentsPage';
-import { InventoryCheckPage } from './InventoryCheckPage';
-import { ReturnToSupplierPage } from './ReturnToSupplierPage';
-import { CancelIssuePage } from './CancelIssuePage';
 
 const tabs = [
   { id: 'imports', label: 'Nhập kho', icon: ArrowDownLeft, permission: 'inventory:import:view' },
   { id: 'stock-outs', label: 'Xuất kho', icon: ArrowUpRight, permission: 'inventory:stock-out:view' },
   { id: 'transfers', label: 'Chuyển kho', icon: ArrowRightLeft, permission: 'inventory:transfer:view' },
   { id: 'transfer-requests', label: 'Yêu cầu chuyển kho', icon: FileQuestion, permission: 'inventory:transfer-request:view' },
-  { id: 'adjustments', label: 'Cân chỉnh kho', icon: Sliders, permission: 'inventory:adjustment:view' },
-  { id: 'checks', label: 'Kiểm kê kho', icon: CheckSquare, permission: 'inventory:check:view' },
-  { id: 'returns', label: 'Trả hàng NCC', icon: CornerUpLeft, permission: 'inventory:supplier-return:view' },
-  { id: 'cancel', label: 'Xuất hủy', icon: Trash2, permission: 'inventory:cancel:view' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];
@@ -87,26 +79,6 @@ export function InventoryOperationsTabbedPage() {
         {activeTab === 'transfer-requests' && (
           <RoleGuard requiredPermission="inventory:transfer-request:view">
             <StockTransferRequestsPage />
-          </RoleGuard>
-        )}
-        {activeTab === 'adjustments' && (
-          <RoleGuard requiredPermission="inventory:adjustment:view">
-            <InventoryAdjustmentsPage />
-          </RoleGuard>
-        )}
-        {activeTab === 'checks' && (
-          <RoleGuard requiredPermission="inventory:check:view">
-            <InventoryCheckPage />
-          </RoleGuard>
-        )}
-        {activeTab === 'returns' && (
-          <RoleGuard requiredPermission="inventory:supplier-return:view">
-            <ReturnToSupplierPage />
-          </RoleGuard>
-        )}
-        {activeTab === 'cancel' && (
-          <RoleGuard requiredPermission="inventory:cancel:view">
-            <CancelIssuePage />
           </RoleGuard>
         )}
       </div>

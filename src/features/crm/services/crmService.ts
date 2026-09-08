@@ -562,7 +562,7 @@ export const crmService = {
     return list.map((item: any) => ({
       id: String(item.id),
       ticketCode: item.ticketCode || `TCK-${item.id}`,
-      customerName: item.customerName || 'Khách hàng Web Online',
+      customerName: item.customerName || 'Khách hàng vãng lai',
       customerPhone: item.customerPhone || '',
       subject: item.subject || item.title || 'Yêu cầu hỗ trợ',
       priority: item.priority || 'MEDIUM',
@@ -615,7 +615,7 @@ export const crmService = {
       return {
         id: String(item.id),
         ticketId: String(item.ticketId || ticketId || '1'),
-        senderName: item.senderName || (item.isStaff ? 'Nhân viên CSKH' : 'Khách hàng Web Online'),
+        senderName: item.senderName || (item.isStaff ? 'Nhân viên CSKH' : 'Khách hàng vãng lai'),
         isStaff: Boolean(item.isStaff),
         message: item.message || '',
         createdAt: timeStr,

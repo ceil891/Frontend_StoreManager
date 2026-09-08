@@ -837,6 +837,10 @@ export function PosTerminalPage() {
   }, [activeCustomer, isCustomerCreditBlocked, displayPayments, selectedPaymentId, setSelectedPaymentId]);
 
   const selectedPayment = displayPayments.find((d) => String(d?.id) === String(selectedPaymentId)) ?? displayPayments[0];
+  const selectedPaymentConfig = useMemo(() => {
+    if (!selectedPayment) return null;
+    return paymentMethodsFromConfig.find((m) => String(m.id) === String(selectedPayment.id)) ?? null;
+  }, [paymentMethodsFromConfig, selectedPayment]);
   const isCashPayment = selectedPayment?.isCash ?? true;
 
   const isQrPayment = useMemo(() => {
@@ -1252,7 +1256,6 @@ export function PosTerminalPage() {
   const totalAmount = taxableAmount + vatAmount;
 
   // Cấu hình phí phụ thu của phương thức thanh toán
-  const selectedPaymentConfig = paymentMethodsFromConfig.find((m) => String(m.id) === String(selectedPaymentId));
   let paymentFee = 0;
   if (selectedPaymentConfig) {
     const feeVal = selectedPaymentConfig.feeValue !== undefined ? selectedPaymentConfig.feeValue : 
