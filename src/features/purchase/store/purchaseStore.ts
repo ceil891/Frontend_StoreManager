@@ -12,6 +12,10 @@ export interface SupplierRecord {
   phone: string;
   email: string;
   address: string;
+  province?: string;
+  district?: string;
+  ward?: string;
+  addressDetail?: string;
   taxCode?: string;
   paymentTerm?: number;
   creditLimit?: number;

@@ -51,7 +51,7 @@ export function TicketMessagesPage() {
     const list = supportTickets.map((t) => ({
       id: String(t.id),
       ticketNumber: t.ticketCode || `TCK-${t.id}`,
-      customerName: t.customerName || 'Khách hàng Web Online',
+      customerName: t.customerName || 'Khách hàng vãng lai',
       customerPhone: t.customerPhone || '',
       subject: t.subject || 'Yêu cầu hỗ trợ từ Web Online',
       status: t.status || 'OPEN',
@@ -71,7 +71,7 @@ export function TicketMessagesPage() {
         id: String(m.id),
         ticketId: String(m.ticketId),
         ticketNumber: ticket?.ticketCode || `TCK-${m.ticketId}`,
-        senderName: m.senderName || (m.isStaff ? 'Nhân viên CSKH' : (ticket?.customerName || 'Khách hàng Web Online')),
+        senderName: m.senderName || (m.isStaff ? 'Nhân viên CSKH' : (ticket?.customerName || 'Khách hàng vãng lai')),
         senderType: m.isStaff ? 'AGENT' : 'CUSTOMER',
         messageText: m.message,
         createdAt: timeStr,
@@ -97,8 +97,12 @@ export function TicketMessagesPage() {
 
   const activeMessages = useMemo(() => {
     if (!selectedTicketId) return [];
-    return messages.filter((m) => String(m.ticketId) === String(selectedTicketId));
-  }, [messages, selectedTicketId]);
+    return messages.filter((m) => {
+      const isDirectMatch = String(m.ticketId) === String(selectedTicketId);
+      const isCodeMatch = currentTicket?.ticketNumber && m.ticketNumber && String(m.ticketNumber).toLowerCase() === String(currentTicket.ticketNumber).toLowerCase();
+      return isDirectMatch || isCodeMatch;
+    });
+  }, [messages, selectedTicketId, currentTicket]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();

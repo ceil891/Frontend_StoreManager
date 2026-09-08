@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { Plus, Download, Search, Filter, Eye, Building2, Phone, Mail, MapPin, FileText, CheckCircle2, User, Edit, Trash2 } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -15,6 +16,7 @@ import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/sh
 import { axiosClient } from '@/shared/lib/axiosClient';
 
 export function SuppliersPage() {
+  const navigate = useNavigate();
   const { suppliers: data, addSupplier, updateSupplier, deleteSupplier, fetchSuppliers, isLoadingSuppliers } = usePurchaseStore();
   const { categories, fetchCategories } = useInventoryStore();
   
@@ -114,7 +116,7 @@ export function SuppliersPage() {
     setEditingSupplier({
       code: `SUP-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
       supplierName: '',
-      category: 'GENERAL',
+      category: '',
       contactPerson: '',
       phone: '',
       email: '',
@@ -218,6 +220,10 @@ export function SuppliersPage() {
           phone: editingSupplier.phone || '',
           email: editingSupplier.email || '',
           address: editingSupplier.address || '',
+          province: editingSupplier.province || '',
+          district: editingSupplier.district || '',
+          ward: editingSupplier.ward || '',
+          addressDetail: editingSupplier.addressDetail || '',
           taxCode: editingSupplier.taxCode || '',
           paymentTerm: Number(editingSupplier.paymentTerm) || 30,
           creditLimit: Number(editingSupplier.creditLimit) || 0,
@@ -247,6 +253,10 @@ export function SuppliersPage() {
           bankName: editingSupplier.bankName,
           bankAccount: editingSupplier.bankAccount,
           accountHolder: editingSupplier.accountHolder,
+          province: editingSupplier.province || '',
+          district: editingSupplier.district || '',
+          ward: editingSupplier.ward || '',
+          addressDetail: editingSupplier.addressDetail || '',
           groupId: editingSupplier.groupId ? String(editingSupplier.groupId) : undefined,
           areaId: editingSupplier.areaId ? String(editingSupplier.areaId) : undefined,
           notes: editingSupplier.notes || editingSupplier.description,
@@ -582,7 +592,10 @@ export function SuppliersPage() {
 
             <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex gap-3">
               <button
-                onClick={() => toast.info('Đang chuyển hướng sang trang tạo đơn mua PO...')}
+                onClick={() => {
+                  navigate(`/purchase/orders?create=1&supplier=${encodeURIComponent(selectedSupplier.supplierName)}`);
+                  setSelectedSupplier(null);
+                }}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow transition-colors text-sm"
               >
                 <FileText className="w-4 h-4" /> Tạo đơn đặt hàng mua (PO)

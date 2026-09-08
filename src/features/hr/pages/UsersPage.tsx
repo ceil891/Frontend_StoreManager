@@ -9,6 +9,7 @@ import { buildUserAvatarUrl } from '@/shared/utils/userAvatar';
 import { useRoleStore } from '../store/roleStore';
 import { useHrStore } from '../store/hrStore';
 import { useBranchStore } from '@/features/system/store/branchStore';
+import { useSystemStore } from '@/features/system/store/systemStore';
 import type { ColumnDef } from '@tanstack/react-table';
 import { SearchInput } from '@/shared/components/ui/SearchInput';
 import { CreateButton, SecondaryButton, PrimaryButton, DangerButton } from '@/shared/components/ui/Button';
@@ -108,7 +109,17 @@ export function UsersPage() {
     try {
       setIsSubmittingPasswordReset(true);
       await resetPassword(resetPasswordUser.id, newPasswordInput);
-      toast.success(`Đã cấp lại mật khẩu và gửi email thông báo đến ${resetPasswordUser.emailAddress || resetPasswordUser.fullName} thành công!`);
+      try {
+        await useSystemStore.getState().addPasswordHistory({
+          userName: `${resetPasswordUser.fullName} (${resetPasswordUser.userCode})`,
+          changedAt: new Date().toISOString().replace('T', ' ').slice(0, 19),
+          changedBy: 'Super Admin',
+          reason: 'Reset bởi Admin (Cấp lại mật khẩu)',
+        });
+      } catch (errHistory) {
+        console.warn('Lưu lịch sử đổi mật khẩu:', errHistory);
+      }
+      toast.success(`Đã cấp lại mật khẩu và lưu lịch sử thành công!`);
       setResetPasswordUser(null);
     } catch (err: any) {
       toast.error(err.response?.data?.message || err.message || 'Lỗi khi cấp lại mật khẩu');

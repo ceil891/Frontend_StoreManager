@@ -30,13 +30,11 @@ import {
   Compass,
   MapPin,
   Key,
-  Sliders,
   LifeBuoy,
   AlertTriangle,
   BookOpen,
   Calendar,
   FileSpreadsheet,
-  Globe,
   Route,
   Share2,
 } from 'lucide-react';
@@ -82,12 +80,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { name: 'Giao nhận & xuất hàng', href: '/sales/deliveries', icon: PackageCheck, permission: 'sales:delivery-note:view' },
     ],
   },
-  {
-    group: 'Bán hàng đa kênh',
-    items: [
-      { name: 'Kênh & sàn liên kết', href: '/omnichannel', icon: Globe, permission: 'omnichannel:channel:view' },
-    ],
-  },
+
   {
     group: 'Quản lý kho',
     items: [
@@ -133,9 +126,7 @@ export const NAV_GROUPS: NavGroup[] = [
     group: 'Vận chuyển & logistics',
     items: [
       { name: 'Đơn vị vận chuyển', href: '/logistics/partners', icon: Users, permission: 'logistics:shipper:view' },
-      { name: 'Đơn hàng & đóng gói', href: '/logistics/orders', icon: Package, permission: 'logistics:order:view' },
       { name: 'Quản lý vận đơn', href: '/logistics/deliveries', icon: Truck, permission: 'logistics:shipment:view' },
-      { name: 'Vận hành giao vận', href: '/logistics/operations', icon: Route, permission: 'logistics:method:view' },
     ],
   },
   {
@@ -160,7 +151,6 @@ export const NAV_GROUPS: NavGroup[] = [
     group: 'Cấu hình hệ thống',
     items: [
       { name: 'Chi nhánh & banner', href: '/system/organization', icon: Store, permission: 'system:branch:view' },
-      { name: 'Cấu hình & cài đặt', href: '/system/config', icon: Sliders, permission: 'system:config:view' },
     ],
   },
 ];

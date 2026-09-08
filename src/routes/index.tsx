@@ -132,9 +132,7 @@ const CrmSupportTabbedPage = lz(() => import('@/features/crm/pages/CrmSupportTab
 
 // 8. Logistics Containers
 const LogisticsPartnersPage = lz(() => import('@/features/logistics/pages/LogisticsPartnersPage'), 'LogisticsPartnersPage');
-const LogisticsOrdersTabbedPage = lz(() => import('@/features/logistics/pages/LogisticsOrdersTabbedPage'), 'LogisticsOrdersTabbedPage');
 const LogisticsDeliveriesTabbedPage = lz(() => import('@/features/logistics/pages/LogisticsDeliveriesTabbedPage'), 'LogisticsDeliveriesTabbedPage');
-const LogisticsOperationsTabbedPage = lz(() => import('@/features/logistics/pages/LogisticsOperationsTabbedPage'), 'LogisticsOperationsTabbedPage');
 
 // 8.1 Omnichannel Containers
 const OmnichannelTabbedPage = lz(() => import('@/features/omnichannel/pages/OmnichannelTabbedPage'), 'OmnichannelTabbedPage');
@@ -156,7 +154,6 @@ const PayrollPage = lz(() => import('@/features/hr/pages/PayrollPage'), 'Payroll
 
 // 11. System Containers
 const SystemOrganizationTabbedPage = lz(() => import('@/features/system/pages/SystemOrganizationTabbedPage'), 'SystemOrganizationTabbedPage');
-const SystemConfigTabbedPage = lz(() => import('@/features/system/pages/SystemConfigTabbedPage'), 'SystemConfigTabbedPage');
 const SystemSecurityTabbedPage = lz(() => import('@/features/system/pages/SystemSecurityTabbedPage'), 'SystemSecurityTabbedPage');
 const NotificationsPage = lz(() => import('@/features/system/pages/NotificationsPage'), 'NotificationsPage');
 
@@ -331,10 +328,6 @@ const router = createBrowserRouter([
           { path: 'inventory/transfers', element: <LegacyRedirect targetCanonical="/inventory/operations" defaultTab="transfers" /> },
           { path: 'inventory/transfer-requests', element: <LegacyRedirect targetCanonical="/inventory/operations" defaultTab="transfer-requests" /> },
           { path: 'inventory/transfers-list', element: <LegacyRedirect targetCanonical="/inventory/operations" defaultTab="transfers-list" /> },
-          { path: 'inventory/adjustments', element: <LegacyRedirect targetCanonical="/inventory/operations" defaultTab="adjustments" /> },
-          { path: 'inventory/checks', element: <LegacyRedirect targetCanonical="/inventory/operations" defaultTab="checks" /> },
-          { path: 'inventory/returns', element: <LegacyRedirect targetCanonical="/inventory/operations" defaultTab="returns" /> },
-          { path: 'inventory/cancel', element: <LegacyRedirect targetCanonical="/inventory/operations" defaultTab="cancel" /> },
           { path: 'inventory/batches', element: <LegacyRedirect targetCanonical="/inventory/tracking" defaultTab="batches" /> },
           { path: 'inventory/serials', element: <LegacyRedirect targetCanonical="/inventory/tracking" defaultTab="serials" /> },
 
@@ -395,9 +388,7 @@ const router = createBrowserRouter([
 
           // ── 7. Logistics Canonical Routes ─────────────────────────
           { path: 'logistics/partners', ...protect(<LogisticsPartnersPage />, 'logistics:shipper:view') },
-          { path: 'logistics/orders', ...protect(<LogisticsOrdersTabbedPage />, 'logistics:order:view') },
           { path: 'logistics/deliveries', ...protect(<LogisticsDeliveriesTabbedPage />, 'logistics:shipment:view') },
-          { path: 'logistics/operations', ...protect(<LogisticsOperationsTabbedPage />, 'logistics:method:view') },
 
           // ── 7.1 Omnichannel Canonical Routes ───────────────────────
           { path: 'omnichannel', ...protect(<OmnichannelTabbedPage />, 'omnichannel:channel:view') },
@@ -408,14 +399,10 @@ const router = createBrowserRouter([
           // Logistics Legacy Redirects
           { path: 'logistics/shippers', element: <LegacyRedirect targetCanonical="/logistics/partners" defaultTab="shippers" /> },
           { path: 'logistics/carriers', element: <LegacyRedirect targetCanonical="/logistics/partners" defaultTab="carriers" /> },
-          { path: 'logistics/batches', element: <LegacyRedirect targetCanonical="/logistics/orders" defaultTab="batches" /> },
-          { path: 'logistics/packing-lists', element: <LegacyRedirect targetCanonical="/logistics/orders" defaultTab="packing-lists" /> },
           { path: 'logistics/notes', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="shipments" /> },
           { path: 'logistics/shipments', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="shipments" /> },
           { path: 'logistics/trips', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="trips" /> },
           { path: 'logistics/cod', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="cod" /> },
-          { path: 'logistics/methods', element: <LegacyRedirect targetCanonical="/logistics/operations" defaultTab="methods" /> },
-          { path: 'logistics/vehicles', element: <LegacyRedirect targetCanonical="/logistics/operations" defaultTab="vehicles" /> },
           { path: 'logistics/delivery-notes', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="shipments" /> },
           { path: 'logistics/attempts', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="shipments" /> },
           { path: 'logistics/pod', element: <LegacyRedirect targetCanonical="/logistics/deliveries" defaultTab="shipments" /> },
@@ -440,26 +427,16 @@ const router = createBrowserRouter([
           { path: 'hr/attendance', element: <LegacyRedirect targetCanonical="/hr/timekeeping" defaultTab="attendance" /> },
           { path: 'hr/leave-requests', element: <LegacyRedirect targetCanonical="/hr/timekeeping" defaultTab="leave-requests" /> },
           { path: 'hr/shift-swaps', element: <LegacyRedirect targetCanonical="/hr/timekeeping" defaultTab="shift-swaps" /> },
-          { path: 'hr/kpis', element: <LegacyRedirect targetCanonical="/hr/employees" defaultTab="kpis" /> },
           { path: 'hr/logs', element: <LegacyRedirect targetCanonical="/hr/employees" defaultTab="logs" /> },
           { path: 'hr/roles', element: <LegacyRedirect targetCanonical="/hr/roles-permissions" defaultTab="roles" /> },
 
           // ── 10. System Canonical Routes ───────────────────────────
           { path: 'system/organization', ...protect(<SystemOrganizationTabbedPage />, 'system:branch:view') },
-          { path: 'system/config', ...protect(<SystemConfigTabbedPage />, 'system:config:view') },
 
           // System Legacy Redirects
-          { path: 'system/security', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="device-sessions" /> },
-          { path: 'system/notifications', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="notifications" /> },
           { path: 'system/branches', element: <LegacyRedirect targetCanonical="/system/organization" defaultTab="branches" /> },
           { path: 'system/banners', element: <LegacyRedirect targetCanonical="/system/organization" defaultTab="banners" /> },
-          { path: 'system/settings', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="settings" /> },
-          { path: 'system/parameters', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="parameters" /> },
-          { path: 'system/vat', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="vat" /> },
-          { path: 'system/print-templates', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="print-templates" /> },
-          { path: 'system/error-logs', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="error-logs" /> },
-          { path: 'system/device-sessions', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="device-sessions" /> },
-          { path: 'system/password-history', element: <LegacyRedirect targetCanonical="/system/config" defaultTab="password-history" /> },
+          { path: 'system/password-history', element: <LegacyRedirect targetCanonical="/hr/employees" defaultTab="password-history" /> },
           { path: 'system/permissions', element: <LegacyRedirect targetCanonical="/hr/roles-permissions" defaultTab="permissions" /> },
         ],
       },

@@ -8,6 +8,7 @@ import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { useCrmStore, type CustomerProfile } from '../store/crmStore';
+import { useSystemStore } from '@/features/system/store/systemStore';
 import { UserAvatar } from '@/shared/components/ui/UserAvatar';
 import { buildUserAvatarUrl } from '@/shared/utils/userAvatar';
 import { toast } from 'sonner';
@@ -267,7 +268,17 @@ export function CustomersPage() {
     setIsResettingPassword(true);
     try {
       await axiosClient.put(`/partnerarea/customers/${resetPasswordCustomer.id}/reset-password?newPassword=${encodeURIComponent(newPasswordInput)}`);
-      toast.success(`Đã cấp lại mật khẩu và gửi email thông báo cho khách hàng "${resetPasswordCustomer.name}" thành công!`);
+      try {
+        await useSystemStore.getState().addPasswordHistory({
+          userName: `[Khách hàng] ${resetPasswordCustomer.name} (${resetPasswordCustomer.phone || resetPasswordCustomer.customerCode || 'KH'})`,
+          changedAt: new Date().toISOString().replace('T', ' ').slice(0, 19),
+          changedBy: 'Admin CRM',
+          reason: 'Reset bởi Admin (Cấp lại mật khẩu khách hàng)',
+        });
+      } catch (errHistory) {
+        console.warn('Lưu lịch sử đổi mật khẩu:', errHistory);
+      }
+      toast.success(`Đã cấp lại mật khẩu và lưu lịch sử thành công!`);
       setResetPasswordCustomer(null);
     } catch (err) {
       console.error(err);

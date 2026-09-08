@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Plus, Download, Search, Filter, Eye, CreditCard, Percent, Smartphone, Globe, RefreshCcw, Edit, Trash2, Wallet } from 'lucide-react';
+import { Plus, Download, Search, Filter, Eye, CreditCard, Percent, Smartphone, Globe, RefreshCcw, Edit, Trash2, Wallet, Power } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -155,6 +155,14 @@ export function PaymentMethodsPage() {
     setDeletingMethod(null);
   };
 
+  const handleToggleOnlineMethod = (method: PaymentMethodRecord) => {
+    const nextStatus = method.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
+    void updatePaymentMethod(method.id, { status: nextStatus });
+    if (selectedMethod?.id === method.id) {
+      setSelectedMethod({ ...method, status: nextStatus });
+    }
+  };
+
   const columns = useMemo<ColumnDef<PaymentMethodRecord>[]>(
     () => [
       {
@@ -272,6 +280,17 @@ export function PaymentMethodsPage() {
               className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors shrink-0"
             >
               <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleToggleOnlineMethod(row.original); }}
+              title={row.original.status === 'ACTIVE' ? 'Tắt và ẩn phương thức thanh toán' : 'Bật phương thức thanh toán'}
+              className={`p-1.5 rounded-lg transition-colors shrink-0 ${
+                row.original.status === 'ACTIVE'
+                  ? 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30'
+                  : 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30'
+              }`}
+            >
+              <Power className="w-4 h-4" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); setDeletingMethod(row.original); }}

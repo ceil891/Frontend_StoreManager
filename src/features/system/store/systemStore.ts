@@ -111,6 +111,7 @@ interface SystemState {
   fetchDeviceSessions: () => Promise<void>;
   revokeDeviceSession: (id: string) => Promise<void>;
   fetchPasswordHistories: () => Promise<void>;
+  addPasswordHistory: (item: Omit<PasswordHistoryRecord, 'id'>) => Promise<void>;
   fetchSystemErrorLogs: () => Promise<void>;
 }
 
@@ -168,6 +169,20 @@ const DEFAULT_PASSWORD_HISTORIES: PasswordHistoryRecord[] = [
   { id: '2', userName: 'tranthithuy', changedAt: '2026-05-15 14:20', changedBy: 'User Self-Service', reason: 'Reset mật khẩu qua Email' },
 ];
 
+const getSavedPasswordHistories = (): PasswordHistoryRecord[] => {
+  try {
+    const saved = localStorage.getItem('retailhub_password_histories');
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return DEFAULT_PASSWORD_HISTORIES;
+};
+
+const savePasswordHistories = (list: PasswordHistoryRecord[]) => {
+  try {
+    localStorage.setItem('retailhub_password_histories', JSON.stringify(list));
+  } catch {}
+};
+
 const DEFAULT_ERROR_LOGS: SystemErrorLogRecord[] = [
   { id: '1', logCode: 'ERR-500-8819', serviceName: 'Order-Service', errorMessage: 'Database Connection Timeout on Order Flush', stackTrace: 'ConnectionPoolTimeoutException at HikariCP pool-1', severity: 'CRITICAL', timestamp: '2026-07-25 11:20:15' },
   { id: '2', logCode: 'ERR-400-9921', serviceName: 'Sync-Gateway', errorMessage: 'Shopee Webhook Signature Verification Failed', stackTrace: 'InvalidSignatureException at WebhookValidator.java:45', severity: 'WARNING', timestamp: '2026-07-25 10:05:00' },
@@ -178,7 +193,7 @@ export const useSystemStore = create<SystemState>()((set) => ({
   printTemplates: [],
   notifications: [],
   deviceSessions: DEFAULT_DEVICE_SESSIONS,
-  passwordHistories: DEFAULT_PASSWORD_HISTORIES,
+  passwordHistories: getSavedPasswordHistories(),
   systemErrorLogs: DEFAULT_ERROR_LOGS,
   isLoading: false,
   error: null,
@@ -379,12 +394,32 @@ export const useSystemStore = create<SystemState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const data = await systemService.fetchPasswordHistories();
-      if (data.length > 0) set({ passwordHistories: data });
-      set({ isLoading: false });
+      const localSaved = getSavedPasswordHistories();
+      const combined = [...localSaved];
+      if (Array.isArray(data)) {
+        data.forEach((d) => {
+          if (!combined.some(c => c.id === d.id || (c.userName === d.userName && c.changedAt === d.changedAt))) {
+            combined.push(d);
+          }
+        });
+      }
+      set({ passwordHistories: combined, isLoading: false });
     } catch (e: any) {
       console.error('Failed to fetch password histories:', e);
-      set({ isLoading: false });
+      set({ passwordHistories: getSavedPasswordHistories(), isLoading: false });
     }
+  },
+
+  addPasswordHistory: async (item) => {
+    const newRecord: PasswordHistoryRecord = {
+      id: `PH-${Date.now()}`,
+      ...item,
+    };
+    set((state) => {
+      const updated = [newRecord, ...state.passwordHistories];
+      savePasswordHistories(updated);
+      return { passwordHistories: updated };
+    });
   },
 
   fetchSystemErrorLogs: async () => {

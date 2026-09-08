@@ -1,24 +1,21 @@
 import { useSearchParams } from 'react-router';
-import { Settings, Bell, Sliders, Percent, Printer, AlertTriangle, Smartphone, KeyRound } from 'lucide-react';
 import { RoleGuard } from '@/routes/RoleGuard';
 import { SettingsPage } from '@/features/settings/pages/SettingsPage';
 import { NotificationsPage } from './NotificationsPage';
 import { SystemConfigPage } from './SystemConfigPage';
 import { VatConfigPage } from './VatConfigPage';
 import { PrintTemplatesPage } from './PrintTemplatesPage';
-import { SystemErrorLogPage } from './SystemErrorLogPage';
 import { DeviceSessionsPage } from './DeviceSessionsPage';
 import { PasswordHistoryPage } from './PasswordHistoryPage';
 
 const tabs = [
-  { id: 'settings', label: 'Cài đặt chung', icon: Settings, permission: 'system:settings:view' },
-  { id: 'parameters', label: 'Tham số hệ thống', icon: Sliders, permission: 'system:config:view' },
-  { id: 'vat', label: 'Cấu hình thuế VAT', icon: Percent, permission: 'system:config:view' },
-  { id: 'print-templates', label: 'Mẫu in chứng từ', icon: Printer, permission: 'system:config:view' },
-  { id: 'notifications', label: 'Cấu hình thông báo', icon: Bell, permission: 'system:notification:view' },
-  { id: 'device-sessions', label: 'Phiên đăng nhập thiết bị', icon: Smartphone, permission: 'system:device-session:view' },
-  { id: 'password-history', label: 'Lịch sử đổi mật khẩu', icon: KeyRound, permission: 'system:password-history:view' },
-  { id: 'error-logs', label: 'Nhật ký lỗi', icon: AlertTriangle, permission: 'system:config:view' },
+  { id: 'settings', label: 'Cài đặt chung', permission: 'system:settings:view' },
+  { id: 'parameters', label: 'Tham số hệ thống', permission: 'system:config:view' },
+  { id: 'vat', label: 'Cấu hình thuế VAT', permission: 'system:config:view' },
+  { id: 'print-templates', label: 'Mẫu in chứng từ', permission: 'system:config:view' },
+  { id: 'notifications', label: 'Cấu hình thông báo', permission: 'system:notification:view' },
+  { id: 'device-sessions', label: 'Phiên đăng nhập thiết bị', permission: 'system:device-session:view' },
+  { id: 'password-history', label: 'Lịch sử đổi mật khẩu', permission: 'system:password-history:view' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];
@@ -49,7 +46,6 @@ export function SystemConfigTabbedPage() {
 
       <div className="flex space-x-1 border-b border-gray-200 dark:border-gray-800 overflow-x-auto">
         {tabs.map((tab) => {
-          const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
             <button
@@ -61,7 +57,6 @@ export function SystemConfigTabbedPage() {
                   : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
               }`}
             >
-              <Icon className="w-4 h-4" />
               {tab.label}
             </button>
           );
@@ -102,11 +97,6 @@ export function SystemConfigTabbedPage() {
         {activeTab === 'password-history' && (
           <RoleGuard requiredPermission="system:password-history:view">
             <PasswordHistoryPage />
-          </RoleGuard>
-        )}
-        {activeTab === 'error-logs' && (
-          <RoleGuard requiredPermission="system:config:view">
-            <SystemErrorLogPage />
           </RoleGuard>
         )}
       </div>

@@ -4,6 +4,7 @@ import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTa
 import { Modal } from '@/shared/components/ui/Modal';
 import type { ColumnDef } from '@tanstack/react-table';
 import { usePurchaseStore, type PurchaseOrderItem } from '../store/purchaseStore';
+import { useSearchParams } from 'react-router';
 import { axiosClient } from '@/shared/lib/axiosClient';
 import { extractPageContent } from '@/shared/lib/apiHelpers';
 import { toast } from 'sonner';
@@ -40,8 +41,9 @@ interface POLineItem {
 }
 
 export function PurchaseOrdersPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { purchaseOrders: data, addPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, fetchPurchaseOrders } = usePurchaseStore();
-  const [apiSuppliers, setApiSuppliers] = useState<string[]>([]);
+  const [apiSuppliers, setApiSuppliers] = useState<{ name: string; category: string }[]>([]);
   const [apiProducts, setApiProducts] = useState<{ id?: string; name: string; price: number; supplierName?: string }[]>([]);
   const [apiBranches, setApiBranches] = useState<string[]>([]);
   const currentUser = useAuthStore((s) => s.user);
@@ -52,7 +54,7 @@ export function PurchaseOrdersPage() {
 
     axiosClient.get('/partnerarea/suppliers?size=500').then((res: any) => {
       const list = extractPageContent<any>(res);
-      setApiSuppliers(list.map((s: any) => s.supplierName || s.name || s.fullName || '').filter(Boolean));
+      setApiSuppliers(list.map((s: any) => ({ name: s.supplierName || s.name || s.fullName || '', category: s.category || '' })).filter((s: any) => s.name));
     }).catch(() => {});
 
     axiosClient.get('/products?size=500').then((res: any) => {
@@ -83,7 +85,7 @@ export function PurchaseOrdersPage() {
 
   // Filter products by selected supplier
   const availableProducts = useMemo(() => {
-    if (!editingPO.supplierName) return apiProducts;
+    if (!editingPO.supplierName) return [];
     const match = apiProducts.filter(
       (p) => p.supplierName && p.supplierName.toLowerCase() === editingPO.supplierName?.toLowerCase()
     );
@@ -119,7 +121,7 @@ export function PurchaseOrdersPage() {
     const now = new Date();
     setEditingPO({
       poNumber: `PO-${now.getFullYear()}-${Date.now().toString().slice(-5)}${Math.floor(10 + Math.random() * 90)}`,
-      supplierName: apiSuppliers[0] || '',
+      supplierName: searchParams.get('supplier') || '',
       destinationStore: apiBranches[0] || 'Chi nhánh mặc định',
       orderDate: today,
       estDeliveryDate: nextWeek.toISOString().split('T')[0],
@@ -135,6 +137,15 @@ export function PurchaseOrdersPage() {
     });
     setIsModalOpen(true);
   };
+
+  useEffect(() => {
+    if (searchParams.get('create') === '1' && apiSuppliers.length > 0) {
+      handleOpenCreate();
+      setSearchParams({}, { replace: true });
+    }
+  // The query string is a one-time instruction from the supplier detail page.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiSuppliers]);
 
   const handleAddPOLine = () => {
     const lines = [...(editingPO.poLines || [])];
@@ -861,7 +872,7 @@ export function PurchaseOrdersPage() {
                   >
                     <option value="">-- Chọn Nhà Cung Cấp --</option>
                     {apiSuppliers.map((s) => (
-                      <option key={s} value={s}>{s}</option>
+                      <option key={s.name} value={s.name}>{s.name}{s.category ? ` — ${s.category}` : ''}</option>
                     ))}
                   </select>
                 </div>
