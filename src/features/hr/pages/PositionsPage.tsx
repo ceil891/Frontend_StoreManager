@@ -71,13 +71,13 @@ export function PositionsPage() {
     setModalMode('create');
     const firstDept = departments[0];
     setEditingPos({
-      positionCode: `POS-${Math.floor(1000 + Math.random() * 9000)}`,
+      positionCode: '', // Đã xóa mock mã random
       positionTitle: '',
       departmentId: firstDept?.id,
       departmentName: firstDept ? firstDept.departmentName : '',
-      jobGradeTier: 'ASSOCIATE_L2',
-      salaryRangeMin: 10000000,
-      salaryRangeMax: 20000000,
+      jobGradeTier: 'ENTRY_L1', // Đưa về level cơ bản thay vì L2
+      salaryRangeMin: 0, // Đã xóa mock 10.000.000
+      salaryRangeMax: 0, // Đã xóa mock 20.000.000
       activeHeadcount: 0,
       approvedHeadcountQuota: 1,
       isOvertimeEligible: true,
@@ -110,7 +110,7 @@ export function PositionsPage() {
       positionTitle: editingPos.positionTitle,
       departmentId: matchedDept?.id || editingPos.departmentId,
       departmentName: matchedDept?.departmentName || editingPos.departmentName || '',
-      jobGradeTier: editingPos.jobGradeTier as any || 'ASSOCIATE_L2',
+      jobGradeTier: editingPos.jobGradeTier as any || 'ENTRY_L1',
       salaryRangeMin: Number(editingPos.salaryRangeMin) || 0,
       salaryRangeMax: Number(editingPos.salaryRangeMax) || 0,
       activeHeadcount: Number(editingPos.activeHeadcount) || 0,
@@ -194,12 +194,12 @@ export function PositionsPage() {
           );
         },
       },
-      {
+     {
         accessorKey: 'salaryRangeMin',
         header: 'Khoảng lương',
         cell: ({ row }) => (
           <span className="font-mono font-semibold text-gray-800 dark:text-gray-200 text-xs">
-            ${(row.original.salaryRangeMin / 1000).toFixed(0)}k - ${(row.original.salaryRangeMax / 1000).toFixed(0)}k USD
+            {row.original.salaryRangeMin.toLocaleString('vi-VN')} - {row.original.salaryRangeMax.toLocaleString('vi-VN')} VNĐ
           </span>
         ),
       },
@@ -494,7 +494,7 @@ export function PositionsPage() {
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Cấp bậc (Job Grade)</label>
               <select
-                value={editingPos.jobGradeTier || 'ASSOCIATE_L2'}
+                value={editingPos.jobGradeTier || 'ENTRY_L1'}
                 onChange={(e) => setEditingPos({ ...editingPos, jobGradeTier: e.target.value as any })}
                 className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
               >
@@ -534,6 +534,7 @@ export function PositionsPage() {
                 }}
                 className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary"
               >
+                <option value="" disabled>Chọn phòng ban</option>
                 {departments.map(d => (
                   <option key={d.id} value={d.id}>{d.departmentName} ({d.departmentCode})</option>
                 ))}
@@ -547,7 +548,7 @@ export function PositionsPage() {
                 <label className="block text-[10px] font-medium text-gray-700 mb-1">Lương min ($)</label>
                 <input
                   type="number"
-                  value={editingPos.salaryRangeMin || 0}
+                  value={editingPos.salaryRangeMin || ''}
                   onChange={(e) => setEditingPos({ ...editingPos, salaryRangeMin: parseFloat(e.target.value) || 0 })}
                   className="w-full px-3 py-2 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary"
                 />
@@ -556,7 +557,7 @@ export function PositionsPage() {
                 <label className="block text-[10px] font-medium text-gray-700 mb-1">Lương max ($)</label>
                 <input
                   type="number"
-                  value={editingPos.salaryRangeMax || 0}
+                  value={editingPos.salaryRangeMax || ''}
                   onChange={(e) => setEditingPos({ ...editingPos, salaryRangeMax: parseFloat(e.target.value) || 0 })}
                   className="w-full px-3 py-2 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary"
                 />
@@ -567,7 +568,7 @@ export function PositionsPage() {
                 <label className="block text-[10px] font-medium text-gray-700 mb-1">Quota Định biên</label>
                 <input
                   type="number"
-                  value={editingPos.approvedHeadcountQuota || 0}
+                  value={editingPos.approvedHeadcountQuota || ''}
                   onChange={(e) => setEditingPos({ ...editingPos, approvedHeadcountQuota: parseInt(e.target.value) || 0 })}
                   className="w-full px-3 py-2 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary"
                 />

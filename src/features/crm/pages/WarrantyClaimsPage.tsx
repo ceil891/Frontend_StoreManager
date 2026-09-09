@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, Scan, Sparkles, ShieldCheck } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, Scan, Sparkles, ShieldCheck, Download } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
 import { ConfirmDeleteModal } from '@/shared/components/ui/ConfirmDeleteModal';
@@ -11,6 +11,10 @@ import { playBarcodeBeep } from '@/shared/utils/barcodeScanner';
 export interface ClaimRecord {
   id: string;
   warrantyCode: string;
+  customerName: string;
+  customerPhone: string;
+  productName: string;
+  serialNumber: string;
   claimCode: string;
   description: string;
   reportedAt: string;
@@ -65,8 +69,12 @@ export function WarrantyClaimsPage() {
 
   const data: ClaimRecord[] = useMemo(() => {
     return storeClaims.map((c: any) => ({
-      id: c.id,
-      warrantyCode: c.serialNumber || c.warrantyCode || '',
+        id: c.id,
+        warrantyCode: c.serialNumber || c.warrantyCode || '',
+        customerName: c.customerName || 'Khách bảo hành',
+        customerPhone: c.customerPhone || '',
+        productName: c.productName || 'Thiết bị bảo hành',
+        serialNumber: c.serialNumber || '',
       claimCode: c.claimCode || '',
       description: c.issueDescription || c.description || '',
       reportedAt: c.receivedDate || c.createdDate || '',
@@ -77,12 +85,16 @@ export function WarrantyClaimsPage() {
       estimatedReturnDate: c.estimatedReturnDate,
       repairCost: c.repairCost,
       approvalStatus: c.approvalStatus,
-      progressStatus: c.progressStatus || (c.status === 'COMPLETED' ? 'DONE' : 'NEW'),
+       progressStatus: c.progressStatus || (c.status === 'COMPLETED' ? 'DONE' : c.status || 'NEW'),
     }));
   }, [storeClaims]);
 
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [statusTab, setStatusTab] = useState('ALL');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [handlerFilter, setHandlerFilter] = useState('ALL');
   const [selected, setSelected] = useState<ClaimRecord | null>(null);
   
   // Barcode scanner modal
@@ -225,7 +237,7 @@ export function WarrantyClaimsPage() {
       customerPhone: mockCustomer?.phone,
       productName: mockCustomer?.product,
       issueDescription: form.description,
-      status: form.status === 'APPROVED' ? 'COMPLETED' : form.status === 'REJECTED' ? 'REJECTED' : 'PROCESSING',
+       status: form.status === 'REJECTED' ? 'REJECTED' : form.progressStatus,
       resolutionNotes: form.notes,
       conditionOnReceive: form.conditionOnReceive,
       estimatedReturnDate: form.estimatedReturnDate,
@@ -264,16 +276,27 @@ export function WarrantyClaimsPage() {
   };
 
   const filtered = useMemo(() => {
-    if (!search) return data;
     const q = search.toLowerCase();
     return data.filter(
       (c) =>
-        c.claimCode.toLowerCase().includes(q) ||
-        c.warrantyCode.toLowerCase().includes(q) ||
-        c.handler.toLowerCase().includes(q) ||
-        c.description.toLowerCase().includes(q)
+        (!q || c.claimCode.toLowerCase().includes(q) || c.warrantyCode.toLowerCase().includes(q) || c.customerName.toLowerCase().includes(q) || c.productName.toLowerCase().includes(q) || c.handler.toLowerCase().includes(q) || c.description.toLowerCase().includes(q)) &&
+        (statusTab === 'ALL' || c.progressStatus === statusTab || (statusTab === 'CHECKING' && ['REPAIRING', 'WAITING_PARTS'].includes(c.progressStatus || '')) || (statusTab === 'REJECTED' && c.status === 'REJECTED')) &&
+        (handlerFilter === 'ALL' || c.handler === handlerFilter) &&
+        (!dateFrom || c.reportedAt >= dateFrom) && (!dateTo || c.reportedAt <= dateTo)
     );
-  }, [search, data]);
+  }, [search, data, statusTab, handlerFilter, dateFrom, dateTo]);
+
+  const handlers = useMemo(() => [...new Set(data.map(c => c.handler).filter(Boolean))], [data]);
+  const exportClaims = () => {
+    const rows = [['Mã yêu cầu', 'Khách hàng', 'Số điện thoại', 'Sản phẩm', 'Serial/IMEI', 'Tiến độ', 'Ngày tiếp nhận', 'Nhân viên tiếp nhận']];
+    filtered.forEach(c => rows.push([c.claimCode, c.customerName, c.customerPhone, c.productName, c.serialNumber, c.progressStatus || '', c.reportedAt, c.handler]));
+    const blob = new Blob(['\uFEFF' + rows.map(row => row.map(value => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `yeu-cau-bao-hanh-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
 
   const columns = useMemo<ColumnDef<ClaimRecord>[]>(
     () => [
@@ -290,6 +313,16 @@ export function WarrantyClaimsPage() {
         accessorKey: 'warrantyCode',
         header: 'Mã bảo hành',
         cell: (info) => <span className="font-medium text-gray-900 dark:text-white">{info.getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'customerName',
+        header: 'Khách hàng',
+        cell: ({ row }) => <div><p className="font-medium text-gray-900 dark:text-white">{row.original.customerName}</p><p className="text-xs text-gray-500">{row.original.customerPhone || 'Chưa có SĐT'}</p></div>,
+      },
+      {
+        accessorKey: 'productName',
+        header: 'Sản phẩm & Serial',
+        cell: ({ row }) => <div><p className="font-medium text-gray-900 dark:text-white">{row.original.productName}</p><p className="font-mono text-xs text-indigo-600 dark:text-indigo-400">{row.original.serialNumber || row.original.warrantyCode}</p></div>,
       },
       {
         accessorKey: 'description',
@@ -378,6 +411,9 @@ export function WarrantyClaimsPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <button onClick={exportClaims} className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-700">
+              <Download className="w-4 h-4" /> Xuất Excel
+            </button>
             <button
               onClick={() => {
                 setTargetScanField('search');
@@ -395,6 +431,12 @@ export function WarrantyClaimsPage() {
               <Plus className="w-4 h-4" /> Thêm mới yêu cầu
             </button>
           </div>
+        </div>
+        <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700 pb-3">
+          {[
+            ['ALL', 'Tất cả'], ['NEW', 'Mới tiếp nhận'], ['CHECKING', 'Đang xử lý'],
+            ['DONE', 'Hoàn thành'], ['RETURNED', 'Đã trả khách'], ['REJECTED', 'Từ chối'],
+          ].map(([value, label]) => <button key={value} onClick={() => setStatusTab(value)} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${statusTab === value ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>{label}</button>)}
         </div>
         <div className="flex flex-col gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
           <div className="relative">
@@ -416,6 +458,11 @@ export function WarrantyClaimsPage() {
             >
               <Scan className="w-4 h-4" />
             </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div><label className="block text-xs text-gray-500 mb-1">Từ ngày tiếp nhận</label><input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-sm" /></div>
+            <div><label className="block text-xs text-gray-500 mb-1">Đến ngày</label><input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-sm" /></div>
+            <div><label className="block text-xs text-gray-500 mb-1">Nhân viên tiếp nhận</label><select value={handlerFilter} onChange={e => setHandlerFilter(e.target.value)} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-sm"><option value="ALL">Tất cả nhân viên</option>{handlers.map(handler => <option key={handler} value={handler}>{handler}</option>)}</select></div>
           </div>
         </div>
         <ReusableDataTable columns={columns} data={filtered} isLoading={isLoading} onRowClick={(row) => setSelected(row)} />
@@ -506,6 +553,19 @@ export function WarrantyClaimsPage() {
               </div>
             </div>
             <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Chọn sổ bảo hành / khách hàng *</label>
+              <select
+                value={form.warrantyCode}
+                onChange={(e) => {
+                  const code = e.target.value;
+                  setForm(current => ({ ...current, warrantyCode: code }));
+                  setMockCustomer(lookupCustomerByCode(code));
+                }}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm mb-3"
+              >
+                <option value="">-- Chọn khách hàng từ sổ bảo hành --</option>
+                {(productWarranties || []).map((w: any) => <option key={w.id} value={w.warrantyCode || w.serialNumber || w.id}>{w.customerName || 'Khách hàng'}{w.customerPhone ? ` - ${w.customerPhone}` : ''} / {w.productName || 'Sản phẩm'} / {w.serialNumber || w.warrantyCode}</option>)}
+              </select>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Mã bảo hành / Serial</label>
               <div className="relative">
                 <input

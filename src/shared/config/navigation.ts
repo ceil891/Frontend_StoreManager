@@ -91,7 +91,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { name: 'Trạng thái tồn kho', href: '/inventory/stock-status', icon: Boxes, permission: 'inventory:stock-keeping:view' },
       { name: 'Thao tác & nghiệp vụ kho', href: '/inventory/operations', icon: Truck, permission: 'inventory:import:view' },
       { name: 'Thẻ kho', href: '/inventory/ledger', icon: Activity, permission: 'inventory:ledger:view' },
-      { name: 'Nguồn gốc & lô / serial', href: '/inventory/tracking', icon: Archive, permission: 'inventory:batch:view' },
     ],
   },
   {
@@ -118,7 +117,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { name: 'Danh sách khách hàng', href: '/crm/customers', icon: Users, permission: 'crm:customer:view' },
       { name: 'Hạng thành viên & điểm thưởng', href: '/crm/loyalty', icon: Shield, permission: 'crm:tier:view' },
       { name: 'Mã giảm giá & voucher', href: '/crm/vouchers', icon: Percent, permission: 'crm:voucher:view' },
-      { name: 'Quản lý bảo hành', href: '/crm/warranties', icon: Shield, permission: 'crm:warranty:view' },
       { name: 'Chăm sóc & hỗ trợ', href: '/crm/support', icon: LifeBuoy, permission: 'crm:ticket:view' },
     ],
   },

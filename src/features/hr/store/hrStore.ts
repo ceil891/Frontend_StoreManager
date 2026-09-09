@@ -98,6 +98,8 @@ export interface PayrollRecord {
   kpiBonus: number;
   deductions: number;
   netSalary: number;
+  workingDays?: number;
+  leaveDays?: number;
   status: 'DRAFT' | 'APPROVED' | 'PAID';
   paymentDate?: string;
 }
