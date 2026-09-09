@@ -31,6 +31,7 @@ export interface SystemUserRecord {
   lastLoginTimestamp: string;
   mfaEnabled: boolean;
   faceEnrolled?: boolean;
+  faceDescriptor?: string;
   notes?: string;
   username?: string;
   email?: string;

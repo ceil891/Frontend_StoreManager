@@ -172,7 +172,11 @@ export function DebtLedgerPage() {
         debtCode: editingDebt.debtCode || `DBT-2024-${Math.floor(100 + Math.random() * 900)}`,
         entityName: editingDebt.entityName || 'Đối tác',
         entityType: editingDebt.entityType || 'CUSTOMER',
+        // Gửi cả tên field giao diện và field lưu trữ backend để không mất giá trị
+        // khi Jackson ánh xạ DebtLedger.balance.
         totalDebt: Number(editingDebt.totalDebt) || 0,
+        balance: Number(editingDebt.totalDebt) || 0,
+        increase: Number(editingDebt.totalDebt) > 0 ? Number(editingDebt.totalDebt) : 0,
         dueAmount: Number(editingDebt.dueAmount) || 0,
         dueDate: editingDebt.dueDate || new Date().toISOString().substring(0, 10),
         status: editingDebt.status || 'NORMAL',
@@ -180,9 +184,15 @@ export function DebtLedgerPage() {
         accountManager: editingDebt.accountManager || 'Quản lý viên',
         branchId: editingDebt.branchId || 'BR-001',
         notes: editingDebt.notes,
-      });
+      } as any);
     } else if (editingDebt.id) {
-      updateDebt(editingDebt.id, editingDebt);
+      updateDebt(editingDebt.id, {
+        ...editingDebt,
+        balance: Number(editingDebt.totalDebt) || 0,
+        totalDebt: Number(editingDebt.totalDebt) || 0,
+        increase: Number(editingDebt.totalDebt) > 0 ? Number(editingDebt.totalDebt) : Number(editingDebt.increase || 0),
+        dueAmount: Number(editingDebt.dueAmount) || 0,
+      } as any);
     }
     setIsModalOpen(false);
   };

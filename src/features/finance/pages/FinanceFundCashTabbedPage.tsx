@@ -1,12 +1,14 @@
 import { useSearchParams } from 'react-router';
-import { Landmark, Wallet } from 'lucide-react';
+import { Landmark, History } from 'lucide-react';
 import { RoleGuard } from '@/routes/RoleGuard';
 import { BankAccountsPage } from './BankAccountsPage';
+import { AccountTransactionHistoryPage } from './AccountTransactionHistoryPage';
 import { FundBalancesPage } from './FundBalancesPage';
 
 const tabs = [
+  { id: 'funds', label: 'Sổ quỹ', icon: Landmark, permission: 'finance:bank:view' },
   { id: 'banks', label: 'Tài khoản Ngân hàng', icon: Landmark, permission: 'finance:bank:view' },
-  { id: 'balances', label: 'Quỹ tiền mặt & Số dư', icon: Wallet, permission: 'finance:fund-balance:view' },
+  { id: 'history', label: 'Lịch sử biến động', icon: History, permission: 'finance:bank:view' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];
@@ -28,9 +30,9 @@ export function FinanceFundCashTabbedPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Ngân hàng & Tồn quỹ</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý tài khoản ngân hàng</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Quản lý tài khoản ngân hàng, dòng tiền và số dư tồn quỹ tiền mặt
+            Quản lý tài khoản ngân hàng và theo dõi biến động thu/chi
           </p>
         </div>
       </div>
@@ -57,14 +59,17 @@ export function FinanceFundCashTabbedPage() {
       </div>
 
       <div>
+        {activeTab === 'funds' && (
+          <RoleGuard requiredPermission="finance:bank:view"><FundBalancesPage /></RoleGuard>
+        )}
         {activeTab === 'banks' && (
           <RoleGuard requiredPermission="finance:bank:view">
             <BankAccountsPage />
           </RoleGuard>
         )}
-        {activeTab === 'balances' && (
-          <RoleGuard requiredPermission="finance:fund-balance:view">
-            <FundBalancesPage />
+        {activeTab === 'history' && (
+          <RoleGuard requiredPermission="finance:bank:view">
+            <AccountTransactionHistoryPage />
           </RoleGuard>
         )}
       </div>

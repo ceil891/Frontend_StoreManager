@@ -76,7 +76,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { name: 'Đơn bán & chào hàng', href: '/sales/orders', icon: ShoppingBag, permission: 'sales:order:view' },
       { name: 'Hóa đơn bán hàng', href: '/sales/invoices', icon: ClipboardList, permission: 'sales:invoice:view' },
       { name: 'Khách hàng trả hàng', href: '/sales/returns', icon: RotateCcw, permission: 'sales:return-request:view' },
-      { name: 'Công nợ phải thu', href: '/sales/receivables', icon: DollarSign, permission: 'sales:receivable:view' },
       { name: 'Giao nhận & xuất hàng', href: '/sales/deliveries', icon: PackageCheck, permission: 'sales:delivery-note:view' },
     ],
   },

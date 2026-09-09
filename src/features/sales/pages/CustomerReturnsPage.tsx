@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router';
 import { Plus, Download, Search, Eye, User, Calendar, CheckCircle2, RefreshCw, AlertTriangle, Edit, Trash2, Box, Package, Building2, Wallet, CreditCard, ShieldCheck, Lock, FileText } from 'lucide-react';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -29,12 +30,13 @@ const ERP_STATUS_LABELS: Record<string, { label: string; style: string }> = {
   APPROVED: { label: 'Đã duyệt', style: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
   STOCK_IN: { label: 'Đã nhập kho WMS', style: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300' },
   REFUND_PROCESSING: { label: 'Đang hoàn tiền', style: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300' },
-  REFUNDED: { label: 'Đã hoàn tiền & Nhập kho', style: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
+  REFUNDED: { label: 'Đã hoàn tiền', style: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
   COMPLETED: { label: 'Đã hoàn thành', style: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
   REJECTED: { label: 'Từ chối', style: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' },
 };
 
 export function CustomerReturnsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const canManage = usePermission('sales:returns:manage');
   const customers = useCrmStore((s) => s.customers);
   const currentUser = useAuthStore((s) => s.user);
@@ -53,6 +55,7 @@ export function CustomerReturnsPage() {
     updateCustomerReturn,
     deleteCustomerReturn,
     fetchCustomerReturns,
+    fetchReturnRequests,
   } = useSalesStore();
 
   const [isLoading, setIsLoading] = useState(true);
@@ -63,6 +66,7 @@ export function CustomerReturnsPage() {
       try {
         await Promise.all([
           fetchCustomerReturns(),
+          fetchReturnRequests(),
           fetchSaleOrders(),
           fetchBranches(),
           fetchWarehouseZones(),
@@ -77,7 +81,7 @@ export function CustomerReturnsPage() {
       }
     };
     load();
-  }, [fetchCustomerReturns, fetchSaleOrders, fetchBranches, fetchWarehouseZones, fetchRacks, fetchUsers]);
+  }, [fetchCustomerReturns, fetchReturnRequests, fetchSaleOrders, fetchBranches, fetchWarehouseZones, fetchRacks, fetchUsers]);
 
   const [search, setSearch] = useState('');
   const [selectedReturn, setSelectedReturn] = useState<CustomerReturnItem | null>(null);
@@ -110,9 +114,9 @@ export function CustomerReturnsPage() {
 
   const filtered = customerReturns.filter(
     (item) =>
-      resolveCustomerName(item.customerId, customers).toLowerCase().includes(search.toLowerCase()) ||
-      item.returnCode.toLowerCase().includes(search.toLowerCase()) ||
-      (item.orderCode || '').toLowerCase().includes(search.toLowerCase())
+      String(resolveCustomerName(item.customerId, customers, item.customerName) || '').toLowerCase().includes(search.toLowerCase()) ||
+      String(item.returnCode || '').toLowerCase().includes(search.toLowerCase()) ||
+      String(item.orderCode || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const syncSelected = (updated: CustomerReturnItem) => {
@@ -149,7 +153,7 @@ export function CustomerReturnsPage() {
       locationId: defaultRack,
       returnDate: new Date().toISOString().split('T')[0],
       reason: 'Khách đổi trả / hàng lỗi',
-      status: 'PENDING_INSPECTION',
+      status: 'PENDING_RECEIPT',
       inspector: defaultInspector,
       createdBy: currentAccountName,
       notes: '',
@@ -276,6 +280,44 @@ export function CustomerReturnsPage() {
     }
   };
 
+  useEffect(() => {
+    const requestCode = searchParams.get('requestCode');
+    if (!requestCode || isLoading) return;
+    const request = returnRequests.find((r) => r.requestCode === requestCode);
+    if (!request) {
+      toast.error('Không tìm thấy yêu cầu trả hàng');
+      return;
+    }
+    if (!['APPROVED', 'PARTIALLY_RETURNED'].includes(request.status) || request.remainingQty <= 0) {
+      toast.error('Yêu cầu chưa được duyệt hoặc không còn số lượng được trả');
+      return;
+    }
+    handleOpenCreate();
+    handleSelectReturnRequest(requestCode);
+    let remaining = request.remainingQty;
+    const lines = (request.items || []).map((item, index) => {
+      const quantity = Math.max(0, Math.min(Number(item.quantity) || 0, remaining));
+      remaining -= quantity;
+      return {
+        id: String(index + 1), productId: item.productId,
+        productName: item.productName, sku: item.sku,
+        quantity, availableQty: quantity, originalQty: item.quantity,
+        price: item.price, subTotal: quantity * item.price,
+        reason: item.reason || request.reason, condition: 'UNOPENED', isRestocked: true,
+      };
+    }).filter((line) => line.quantity > 0);
+    setEditing((prev) => ({
+      ...prev, returnLines: lines, status: 'PENDING_RECEIPT',
+      refundMethod: (request.requestedRefundMethod as RefundMethod) || 'CASH',
+      refundAmount: lines.reduce((sum, line) => sum + line.subTotal, 0),
+    }));
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('requestCode');
+      return next;
+    }, { replace: true });
+  }, [isLoading, searchParams, returnRequests]);
+
   const handleLineQtyChange = (lineIndex: number, newQty: number) => {
     if (!editing.returnLines) return;
     const updatedLines = [...editing.returnLines];
@@ -333,6 +375,8 @@ export function CustomerReturnsPage() {
       if (modalMode === 'create') {
         await addCustomerReturn({
           returnCode: editing.returnCode,
+          returnRequestCode: editing.returnRequestCode,
+          returnRequestId: editing.returnRequestId,
           orderCode: editing.orderCode,
           customerId: editing.customerId || '1',
           refundAmount: editing.refundAmount || 0,
@@ -345,7 +389,7 @@ export function CustomerReturnsPage() {
           returnLines: lines.filter((l) => l.quantity > 0),
           returnDate: editing.returnDate || new Date().toISOString().split('T')[0],
           reason: editing.reason || 'Khách hoàn trả',
-          status: (editing.status as any) || 'PENDING_INSPECTION',
+          status: editing.returnRequestCode ? 'PENDING_RECEIPT' : ((editing.status as any) || 'PENDING_RECEIPT'),
           inspector: editing.inspector || currentAccountName,
           createdBy: currentAccountName,
           notes: editing.notes,
@@ -435,7 +479,7 @@ export function CustomerReturnsPage() {
         header: 'Khách hàng',
         cell: ({ row }) => (
           <span className="font-medium text-gray-900 dark:text-white">
-            {resolveCustomerName(row.original.customerId, customers)}
+            {resolveCustomerName(row.original.customerId, customers, row.original.customerName)}
           </span>
         ),
       },
@@ -584,7 +628,7 @@ export function CustomerReturnsPage() {
               </div>
               <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border">
                 <span className="text-gray-500 block text-xs">Khách hàng CRM:</span>
-                <span className="font-bold text-gray-900 dark:text-white">{resolveCustomerName(selectedReturn.customerId, customers)}</span>
+                <span className="font-bold text-gray-900 dark:text-white">{resolveCustomerName(selectedReturn.customerId, customers, selectedReturn.customerName)}</span>
               </div>
               <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border">
                 <span className="text-gray-500 block text-xs">Người kiểm tra được phân công:</span>
@@ -1090,7 +1134,7 @@ export function CustomerReturnsPage() {
                   <option value="PENDING_INSPECTION">Chờ kiểm tra</option>
                   <option value="APPROVED">Đã duyệt</option>
                   <option value="REFUND_PROCESSING">Đang xử lý hoàn tiền</option>
-                  <option value="REFUNDED">Đã hoàn tiền & Nhập kho</option>
+                  <option value="REFUNDED">Đã hoàn tiền</option>
                   <option value="REJECTED">Từ chối</option>
                 </select>
               </div>

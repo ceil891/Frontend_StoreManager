@@ -240,6 +240,7 @@ export function UsersPage() {
           const updated = {
             ...faceScanUser,
             faceEnrolled: true,
+            faceDescriptor: JSON.stringify(Array.from(detection.descriptor)),
           };
           updateUser(updated);
           if (selectedUser?.id === faceScanUser.id) {

@@ -57,6 +57,7 @@ export function ReceiptVouchersPage() {
   const fetchReceipts = useFinanceStore((s) => s.fetchReceipts);
 
   const [search, setSearch] = useState('');
+  const [creationFilter, setCreationFilter] = useState<'ALL' | 'AUTO' | 'MANUAL'>('ALL');
   const [selectedVoucher, setSelectedVoucher] = useState<ReceiptVoucher | null>(null);
 
   // Modal states
@@ -73,16 +74,18 @@ export function ReceiptVouchersPage() {
 
   const fetchMasterData = async () => {
     try {
-      const [custRes, invRes, debtRes, fundRes] = await Promise.allSettled([
+      const [custRes, invRes, debtRes, fundRes, orderRes] = await Promise.allSettled([
         axiosClient.get('/partnerarea/customers?size=500'),
         axiosClient.get('/sales/invoices?size=500'),
         axiosClient.get('/finance/debt-ledgers'),
         axiosClient.get('/finance/bank-accounts'),
+        axiosClient.get('/sales/orders?size=500'),
       ]);
 
       const rawInvoices = invRes.status === 'fulfilled' ? extractPageContent<any>(invRes.value) : [];
       const rawDebts = debtRes.status === 'fulfilled' ? ((debtRes.value as any)?.data || debtRes.value || []) : [];
       const debtsList = Array.isArray(rawDebts) ? rawDebts : (rawDebts.content || []);
+      const rawOrders = orderRes.status === 'fulfilled' ? extractPageContent<any>(orderRes.value) : [];
 
       const invoiceMap = new Map<string, SalesInvoiceOption>();
       const customerDebtMap = new Map<string, number>();
@@ -106,6 +109,19 @@ export function ReceiptVouchersPage() {
           if (customerName) {
             customerDebtMap.set(customerName, (customerDebtMap.get(customerName) || 0) + remaining);
           }
+        }
+      });
+
+      // Đơn online chưa phát hành hóa đơn vẫn phải xuất hiện để lập phiếu thu.
+      rawOrders.forEach((order: any) => {
+        const code = order.orderCode || order.code || `ONLINE-${order.id}`;
+        const total = Number(order.finalAmount || order.totalAmount || 0);
+        const paid = Number(order.paidAmount || 0);
+        const remaining = Math.max(0, total - paid);
+        const customerName = order.customerName || order.customer?.name || 'Khách online';
+        if (remaining > 0 && !invoiceMap.has(code)) {
+          invoiceMap.set(code, { code, customerName, totalAmount: total, paidAmount: paid, remainingDebt: remaining });
+          customerDebtMap.set(customerName, (customerDebtMap.get(customerName) || 0) + remaining);
         }
       });
 
@@ -177,11 +193,15 @@ export function ReceiptVouchersPage() {
     fetchMasterData();
   }, [fetchReceipts]);
 
-  const filtered = data.filter((item) =>
-    item.payerName.toLowerCase().includes(search.toLowerCase()) ||
-    item.voucherNumber.toLowerCase().includes(search.toLowerCase()) ||
-    (item.referenceDoc && item.referenceDoc.toLowerCase().includes(search.toLowerCase()))
-  );
+  const isAutomatic = (item: ReceiptVoucher) => item.creationSource === 'AUTO';
+  const filtered = data.filter((item) => {
+    const matchesSource = creationFilter === 'ALL' || (creationFilter === 'AUTO' ? isAutomatic(item) : !isAutomatic(item));
+    const query = search.toLowerCase();
+    const matchesSearch = item.payerName.toLowerCase().includes(query)
+      || item.voucherNumber.toLowerCase().includes(query)
+      || Boolean(item.referenceDoc && item.referenceDoc.toLowerCase().includes(query));
+    return matchesSource && matchesSearch;
+  });
 
   const handleOpenCreate = () => {
     fetchMasterData();
@@ -312,6 +332,13 @@ export function ReceiptVouchersPage() {
   const columns = useMemo<ColumnDef<ReceiptVoucher>[]>(
     () => [
       {
+        id: 'creationSource',
+        header: 'Nguồn tạo',
+        cell: ({ row }) => isAutomatic(row.original)
+          ? <span className="text-xs font-semibold rounded-full bg-violet-100 text-violet-700 px-2 py-1">Tự động</span>
+          : <span className="text-xs font-semibold rounded-full bg-slate-100 text-slate-700 px-2 py-1">Thủ công</span>,
+      },
+      {
         accessorKey: 'voucherNumber',
         header: 'Số phiếu thu',
         cell: (info) => <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 hover:underline">{info.getValue() as string}</span>,
@@ -379,20 +406,7 @@ export function ReceiptVouchersPage() {
             >
               <Eye className="w-4 h-4" />
             </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
-              title="Chỉnh sửa"
-              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); setDeletingVoucher(row.original); }}
-              title="Xóa"
-              className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {!isAutomatic(row.original) && <><button onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }} title="Chỉnh sửa" className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Edit className="w-4 h-4" /></button><button onClick={(e) => { e.stopPropagation(); setDeletingVoucher(row.original); }} title="Xóa" className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button></>}
           </div>
         ),
       },
@@ -430,9 +444,14 @@ export function ReceiptVouchersPage() {
             <CreateButton
               onClick={handleOpenCreate}
             >
-              Lập phiếu thu mới
+              Lập phiếu thu thủ công
             </CreateButton>
           </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-3">
+          {([['ALL', 'Tất cả'], ['AUTO', 'Tạo tự động'], ['MANUAL', 'Tạo thủ công']] as const).map(([value, label]) => <button key={value} onClick={() => setCreationFilter(value)} className={`px-3 py-2 text-sm font-semibold rounded-lg ${creationFilter === value ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'}`}>{label}</button>)}
+          <span className="text-xs text-gray-500 ml-1">Phiếu tự động liên kết chứng từ nguồn và không cho sửa/xóa.</span>
         </div>
 
         <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-3">
@@ -597,22 +616,24 @@ export function ReceiptVouchersPage() {
                 <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1 flex items-center gap-1">
                   <Lock className="w-3 h-3 text-emerald-600" /> Chọn Khách hàng nộp tiền (Danh bạ DB) *
                 </label>
-                <select
-                  value={editingVoucher.payerName || ''}
-                  onChange={(e) => handleSelectCustomer(e.target.value)}
-                  className="w-full p-2 border border-emerald-300 dark:border-emerald-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
-                  required
-                >
-                  <option value="">-- Chọn Khách hàng từ DB --</option>
-                  {customersList.map((cust) => (
-                    <option key={cust.id} value={cust.name}>
-                      {cust.name} - {cust.phone} (Công nợ: {cust.debt.toLocaleString('vi-VN')} ₫)
-                    </option>
-                  ))}
-                  {!customersList.some(c => c.name === editingVoucher.payerName) && editingVoucher.payerName && (
-                    <option value={editingVoucher.payerName}>{editingVoucher.payerName}</option>
-                  )}
-                </select>
+                {editingVoucher.referenceDoc ? (
+                  <div className="w-full p-2 border border-emerald-300 dark:border-emerald-700 rounded bg-emerald-100/60 dark:bg-emerald-900/30 text-gray-900 dark:text-white font-bold">
+                    {editingVoucher.payerName || 'Khách hàng theo chứng từ'}
+                    <span className="block text-[10px] text-emerald-700 dark:text-emerald-300 font-normal">Đã khóa theo đơn/hóa đơn đã chọn</span>
+                  </div>
+                ) : (
+                  <select
+                    value={editingVoucher.payerName || ''}
+                    onChange={(e) => handleSelectCustomer(e.target.value)}
+                    className="w-full p-2 border border-emerald-300 dark:border-emerald-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
+                    required
+                  >
+                    <option value="">-- Chọn Khách hàng từ DB --</option>
+                    {customersList.map((cust) => (
+                      <option key={cust.id} value={cust.name}>{cust.name} - {cust.phone} (Công nợ: {cust.debt.toLocaleString('vi-VN')} ₫)</option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
           </div>
@@ -628,7 +649,14 @@ export function ReceiptVouchersPage() {
                 <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Hình thức nhận tiền *</label>
                 <select
                   value={editingVoucher.paymentMethod || 'BANK_TRANSFER'}
-                  onChange={(e) => setEditingVoucher({ ...editingVoucher, paymentMethod: e.target.value as any })}
+                  onChange={(e) => {
+                    const paymentMethod = e.target.value as ReceiptVoucher['paymentMethod'];
+                    setEditingVoucher({
+                      ...editingVoucher,
+                      paymentMethod,
+                      fundAccountName: paymentMethod === 'CASH' ? 'Quỹ tiền mặt' : (editingVoucher.fundAccountName || fundsList[0]?.name || ''),
+                    });
+                  }}
                   className="w-full p-2 border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-bold"
                 >
                   <option value="BANK_TRANSFER">Chuyển khoản Ngân hàng (TK Doanh nghiệp)</option>
@@ -638,23 +666,23 @@ export function ReceiptVouchersPage() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Tài khoản Ngân hàng / Quỹ nhận tiền *</label>
-                <select
-                  value={editingVoucher.fundAccountName || (fundsList[0]?.name || '')}
-                  onChange={(e) => setEditingVoucher({ ...editingVoucher, fundAccountName: e.target.value })}
-                  className="w-full p-2 border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-semibold"
-                  required
-                >
-                  {fundsList.length > 0 ? (
-                    fundsList.map((fund) => (
-                      <option key={fund.id} value={fund.name}>
-                        {fund.name} (Dư: {fund.balance.toLocaleString('vi-VN')} ₫)
-                      </option>
-                    ))
-                  ) : (
-                    <option value="">-- Chưa có tài khoản ngân hàng / quỹ --</option>
-                  )}
-                </select>
+                <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">
+                  {editingVoucher.paymentMethod === 'CASH' ? 'Quỹ nhận tiền *' : 'Tài khoản Ngân hàng nhận tiền *'}
+                </label>
+                {editingVoucher.paymentMethod === 'CASH' ? (
+                  <input value="Quỹ tiền mặt" readOnly className="w-full p-2 border border-blue-300 dark:border-blue-700 rounded bg-slate-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-semibold" />
+                ) : (
+                  <select
+                    value={editingVoucher.fundAccountName || (fundsList[0]?.name || '')}
+                    onChange={(e) => setEditingVoucher({ ...editingVoucher, fundAccountName: e.target.value })}
+                    className="w-full p-2 border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-semibold"
+                    required
+                  >
+                    {fundsList.length > 0 ? fundsList.filter(fund => fund.type === 'BANK').map((fund) => (
+                      <option key={fund.id} value={fund.name}>{fund.name} (Dư: {fund.balance.toLocaleString('vi-VN')} ₫)</option>
+                    )) : <option value="">-- Chưa có tài khoản ngân hàng --</option>}
+                  </select>
+                )}
               </div>
             </div>
           </div>

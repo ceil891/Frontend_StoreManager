@@ -1,16 +1,12 @@
 import { useSearchParams } from 'react-router';
 import { ReceiptVouchersPage } from './ReceiptVouchersPage';
 import { PaymentVouchersPage } from './PaymentVouchersPage';
-import { OperatingCostsPage } from './OperatingCostsPage';
-import CostCentersPage from './CostCentersPage';
 import { RoleGuard } from '@/routes/RoleGuard';
-import { ArrowDownLeft, ArrowUpRight, DollarSign, PieChart } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 
 const tabs = [
   { id: 'receipts', label: 'Phiếu thu tiền', icon: ArrowDownLeft, permission: 'finance:receipt:view' },
   { id: 'payments', label: 'Phiếu chi tiền', icon: ArrowUpRight, permission: 'finance:payment:view' },
-  { id: 'costs', label: 'Chi phí vận hành', icon: DollarSign, permission: 'finance:cost:view' },
-  { id: 'cost-centers', label: 'Trung tâm chi phí', icon: PieChart, permission: 'finance:cost-center:view' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];
@@ -32,9 +28,9 @@ export function VouchersTabbedPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Thu / Chi & Chi phí</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Phiếu thu / chi</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Theo dõi tất cả giao dịch phiếu thu, phiếu chi, chi phí vận hành và trung tâm chi phí trong toàn hệ thống
+            Lập phiếu thủ công và theo dõi các phiếu được tạo tự động từ nghiệp vụ nguồn.
           </p>
         </div>
       </div>
@@ -69,16 +65,6 @@ export function VouchersTabbedPage() {
         {activeTab === 'payments' && (
           <RoleGuard requiredPermission="finance:payment:view">
             <PaymentVouchersPage />
-          </RoleGuard>
-        )}
-        {activeTab === 'costs' && (
-          <RoleGuard requiredPermission="finance:cost:view">
-            <OperatingCostsPage />
-          </RoleGuard>
-        )}
-        {activeTab === 'cost-centers' && (
-          <RoleGuard requiredPermission="finance:cost-center:view">
-            <CostCentersPage />
           </RoleGuard>
         )}
       </div>

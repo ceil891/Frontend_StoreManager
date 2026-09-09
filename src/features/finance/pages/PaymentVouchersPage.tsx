@@ -33,6 +33,7 @@ export function PaymentVouchersPage() {
 
   const [unpaidInvoices, setUnpaidInvoices] = useState<{ code: string; supplierName: string; remainingDebt: number }[]>([]);
   const [bankAccounts, setBankAccounts] = useState<{ id: string; name: string }[]>([]);
+  const [payrollPayments, setPayrollPayments] = useState<PaymentVoucher[]>([]);
   const [isPayeeLocked, setIsPayeeLocked] = useState(false);
 
   useEffect(() => {
@@ -64,10 +65,29 @@ export function PaymentVouchersPage() {
         }));
         setBankAccounts(mapped);
       }).catch(() => setBankAccounts([]));
+
+      // Payroll marked PAID is a system-generated payment voucher.  Show it
+      // immediately even if the voucher list request returns before the
+      // backend transaction has created its matching PAYMENT record.
+      axiosClient.get('/finance/payrolls').then((res: any) => {
+        const list = Array.isArray(res) ? res : (res?.content || res?.data || []);
+        setPayrollPayments(list.filter((item: any) => String(item.status).toUpperCase() === 'PAID').map((item: any) => ({
+          id: `payroll-${item.id}`,
+          voucherNumber: `PAYROLL-${item.id}`,
+          payeeName: item.employeeName || item.user?.fullName || 'Nhân viên',
+          category: 'PAYROLL', amount: Number(item.netSalary || 0),
+          paymentMethod: 'BANK_TRANSFER', paymentDate: (item.paymentDate || item.updatedAt || '').split('T')[0],
+          bankAccountRef: 'Phiếu chi lương tự động', approver: 'Hệ thống', status: 'COMPLETED',
+           branchId: String(item.branchId || ''), referenceDoc: `PAYROLL-${item.id}`,
+           creationSource: 'AUTO', sourceDocumentType: 'PAYROLL', sourceDocumentCode: `PAYROLL-${item.id}`,
+          notes: `Chi lương ${item.payrollMonth || ''}`,
+        })));
+      }).catch(() => setPayrollPayments([]));
     });
   }, [fetchPayments]);
 
   const [search, setSearch] = useState('');
+  const [creationFilter, setCreationFilter] = useState<'ALL' | 'AUTO' | 'MANUAL'>('ALL');
   const [selectedVoucher, setSelectedVoucher] = useState<PaymentVoucher | null>(null);
 
   // Modal states
@@ -77,11 +97,21 @@ export function PaymentVouchersPage() {
   const [editingVoucher, setEditingVoucher] = useState<Partial<PaymentVoucher>>({});
   const [deletingVoucher, setDeletingVoucher] = useState<PaymentVoucher | null>(null);
 
-  const filtered = data.filter((item) =>
-    item.payeeName.toLowerCase().includes(search.toLowerCase()) ||
-    item.voucherNumber.toLowerCase().includes(search.toLowerCase()) ||
-    item.bankAccountRef.toLowerCase().includes(search.toLowerCase())
-  );
+  const displayedPayments = useMemo(() => {
+    const existingReferences = new Set(data.map(item => item.referenceDoc || item.voucherNumber));
+    return [...data, ...payrollPayments.filter(item => !existingReferences.has(item.referenceDoc || item.voucherNumber))];
+  }, [data, payrollPayments]);
+
+  const isAutomatic = (item: PaymentVoucher) => item.creationSource === 'AUTO';
+
+  const filtered = displayedPayments.filter((item) => {
+    const matchesSource = creationFilter === 'ALL' || (creationFilter === 'AUTO' ? isAutomatic(item) : !isAutomatic(item));
+    const query = search.toLowerCase();
+    const matchesSearch = item.payeeName.toLowerCase().includes(query)
+      || item.voucherNumber.toLowerCase().includes(query)
+      || item.bankAccountRef.toLowerCase().includes(query);
+    return matchesSource && matchesSearch;
+  });
 
   const generateAutoCode = () => {
     const todayStr = new Date().toISOString().substring(0, 10).replace(/-/g, '');
@@ -193,6 +223,13 @@ export function PaymentVouchersPage() {
   const columns = useMemo<ColumnDef<PaymentVoucher>[]>(
     () => [
       {
+        id: 'creationSource',
+        header: 'Nguồn tạo',
+        cell: ({ row }) => isAutomatic(row.original)
+          ? <span className="text-xs font-semibold rounded-full bg-violet-100 text-violet-700 px-2 py-1">Tự động</span>
+          : <span className="text-xs font-semibold rounded-full bg-slate-100 text-slate-700 px-2 py-1">Thủ công</span>,
+      },
+      {
         accessorKey: 'voucherNumber',
         header: 'Số phiếu chi',
         cell: (info) => <span className="font-mono font-bold text-red-600 dark:text-red-400 hover:underline">{info.getValue() as string}</span>,
@@ -260,20 +297,10 @@ export function PaymentVouchersPage() {
             >
               <Eye className="w-4 h-4" />
             </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }}
-              title="Chỉnh sửa"
-              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); setDeletingVoucher(row.original); }}
-              title="Xóa"
-              className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {!isAutomatic(row.original) && <>
+              <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(row.original); }} title="Chỉnh sửa" className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
+              <button onClick={(e) => { e.stopPropagation(); setDeletingVoucher(row.original); }} title="Xóa" className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+            </>}
           </div>
         ),
       },
@@ -310,9 +337,16 @@ export function PaymentVouchersPage() {
             <CreateButton
               onClick={handleOpenCreate}
             >
-              Lập phiếu chi mới
+              Lập phiếu chi thủ công
             </CreateButton>
           </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-3">
+          {([
+            ['ALL', 'Tất cả'], ['AUTO', 'Tạo tự động'], ['MANUAL', 'Tạo thủ công'],
+          ] as const).map(([value, label]) => <button key={value} onClick={() => setCreationFilter(value)} className={`px-3 py-2 text-sm font-semibold rounded-lg ${creationFilter === value ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'}`}>{label}</button>)}
+          <span className="text-xs text-gray-500 ml-1">Phiếu tự động liên kết chứng từ nguồn và không cho sửa/xóa.</span>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -551,7 +585,10 @@ export function PaymentVouchersPage() {
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phương thức thanh toán</label>
               <select
                 value={editingVoucher.paymentMethod || 'BANK_TRANSFER'}
-                onChange={(e) => setEditingVoucher({ ...editingVoucher, paymentMethod: e.target.value as any })}
+                onChange={(e) => {
+                  const paymentMethod = e.target.value as PaymentVoucher['paymentMethod'];
+                  setEditingVoucher({ ...editingVoucher, paymentMethod, bankAccountRef: paymentMethod === 'CASH' ? 'Quỹ tiền mặt' : (editingVoucher.bankAccountRef || bankAccounts[0]?.name || '') });
+                }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
               >
                 <option value="BANK_TRANSFER">Chuyển khoản ngân hàng</option>
@@ -597,21 +634,23 @@ export function PaymentVouchersPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tài khoản / Quỹ xuất tiền *</label>
-              <select
-                value={editingVoucher.bankAccountRef || (bankAccounts[0]?.name || '')}
-                onChange={(e) => setEditingVoucher({ ...editingVoucher, bankAccountRef: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 font-semibold"
-                required
-              >
-                {bankAccounts.length > 0 ? (
-                  bankAccounts.map((b) => (
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {editingVoucher.paymentMethod === 'CASH' ? 'Quỹ xuất tiền *' : 'Tài khoản ngân hàng xuất tiền *'}
+              </label>
+              {editingVoucher.paymentMethod === 'CASH' ? (
+                <input value="Quỹ tiền mặt" readOnly className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-semibold" />
+              ) : (
+                <select
+                  value={editingVoucher.bankAccountRef || (bankAccounts[0]?.name || '')}
+                  onChange={(e) => setEditingVoucher({ ...editingVoucher, bankAccountRef: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 font-semibold"
+                  required
+                >
+                  {bankAccounts.length > 0 ? bankAccounts.map((b) => (
                     <option key={b.id} value={b.name}>{b.name}</option>
-                  ))
-                ) : (
-                  <option value="">-- Chưa có tài khoản ngân hàng --</option>
-                )}
-              </select>
+                  )) : <option value="">-- Chưa có tài khoản ngân hàng --</option>}
+                </select>
+              )}
             </div>
           </div>
 

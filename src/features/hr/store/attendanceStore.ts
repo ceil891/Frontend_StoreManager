@@ -64,8 +64,8 @@ interface AttendanceState {
   isProcessing: boolean; // Cờ chặn request chồng chéo
   error: string | null;
   fetchAttendances: (params?: { workDateFrom?: string; workDateTo?: string; search?: string }) => Promise<void>;
-  recordCheckIn: (userId: string, userName: string) => Promise<void>;
-  recordCheckOut: (userId: string, userName: string) => Promise<void>;
+  recordCheckIn: (userId: string, userName: string, branchLocation?: string) => Promise<void>;
+  recordCheckOut: (userId: string, userName: string, branchLocation?: string) => Promise<void>;
 }
 
 // Bổ sung `get` vào hàm create để có thể đọc state hiện tại
@@ -98,7 +98,7 @@ export const useAttendanceStore = create<AttendanceState>()((set, get) => ({
     }
   },
 
- recordCheckIn: async (userId: string, userName: string) => {
+ recordCheckIn: async (userId: string, userName: string, branchLocation?: string) => {
     if (get().isProcessing) {
       throw new Error('Hệ thống đang xử lý, vui lòng giữ nguyên khuôn mặt...');
     }
@@ -113,7 +113,7 @@ export const useAttendanceStore = create<AttendanceState>()((set, get) => ({
     try {
       await axiosClient.post('/hrm/attendances/check-in', {
         userId: numericUserId,
-        gpsLocation: 'Văn phòng chính (Chi nhánh 1)',
+        gpsLocation: branchLocation || 'Chi nhánh làm việc chưa được phân công',
         deviceId: 'AI_FACE_SCANNER',
         faceVerified: true,
       });
@@ -129,7 +129,7 @@ export const useAttendanceStore = create<AttendanceState>()((set, get) => ({
     }
   },
 
-  recordCheckOut: async (userId: string, userName: string) => {
+  recordCheckOut: async (userId: string, userName: string, branchLocation?: string) => {
     if (get().isProcessing) {
       throw new Error('Hệ thống đang xử lý, vui lòng giữ nguyên khuôn mặt...');
     }
@@ -144,6 +144,7 @@ export const useAttendanceStore = create<AttendanceState>()((set, get) => ({
     try {
       await axiosClient.post('/hrm/attendances/check-out', {
         userId: numericUserId,
+        gpsLocation: branchLocation || 'Chi nhánh làm việc chưa được phân công',
         faceVerified: true,
       });
 

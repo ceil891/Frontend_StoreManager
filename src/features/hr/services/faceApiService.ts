@@ -1,6 +1,11 @@
 import * as faceapi from '@vladmandic/face-api';
 
-const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model/';
+// Keep a second CDN available: the attendance screen must not fail merely because
+// one public CDN is temporarily unavailable.
+const MODEL_URLS = [
+  'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model/',
+  'https://unpkg.com/@vladmandic/face-api@1.7.15/model/',
+];
 const STORAGE_KEY_PREFIX = 'hrm_face_descriptor_';
 const ENROLLED_LIST_KEY = 'hrm_face_enrolled_user_ids';
 
@@ -28,18 +33,34 @@ export const faceApiService = {
     );
   },
 
+  cacheBackendDescriptor(userId: string, fullName: string, serialized: string): void {
+    try {
+      const descriptor = JSON.parse(serialized);
+      if (Array.isArray(descriptor) && descriptor.length === 128) this.saveFaceDescriptor(userId, fullName, descriptor);
+    } catch { /* ignore malformed data */ }
+  },
+
   async loadModels(): Promise<boolean> {
     if (this.isModelsLoaded()) return true;
     if (modelsLoadedPromise) return modelsLoadedPromise;
 
     modelsLoadedPromise = (async () => {
       try {
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-        ]);
-        return true;
+        let lastError: unknown;
+        for (const modelUrl of MODEL_URLS) {
+          try {
+            // Load sequentially so a transient failure in one manifest does not
+            // leave an unobservable Promise.all race/partial model state.
+            await faceapi.nets.tinyFaceDetector.loadFromUri(modelUrl);
+            await faceapi.nets.faceLandmark68Net.loadFromUri(modelUrl);
+            await faceapi.nets.faceRecognitionNet.loadFromUri(modelUrl);
+            return true;
+          } catch (error) {
+            lastError = error;
+            console.warn(`Không thể tải mô hình Face AI từ ${modelUrl}`, error);
+          }
+        }
+        throw lastError || new Error('Không thể tải mô hình nhận diện khuôn mặt');
       } catch (err) {
         console.error('Lỗi khi tải AI Face Recognition models:', err);
         modelsLoadedPromise = null;
@@ -57,7 +78,7 @@ export const faceApiService = {
 
     const options = new faceapi.TinyFaceDetectorOptions({
       inputSize: 224,
-      scoreThreshold: 0.5,
+      scoreThreshold: 0.45,
     });
 
     const detection = await faceapi

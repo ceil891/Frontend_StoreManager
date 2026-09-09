@@ -170,8 +170,12 @@ export function PayrollPage() {
   };
 
   const markPaid = async (id: string) => {
-    await updatePayroll(id, { status: 'PAID' } as any);
-    toast.success('Đã chi lương và tự động tạo phiếu chi');
+    try {
+      await updatePayroll(id, { status: 'PAID' } as any);
+      toast.success('Đã chi lương và tự động tạo phiếu chi');
+    } catch (err: any) {
+      toast.error('Không thể chi lương: ' + (err?.message || 'Lỗi máy chủ'));
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -189,7 +193,7 @@ export function PayrollPage() {
   const columns = useMemo<ColumnDef<PayrollItem>[]>(() => [
     { accessorKey:'userName', header:'Nhân viên', cell:({row}) => <div><p className="font-medium text-gray-900 dark:text-white">{row.original.userName}</p><p className="text-xs text-gray-400">{row.original.department}</p></div> },
     { id:'period', header:'Kỳ lương', cell:({row}) => <span className="text-sm font-mono text-gray-700 dark:text-gray-300">Tháng {row.original.periodMonth}/{row.original.periodYear}</span> },
-    { accessorKey:'baseSalary', header:'Lương cơ bản', cell:info => <span className="text-sm text-gray-700 dark:text-gray-300">{fmt(info.getValue() as number)}</span> },
+    { accessorKey:'baseSalary', header:'Lương theo ngày', cell:info => <span className="text-sm text-gray-700 dark:text-gray-300">{fmt(info.getValue() as number)}</span> },
     { accessorKey:'workingDays', header:'Ngày làm việc', cell:info => <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{info.getValue() as number} công</span> },
     { accessorKey:'leaveDays', header:'Ngày nghỉ', cell:info => <span className="text-sm font-semibold text-amber-600 dark:text-amber-400">{info.getValue() as number} ngày</span> },
     { accessorKey:'allowance', header:'Phụ cấp', cell:info => <span className="text-sm text-emerald-600 dark:text-emerald-400">+{fmt(info.getValue() as number)}</span> },
@@ -265,7 +269,7 @@ export function PayrollPage() {
               <div><p className="text-xs text-gray-500">Thực lĩnh kỳ tháng {selected.periodMonth}/{selected.periodYear}</p><p className="text-xl font-bold text-emerald-700 dark:text-emerald-400">{fmt(selected.netSalary)}</p></div>
             </div>
             <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
-              {[['Nhân viên',selected.userName],['Phòng ban',selected.department],['Kỳ lương',`Tháng ${selected.periodMonth}/${selected.periodYear}`],['Lương cơ bản',fmt(selected.baseSalary)],['Phụ cấp thêm',`+${fmt(selected.allowance)}`],['Khoản giảm trừ',`-${fmt(selected.deduction)}`]].map(([l,v])=>(
+              {[['Nhân viên',selected.userName],['Phòng ban',selected.department],['Kỳ lương',`Tháng ${selected.periodMonth}/${selected.periodYear}`],['Lương theo ngày',fmt(selected.baseSalary)],['Phụ cấp thêm',`+${fmt(selected.allowance)}`],['Khoản giảm trừ',`-${fmt(selected.deduction)}`]].map(([l,v])=>(
                 <div key={l} className="flex justify-between text-sm"><span className="text-gray-500">{l}:</span><span className="font-semibold text-gray-900 dark:text-white">{v}</span></div>
               ))}
               <div className="flex justify-between text-sm border-t border-gray-200 dark:border-gray-700 pt-2 font-bold">
@@ -362,7 +366,7 @@ export function PayrollPage() {
           </div>
 
           <div className="grid grid-cols-3 gap-4">
-            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lương cơ bản</label>
+            <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Lương theo ngày</label>
               <input type="number" value={form.baseSalary||0} onChange={e=>setForm({...form,baseSalary:+e.target.value})} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>
             <div><label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phụ cấp</label>
               <input type="number" value={form.allowance||0} onChange={e=>setForm({...form,allowance:+e.target.value})} className="w-full px-3 py-2 border border-emerald-300 dark:border-emerald-700 rounded-lg bg-emerald-50 dark:bg-emerald-900/10 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500"/></div>

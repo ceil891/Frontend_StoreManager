@@ -77,7 +77,7 @@ export function SalesReportPage() {
 
   const [dateRange, setDateRange] = useState('7d');
   const [selectedBranch, setSelectedBranch] = useState('all');
-  const [activeTab, setActiveTab] = useState<'overview' | 'customer_products'>('overview');
+  const activeTab = 'overview';
   const [productSearch, setProductSearch] = useState('');
   const [apiReport, setApiReport] = useState<SalesReportData | null>(null);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
@@ -458,31 +458,13 @@ export function SalesReportPage() {
 
       {/* Tabs */}
       <div className="flex space-x-1 border-b border-gray-200 dark:border-gray-800">
-        <button
-          onClick={() => setActiveTab('overview')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
-            activeTab === 'overview'
-              ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400 font-bold'
-              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'
-          }`}
-        >
+        <div className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400 font-bold">
           <TrendingUp className="w-4 h-4" />
           Tổng quan & doanh thu
-        </button>
-        <button
-          onClick={() => setActiveTab('customer_products')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
-            activeTab === 'customer_products'
-              ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400 font-bold'
-              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          Sản phẩm bán theo khách hàng
-        </button>
+        </div>
       </div>
 
-      {activeTab === 'overview' ? (
+      {activeTab === 'overview' && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {kpiCards.map((kpi, idx) => (
@@ -576,32 +558,6 @@ export function SalesReportPage() {
             <ReusableDataTable columns={columns} data={recentTransactions} />
           </div>
         </>
-      ) : (
-        <div className="space-y-6">
-          <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-3">
-            <Search className="w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={productSearch}
-              onChange={(e) => setProductSearch(e.target.value)}
-              placeholder="Tìm kiếm theo tên khách hàng, số điện thoại, tên sản phẩm hoặc mã đơn hàng..."
-              className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-white placeholder-gray-400"
-            />
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Báo cáo sản phẩm bán theo từng khách hàng</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Bóc tách chi tiết từng sản phẩm khách hàng đã mua, số lượng, đơn giá và giá trị giao dịch</p>
-              </div>
-              <span className="text-xs font-semibold px-2.5 py-1 bg-primary/10 text-primary rounded-full font-mono">
-                {filteredCustomerProductSales.length} dòng dữ liệu
-              </span>
-            </div>
-            <ReusableDataTable columns={productSaleColumns} data={filteredCustomerProductSales} />
-          </div>
-        </div>
       )}
     </div>
   );

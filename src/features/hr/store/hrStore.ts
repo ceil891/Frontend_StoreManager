@@ -409,7 +409,10 @@ export const useHrStore = create<HrState>()(
         try {
           const res = await axiosClient.get<any, any>('/finance/payrolls');
           const list = Array.isArray(res) ? res : (res?.data || res?.content || []);
-          set({ payrolls: list, isLoading: false });
+          // Không xóa danh sách đang hiển thị nếu API trả rỗng tạm thời
+          // (ví dụ backend vừa cập nhật trạng thái hoặc lỗi serialize một bản ghi).
+          const current = get().payrolls;
+          set({ payrolls: Array.isArray(list) && (list.length > 0 || current.length === 0) ? list : current, isLoading: false });
         } catch {
           set({ isLoading: false });
         }

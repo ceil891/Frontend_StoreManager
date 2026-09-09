@@ -50,6 +50,12 @@ export function AttendancePage() {
     fetchUsers();
   }, [fetchAttendances, fetchUsers]);
 
+  useEffect(() => {
+    users.forEach((u: any) => {
+      if (u.faceDescriptor) faceApiService.cacheBackendDescriptor(String(u.id), u.fullName, u.faceDescriptor);
+    });
+  }, [users]);
+
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('Tất cả');
@@ -80,16 +86,20 @@ export function AttendancePage() {
   }, [users, faceCheckInOpen]);
 
   const processAttendanceForUser = async (userId: string, userName: string) => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const employee = users.find(u => String(u.id) === String(userId));
+    const branchLocation = employee?.branchLocation || 'Chi nhánh làm việc chưa được phân công';
+    // Use local business date; UTC conversion changes the day around midnight in VN.
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const existingToday = records.find(r => String(r.userId) === String(userId) && r.workDate === todayStr);
     const willCheckOut = attendanceAction === 'CHECK_OUT' || (attendanceAction === 'AUTO' && existingToday && existingToday.checkIn && (!existingToday.checkOut || existingToday.checkOut === '--:--' || existingToday.checkOut.trim() === ''));
 
     if (willCheckOut) {
       setRecordedType('OUT');
-      await recordCheckOut(userId, userName);
+      await recordCheckOut(userId, userName, branchLocation);
     } else {
       setRecordedType('IN');
-      await recordCheckIn(userId, userName);
+      await recordCheckIn(userId, userName, branchLocation);
     }
   };
 
@@ -145,12 +155,16 @@ export function AttendancePage() {
       setFaceAiStatus(`Vui lòng giữ thẳng khuôn mặt của ${targetUser.fullName} trong khung hình...`);
     } catch (e) {
       setFaceAiStatus('Lỗi nạp mô hình AI. Vui lòng kiểm tra kết nối mạng!');
+      stopCameraAndAi();
       return;
     }
 
     let steadyCount = 0;
+    let scanBusy = false;
     scanIntervalRef.current = setInterval(async () => {
       if (!videoRef.current || videoRef.current.paused || videoRef.current.ended) return;
+      if (scanBusy) return;
+      scanBusy = true;
 
       try {
         const detection = await faceApiService.detectFaceAndDescriptor(videoRef.current);
@@ -182,12 +196,14 @@ export function AttendancePage() {
           setEnrollSuccessUser({ id: String(targetUser.id), fullName: targetUser.fullName });
           setScanStep(2);
           try {
-            await updateUser({ ...targetUser, faceEnrolled: true });
+            await updateUser({ ...targetUser, faceEnrolled: true, faceDescriptor: JSON.stringify(Array.from(detection.descriptor)) });
           } catch {}
           toast.success(`Đã đăng ký khuôn mặt AI cho ${targetUser.fullName} thành công!`);
         }, 500);
       } catch (err) {
         console.error('Lỗi khi quét đăng ký khuôn mặt:', err);
+      } finally {
+        scanBusy = false;
       }
     }, 400);
   };
@@ -221,6 +237,7 @@ export function AttendancePage() {
       setFaceAiStatus('Vui lòng đưa khuôn mặt vào giữa khung hình...');
     } catch (e) {
       setFaceAiStatus('Lỗi nạp mô hình AI. Vui lòng kiểm tra kết nối mạng!');
+      stopCameraAndAi();
       return;
     }
 
@@ -228,8 +245,11 @@ export function AttendancePage() {
     let consecutiveMatchCount = 0;
     let lastMatchedId = '';
 
+    let scanBusy = false;
     scanIntervalRef.current = setInterval(async () => {
       if (!videoRef.current || videoRef.current.paused || videoRef.current.ended) return;
+      if (scanBusy) return;
+      scanBusy = true;
 
       try {
         const detection = await faceApiService.detectFaceAndDescriptor(videoRef.current);
@@ -336,6 +356,8 @@ export function AttendancePage() {
         }
       } catch (err) {
         console.error('Lỗi khi đối soát khuôn mặt:', err);
+      } finally {
+        scanBusy = false;
       }
     }, 400);
   };

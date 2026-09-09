@@ -46,6 +46,7 @@ export function normalizeSystemUser(
     lastLoginTimestamp: partial.lastLoginTimestamp ?? 'Chưa từng đăng nhập',
     mfaEnabled: partial.mfaEnabled ?? false,
     faceEnrolled: partial.faceEnrolled ?? false,
+    faceDescriptor: partial.faceDescriptor,
     notes: partial.notes,
   };
 }
@@ -207,6 +208,7 @@ export const userService = {
       dateOfBirth: updatedUser.dateOfBirth || '',
       departmentId: updatedUser.departmentId || '',
       positionId: updatedUser.positionId || '',
+      faceDescriptor: updatedUser.faceDescriptor,
     };
     if (roleId) {
       payload.roleId = roleId;

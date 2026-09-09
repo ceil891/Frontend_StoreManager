@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router';
 import { Plus, Search, Eye, CheckCircle2, XCircle, FileText, ArrowRight, Upload, Package, DollarSign, User } from 'lucide-react';
 import { Modal } from '@/shared/components/ui/Modal';
 import { ReusableDataTable } from '@/shared/components/data-table/ReusableDataTable';
@@ -24,6 +25,7 @@ const REFUND_METHOD_LABELS: Record<string, string> = {
 };
 
 export function ReturnsListsPage() {
+  const [, setSearchParams] = useSearchParams();
   const { saleOrders, returnRequests, addReturnRequest, updateReturnRequestStatus, addCustomerReturn, fetchSaleOrders, fetchCustomerReturns, fetchReturnRequests } = useSalesStore();
   const { users, fetchUsers } = useUserStore();
   const currentUser = useAuthStore((s) => s.user);
@@ -117,70 +119,23 @@ export function ReturnsListsPage() {
     const q = search.toLowerCase();
     return returnRequests.filter(
       (r) =>
-        r.requestCode.toLowerCase().includes(q) ||
-        r.orderCode.toLowerCase().includes(q) ||
-        (r.customerName || '').toLowerCase().includes(q) ||
-        (r.customerPhone || '').includes(q)
+        String(r.requestCode || '').toLowerCase().includes(q) ||
+        String(r.orderCode || '').toLowerCase().includes(q) ||
+        String(r.customerName || '').toLowerCase().includes(q) ||
+        String(r.customerPhone || '').includes(q)
     );
   }, [search, returnRequests]);
 
   const handleApproveAndCreateReturn = async (req: ReturnRequestItem) => {
     if (req.remainingQty <= 0) {
-      toast.warning(`Yêu cầu ${req.requestCode} đã hoàn tất trả hàng (100%)`);
+      toast.warning('Yêu cầu không còn số lượng được trả');
       return;
     }
-
     try {
-      // 1. Update Request status to APPROVED or PARTIALLY_RETURNED
-      if (req.status === 'PENDING') {
-        updateReturnRequestStatus(req.id, 'APPROVED');
-      }
-
-      // 2. Auto Create Physical Customer Return (RET-XXXX) in status PENDING_RECEIPT
-      const newRetCode = `RET-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      const qtyToReturn = req.remainingQty;
-      const firstItem = req.items && req.items[0];
-      const itemPrice = firstItem?.price || 15000;
-      const totalAmount = qtyToReturn * itemPrice;
-
-      await addCustomerReturn({
-        returnCode: newRetCode,
-        returnRequestCode: req.requestCode,
-        orderCode: req.orderCode,
-        customerId: req.customerId,
-        returnDate: new Date().toISOString().split('T')[0],
-        refundAmount: totalAmount,
-        deductionAmount: 0,
-        reason: req.reason,
-        status: 'PENDING_RECEIPT', // Standard: RET created in PENDING_RECEIPT state waiting for physical goods
-        refundMethod: (req.requestedRefundMethod as any) || 'CASH',
-        isRestocked: true,
-        returnBranchId: '1',
-        warehouseId: 'WH-01',
-        locationId: 'BIN-A01',
-        inspector: req.handlerName || 'Trần Văn Hưng',
-        createdBy: 'Admin POS',
-        notes: `Tạo từ Yêu cầu trả hàng ${req.requestCode} (SL: ${qtyToReturn})`,
-        returnLines: (req.items || []).map((it, idx) => ({
-          id: String(idx + 1),
-          productId: it.productId,
-          productName: it.productName,
-          sku: it.sku,
-          quantity: qtyToReturn,
-          availableQty: qtyToReturn,
-          originalQty: it.quantity,
-          price: it.price,
-          subTotal: qtyToReturn * it.price,
-          reason: it.reason || req.reason,
-          condition: 'UNOPENED',
-          isRestocked: true,
-        })),
-      });
-
-      toast.success(`✓ Đã tạo Phiếu Khách Hàng Trả Hàng ${newRetCode} (Trạng thái: Chờ nhận hàng)!`);
-    } catch (err) {
-      console.error(err);
-      toast.error('Có lỗi xảy ra khi tạo phiếu thực trả');
+      if (req.status === 'PENDING') await updateReturnRequestStatus(req.id, 'APPROVED');
+      setSearchParams({ tab: 'returns', requestCode: req.requestCode });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Không thể duyệt yêu cầu trả hàng');
     }
   };
 

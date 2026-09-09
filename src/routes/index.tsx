@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { createBrowserRouter, RouterProvider, Link, useRouteError, useNavigate } from 'react-router';
+import { createBrowserRouter, RouterProvider, Link, Navigate, useRouteError, useNavigate } from 'react-router';
 import { PrivateRoute } from './PrivateRoute';
 import { RoleGuard } from './RoleGuard';
 import { LegacyRedirect } from './LegacyRedirect';
@@ -274,7 +274,7 @@ const router = createBrowserRouter([
           { path: 'sales/orders', ...protect(<SalesOrdersTabbedPage />, 'sales:order:view') },
           { path: 'sales/invoices', ...protect(<SalesInvoicesTabbedPage />, 'sales:invoice:view') },
           { path: 'sales/returns', ...protect(<SalesReturnsTabbedPage />, 'sales:return-request:view') },
-          { path: 'sales/receivables', ...protect(<SalesReceivablesTabbedPage />, 'sales:receivable:view') },
+          { path: 'sales/receivables', element: <Navigate to="/finance/debts" replace /> },
           { path: 'sales/deliveries', ...protect(<SalesDeliveriesTabbedPage />, 'sales:delivery-note:view') },
 
           // Sales Legacy Redirects
@@ -359,7 +359,7 @@ const router = createBrowserRouter([
           { path: 'finance/operating-costs', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="costs" /> },
           { path: 'finance/cost-centers', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="costs" /> },
           { path: 'finance/banks', element: <LegacyRedirect targetCanonical="/finance/fund-cash" defaultTab="banks" /> },
-          { path: 'finance/fund-balances', element: <LegacyRedirect targetCanonical="/finance/fund-cash" defaultTab="balances" /> },
+          { path: 'finance/fund-balances', element: <LegacyRedirect targetCanonical="/finance/fund-cash" defaultTab="history" /> },
           { path: 'finance/accounting', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="receipts" /> },
           { path: 'finance/journal-entries', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="receipts" /> },
           { path: 'finance/chart-of-accounts', element: <LegacyRedirect targetCanonical="/finance/vouchers" defaultTab="receipts" /> },

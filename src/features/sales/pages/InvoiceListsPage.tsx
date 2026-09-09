@@ -483,12 +483,6 @@ export function InvoiceListsPage() {
             Xem lịch sử, thống kê toàn bộ hóa đơn VAT bán lẻ, bán sỉ và các nghiệp vụ trả hàng khách hàng.
           </p>
         </div>
-        <button
-          onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition"
-        >
-          <Plus className="w-4 h-4" /> Lập Hóa Đơn Mới
-        </button>
       </div>
 
       {/* KPI Summary Cards */}

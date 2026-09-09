@@ -25,6 +25,12 @@ export const financeService = {
         : (item.createdAt ? item.createdAt.split('T')[0] : ''),
       status: item.status || 'COMPLETED',
       createdByName: item.createdByName || item.cashier || 'Kế toán viên',
+      invoiceCode: item.invoiceCode || '',
+      referenceDoc: item.sourceDocumentCode || item.invoiceCode || '',
+      creationSource: item.creationSource || 'MANUAL',
+      sourceDocumentType: item.sourceDocumentType || '',
+      sourceDocumentCode: item.sourceDocumentCode || '',
+      sourceDocumentId: item.sourceDocumentId ? String(item.sourceDocumentId) : undefined,
     }));
   },
 
@@ -85,6 +91,7 @@ export const financeService = {
       paymentDate: item.voucherDate
         ? item.voucherDate.split('T')[0]
         : (item.createdAt ? item.createdAt.split('T')[0] : ''),
+      category: String(item.invoiceCode || '').startsWith('PAYROLL-') ? 'PAYROLL' : 'SUPPLIER_PAYMENT',
       status: item.status || 'PENDING_APPROVAL',
       createdByName: item.handler || item.createdByName || 'Kế toán viên',
       approver: item.handler || item.createdByName || 'Super Admin',
@@ -94,6 +101,10 @@ export const financeService = {
       referenceDoc: item.invoiceCode || '',
       attachmentUrl: item.attachmentUrl || '',
       attachments: item.attachmentUrl ? [item.attachmentUrl] : [],
+      creationSource: item.creationSource || 'MANUAL',
+      sourceDocumentType: item.sourceDocumentType || '',
+      sourceDocumentCode: item.sourceDocumentCode || '',
+      sourceDocumentId: item.sourceDocumentId ? String(item.sourceDocumentId) : undefined,
     }));
   },
 

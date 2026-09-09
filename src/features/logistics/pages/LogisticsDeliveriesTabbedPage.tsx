@@ -1,14 +1,10 @@
 import { useSearchParams } from 'react-router';
-import { Truck, Navigation, Banknote } from 'lucide-react';
+import { Truck } from 'lucide-react';
 import { RoleGuard } from '@/routes/RoleGuard';
 import { ShipmentsPage } from './ShipmentsPage';
-import { DeliveryTripsPage } from './DeliveryTripsPage';
-import { CodReconciliationPage } from './CodReconciliationPage';
 
 const tabs = [
   { id: 'shipments', label: 'Vận đơn & giao nhận', icon: Truck, permission: 'logistics:shipment:view' },
-  { id: 'trips', label: 'Chuyến xe giao hàng', icon: Navigation, permission: 'logistics:shipment:view' },
-  { id: 'cod', label: 'Đối soát cước & COD', icon: Banknote, permission: 'logistics:cod:view' },
 ] as const;
 
 type TabId = typeof tabs[number]['id'];
@@ -32,7 +28,7 @@ export function LogisticsDeliveriesTabbedPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản lý Vận đơn & Giao nhận</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Theo dõi hành trình vận đơn hàng hóa, điều phối chuyến xe giao hàng và đối soát dòng tiền thu hộ COD
+            Theo dõi hành trình và trạng thái giao nhận của vận đơn.
           </p>
         </div>
       </div>
@@ -62,16 +58,6 @@ export function LogisticsDeliveriesTabbedPage() {
         {activeTab === 'shipments' && (
           <RoleGuard requiredPermission="logistics:shipment:view">
             <ShipmentsPage />
-          </RoleGuard>
-        )}
-        {activeTab === 'trips' && (
-          <RoleGuard requiredPermission="logistics:shipment:view">
-            <DeliveryTripsPage />
-          </RoleGuard>
-        )}
-        {activeTab === 'cod' && (
-          <RoleGuard requiredPermission="logistics:cod:view">
-            <CodReconciliationPage />
           </RoleGuard>
         )}
       </div>

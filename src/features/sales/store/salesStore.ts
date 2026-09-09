@@ -198,6 +198,7 @@ export interface CustomerReturnItem {
   returnCode: string;
   returnRequestId?: string | null;
   returnRequestCode?: string | null;
+  customerName?: string;
   orderCode?: string;
   originalOrderCode?: string;
   customerId: string;
@@ -511,6 +512,7 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
       const payload = {
         returnCode: ret.returnCode || `RET-${Date.now()}`,
         returnRequestCode: ret.returnRequestCode || null,
+        returnRequestId: Number(ret.returnRequestId) > 0 ? Number(ret.returnRequestId) : null,
         returnDate: validReturnDate,
         reason: ret.reason || 'Khách hoàn trả',
         status: ret.status || 'PENDING_INSPECTION',
@@ -525,25 +527,7 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
       await salesService.addCustomerReturn(payload);
       const data = await salesService.fetchCustomerReturns();
 
-      // Update ReturnRequest state if returnRequestCode is present
-      if (ret.returnRequestCode) {
-        const reqCode = ret.returnRequestCode;
-        const numReturnedThisTime = (ret.returnLines || []).reduce((sum, l) => sum + (l.quantity || 0), 0);
-        set((state) => ({
-          returnRequests: state.returnRequests.map((r) => {
-            if (r.requestCode !== reqCode) return r;
-            const newReturned = (r.returnedQty || 0) + numReturnedThisTime;
-            const newRemaining = Math.max(0, r.requestedQty - newReturned);
-            const newStatus = newRemaining === 0 ? 'COMPLETED' : 'PARTIALLY_RETURNED';
-            return {
-              ...r,
-              returnedQty: newReturned,
-              remainingQty: newRemaining,
-              status: newStatus,
-            };
-          }),
-        }));
-      }
+      // Creating a pending receipt does not mean goods have physically been returned.
 
       set({ customerReturns: data, isLoading: false });
     } catch (e: any) {

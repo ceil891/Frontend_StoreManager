@@ -23,6 +23,10 @@ export interface ReceiptVoucher {
   createdByName?: string;
   invoiceCode?: string;
   paymentReason?: string;
+  creationSource?: 'AUTO' | 'MANUAL';
+  sourceDocumentType?: string;
+  sourceDocumentCode?: string;
+  sourceDocumentId?: string;
 }
 
 export interface PaymentVoucher {
@@ -42,6 +46,10 @@ export interface PaymentVoucher {
   attachments?: string[];
   creator?: string;
   referenceDoc?: string;
+  creationSource?: 'AUTO' | 'MANUAL';
+  sourceDocumentType?: string;
+  sourceDocumentCode?: string;
+  sourceDocumentId?: string;
 }
 
 export interface DebtRecord {

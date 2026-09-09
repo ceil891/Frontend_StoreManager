@@ -11,7 +11,6 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import { useSalesStore } from '../store/salesStore';
 import { usePermission } from '@/shared/hooks/usePermission';
-import { useUserStore } from '@/features/hr/store/userStore';
 
 export interface BranchOption {
   id: string | number;
@@ -39,7 +38,7 @@ export interface OnlineOrder {
   shipperPhone?: string;
   createdDate: string;
   itemsCount: number;
-  items: { productName: string; sku: string; quantity: number; price: number }[];
+  items: { productId?: string | number; productName: string; sku: string; quantity: number; price: number }[];
 }
 
 export const formatOrderDateTime = (dateStr?: any): string => {
@@ -87,9 +86,9 @@ export function OnlineOrdersPage() {
   const [isAssignBranchOpen, setIsAssignBranchOpen] = useState(false);
   const [selectedBranchId, setSelectedBranchId] = useState<string | number>('');
   const [branchPackingNote, setBranchPackingNote] = useState('');
+  const [branchStock, setBranchStock] = useState<Record<string, { available: number; loading: boolean }>>({});
 
   // Modal for assigning Shipper / Carrier
-  const { users, fetchUsers } = useUserStore();
   const [isAssignShipperOpen, setIsAssignShipperOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [assignmentHistory, setAssignmentHistory] = useState<any[]>([]);
@@ -169,24 +168,13 @@ export function OnlineOrdersPage() {
     }
   };
 
-  const availableShippers = useMemo(() => {
-    const staffShippers = (users || [])
-      .filter(u => u.status === 'ACTIVE' || !u.status)
-      .map(u => ({
-        id: `staff_${u.id}`,
-        name: u.fullName || u.userCode,
-        phone: u.contactPhone || '',
-        carrier: 'Đội xe AuraMart (Nội bộ)',
-        label: `${u.fullName} — ${u.contactPhone || '0912 345 678'} (${u.assignedRole || 'Nhân viên giao hàng'})`
-      }));
-
-    return [...dynamicShippers, ...staffShippers];
-  }, [users, dynamicShippers]);
+  // Only entities registered in the shipper directory may be assigned.  The old
+  // implementation appended every active employee, including non-delivery staff.
+  const availableShippers = useMemo(() => dynamicShippers, [dynamicShippers]);
 
   useEffect(() => {
-    fetchUsers();
     fetchDynamicShippersAndCarriers();
-  }, [fetchUsers]);
+  }, []);
 
   const fetchBranches = async () => {
     try {
@@ -244,7 +232,7 @@ export function OnlineOrdersPage() {
 
           const rawPs = (item.paymentStatus || '').toUpperCase();
           let ps: OnlineOrder['paymentStatus'] = 'Chờ thanh toán COD';
-          if (rawPs === 'PAID' || item.status === 'COMPLETED' || item.status === 'DELIVERED') {
+          if (rawPs === 'PAID') {
             ps = 'Đã thanh toán';
           } else if (pm === 'VietQR' || pm === 'Chuyển khoản') {
             ps = 'Chờ xác nhận CK';
@@ -271,6 +259,7 @@ export function OnlineOrdersPage() {
             createdDate: formatOrderDateTime(item.orderDate || item.createdAt),
             itemsCount: item.details?.length || (item.items?.length || 1),
             items: (item.details || item.items || []).map((d: any) => ({
+              productId: d.productId || d.variantId || d.productVariantId,
               productName: d.productNameSnapshot || d.productName || 'Sản phẩm',
               sku: d.variantCode || d.skuSnapshot || d.sku || 'SKU',
               quantity: Number(d.quantity || 1),
@@ -364,8 +353,7 @@ export function OnlineOrdersPage() {
       return;
     }
 
-    const isSuccess = newStatus === 'GIAO_THANH_CONG';
-    const isPaid = isSuccess || extraData?.paymentStatus === 'PAID';
+    const isPaid = extraData?.paymentStatus === 'PAID';
 
     setOrders((prev) =>
       prev.map((o) => {
@@ -423,7 +411,7 @@ export function OnlineOrdersPage() {
     try {
       await axiosClient.put(`/sales/orders/${orderId}/status`, null, {
         params: {
-          status: 'PENDING',
+          status: mapFulfillmentToBackendStatus(orders.find(o => o.id === orderId)?.fulfillmentStatus || 'CHO_XAC_NHAN'),
           paymentStatus: 'PAID'
         }
       });
@@ -432,7 +420,7 @@ export function OnlineOrdersPage() {
       if (selectedOrder && selectedOrder.id === orderId) {
         setSelectedOrder(prev => prev ? { ...prev, paymentStatus: 'Đã thanh toán' } : null);
       }
-      toast.success('Duyệt đơn thành công! Đã xác nhận khách thanh toán chuyển khoản.');
+      toast.success('Đã xác nhận nhận tiền và ghi nhận phiếu thu vào quỹ/tài khoản.');
     } catch (err: any) {
       console.error('Approve payment failed:', err);
       toast.error(err?.response?.data?.message || 'Không thể duyệt thanh toán đơn hàng');
@@ -453,6 +441,20 @@ export function OnlineOrdersPage() {
     }
     setBranchPackingNote('');
     setIsAssignBranchOpen(true);
+    setBranchStock(Object.fromEntries(branches.map(b => [String(b.id), { available: 0, loading: true }])));
+    branches.forEach(async (branch) => {
+      try {
+        const res = await axiosClient.get<any, any>(`/inventory/branches/${branch.id}/inventory`);
+        const rows: any[] = Array.isArray(res) ? res : (res?.data || res?.content || []);
+        const available = selectedOrder.items.reduce((sum, item) => {
+          const row = rows.find(x => String(x.productId || x.variantId) === String(item.productId) || (item.sku && String(x.sku) === String(item.sku)));
+          return sum + Math.max(0, Number(row?.availableQuantity ?? row?.onHandQuantity ?? row?.quantity ?? 0)) / Math.max(1, Number(item.quantity || 1));
+        }, 0);
+        setBranchStock(prev => ({ ...prev, [String(branch.id)]: { available: Math.floor(available), loading: false } }));
+      } catch {
+        setBranchStock(prev => ({ ...prev, [String(branch.id)]: { available: 0, loading: false } }));
+      }
+    });
   };
 
   const handleConfirmAssignBranch = async (e: React.FormEvent) => {
@@ -573,7 +575,7 @@ export function OnlineOrdersPage() {
 
           const rawPs = (data.paymentStatus || '').toUpperCase();
           let resolvedPs: OnlineOrder['paymentStatus'] = 'Chờ thanh toán COD';
-          if (rawPs === 'PAID' || data.status === 'COMPLETED' || data.status === 'DELIVERED') {
+          if (rawPs === 'PAID') {
             resolvedPs = 'Đã thanh toán';
           } else if (resolvedPm === 'VietQR' || resolvedPm === 'Chuyển khoản') {
             resolvedPs = 'Chờ xác nhận CK';
@@ -722,8 +724,7 @@ export function OnlineOrdersPage() {
       id: 'actions',
       header: 'Thao tác',
       cell: ({ row }) => {
-        const isCK = row.original.paymentMethod === 'VietQR' || row.original.paymentMethod === 'Chuyển khoản';
-        const needsApproval = isCK && row.original.paymentStatus !== 'Đã thanh toán' && row.original.fulfillmentStatus !== 'DA_HUY';
+        const needsApproval = row.original.paymentStatus !== 'Đã thanh toán' && row.original.fulfillmentStatus !== 'DA_HUY';
 
         return (
           <div className="flex items-center gap-1.5">
@@ -734,9 +735,9 @@ export function OnlineOrdersPage() {
                   handleApprovePayment(row.original.id);
                 }}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors cursor-pointer shadow-sm"
-                title="Xác nhận đã nhận chuyển khoản"
+                title="Chỉ xác nhận sau khi quỹ/tài khoản đã thực nhận tiền"
               >
-                <CheckCircle2 className="w-3.5 h-3.5" /> Duyệt CK
+                <CheckCircle2 className="w-3.5 h-3.5" /> Đã nhận tiền
               </button>
             )}
             <button
@@ -1102,14 +1103,13 @@ export function OnlineOrdersPage() {
               </button>
 
               {/* Bank Transfer Approval Button */}
-              {(selectedOrder.paymentMethod === 'VietQR' || selectedOrder.paymentMethod === 'Chuyển khoản') &&
-               selectedOrder.paymentStatus !== 'Đã thanh toán' &&
+              {selectedOrder.paymentStatus !== 'Đã thanh toán' &&
                selectedOrder.fulfillmentStatus !== 'DA_HUY' && (
                 <button
                   onClick={() => handleApprovePayment(selectedOrder.id)}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold cursor-pointer shadow-sm transition-all"
                 >
-                  <CheckCircle2 className="w-4 h-4" /> Duyệt đơn (Đã nhận chuyển khoản)
+                  <CheckCircle2 className="w-4 h-4" /> Xác nhận đã thực nhận tiền
                 </button>
               )}
 
@@ -1185,12 +1185,16 @@ export function OnlineOrdersPage() {
               </label>
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                 {branches.map(branch => (
+                  (() => {
+                    const stock = branchStock[String(branch.id)];
+                    const unavailable = !stock || stock.loading || stock.available < 1;
+                    return (
                   <label
                     key={branch.id}
                     className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                       String(selectedBranchId) === String(branch.id)
                         ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 ring-1 ring-indigo-600'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                        : unavailable ? 'border-gray-200 dark:border-gray-700 opacity-60 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
                     }`}
                   >
                     <input
@@ -1198,6 +1202,7 @@ export function OnlineOrdersPage() {
                       name="branchSelect"
                       value={branch.id}
                       checked={String(selectedBranchId) === String(branch.id)}
+                      disabled={unavailable}
                       onChange={(e) => setSelectedBranchId(e.target.value)}
                       className="mt-1 text-indigo-600 focus:ring-indigo-500"
                     />
@@ -1206,9 +1211,12 @@ export function OnlineOrdersPage() {
                         <Building2 className="w-3.5 h-3.5 text-indigo-600" /> {branch.branchName}
                       </p>
                       <p className="text-gray-500 mt-0.5">{branch.address}</p>
+                      <p className={`mt-1 font-semibold ${unavailable ? 'text-red-600' : 'text-emerald-600'}`}>{stock?.loading ? 'Đang tải tồn kho…' : `Tồn khả dụng: ${stock?.available ?? 0}`}</p>
                       {branch.phone && <p className="text-gray-400">Hotline: {branch.phone}</p>}
                     </div>
                   </label>
+                    );
+                  })()
                 ))}
               </div>
             </div>
@@ -1236,6 +1244,7 @@ export function OnlineOrdersPage() {
               </button>
               <button
                 type="submit"
+                disabled={!branchStock[String(selectedBranchId)] || branchStock[String(selectedBranchId)].loading || branchStock[String(selectedBranchId)].available < 1}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5"
               >
                 <Package className="w-4 h-4" /> Xác nhận & Chuyển sang đóng gói
@@ -1276,7 +1285,7 @@ export function OnlineOrdersPage() {
                 }}
                 className="w-full px-3 py-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-xl text-sm font-semibold text-emerald-900 dark:text-emerald-300 focus:ring-2 focus:ring-emerald-500"
               >
-                <option value="">-- Chọn Shipper / Tài xế từ Đội ngũ nhân sự --</option>
+                <option value="">-- Chọn Shipper / Tài xế từ đội ngũ shipper --</option>
                 {availableShippers.map(s => (
                   <option key={s.id} value={s.id}>
                     {s.label}
@@ -1294,7 +1303,8 @@ export function OnlineOrdersPage() {
                 value={shipperForm.carrier}
                 onChange={(e) => setShipperForm({ ...shipperForm, carrier: e.target.value })}
                 required
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
+                disabled
+                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-xl text-sm font-medium text-gray-700"
               >
                 <option value="">-- Chọn Đơn vị vận chuyển --</option>
                 {dynamicCarriers.map(car => (

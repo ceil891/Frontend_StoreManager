@@ -82,8 +82,8 @@ export function ReturnsHistoryPage() {
       // Search text
       if (search) {
         const q = search.toLowerCase().trim();
-        const codeMatch = item.returnCode.toLowerCase().includes(q);
-        const orderMatch = (item.orderCode || '').toLowerCase().includes(q);
+        const codeMatch = String(item.returnCode || '').toLowerCase().includes(q);
+        const orderMatch = String(item.orderCode || '').toLowerCase().includes(q);
         const reqMatch = (item.returnRequestCode || '').toLowerCase().includes(q);
         const custName = resolveCustomerName(item.customerId, customers).toLowerCase();
         const custMatch = custName.includes(q);

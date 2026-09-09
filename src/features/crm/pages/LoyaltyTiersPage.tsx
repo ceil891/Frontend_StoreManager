@@ -627,19 +627,7 @@ export function LoyaltyTiersPage() {
               <p className="text-xs text-gray-400 mt-1">Giảm {editForm.discountPct}% trên tổng giá trị mỗi đơn hàng</p>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                Số khách hàng hiện có
-              </label>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={editForm.customerCount}
-                onChange={(e) => setEditForm({ ...editForm, customerCount: parseInt(e.target.value, 10) || 0 })}
-                className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-primary focus:border-primary"
-              />
-            </div>
+            <p className="text-xs text-gray-500">Số khách hàng được hệ thống tự tính từ hồ sơ khách hàng đang thuộc hạng này.</p>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
@@ -753,17 +741,7 @@ export function LoyaltyTiersPage() {
                 className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-primary focus:border-primary"
               />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Số khách hàng</label>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={editForm.customerCount}
-                onChange={(e) => setEditForm({ ...editForm, customerCount: parseInt(e.target.value, 10) || 0 })}
-                className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-primary focus:border-primary"
-              />
-            </div>
+            <div className="col-span-3 rounded-lg bg-slate-50 dark:bg-gray-800 px-3 py-2 text-xs text-gray-500">Số khách hàng sẽ được hệ thống tính tự động sau khi tạo hạng.</div>
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">

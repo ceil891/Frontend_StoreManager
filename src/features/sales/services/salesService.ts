@@ -487,6 +487,9 @@ export const salesService = {
     return data.map((item: any) => ({
       id: String(item.id),
       returnCode: item.returnCode || `RET-${item.id}`,
+      customerName: item.customerName || item.customer?.name || 'Khách chưa xác định',
+      returnRequestId: item.returnRequestId ? String(item.returnRequestId) : null,
+      returnRequestCode: item.returnRequestCode || null,
       orderCode: item.originalOrderCode || item.orderCode || (item.invoice ? `INV-${item.invoice.id}` : ''),
       customerId: item.customer?.id ? String(item.customer.id) : (item.customerId ? String(item.customerId) : '1'),
       returnDate: item.returnDate ? item.returnDate.split('T')[0] : new Date().toISOString().split('T')[0],
@@ -496,7 +499,7 @@ export const salesService = {
       status: item.status || 'PENDING_INSPECTION',
       refundMethod: item.refundMethod || 'CASH',
       isRestocked: item.isRestocked !== undefined ? item.isRestocked : true,
-      returnBranchId: item.branch?.id ? String(item.branch.id) : (item.returnBranchId || 'BR-001'),
+      returnBranchId: String(item.branchId || item.branch?.id || item.returnBranchId || ''),
       warehouseId: item.warehouseId ? String(item.warehouseId) : '',
       locationId: item.locationId ? String(item.locationId) : '',
       inspector: item.inspector || item.createdBy || 'Người kiểm tra',
